@@ -1,0 +1,25 @@
+1. I got a error we have to fix (Failed to initlize app: database: main migrations: goose up (main): ERROR 20260525210307_create_permissions_table.sql: failed to run SQL migration: failed to execute SQL query "CREATE INDEX ON user_roles (user_id);": ERROR: relation "user_roles" does not exist (SQLSTATE 42P01))
+
+2. the website is not about selling only Rum or whiskey its a e-commerce site not focused on one thing so you have to do some enhancement, for home page hero section
+i want you to remove the svg with the card you made make the hero section a slider maybe ? or what do you think is better design slider or one static hero section in 
+my opinion slider would be better and we have to add it to backend too so the slides will be dynamic and we don't get problem in future, the section under hero section
+is good but the texts are not good make it better, the brand live slides is good idea too but make that better too add more brand and not specially for rum for example
+johnny walker or jack daniel or absolute and make it a bit more better, the category section its need so much ui ux enhancements but its not that bad,
+the product section in home page is not good at all i mean the idea is respectfull but its need so much more ui ux improvements, we will not use svg you added a color in
+the image part of the card its useless because product image will be there and the cards need to be better to show luxe and friendly vibe while getting the customer in
+when you hover on card i guess its good to add some features for it, our story part style look good but again this svg is useless so make that a good placeholder for image and 
+document the image sizes for diffrent parts, the comment or quote part is good but its can be smaller and better ui ux, signup is not that good and  its not that bad make it better,
+footer is very good but can have some improvements, the font is good but only for brand and some texts i guess i want you to combine it with "Vazirmatn" Persian font
+its would make it better i guess
+
+3. Recipes page need complete rebuild for style font and ..., its need a search filter and better card styles its need a very smooth and great ux that user explore and don't get angry
+enjoy using the recipes and recommend it to their friends, and the recipe card detail itself need a huge ui ux upgrade and its should show the product linked to it and recommended recipes to read
+and way more better ui ux than this one recipes have tags category products and ..., 
+
+4. journal or blogs page its absolute trash its need way more better ui ux its should feels blogs not a random blog site from 2000 its should have a great and modern ui ux,
+the blog detail need so much improvements its should bring customer and bring views not just a simple text so make the ui ux better
+
+5. in the header i want you to add a part for products make the header better way more better than this something when someone sees it say wow but its should not get heavy its should be optimize and 
+super responsive 
+
+6. the about us need huge ui ux improvements too i want you to design it and make it 
