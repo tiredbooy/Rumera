@@ -50,3 +50,7 @@ func KeyLoginAttempts(scope string) string { return "rl:login:" + scope }
 // reads. Bump the version prefix to invalidate the whole namespace at once.
 func KeyProduct(id int64) string { return "product:v1:" + strconv.FormatInt(id, 10) }
 func KeyCategoryTree() string    { return "category:v1:tree" }
+
+// KeyRecipe caches a hydrated public recipe detail by slug. Bump the version
+// prefix to invalidate the whole recipe namespace at once.
+func KeyRecipe(slug string) string { return "recipe:v1:" + slug }

@@ -29,6 +29,8 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | [Payments](./payments.md) | 🛡️ Payment transaction records |
 | [Inventory](./inventory.md) | 🛡️ Stock levels, adjustments, movements |
 | [Blog](./blog.md) | Blog posts and categories |
+| [Recipes](./recipes.md) | Recipes with shoppable products & SEO |
+| [Recommendations](./recommendations.md) | Trending, similar, FBT, personalized "for you" |
 | [Analytics](./analytics.md) | 🛡️ Revenue, product, and search analytics |
 
 ## Route map
@@ -68,6 +70,11 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | GET | `/reviews/:id` | 🌐 |
 | GET | `/blogs` · `/blogs/:slug` | 🌐 |
 | GET | `/blog-categories` · `/blog-categories/:id` | 🌐 |
+| GET | `/recipes` · `/recipes/featured` · `/recipes/sitemap` | 🌐 |
+| GET | `/recipes/:slug` · `/recipes/:slug/related` | 🌐 |
+| GET | `/products/:id/recipes` | 🌐 |
+| GET | `/recommendations/trending` | 🌐 |
+| GET | `/recommendations/products/:id/similar` · `/frequently-bought-together` | 🌐 |
 | GET | `/shipping/zones` · `/shipping/zones/:id` | 🌐 |
 | GET | `/shipping/zones/:id/methods` | 🌐 |
 | GET | `/shipping/methods/:id` | 🌐 |
@@ -93,6 +100,9 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | PATCH·DELETE | `/reviews/:id` | 🔒 |
 | POST | `/reviews/:id/react` | 🔒 |
 | GET·POST | `/reviews/:id/images` | 🔒 |
+| GET | `/recommendations/for-you` | 🔒 |
+| POST | `/recommendations/interactions` | 🔒 |
+| GET·POST | `/recommendations/profile` · `/recommendations/profile/recompute` | 🔒 |
 
 ### Admin — `/admin` (requires role `admin`)
 | Method | Path | Tier |
@@ -114,6 +124,7 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | GET | `/admin/payments` … | 🛡️ |
 | GET·POST·PATCH | `/admin/inventory/...` | 🛡️ |
 | POST·GET·PATCH·DELETE | `/admin/blogs` · `/admin/blog-categories` … | 🛡️ |
+| GET·POST·PATCH·DELETE | `/admin/recipes` · `/admin/recipes/:id` | 🛡️ |
 | GET | `/admin/analytics/...` | 🛡️ |
 
 > The full, exact list of admin routes is documented on each resource page.

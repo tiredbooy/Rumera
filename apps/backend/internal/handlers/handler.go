@@ -57,6 +57,9 @@ type Deps struct {
 	Blog         services.BlogService
 	BlogCategory services.BlogCategoryService
 
+	Recipe         services.RecipeService
+	Recommendation services.RecommendationService
+
 	Event         *services.EventService
 	ProductStats  *services.DailyProductStatsService
 	RevenueStats  *services.DailyRevenueStatsService
