@@ -12,6 +12,7 @@ This is the documentation home. Start here, then follow the links below.
 | [Architecture](./architecture.md) | Layered design, request lifecycle, directory map |
 | [Conventions](./conventions.md) | Response envelope, error model, pagination, filtering, validation |
 | [Authentication & Authorization](./authentication.md) | JWT flow, token contents, roles, trust tiers |
+| [Operations, Performance & Reliability](./operations.md) | Caching & stampede protection, cron jobs, health probes, graceful shutdown, server hardening |
 | [API Reference](./api/README.md) | Every endpoint, grouped by resource |
 
 ## Quick links

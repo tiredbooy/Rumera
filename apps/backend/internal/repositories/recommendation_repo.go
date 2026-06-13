@@ -25,6 +25,12 @@ type RecommendationRepository interface {
 	GetProfile(ctx context.Context, userID int64) (*models.UserRecommendationProfile, error)
 	ComputeProfile(ctx context.Context, userID int64) (*models.UserRecommendationProfile, error)
 	PurchasedProductIDs(ctx context.Context, userID int64) ([]int64, error)
+
+	// ActiveUserIDs returns the IDs of users who produced a fresh signal — an
+	// interaction or a non-cancelled order — within the last sinceDays, most
+	// recently active first, capped at limit. It drives the nightly profile
+	// refresh so personalization stays warm without recomputing every user.
+	ActiveUserIDs(ctx context.Context, sinceDays, limit int) ([]int64, error)
 }
 
 type recommendationRepository struct{ db *pgxpool.Pool }
@@ -107,6 +113,50 @@ func (r *recommendationRepository) PurchasedProductIDs(ctx context.Context, user
 		var id int64
 		if err := rows.Scan(&id); err != nil {
 			return nil, fmt.Errorf("scanning purchased product id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ActiveUserIDs returns recently-active user IDs (interaction or order within
+// the window), ordered by most-recent activity, for the nightly profile refresh.
+func (r *recommendationRepository) ActiveUserIDs(ctx context.Context, sinceDays, limit int) ([]int64, error) {
+	if sinceDays <= 0 {
+		sinceDays = 30
+	}
+	if limit <= 0 {
+		limit = 5000
+	}
+	rows, err := r.db.Query(ctx,
+		`SELECT user_id FROM (
+			SELECT user_id, MAX(created_at) AS last_active FROM (
+				SELECT user_id, created_at
+				FROM user_product_interactions
+				WHERE created_at >= NOW() - make_interval(days => $1)
+				UNION ALL
+				SELECT user_id, created_at
+				FROM orders
+				WHERE created_at >= NOW() - make_interval(days => $1)
+				  AND status NOT IN ('cancelled','payment_failed')
+				  AND user_id IS NOT NULL
+			) activity
+			GROUP BY user_id
+		) ranked
+		ORDER BY last_active DESC
+		LIMIT $2`,
+		sinceDays, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying active user ids: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning active user id: %w", err)
 		}
 		ids = append(ids, id)
 	}

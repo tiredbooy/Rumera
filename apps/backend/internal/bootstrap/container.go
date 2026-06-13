@@ -5,6 +5,7 @@ import (
 
 	config "github.com/tiredbooy/configs"
 	"github.com/tiredbooy/internal/analytics"
+	"github.com/tiredbooy/internal/corn"
 	"github.com/tiredbooy/internal/handlers"
 	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/internal/services"
@@ -24,6 +25,9 @@ type container struct {
 	queue   *analytics.Queue
 	cache   cache.Store
 	dbs     *database.Connections
+	// cron is the in-process background-job scheduler. It is nil when
+	// CRON_ENABLED=false; the App lifecycle guards against that.
+	cron *cron.Runner
 }
 
 // build wires the whole dependency graph — repositories → services → HTTP
@@ -83,6 +87,13 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	mailer := notify.New(cfg, log)
 	eventService := services.NewEventService(eventRepo)
 
+	// Analytics roll-up and recommendation services are pulled into named vars so
+	// the cron runner (built below) can reach them as well as the HTTP handlers.
+	productStatsService := services.NewDailyProductStatsService(dailyProductStatsRepo)
+	revenueStatsService := services.NewDailyRevenueStatsService(dailyRevenueStatsRepo)
+	searchSummaryService := services.NewSearchSummaryService(searchSummaryRepo)
+	recommendationService := services.NewRecommendationService(recommendationRepo)
+
 	// Payment and inventory are constructed first because the order service
 	// depends on them for the checkout saga (reserve stock → open payment).
 	paymentService := services.NewPaymentService(paymentRepo, orderRepo)
@@ -126,12 +137,12 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		BlogCategory: services.NewBlogCategoryService(blogCategoryRepo),
 
 		Recipe:         services.NewRecipeService(recipeRepo, db),
-		Recommendation: services.NewRecommendationService(recommendationRepo),
+		Recommendation: recommendationService,
 
 		Event:         eventService,
-		ProductStats:  services.NewDailyProductStatsService(dailyProductStatsRepo),
-		RevenueStats:  services.NewDailyRevenueStatsService(dailyRevenueStatsRepo),
-		SearchSummary: services.NewSearchSummaryService(searchSummaryRepo),
+		ProductStats:  productStatsService,
+		RevenueStats:  revenueStatsService,
+		SearchSummary: searchSummaryService,
 	}
 
 	return &container{
@@ -140,5 +151,42 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		queue:   analytics.NewQueue(eventService),
 		cache:   cacheStore,
 		dbs:     dbs,
+		cron: buildCron(cfg, dbs, productStatsService, revenueStatsService,
+			searchSummaryService, recommendationService),
 	}
+}
+
+// buildCron assembles the in-process scheduler with every background job wired
+// to its configured schedule. It returns nil when CRON_ENABLED=false, so the API
+// can run without the scheduler (e.g. when a dedicated worker owns the jobs).
+//
+// The analytics roll-ups read/write the analytics database; the recommendation
+// refresh works against the main database through its service. Schedules are
+// 6-field cron expressions evaluated in UTC (see configs.Config).
+func buildCron(
+	cfg *config.Config,
+	dbs *database.Connections,
+	productStats *services.DailyProductStatsService,
+	revenueStats *services.DailyRevenueStatsService,
+	searchSummary *services.SearchSummaryService,
+	recommendation services.RecommendationService,
+) *cron.Runner {
+	if !cfg.CronEnabled {
+		return nil
+	}
+
+	runner := cron.NewRunner()
+
+	adb := dbs.AnalyticsDB
+	runner.Register(cfg.CronProductStatsSchedule, "product_stats",
+		cron.NewProductStatsCronJob(adb, productStats).Run)
+	runner.Register(cfg.CronRevenueStatsSchedule, "revenue_stats",
+		cron.NewRevenueCronJob(adb, revenueStats).Run)
+	runner.Register(cfg.CronSearchSummarySchedule, "search_summary",
+		cron.NewSearchCronJob(adb, searchSummary).Run)
+	runner.Register(cfg.CronRecsRefreshSchedule, "recommendation_refresh",
+		cron.NewRecommendationRefreshJob(recommendation,
+			cfg.CronRecsRefreshWindowDays, cfg.CronRecsRefreshMaxUsers).Run)
+
+	return runner
 }

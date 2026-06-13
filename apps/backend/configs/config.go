@@ -65,6 +65,25 @@ type Config struct {
 	// ── Crypto Payment ────────────────────────────────────────────────────────
 	CryptoAPIKey     string `envconfig:"CRYPTO_API_KEY"`
 	CryptoWebhookKey string `envconfig:"CRYPTO_WEBHOOK_KEY"`
+
+	// ── Background jobs (cron) ────────────────────────────────────────────────
+	// Schedules are 6-field cron expressions (the runner is configured WithSeconds),
+	// evaluated in UTC. Set CRON_ENABLED=false to run the API without the
+	// in-process scheduler (e.g. when jobs are run by a dedicated worker).
+	CronEnabled bool `envconfig:"CRON_ENABLED" default:"true"`
+
+	// Analytics roll-ups. They aggregate "yesterday", so they run shortly after
+	// midnight UTC, staggered to avoid hammering the analytics DB at once.
+	CronProductStatsSchedule  string `envconfig:"CRON_PRODUCT_STATS_SCHEDULE" default:"0 15 2 * * *"`
+	CronRevenueStatsSchedule  string `envconfig:"CRON_REVENUE_STATS_SCHEDULE" default:"0 30 2 * * *"`
+	CronSearchSummarySchedule string `envconfig:"CRON_SEARCH_SUMMARY_SCHEDULE" default:"0 45 2 * * *"`
+
+	// Recommendation profile refresh — rebuilds affinity profiles for recently
+	// active users so /recommendations/for-you serves from a warm cache instead
+	// of computing on the request path.
+	CronRecsRefreshSchedule   string `envconfig:"CRON_RECS_REFRESH_SCHEDULE" default:"0 0 3 * * *"`
+	CronRecsRefreshWindowDays int    `envconfig:"CRON_RECS_REFRESH_WINDOW_DAYS" default:"30"`
+	CronRecsRefreshMaxUsers   int    `envconfig:"CRON_RECS_REFRESH_MAX_USERS" default:"5000"`
 }
 
 // ── DSN helpers ───────────────────────────────────────────────────────────────
