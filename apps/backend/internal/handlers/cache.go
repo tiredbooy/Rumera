@@ -18,9 +18,16 @@ import (
 // re-encode. build() errors (including domain errors) propagate to the caller
 // for normal error mapping and are never cached.
 //
+// Stampede protection: on a miss, concurrent requests for the same key are
+// collapsed by singleflight so only one of them runs build()/hits the database;
+// the rest wait and share the result. This protects the database when a hot key
+// (a featured recipe, the category tree) expires under load — the classic
+// thundering-herd / cache-stampede failure mode.
+//
 // When no cache is configured it degrades to a direct build() with a marshal,
 // so behaviour is identical with or without Redis.
 func (h *Handler) cachedJSON(ctx context.Context, key string, ttl time.Duration, build func() (any, error)) (json.RawMessage, error) {
+	// Fast path: serve straight from cache without entering singleflight.
 	if h.Cache != nil {
 		if cached, err := h.Cache.Get(ctx, key); err == nil {
 			return json.RawMessage(cached), nil
@@ -31,22 +38,37 @@ func (h *Handler) cachedJSON(ctx context.Context, key string, ttl time.Duration,
 		}
 	}
 
-	value, err := build()
-	if err != nil {
-		return nil, err
-	}
-
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return nil, err
-	}
-
-	if h.Cache != nil {
-		if err := h.Cache.Set(ctx, key, string(raw), ttl); err != nil {
-			h.logCacheWarn("set", key, err)
+	// Slow path: one build per key at a time across concurrent callers.
+	raw, err, _ := h.cacheGroup.Do(key, func() (any, error) {
+		// Re-check the cache: a previous in-flight build for this key may have
+		// just populated it while we were queued behind the singleflight lock.
+		if h.Cache != nil {
+			if cached, err := h.Cache.Get(ctx, key); err == nil {
+				return json.RawMessage(cached), nil
+			}
 		}
+
+		value, err := build()
+		if err != nil {
+			return nil, err
+		}
+
+		marshalled, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+
+		if h.Cache != nil {
+			if err := h.Cache.Set(ctx, key, string(marshalled), ttl); err != nil {
+				h.logCacheWarn("set", key, err)
+			}
+		}
+		return json.RawMessage(marshalled), nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return raw, nil
+	return raw.(json.RawMessage), nil
 }
 
 // invalidate best-effort deletes cache keys after a write. Never fails the

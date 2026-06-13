@@ -12,6 +12,7 @@ import (
 	"github.com/tiredbooy/pkg/token"
 	"github.com/tiredbooy/pkg/validator"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 )
 
 // Deps is the full set of dependencies the HTTP layer needs. It is assembled
@@ -70,6 +71,11 @@ type Deps struct {
 // services are reachable as h.Product, h.Order, etc.
 type Handler struct {
 	Deps
+
+	// cacheGroup collapses concurrent cache-miss builds for the same key into a
+	// single execution (see cachedJSON). Its zero value is ready to use, so no
+	// initialisation is needed.
+	cacheGroup singleflight.Group
 }
 
 // New builds a Handler from its dependencies.

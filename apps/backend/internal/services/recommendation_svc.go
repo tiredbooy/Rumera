@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
@@ -30,6 +31,13 @@ type RecommendationService interface {
 
 	GetProfile(ctx context.Context, userID int64) (*models.UserRecommendationProfile, error)
 	RecomputeProfile(ctx context.Context, userID int64) (*models.UserRecommendationProfile, error)
+
+	// RefreshActiveProfiles rebuilds affinity profiles for users active within the
+	// last windowDays (capped at maxUsers). It is meant to be driven by a cron
+	// job so /for-you serves from warm profiles. It is resilient: one user's
+	// failure is logged-and-skipped, never aborting the batch. Returns the count
+	// successfully refreshed.
+	RefreshActiveProfiles(ctx context.Context, windowDays, maxUsers int) (int, error)
 }
 
 type recommendationService struct {
@@ -161,6 +169,34 @@ func (s *recommendationService) RecomputeProfile(ctx context.Context, userID int
 		return nil, fmt.Errorf("recommendationService.RecomputeProfile: %w", err)
 	}
 	return profile, nil
+}
+
+// RefreshActiveProfiles rebuilds profiles for recently-active users so the
+// personalization hot path never has to compute on demand.
+func (s *recommendationService) RefreshActiveProfiles(ctx context.Context, windowDays, maxUsers int) (int, error) {
+	ids, err := s.repo.ActiveUserIDs(ctx, windowDays, maxUsers)
+	if err != nil {
+		return 0, fmt.Errorf("recommendationService.RefreshActiveProfiles: %w", err)
+	}
+
+	refreshed := 0
+	for _, id := range ids {
+		// Honour cancellation/deadline so a long batch shuts down cleanly.
+		if err := ctx.Err(); err != nil {
+			return refreshed, err
+		}
+		if _, err := s.repo.ComputeProfile(ctx, id); err != nil {
+			s.logRefreshSkip(id, err)
+			continue
+		}
+		refreshed++
+	}
+	return refreshed, nil
+}
+
+func (s *recommendationService) logRefreshSkip(userID int64, err error) {
+	slog.Warn("recommendation profile refresh: skipping user",
+		"user_id", userID, "err", err)
 }
 
 // backfill tops up a personalized list with trending products, skipping anything

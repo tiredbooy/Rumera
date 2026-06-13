@@ -32,8 +32,14 @@ The engine reads two first-party signal sources from the main database:
 
 A per-user **affinity profile** (top categories/brands/tags + preferred price
 band) is derived from those signals and cached in
-`user_recommendation_profiles` for fast serving. It is built lazily on the first
-`/for-you` request and can be rebuilt on demand.
+`user_recommendation_profiles` for fast serving. Profiles are kept warm three
+ways:
+
+- a **nightly cron job** (`recommendation_refresh`) rebuilds profiles for every
+  user active in the recent window, so `/for-you` reads a ready-made profile
+  instead of computing one on the request path (see [Operations](../operations.md));
+- they are still built **lazily** on the first `/for-you` for a brand-new user;
+- and `POST /recommendations/profile/recompute` forces a rebuild on demand.
 
 Every strategy degrades gracefully: `frequently-bought-together` falls back to
 `similar`, and `for-you` backfills with `trending` so a response is never empty.

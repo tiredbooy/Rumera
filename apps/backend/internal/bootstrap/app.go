@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	config "github.com/tiredbooy/configs"
 	"github.com/tiredbooy/internal/analytics"
+	"github.com/tiredbooy/internal/corn"
 	"github.com/tiredbooy/internal/logger"
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/database"
@@ -22,6 +23,7 @@ type App struct {
 	dbs    *database.Connections
 	cache  cache.Store
 	queue  *analytics.Queue
+	cron   *cron.Runner
 	router *gin.Engine
 	server *http.Server
 }
@@ -69,6 +71,12 @@ func New() (*App, error) {
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
+		// ReadHeaderTimeout caps how long a client may take to send request
+		// headers, closing the Slowloris hold-the-connection attack that
+		// ReadTimeout alone doesn't fully cover. MaxHeaderBytes bounds header
+		// size to reject header-bomb requests cheaply.
+		ReadHeaderTimeout: 5 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MiB
 	}
 
 	return &App{
@@ -77,6 +85,7 @@ func New() (*App, error) {
 		dbs:    dbs,
 		cache:  cacheStore,
 		queue:  c.queue,
+		cron:   c.cron,
 		router: router,
 		server: server,
 	}, nil
@@ -88,6 +97,12 @@ func (a *App) Start(ctx context.Context) error {
 	// Launch the analytics ingestion workers before accepting traffic so the
 	// capture middleware always has somewhere to push events.
 	a.queue.Start(ctx)
+
+	// Start the background-job scheduler (analytics roll-ups, recommendation
+	// profile refresh). nil when CRON_ENABLED=false.
+	if a.cron != nil {
+		a.cron.Start()
+	}
 
 	go func() {
 		a.log.Info("server starting", zap.String("addr", a.server.Addr))
@@ -114,6 +129,12 @@ func (a *App) shutdown() error {
 
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("http shutdown: %w", err)
+	}
+
+	// Stop the scheduler and wait for any in-flight job to finish before the DB
+	// pools it depends on are closed.
+	if a.cron != nil {
+		a.cron.Stop()
 	}
 
 	// Drain buffered analytics events before tearing down the DB connections the
