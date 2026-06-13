@@ -80,7 +80,7 @@ func (h *Handler) GetProduct(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	response.OK(c, data)
+	response.CachedJSON(c, data, productCacheTTL)
 }
 
 // buildProductDetail assembles the hydrated product view from the service layer.

@@ -82,7 +82,10 @@ func (h *Handler) GetRecipeBySlug(c *gin.Context) {
 		}
 	}(slug)
 
-	response.OK(c, data)
+	// no-cache (revalidate) rather than max-age: the view counter above must run
+	// on every request, so clients are forced to hit the server — but a matching
+	// ETag still short-circuits to a bodyless 304.
+	response.RevalidateJSON(c, data)
 }
 
 // RelatedRecipes — GET /recipes/:slug/related
