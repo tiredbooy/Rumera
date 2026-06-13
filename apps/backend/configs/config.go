@@ -66,6 +66,12 @@ type Config struct {
 	CryptoAPIKey     string `envconfig:"CRYPTO_API_KEY"`
 	CryptoWebhookKey string `envconfig:"CRYPTO_WEBHOOK_KEY"`
 
+	// ── Observability ─────────────────────────────────────────────────────────
+	// MetricsEnabled toggles the Prometheus /metrics endpoint and the per-request
+	// metrics middleware. Default on: the endpoint is cheap and intended to be
+	// scraped over an internal network only (do not expose it publicly).
+	MetricsEnabled bool `envconfig:"METRICS_ENABLED" default:"true"`
+
 	// ── Background jobs (cron) ────────────────────────────────────────────────
 	// Schedules are 6-field cron expressions (the runner is configured WithSeconds),
 	// evaluated in UTC. Set CRON_ENABLED=false to run the API without the

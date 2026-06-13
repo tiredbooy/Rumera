@@ -9,27 +9,27 @@
  * prod. Set `NEXT_PUBLIC_SITE_URL` in the environment (see .env.example).
  */
 export const siteConfig = {
-  name: "Rumera",
+  name: "رومرا",
   /** Used in <title> templates and OG tags. */
-  title: "Rumera — Rare Spirits, Wine & Champagne",
+  title: "رومرا — ویسکی، شراب و شامپاینِ نایاب",
   description:
-    "A curated cellar of rare whisky, old-world wine, grower champagne and craft spirits — sourced direct from the makers and delivered cold, fast, and beautifully.",
+    "سردابه‌ای منتخب از ویسکی کمیاب، شراب دنیای قدیم، شامپاین تولیدکننده و اسپیریت‌های دست‌ساز — مستقیم از سازندگان تهیه و خنک، سریع و زیبا تحویل داده می‌شود.",
   url: (
     process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
   ).replace(/\/$/, ""),
-  locale: "en_US",
+  locale: "fa_IR",
   /** Brand mark used as the default social share image (generated route). */
   ogImage: "/opengraph-image",
   keywords: [
-    "whisky",
-    "wine",
-    "champagne",
-    "spirits",
-    "rare bottles",
-    "liquor delivery",
-    "single malt",
-    "grower champagne",
-    "fine wine",
+    "ویسکی",
+    "شراب",
+    "شامپاین",
+    "اسپیریت",
+    "بطری‌های کمیاب",
+    "تک‌مالت",
+    "شامپاین تولیدکننده",
+    "شراب اصیل",
+    "رومرا",
   ],
   twitter: "@rumera",
   socials: {

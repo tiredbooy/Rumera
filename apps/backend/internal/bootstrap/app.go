@@ -14,6 +14,7 @@ import (
 	"github.com/tiredbooy/internal/logger"
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/database"
+	"github.com/tiredbooy/pkg/metrics"
 	"go.uber.org/zap"
 )
 
@@ -55,6 +56,15 @@ func New() (*App, error) {
 
 	// ── 6. Dependency graph (repos → services → handlers) ────────────────────
 	c := build(cfg, log, dbs, cacheStore)
+
+	// Expose live DB-pool and analytics-queue state to Prometheus. These are
+	// scrape-time gauges, so they must be registered once the pools and queue
+	// exist. The /metrics endpoint and request middleware are wired in newRouter.
+	if cfg.MetricsEnabled {
+		metrics.RegisterDBPool("main", dbs.DB)
+		metrics.RegisterDBPool("analytics", dbs.AnalyticsDB)
+		metrics.RegisterQueueDepth("events", c.queue.Depth, c.queue.Capacity())
+	}
 
 	// ── 7. Seed the first admin (no-op unless configured / already present) ───
 	seedCtx, cancelSeed := context.WithTimeout(context.Background(), 10*time.Second)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tiredbooy/pkg/cache"
+	"github.com/tiredbooy/pkg/metrics"
 )
 
 // cachedJSON is a read-through cache helper for expensive, read-heavy GETs. On a
@@ -29,11 +30,17 @@ import (
 func (h *Handler) cachedJSON(ctx context.Context, key string, ttl time.Duration, build func() (any, error)) (json.RawMessage, error) {
 	// Fast path: serve straight from cache without entering singleflight.
 	if h.Cache != nil {
-		if cached, err := h.Cache.Get(ctx, key); err == nil {
+		cached, err := h.Cache.Get(ctx, key)
+		switch {
+		case err == nil:
+			metrics.IncCache(metrics.CacheHit)
 			return json.RawMessage(cached), nil
-		} else if !errors.Is(err, cache.ErrNotFound) {
+		case errors.Is(err, cache.ErrNotFound):
+			metrics.IncCache(metrics.CacheMiss)
+		default:
 			// On a transient cache error, fall through and build — availability
 			// over cache correctness.
+			metrics.IncCache(metrics.CacheError)
 			h.logCacheWarn("get", key, err)
 		}
 	}
