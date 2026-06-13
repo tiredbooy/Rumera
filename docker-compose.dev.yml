@@ -1,0 +1,206 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Rumera — DEVELOPMENT stack (hot reload for the whole monorepo)
+#
+#   docker compose -f docker-compose.dev.yml up --watch     # start + live reload
+#   docker compose -f docker-compose.dev.yml watch          # same, watch only
+#   docker compose -f docker-compose.dev.yml down           # stop
+#
+# `--watch` activates Docker Compose Watch: source changes are synced into the
+# running containers, where Air (backend) and Next.js Fast Refresh (frontend)
+# pick them up instantly. Dependency-manifest changes (go.mod, package.json)
+# trigger an automatic image rebuild.
+#
+# Every value has a sensible default, so this boots with zero configuration.
+# Override anything by creating a .env file next to this one (see .env.example).
+# ──────────────────────────────────────────────────────────────────────────────
+name: rumera-dev
+
+services:
+  # ── Main database (PostgreSQL / TimescaleDB) ───────────────────────────────
+  postgres:
+    image: timescale/timescaledb:latest-pg17
+    container_name: rumera_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-rumera}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-rumera}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Analytics database (TimescaleDB) ───────────────────────────────────────
+  analytics_db:
+    image: timescale/timescaledb:latest-pg17
+    container_name: rumera_analytics_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${ANALYTICS_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${ANALYTICS_DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${ANALYTICS_DB_NAME:-rumera_analytics}
+    ports:
+      - "${ANALYTICS_DB_HOST_PORT:-5433}:5432"
+    volumes:
+      - analytics_data:/var/lib/postgresql/data
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ANALYTICS_DB_USER:-postgres} -d ${ANALYTICS_DB_NAME:-rumera_analytics}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Cache (Redis) ──────────────────────────────────────────────────────────
+  redis:
+    image: redis:8-alpine
+    container_name: rumera_redis_dev
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Search (Meilisearch) ───────────────────────────────────────────────────
+  meilisearch:
+    image: getmeili/meilisearch:v1.15
+    container_name: rumera_meilisearch_dev
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_API_KEY:-super_secret_key}
+      MEILI_ENV: development
+    ports:
+      - "${MEILI_PORT:-7700}:7700"
+    volumes:
+      - meili_data:/meili_data
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Backend API (Go + Air hot reload) ──────────────────────────────────────
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile.dev
+    container_name: rumera_backend_dev
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      analytics_db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      meilisearch: { condition: service_healthy }
+    environment:
+      ENV: development
+      SERVER_PORT: "8080"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-rumera}
+      DB_SSL_MODE: disable
+
+      ANALYTICS_DB_HOST: analytics_db
+      ANALYTICS_DB_PORT: "5432"
+      ANALYTICS_DB_USER: ${ANALYTICS_DB_USER:-postgres}
+      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD:-postgres}
+      ANALYTICS_DB_NAME: ${ANALYTICS_DB_NAME:-rumera_analytics}
+      ANALYTICS_DB_SSL_MODE: disable
+
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+
+      MEILI_HOST: http://meilisearch:7700
+      MEILI_API_KEY: ${MEILI_API_KEY:-super_secret_key}
+
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-jwt-secret-change-me}
+
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@rumera.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      # Persist Go module + build caches across restarts for fast rebuilds.
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    networks: [rumera_network]
+    develop:
+      watch:
+        # Sync Go sources into the container; Air rebuilds on change.
+        - action: sync
+          path: ./apps/backend
+          target: /app
+          ignore:
+            - tmp/
+            - .git/
+            - docs/
+            - "*_test.go"
+        # A dependency change needs a fresh image (go mod download layer).
+        - action: rebuild
+          path: ./apps/backend/go.mod
+        - action: rebuild
+          path: ./apps/backend/go.sum
+
+  # ── Frontend storefront (Next.js + Fast Refresh) ───────────────────────────
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile.dev
+    container_name: rumera_frontend_dev
+    restart: unless-stopped
+    depends_on:
+      backend: { condition: service_started }
+    environment:
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      # Browser-facing API base (host port) and server-side base (compose DNS).
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      BACKEND_INTERNAL_URL: http://backend:8080
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks: [rumera_network]
+    develop:
+      watch:
+        # Sync app source; Next.js Fast Refresh applies it live.
+        - action: sync
+          path: ./apps/frontend
+          target: /app
+          ignore:
+            - node_modules/
+            - .next/
+        # Dependency changes require reinstalling — rebuild the image.
+        - action: rebuild
+          path: ./apps/frontend/package.json
+        - action: rebuild
+          path: ./apps/frontend/package-lock.json
+
+volumes:
+  postgres_data:
+  analytics_data:
+  redis_data:
+  meili_data:
+  go_mod_cache:
+  go_build_cache:
+
+networks:
+  rumera_network:
+    driver: bridge

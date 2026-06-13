@@ -193,6 +193,55 @@
   .border-hairline {
     @apply border border-border/70;
   }
+
+  /* Edge-fade mask for marquees / overflow rows */
+  .fade-x {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 8%,
+      black 92%,
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 8%,
+      black 92%,
+      transparent
+    );
+  }
+}
+
+/*
+  Infinite brand marquee — pure CSS so it costs zero JS and runs on the
+  compositor. The track holds two copies of the content; translating by -50%
+  loops seamlessly. Pauses on hover and respects reduced-motion.
+*/
+@keyframes marquee-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee-x var(--marquee-duration, 40s) linear infinite;
+}
+
+.group\/marquee:hover .animate-marquee {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 @utility container-px {

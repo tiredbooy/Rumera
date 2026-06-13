@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { cn } from "@/lib/utils";
+import { siteConfig } from "@/lib/site";
 import { Providers } from "@/app/providers";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
@@ -27,26 +28,56 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteConfig.url),
   title: {
-    default: "Rumera — Rare Spirits, Wine & Champagne",
-    template: "%s · Rumera",
+    default: siteConfig.title,
+    template: `%s · ${siteConfig.name}`,
   },
-  description:
-    "A curated cellar of rare whisky, old-world wine, grower champagne and craft spirits — delivered cold, fast, and beautifully.",
-  keywords: [
-    "whisky",
-    "wine",
-    "champagne",
-    "spirits",
-    "liquor delivery",
-    "rare bottles",
-  ],
+  description: siteConfig.description,
+  applicationName: siteConfig.name,
+  keywords: [...siteConfig.keywords],
+  authors: [{ name: siteConfig.name, url: siteConfig.url }],
+  creator: siteConfig.name,
+  publisher: siteConfig.name,
+  alternates: {
+    canonical: "/",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   openGraph: {
-    title: "Rumera — Rare Spirits, Wine & Champagne",
-    description:
-      "A curated cellar of rare whisky, old-world wine, grower champagne and craft spirits.",
+    title: siteConfig.title,
+    description: siteConfig.description,
     type: "website",
+    url: siteConfig.url,
+    siteName: siteConfig.name,
+    locale: siteConfig.locale,
   },
+  twitter: {
+    card: "summary_large_image",
+    title: siteConfig.title,
+    description: siteConfig.description,
+    creator: siteConfig.twitter,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  category: "shopping",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf8f4" },
+    { media: "(prefers-color-scheme: dark)", color: "#2b231c" },
+  ],
+  colorScheme: "dark light",
 };
 
 export default function RootLayout({

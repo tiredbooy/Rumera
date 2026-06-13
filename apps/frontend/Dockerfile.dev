@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1.7
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Rumera storefront — DEVELOPMENT image
+#
+# Runs `next dev` (Turbopack) with Fast Refresh. Source is synced in by Docker
+# Compose Watch (see docker-compose.dev.yml), so this image only needs the
+# toolchain + installed dependencies — no app source is baked in.
+# ──────────────────────────────────────────────────────────────────────────────
+FROM node:22-alpine
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat
+
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+# Some bind/overlay filesystems don't deliver inotify events reliably; this
+# makes Fast Refresh dependable inside containers.
+ENV WATCHPACK_POLLING=true
+
+# Install dependencies first so this layer is cached until the lockfile changes.
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+
+# Source is provided at runtime via Compose Watch sync.
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]
