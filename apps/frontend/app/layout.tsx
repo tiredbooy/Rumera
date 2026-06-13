@@ -1,23 +1,24 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Playfair_Display, Geist_Mono } from "next/font/google";
+import { Vazirmatn, Markazi_Text, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { cn } from "@/lib/utils";
 import { siteConfig } from "@/lib/site";
 import { Providers } from "@/app/providers";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
-import { AgeGate } from "@/components/age-gate";
 import { Toaster } from "@/components/ui/sonner";
 
-const inter = Inter({
-  subsets: ["latin"],
+// Vazirmatn — the de-facto modern Persian UI typeface (clean, fully hinted for
+// fa/ar). Powers all body + UI copy.
+const vazirmatn = Vazirmatn({
+  subsets: ["arabic", "latin"],
   variable: "--font-sans",
   display: "swap",
 });
 
-const playfair = Playfair_Display({
-  subsets: ["latin"],
+// Markazi Text — an elegant Persian serif used purely for large display
+// headings and the wordmark, giving the cellar its editorial, luxe character.
+const markazi = Markazi_Text({
+  subsets: ["arabic", "latin"],
   variable: "--font-serif",
   display: "swap",
 });
@@ -87,22 +88,20 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="fa"
+      dir="rtl"
       suppressHydrationWarning
       className={cn(
         "h-full antialiased",
-        inter.variable,
-        playfair.variable,
+        vazirmatn.variable,
+        markazi.variable,
         geistMono.variable
       )}
     >
       <body className="flex min-h-full flex-col font-sans">
         <Providers>
-          <SiteHeader />
-          <main className="flex flex-1 flex-col">{children}</main>
-          <SiteFooter />
-          <AgeGate />
-          <Toaster position="bottom-right" />
+          {children}
+          <Toaster position="bottom-left" dir="rtl" />
         </Providers>
       </body>
     </html>
