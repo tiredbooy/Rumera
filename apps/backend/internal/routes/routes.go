@@ -94,6 +94,20 @@ func registerPublicRoutes(v1 *gin.RouterGroup, h *handlers.Handler) {
 	v1.GET("/blog-categories", h.ListBlogCategories)
 	v1.GET("/blog-categories/:id", h.GetBlogCategory)
 
+	// Recipes (content commerce). Static segments registered before the :slug
+	// wildcard so they take precedence.
+	v1.GET("/recipes", h.ListRecipes)
+	v1.GET("/recipes/featured", h.FeaturedRecipes)
+	v1.GET("/recipes/sitemap", h.RecipeSitemap)
+	v1.GET("/recipes/:slug", h.GetRecipeBySlug)
+	v1.GET("/recipes/:slug/related", h.RelatedRecipes)
+	v1.GET("/products/:id/recipes", h.ProductRecipes)
+
+	// Recommendations (public surfaces — work for guests too)
+	v1.GET("/recommendations/trending", h.TrendingRecommendations)
+	v1.GET("/recommendations/products/:id/similar", h.SimilarProducts)
+	v1.GET("/recommendations/products/:id/frequently-bought-together", h.FrequentlyBoughtTogether)
+
 	// Shipping (catalogue + checkout estimation)
 	v1.GET("/shipping/zones", h.ListShippingZones)
 	v1.GET("/shipping/zones/:id", h.GetShippingZone)
@@ -142,6 +156,12 @@ func registerCustomerRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.
 	c.GET("/orders", h.ListMyOrders)
 	c.GET("/orders/:id", h.GetMyOrder)
 	c.POST("/orders/:id/cancel", h.CancelOrder)
+
+	// Recommendations (personalized — requires identity)
+	c.GET("/recommendations/for-you", h.ForYou)
+	c.POST("/recommendations/interactions", h.RecordInteraction)
+	c.GET("/recommendations/profile", h.GetMyRecommendationProfile)
+	c.POST("/recommendations/profile/recompute", h.RecomputeMyRecommendationProfile)
 
 	// Reviews
 	c.POST("/reviews", h.CreateReview)
@@ -237,6 +257,13 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	a.POST("/blog-categories", h.CreateBlogCategory)
 	a.PATCH("/blog-categories/:id", h.UpdateBlogCategory)
 	a.DELETE("/blog-categories/:id", h.DeleteBlogCategory)
+
+	// Recipes
+	a.GET("/recipes", h.ListRecipesAdmin)
+	a.POST("/recipes", h.CreateRecipe)
+	a.GET("/recipes/:id", h.GetRecipeAdmin)
+	a.PATCH("/recipes/:id", h.UpdateRecipe)
+	a.DELETE("/recipes/:id", h.DeleteRecipe)
 
 	// Analytics
 	an := a.Group("/analytics")
