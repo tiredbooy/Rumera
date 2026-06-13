@@ -1,0 +1,123 @@
+package models
+
+import "time"
+
+// ── Entities ──────────────────────────────────────────────────────────────────
+
+type BlogCategory struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Description *string   `json:"description"`
+	Slug        *string   `json:"slug"`
+	ParentID    *int64    `json:"parent_id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type Blog struct {
+	ID              int64      `json:"id"`
+	AuthorID        int64      `json:"author_id"`
+	Title           string     `json:"title"`
+	Slug            string     `json:"slug"`
+	Content         string     `json:"content"`
+	Excerpt         *string    `json:"excerpt"`
+	TimeToRead      int        `json:"time_to_read"`
+	TotalReads      int64      `json:"total_reads"`
+	MetaTitle       *string    `json:"meta_title"`
+	MetaDescription *string    `json:"meta_description"`
+	PublishedAt     *time.Time `json:"published_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	DeletedAt       *time.Time `json:"deleted_at"`
+}
+
+type BlogCategoryAssignment struct {
+	ID             int64 `json:"id"`
+	BlogID         int64 `json:"blog_id"`
+	BlogCategoryID int64 `json:"blog_category_id"`
+}
+
+type BlogProduct struct {
+	ID        int64 `json:"id"`
+	BlogID    int64 `json:"blog_id"`
+	ProductID int64 `json:"product_id"`
+}
+
+type BlogTag struct {
+	ID     int64 `json:"id"`
+	BlogID int64 `json:"blog_id"`
+	TagID  int64 `json:"tag_id"`
+}
+
+// ── Requests ──────────────────────────────────────────────────────────────────
+
+type BlogCategoryReq struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	Slug        *string `json:"slug"`
+	ParentID    *int64  `json:"parent_id"`
+}
+
+type BlogReq struct {
+	AuthorID        int64      `json:"author_id"`
+	Title           string     `json:"title"`
+	Slug            string     `json:"slug"`
+	Content         string     `json:"content"`
+	Excerpt         *string    `json:"excerpt"`
+	TimeToRead      int        `json:"time_to_read"`
+	MetaTitle       *string    `json:"meta_title"`
+	MetaDescription *string    `json:"meta_description"`
+	PublishedAt     *time.Time `json:"published_at"`
+	CategoryIDs     []int64    `json:"category_ids"`
+	ProductIDs      []int64    `json:"product_ids"`
+	TagIDs          []int64    `json:"tag_ids"`
+}
+
+type BlogUpdateReq struct {
+	Title           *string    `json:"title"`
+	Slug            *string    `json:"slug"`
+	Content         *string    `json:"content"`
+	Excerpt         *string    `json:"excerpt"`
+	TimeToRead      *int       `json:"time_to_read"`
+	MetaTitle       *string    `json:"meta_title"`
+	MetaDescription *string    `json:"meta_description"`
+	PublishedAt     *time.Time `json:"published_at"`
+	CategoryIDs []int64 `json:"category_ids"`
+	ProductIDs  []int64 `json:"product_ids"`
+	TagIDs      []int64 `json:"tag_ids"`
+}
+
+// ── Responses ─────────────────────────────────────────────────────────────────
+
+type BlogCategoryResponse struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Description *string   `json:"description"`
+	Slug        *string   `json:"slug"`
+	ParentID    *int64    `json:"parent_id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type BlogResponse struct {
+	ID              int64      `json:"id"`
+	AuthorID        int64      `json:"author_id"`
+	Title           string     `json:"title"`
+	Slug            string     `json:"slug"`
+	Content         string     `json:"content"`
+	Excerpt         *string    `json:"excerpt"`
+	TimeToRead      int        `json:"time_to_read"`
+	TotalReads      int64      `json:"total_reads"`
+	MetaTitle       *string    `json:"meta_title"`
+	MetaDescription *string    `json:"meta_description"`
+	PublishedAt     *time.Time `json:"published_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+type BlogDetailResponse struct {
+	BlogResponse
+	Categories []BlogCategoryResponse `json:"categories"`
+	ProductIDs []int64                `json:"product_ids"`
+	TagIDs     []int64                `json:"tag_ids"`
+}

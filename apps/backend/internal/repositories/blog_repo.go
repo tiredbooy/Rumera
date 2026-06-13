@@ -1,0 +1,414 @@
+package repositories
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/tiredbooy/internal/models"
+)
+
+type BlogCategoryRepository interface {
+	GetByID(ctx context.Context, id int64) (*models.BlogCategory, error)
+	GetAll(ctx context.Context) ([]*models.BlogCategory, error)
+	Create(ctx context.Context, req *models.BlogCategoryReq) (*models.BlogCategory, error)
+	Update(ctx context.Context, id int64, req *models.BlogCategoryReq) (*models.BlogCategory, error)
+	Delete(ctx context.Context, id int64) error
+}
+
+type BlogRepository interface {
+	GetByID(ctx context.Context, id int64) (*models.Blog, error)
+	GetBySlug(ctx context.Context, slug string) (*models.Blog, error)
+	GetAll(ctx context.Context) ([]*models.Blog, error)
+	Create(ctx context.Context, req *models.BlogReq) (*models.Blog, error)
+	Update(ctx context.Context, id int64, req *models.BlogUpdateReq) (*models.Blog, error)
+	SoftDelete(ctx context.Context, id int64) error
+	IncrementReads(ctx context.Context, id int64) error
+
+	// relations
+	AssignCategories(ctx context.Context, blogID int64, categoryIDs []int64) error
+	RemoveCategories(ctx context.Context, blogID int64) error
+	GetCategoriesByBlogID(ctx context.Context, blogID int64) ([]*models.BlogCategory, error)
+
+	AssignProducts(ctx context.Context, blogID int64, productIDs []int64) error
+	RemoveProducts(ctx context.Context, blogID int64) error
+	GetProductIDsByBlogID(ctx context.Context, blogID int64) ([]int64, error)
+
+	AssignTags(ctx context.Context, blogID int64, tagIDs []int64) error
+	RemoveTags(ctx context.Context, blogID int64) error
+	GetTagIDsByBlogID(ctx context.Context, blogID int64) ([]int64, error)
+}
+
+// ── BlogCategory ──────────────────────────────────────────────────────────────
+
+type blogCategoryRepository struct{ db *pgxpool.Pool }
+
+func NewBlogCategoryRepository(db *pgxpool.Pool) BlogCategoryRepository {
+	return &blogCategoryRepository{db: db}
+}
+
+func (r *blogCategoryRepository) GetByID(ctx context.Context, id int64) (*models.BlogCategory, error) {
+	query := `SELECT id, name, description, slug, parent_id, created_at, updated_at
+			  FROM blog_categories WHERE id = $1`
+
+	c := &models.BlogCategory{}
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&c.ID, &c.Name, &c.Description, &c.Slug, &c.ParentID, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("blog category not found: %d", id)
+		}
+		return nil, fmt.Errorf("getting blog category: %w", err)
+	}
+	return c, nil
+}
+
+func (r *blogCategoryRepository) GetAll(ctx context.Context) ([]*models.BlogCategory, error) {
+	query := `SELECT id, name, description, slug, parent_id, created_at, updated_at
+			  FROM blog_categories ORDER BY name ASC`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("querying blog categories: %w", err)
+	}
+	defer rows.Close()
+
+	var categories []*models.BlogCategory
+	for rows.Next() {
+		c := &models.BlogCategory{}
+		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.Slug, &c.ParentID, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning blog category: %w", err)
+		}
+		categories = append(categories, c)
+	}
+	return categories, rows.Err()
+}
+
+func (r *blogCategoryRepository) Create(ctx context.Context, req *models.BlogCategoryReq) (*models.BlogCategory, error) {
+	query := `INSERT INTO blog_categories (name, description, slug, parent_id)
+			  VALUES ($1, $2, $3, $4)
+			  RETURNING id, name, description, slug, parent_id, created_at, updated_at`
+
+	c := &models.BlogCategory{}
+	err := r.db.QueryRow(ctx, query, req.Name, req.Description, req.Slug, req.ParentID).Scan(
+		&c.ID, &c.Name, &c.Description, &c.Slug, &c.ParentID, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating blog category: %w", err)
+	}
+	return c, nil
+}
+
+func (r *blogCategoryRepository) Update(ctx context.Context, id int64, req *models.BlogCategoryReq) (*models.BlogCategory, error) {
+	query := `UPDATE blog_categories
+			  SET name        = COALESCE($2, name),
+			      description = COALESCE($3, description),
+			      slug        = COALESCE($4, slug),
+			      parent_id   = COALESCE($5, parent_id),
+			      updated_at  = NOW()
+			  WHERE id = $1
+			  RETURNING id, name, description, slug, parent_id, created_at, updated_at`
+
+	c := &models.BlogCategory{}
+	err := r.db.QueryRow(ctx, query, id, req.Name, req.Description, req.Slug, req.ParentID).Scan(
+		&c.ID, &c.Name, &c.Description, &c.Slug, &c.ParentID, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("blog category not found: %d", id)
+		}
+		return nil, fmt.Errorf("updating blog category: %w", err)
+	}
+	return c, nil
+}
+
+func (r *blogCategoryRepository) Delete(ctx context.Context, id int64) error {
+	ct, err := r.db.Exec(ctx, `DELETE FROM blog_categories WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("deleting blog category: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("blog category not found: %d", id)
+	}
+	return nil
+}
+
+// ── Blog ──────────────────────────────────────────────────────────────────────
+
+type blogRepository struct{ db *pgxpool.Pool }
+
+func NewBlogRepository(db *pgxpool.Pool) BlogRepository {
+	return &blogRepository{db: db}
+}
+
+const blogColumns = `id, author_id, title, slug, content, excerpt, time_to_read,
+					  total_reads, meta_title, meta_description, published_at, created_at, updated_at`
+
+func scanBlog(row pgx.Row, b *models.Blog) error {
+	return row.Scan(
+		&b.ID, &b.AuthorID, &b.Title, &b.Slug, &b.Content,
+		&b.Excerpt, &b.TimeToRead, &b.TotalReads,
+		&b.MetaTitle, &b.MetaDescription,
+		&b.PublishedAt, &b.CreatedAt, &b.UpdatedAt,
+	)
+}
+
+func (r *blogRepository) GetByID(ctx context.Context, id int64) (*models.Blog, error) {
+	query := `SELECT ` + blogColumns + ` FROM blogs WHERE id = $1 AND deleted_at IS NULL`
+
+	b := &models.Blog{}
+	if err := scanBlog(r.db.QueryRow(ctx, query, id), b); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("blog not found: %d", id)
+		}
+		return nil, fmt.Errorf("getting blog: %w", err)
+	}
+	return b, nil
+}
+
+func (r *blogRepository) GetBySlug(ctx context.Context, slug string) (*models.Blog, error) {
+	query := `SELECT ` + blogColumns + ` FROM blogs WHERE slug = $1 AND deleted_at IS NULL`
+
+	b := &models.Blog{}
+	if err := scanBlog(r.db.QueryRow(ctx, query, slug), b); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("blog not found: %s", slug)
+		}
+		return nil, fmt.Errorf("getting blog by slug: %w", err)
+	}
+	return b, nil
+}
+
+func (r *blogRepository) GetAll(ctx context.Context) ([]*models.Blog, error) {
+	query := `SELECT ` + blogColumns + ` FROM blogs WHERE deleted_at IS NULL ORDER BY created_at DESC`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("querying blogs: %w", err)
+	}
+	defer rows.Close()
+
+	var blogs []*models.Blog
+	for rows.Next() {
+		b := &models.Blog{}
+		if err := rows.Scan(
+			&b.ID, &b.AuthorID, &b.Title, &b.Slug, &b.Content,
+			&b.Excerpt, &b.TimeToRead, &b.TotalReads,
+			&b.MetaTitle, &b.MetaDescription,
+			&b.PublishedAt, &b.CreatedAt, &b.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning blog: %w", err)
+		}
+		blogs = append(blogs, b)
+	}
+	return blogs, rows.Err()
+}
+
+func (r *blogRepository) Create(ctx context.Context, req *models.BlogReq) (*models.Blog, error) {
+	query := `INSERT INTO blogs (author_id, title, slug, content, excerpt, time_to_read, meta_title, meta_description, published_at)
+			  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			  RETURNING ` + blogColumns
+
+	b := &models.Blog{}
+	if err := scanBlog(r.db.QueryRow(ctx, query,
+		req.AuthorID, req.Title, req.Slug, req.Content,
+		req.Excerpt, req.TimeToRead, req.MetaTitle,
+		req.MetaDescription, req.PublishedAt,
+	), b); err != nil {
+		return nil, fmt.Errorf("creating blog: %w", err)
+	}
+	return b, nil
+}
+
+func (r *blogRepository) Update(ctx context.Context, id int64, req *models.BlogUpdateReq) (*models.Blog, error) {
+	query := `UPDATE blogs
+			  SET title            = COALESCE($2, title),
+			      slug             = COALESCE($3, slug),
+			      content          = COALESCE($4, content),
+			      excerpt          = COALESCE($5, excerpt),
+			      time_to_read     = COALESCE($6, time_to_read),
+			      meta_title       = COALESCE($7, meta_title),
+			      meta_description = COALESCE($8, meta_description),
+			      published_at     = COALESCE($9, published_at),
+			      updated_at       = NOW()
+			  WHERE id = $1 AND deleted_at IS NULL
+			  RETURNING ` + blogColumns
+
+	b := &models.Blog{}
+	if err := scanBlog(r.db.QueryRow(ctx, query,
+		id, req.Title, req.Slug, req.Content,
+		req.Excerpt, req.TimeToRead, req.MetaTitle,
+		req.MetaDescription, req.PublishedAt,
+	), b); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("blog not found: %d", id)
+		}
+		return nil, fmt.Errorf("updating blog: %w", err)
+	}
+	return b, nil
+}
+
+func (r *blogRepository) SoftDelete(ctx context.Context, id int64) error {
+	ct, err := r.db.Exec(ctx,
+		`UPDATE blogs SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`, id,
+	)
+	if err != nil {
+		return fmt.Errorf("soft deleting blog: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("blog not found: %d", id)
+	}
+	return nil
+}
+
+func (r *blogRepository) IncrementReads(ctx context.Context, id int64) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE blogs SET total_reads = total_reads + 1 WHERE id = $1 AND deleted_at IS NULL`, id,
+	)
+	if err != nil {
+		return fmt.Errorf("incrementing blog reads: %w", err)
+	}
+	return nil
+}
+
+// ── Relations ─────────────────────────────────────────────────────────────────
+
+func (r *blogRepository) AssignCategories(ctx context.Context, blogID int64, categoryIDs []int64) error {
+	if len(categoryIDs) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, cid := range categoryIDs {
+		batch.Queue(
+			`INSERT INTO blog_categories_assignments (blog_id, blog_category_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+			blogID, cid,
+		)
+	}
+	br := r.db.SendBatch(ctx, batch)
+	defer br.Close()
+	for range categoryIDs {
+		if _, err := br.Exec(); err != nil {
+			return fmt.Errorf("assigning category: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *blogRepository) RemoveCategories(ctx context.Context, blogID int64) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM blog_categories_assignments WHERE blog_id = $1`, blogID)
+	return err
+}
+
+func (r *blogRepository) GetCategoriesByBlogID(ctx context.Context, blogID int64) ([]*models.BlogCategory, error) {
+	query := `SELECT bc.id, bc.name, bc.description, bc.slug, bc.parent_id, bc.created_at, bc.updated_at
+			  FROM blog_categories bc
+			  JOIN blog_categories_assignments bca ON bca.blog_category_id = bc.id
+			  WHERE bca.blog_id = $1`
+
+	rows, err := r.db.Query(ctx, query, blogID)
+	if err != nil {
+		return nil, fmt.Errorf("querying blog categories: %w", err)
+	}
+	defer rows.Close()
+
+	var categories []*models.BlogCategory
+	for rows.Next() {
+		c := &models.BlogCategory{}
+		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.Slug, &c.ParentID, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning blog category: %w", err)
+		}
+		categories = append(categories, c)
+	}
+	return categories, rows.Err()
+}
+
+func (r *blogRepository) AssignProducts(ctx context.Context, blogID int64, productIDs []int64) error {
+	if len(productIDs) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, pid := range productIDs {
+		batch.Queue(
+			`INSERT INTO blog_products (blog_id, product_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+			blogID, pid,
+		)
+	}
+	br := r.db.SendBatch(ctx, batch)
+	defer br.Close()
+	for range productIDs {
+		if _, err := br.Exec(); err != nil {
+			return fmt.Errorf("assigning product: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *blogRepository) RemoveProducts(ctx context.Context, blogID int64) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM blog_products WHERE blog_id = $1`, blogID)
+	return err
+}
+
+func (r *blogRepository) GetProductIDsByBlogID(ctx context.Context, blogID int64) ([]int64, error) {
+	rows, err := r.db.Query(ctx, `SELECT product_id FROM blog_products WHERE blog_id = $1`, blogID)
+	if err != nil {
+		return nil, fmt.Errorf("querying blog products: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning product id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *blogRepository) AssignTags(ctx context.Context, blogID int64, tagIDs []int64) error {
+	if len(tagIDs) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, tid := range tagIDs {
+		batch.Queue(
+			`INSERT INTO blog_tags (blog_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+			blogID, tid,
+		)
+	}
+	br := r.db.SendBatch(ctx, batch)
+	defer br.Close()
+	for range tagIDs {
+		if _, err := br.Exec(); err != nil {
+			return fmt.Errorf("assigning tag: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *blogRepository) RemoveTags(ctx context.Context, blogID int64) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM blog_tags WHERE blog_id = $1`, blogID)
+	return err
+}
+
+func (r *blogRepository) GetTagIDsByBlogID(ctx context.Context, blogID int64) ([]int64, error) {
+	rows, err := r.db.Query(ctx, `SELECT tag_id FROM blog_tags WHERE blog_id = $1`, blogID)
+	if err != nil {
+		return nil, fmt.Errorf("querying blog tags: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning tag id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}

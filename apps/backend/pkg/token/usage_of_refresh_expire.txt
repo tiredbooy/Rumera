@@ -1,0 +1,8 @@
+claims, err := tokenManager.ValidateRefreshToken(token)
+// check Redis: exists = valid, missing = already used
+exists := redis.Exists(ctx, "refresh:"+claims.ID)
+if !exists { return error }
+// delete old, issue new pair, store new jti in Redis
+redis.Del(ctx, "refresh:"+claims.ID)
+newPair, _ := tokenManager.Generate(claims.UserID, claims.Role)
+redis.Set(ctx, "refresh:"+newClaims.ID, ..., m.RefreshTTL)

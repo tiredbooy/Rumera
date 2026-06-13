@@ -1,0 +1,21 @@
+# ── Dev image: Go + Air (hot reload) ──────────────────────────────────────────
+FROM golang:1.25-alpine
+
+RUN apk add --no-cache git gcc musl-dev curl
+
+# Install Air — pinned for reproducibility
+RUN go install github.com/air-verse/air@v1.61.7
+
+WORKDIR /app
+
+# Copy dependency manifests — this layer is only rebuilt when go.mod/go.sum change
+COPY go.mod go.sum ./
+
+# Download modules into the image layer cache
+# The go_mod_cache volume in compose also mounts /go/pkg/mod so this
+# persists across container restarts without re-downloading
+RUN go mod download
+
+EXPOSE 8080
+
+CMD ["air", "-c", ".air.toml"]

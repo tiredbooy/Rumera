@@ -1,0 +1,37 @@
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	db := mustConnectDB() // your pgxpool setup
+
+	// repos
+	eventRepo := repository.NewEventRepository(db)
+
+	// services
+	eventSvc := analytics.NewEventService(eventRepo)
+
+	// queue — tune these for your traffic
+	queue := analytics.NewQueue(eventSvc,
+		analytics.WithBatchSize(250),
+		analytics.WithFlushEvery(3*time.Second),
+		analytics.WithWorkerCount(4),
+		analytics.WithChannelSize(10_000),
+	)
+	queue.Start(ctx)
+
+	// router — add middleware globally
+	mux := http.NewServeMux()
+	handler := middleware.Analytics(queue)(mux)
+
+	srv := &http.Server{Addr: ":8080", Handler: handler}
+
+	go func() {
+		<-ctx.Done()
+		slog.Info("shutting down analytics queue...")
+		queue.Shutdown() // drain remaining events before exit
+		srv.Shutdown(context.Background())
+	}()
+
+	slog.Info("server starting", "addr", ":8080")
+	srv.ListenAndServe()
+}
