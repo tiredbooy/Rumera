@@ -10,22 +10,45 @@ export type Category =
 export type Product = {
   id: string
   slug: string
+  /** Persian display name */
   name: string
+  /** Persian maker / house name */
   maker: string
   category: Category
-  /** Tasting note / short pitch shown on the card */
+  /** Tasting note / short pitch shown on the card (Persian) */
   note: string
+  /** Persian origin label */
   origin: string
   abv: number
   volumeMl: number
+  /** Price in Toman */
   price: number
-  /** Optional strike-through price for "on sale" badges */
+  /** Optional strike-through price for "on sale" badges (Toman) */
   compareAt?: number
   rating: number
   reviews: number
   /** Two oklch stops used to paint the bottle/label gradient */
   hue: [string, string]
   badge?: "Limited" | "New" | "Award" | "Rare"
+}
+
+/** Persian labels for each category — used everywhere a category is shown. */
+export const categoryFa: Record<Category, string> = {
+  Whisky: "ویسکی",
+  Wine: "شراب",
+  Champagne: "شامپاین",
+  Gin: "جین",
+  Rum: "رام",
+  Tequila: "تکیلا",
+  Vodka: "ودکا",
+}
+
+/** Persian labels for product badges. */
+export const badgeFa: Record<NonNullable<Product["badge"]>, string> = {
+  Limited: "محدود",
+  New: "جدید",
+  Award: "برگزیده",
+  Rare: "کمیاب",
 }
 
 /** Brand-consistent gradient pairs keyed loosely to the liquid's color. */
@@ -39,12 +62,13 @@ const HUES: Record<Category, [string, string]> = {
   Vodka: ["oklch(0.8 0.03 230)", "oklch(0.55 0.04 250)"],
 }
 
+// Slugs stay ASCII (latin) so URLs/anchors remain clean — the catalogue keeps an
+// English slug alongside the Persian display name.
 function make(
-  p: Omit<Product, "slug" | "hue"> & { hue?: [string, string] }
+  p: Omit<Product, "hue"> & { hue?: [string, string] }
 ): Product {
   return {
     ...p,
-    slug: p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
     hue: p.hue ?? HUES[p.category],
   }
 }
@@ -52,112 +76,120 @@ function make(
 export const products: Product[] = [
   make({
     id: "1",
-    name: "Aobane 18 Year",
-    maker: "Aobane Distillery",
+    slug: "aobane-18-year",
+    name: "آئوبانه ۱۸ سال",
+    maker: "تقطیرخانهٔ آئوبانه",
     category: "Whisky",
-    note: "Single malt aged in sherry casks — dried fig, toffee, a whisper of sea salt.",
-    origin: "Islay, Scotland",
+    note: "تک‌مالت رسیده در بشکه‌های شِری — انجیر خشک، تافی و رایحه‌ای از نمک دریا.",
+    origin: "آیلا، اسکاتلند",
     abv: 46,
     volumeMl: 700,
-    price: 189,
+    price: 18_900_000,
     rating: 4.9,
     reviews: 214,
     badge: "Award",
   }),
   make({
     id: "2",
-    name: "Maison Velour Brut",
-    maker: "Maison Velour",
+    slug: "maison-velour-brut",
+    name: "مزون وِلور بروت",
+    maker: "مزون وِلور",
     category: "Champagne",
-    note: "Grower champagne with a fine, persistent mousse — brioche, white peach, citrus zest.",
-    origin: "Reims, France",
+    note: "شامپاین تولیدکننده با حباب‌های ریز و ماندگار — بریوش، هلوی سفید و پوست مرکبات.",
+    origin: "رَمس، فرانسه",
     abv: 12,
     volumeMl: 750,
-    price: 84,
-    compareAt: 99,
+    price: 8_400_000,
+    compareAt: 9_900_000,
     rating: 4.8,
     reviews: 132,
     badge: "New",
   }),
   make({
     id: "3",
-    name: "Château Noir 2016",
-    maker: "Château Noir",
+    slug: "chateau-noir-2016",
+    name: "شاتو نوآر ۲۰۱۶",
+    maker: "شاتو نوآر",
     category: "Wine",
-    note: "A brooding Bordeaux blend — blackcurrant, cedar, graphite and velvet tannins.",
-    origin: "Pauillac, France",
+    note: "بلندِ بوردوی پرعمق — انگورفرنگی سیاه، چوب سِدر، گرافیت و تانن‌های مخملی.",
+    origin: "پویاک، فرانسه",
     abv: 14,
     volumeMl: 750,
-    price: 142,
+    price: 14_200_000,
     rating: 4.7,
     reviews: 98,
     badge: "Limited",
   }),
   make({
     id: "4",
-    name: "Botanic No. 7",
-    maker: "Harrow & Vale",
+    slug: "botanic-no-7",
+    name: "بوتانیک شمارهٔ ۷",
+    maker: "هَرو و وِیل",
     category: "Gin",
-    note: "Small-batch London Dry — juniper forward with coriander, grapefruit peel and elderflower.",
-    origin: "London, England",
+    note: "جین لندن درای در دسته‌های کوچک — سرشار از سروکوهی با گشنیز، پوست گریپ‌فروت و گل بیدمشک.",
+    origin: "لندن، انگلستان",
     abv: 43,
     volumeMl: 700,
-    price: 48,
+    price: 4_800_000,
     rating: 4.6,
     reviews: 176,
   }),
   make({
     id: "5",
-    name: "Isla Vieja Añejo",
-    maker: "Isla Vieja",
+    slug: "isla-vieja-anejo",
+    name: "ایسلا ویخا آنیخو",
+    maker: "ایسلا ویخا",
     category: "Rum",
-    note: "Twelve years in oak — banana bread, burnt sugar, baking spice and a long warm finish.",
-    origin: "Bridgetown, Barbados",
+    note: "دوازده سال در بلوط — نان موز، شکر سوخته، ادویه و پایانی گرم و طولانی.",
+    origin: "بریجتاون، باربادوس",
     abv: 40,
     volumeMl: 700,
-    price: 72,
+    price: 7_200_000,
     rating: 4.8,
     reviews: 143,
     badge: "Rare",
   }),
   make({
     id: "6",
-    name: "Sol de Agave Blanco",
-    maker: "Sol de Agave",
+    slug: "sol-de-agave-blanco",
+    name: "سول د آگاوه بلانکو",
+    maker: "سول د آگاوه",
     category: "Tequila",
-    note: "Additive-free highland tequila — cooked agave, green apple, white pepper and citrus.",
-    origin: "Jalisco, Mexico",
+    note: "تکیلای کوهستانی بدون افزودنی — آگاوهٔ پخته، سیب سبز، فلفل سفید و مرکبات.",
+    origin: "خالیسکو، مکزیک",
     abv: 40,
     volumeMl: 750,
-    price: 59,
+    price: 5_900_000,
     rating: 4.7,
     reviews: 121,
     badge: "New",
   }),
   make({
     id: "7",
-    name: "Polar Crystal",
-    maker: "Polar Crystal",
+    slug: "polar-crystal",
+    name: "پولار کریستال",
+    maker: "پولار کریستال",
     category: "Vodka",
-    note: "Seven-times distilled from winter wheat — clean, silky, with a faint cracked-pepper finish.",
-    origin: "Mazovia, Poland",
+    note: "هفت‌بار تقطیرشده از گندم زمستانه — زلال، لطیف و با پایانی از فلفل تازه.",
+    origin: "مازوویا، لهستان",
     abv: 40,
     volumeMl: 700,
-    price: 38,
+    price: 3_800_000,
     rating: 4.5,
     reviews: 89,
   }),
   make({
     id: "8",
-    name: "Aobane Cask Strength",
-    maker: "Aobane Distillery",
+    slug: "aobane-cask-strength",
+    name: "آئوبانه کَسک‌استرنث",
+    maker: "تقطیرخانهٔ آئوبانه",
     category: "Whisky",
-    note: "Bottled at full strength — bonfire smoke, dark chocolate and orange marmalade.",
-    origin: "Islay, Scotland",
+    note: "بطری‌شده با قدرت کامل — دود آتش، شکلات تلخ و مارمالاد پرتقال.",
+    origin: "آیلا، اسکاتلند",
     abv: 58.4,
     volumeMl: 700,
-    price: 124,
-    compareAt: 139,
+    price: 12_400_000,
+    compareAt: 13_900_000,
     rating: 4.9,
     reviews: 167,
     badge: "Limited",
@@ -165,23 +197,29 @@ export const products: Product[] = [
 ]
 
 export const categories: { name: Category; tagline: string }[] = [
-  { name: "Whisky", tagline: "Single malts & rare casks" },
-  { name: "Wine", tagline: "Old-world cellars" },
-  { name: "Champagne", tagline: "Grower & vintage" },
-  { name: "Gin", tagline: "Botanical small batch" },
-  { name: "Rum", tagline: "Aged & single estate" },
-  { name: "Tequila", tagline: "100% agave" },
-  { name: "Vodka", tagline: "Craft distilled" },
+  { name: "Whisky", tagline: "تک‌مالت‌ها و بشکه‌های کمیاب" },
+  { name: "Wine", tagline: "سردابه‌های دنیای قدیم" },
+  { name: "Champagne", tagline: "تولیدکننده و وینتیج" },
+  { name: "Gin", tagline: "گیاهی و دسته‌کوچک" },
+  { name: "Rum", tagline: "رسیده و تک‌املاک" },
+  { name: "Tequila", tagline: "۱۰۰٪ آگاوه" },
+  { name: "Vodka", tagline: "تقطیر دست‌ساز" },
 ]
 
-const priceFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 0,
+/** Persian-digit number formatter (groups, digits and decimals localised). */
+const faNumberFormatter = new Intl.NumberFormat("fa-IR")
+
+export function faNum(value: number): string {
+  return faNumberFormatter.format(value)
+}
+
+const tomanFormatter = new Intl.NumberFormat("fa-IR", {
+  maximumFractionDigits: 0,
 })
 
+/** Formats a Toman price with Persian digits, e.g. «۱۸٬۹۰۰٬۰۰۰ تومان». */
 export function formatPrice(value: number): string {
-  return priceFormatter.format(value)
+  return `${tomanFormatter.format(value)} تومان`
 }
 
 export function getFeatured(): Product[] {

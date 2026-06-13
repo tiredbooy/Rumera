@@ -4,7 +4,13 @@ import { Star, Plus } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
-import { formatPrice, type Product } from "@/lib/products"
+import {
+  badgeFa,
+  categoryFa,
+  faNum,
+  formatPrice,
+  type Product,
+} from "@/lib/products"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Bottle } from "@/components/bottle"
@@ -22,14 +28,14 @@ export function ProductCard({ product }: { product: Product }) {
             background: `radial-gradient(75% 60% at 50% 120%, ${product.hue[0]}, transparent 70%)`,
           }}
         />
-        <div className="absolute left-4 top-4 flex flex-col gap-1.5">
+        <div className="absolute start-4 top-4 flex flex-col gap-1.5">
           {product.badge ? (
             <Badge className="bg-gold text-gold-foreground shadow-sm">
-              {product.badge}
+              {badgeFa[product.badge]}
             </Badge>
           ) : null}
           {onSale ? (
-            <Badge className="bg-wine text-wine-foreground shadow-sm">Sale</Badge>
+            <Badge className="bg-wine text-wine-foreground shadow-sm">حراج</Badge>
           ) : null}
         </div>
         <Bottle product={product} className="relative h-48 transition-transform duration-500 group-hover/product:-translate-y-1 group-hover/product:scale-105" />
@@ -38,18 +44,18 @@ export function ProductCard({ product }: { product: Product }) {
       {/* Body */}
       <div className="flex flex-1 flex-col gap-3 border-t border-border/60 p-5">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            {product.category}
+          <span className="text-xs font-medium text-muted-foreground">
+            {categoryFa[product.category]}
           </span>
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <Star className="size-3 fill-primary text-primary" />
-            {product.rating.toFixed(1)}
-            <span className="text-muted-foreground/60">({product.reviews})</span>
+            {faNum(product.rating)}
+            <span className="text-muted-foreground/60">({faNum(product.reviews)})</span>
           </span>
         </div>
 
         <div>
-          <h3 className="font-serif text-lg leading-tight">{product.name}</h3>
+          <h3 className="font-serif text-xl leading-tight">{product.name}</h3>
           <p className="text-xs text-muted-foreground">
             {product.maker} · {product.origin}
           </p>
@@ -60,10 +66,10 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="mt-auto flex items-end justify-between gap-3 pt-2">
           <div className="flex flex-col">
             <span className="text-[11px] text-muted-foreground">
-              {product.volumeMl}ml · {product.abv}% ABV
+              {faNum(product.volumeMl)} میلی‌لیتر · {faNum(product.abv)}٪ الکل
             </span>
             <span className="flex items-baseline gap-2">
-              <span className="font-serif text-xl text-foreground">
+              <span className="font-serif text-2xl text-foreground">
                 {formatPrice(product.price)}
               </span>
               {onSale ? (
@@ -76,9 +82,9 @@ export function ProductCard({ product }: { product: Product }) {
           <Button
             size="icon-lg"
             className={cn("rounded-2xl")}
-            aria-label={`Add ${product.name} to cart`}
+            aria-label={`افزودن ${product.name} به سبد خرید`}
             onClick={() =>
-              toast.success("Added to cart", {
+              toast.success("به سبد خرید افزوده شد", {
                 description: `${product.name} — ${formatPrice(product.price)}`,
               })
             }
