@@ -69,6 +69,47 @@ best-effort delete affected keys (never failing the write).
 | `KeyCategoryTree()` | The full category tree |
 | `KeyRecipe(slug)` | A hydrated public recipe detail |
 
+### HTTP caching: ETag & Cache-Control
+
+On top of the server-side Redis cache, the cacheable detail endpoints emit
+client/CDN cache headers via `pkg/response/cache.go`, so a client holding a
+current copy gets a bodyless `304 Not Modified` instead of the full payload:
+
+| Endpoint | Helper | `Cache-Control` | Why |
+|----------|--------|-----------------|-----|
+| Product detail, Category tree | `response.CachedJSON` | `public, max-age=<ttl>` | No per-request side effects — safe for shared/browser caches to serve within the TTL. |
+| Recipe detail | `response.RevalidateJSON` | `no-cache` | The endpoint **counts a view on every GET**; `max-age` would let clients skip the server and silently drop view counts. `no-cache` forces revalidation (view still fires) while a matching `ETag` still returns a tiny `304`. |
+
+The `ETag` is a strong validator (a quoted FNV-1a 64 hash of the payload). Clients
+echo it back in `If-None-Match`; on a match the handler returns `304` with no body.
+Behaviour is covered by `pkg/response/cache_test.go`.
+
+---
+
+## Metrics & observability
+
+The backend exposes Prometheus metrics at **`GET /metrics`** (toggle with
+`METRICS_ENABLED`, default `true`). Keep this endpoint on an internal network —
+it is unauthenticated. The middleware (`pkg/middleware/metrics.go`) times the full
+handler chain and the series live in `pkg/metrics/metrics.go`.
+
+| Metric | Type | Labels | Meaning |
+|--------|------|--------|---------|
+| `http_requests_total` | counter | `method`, `route`, `status` | Request count. `route` is the **matched template** (`/api/v1/products/:id`), not the raw path, so IDs don't explode cardinality; unmatched requests collapse to `route="unmatched"`. |
+| `http_request_duration_seconds` | histogram | `route` | Request latency (default buckets). Use for p50/p95/p99. |
+| `cache_requests_total` | counter | `result` (`hit`/`miss`/`error`) | Read-through cache outcomes → cache hit ratio. |
+| `db_pool_{total,acquired,idle,max}_conns` | gauge | `pool` (`main`/`analytics`) | Live pgx pool stats, read at scrape time. `acquired` approaching `max` = pool saturation. |
+| `analytics_queue_depth` / `analytics_queue_capacity` | gauge | `queue` (`events`) | Buffered analytics events vs buffer size. Depth trending toward capacity = back-pressure, events about to drop. |
+
+Go runtime and process collectors are included automatically (goroutines, GC, heap,
+fds, CPU). The registry is private to the app — only the series above (plus runtime)
+are exposed, nothing leaks from third-party default registries.
+
+Suggested starting alerts (formal rules land with roadmap item A3): p99
+`http_request_duration_seconds` over budget, `http_requests_total` 5xx rate,
+`db_pool_acquired_conns / db_pool_max_conns` near 1, `analytics_queue_depth` near
+capacity, and a rising `cache_requests_total{result="error"}` rate.
+
 ---
 
 ## Background jobs (cron)
@@ -180,5 +221,6 @@ All via environment variables (see `configs/config.go`).
 | `CRON_RECS_REFRESH_MAX_USERS` | `5000` | Per-run cap on profiles rebuilt |
 | `REDIS_ADDR` / `REDIS_PASSWORD` / `REDIS_DB` | `localhost:6379` / – / `0` | Cache backend |
 | `CORS_ALLOWED_ORIGINS` | `*` | Browser origin allow-list (set explicitly in prod) |
+| `METRICS_ENABLED` | `true` | Expose the Prometheus `/metrics` endpoint + request metrics middleware (keep internal-only) |
 
 > Cron schedules are 6-field (`sec min hour dom mon dow`) and evaluated in UTC.

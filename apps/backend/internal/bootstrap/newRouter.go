@@ -9,6 +9,7 @@ import (
 	config "github.com/tiredbooy/configs"
 	"github.com/tiredbooy/internal/middlewares"
 	"github.com/tiredbooy/internal/routes"
+	"github.com/tiredbooy/pkg/metrics"
 	"go.uber.org/zap"
 )
 
@@ -19,6 +20,11 @@ func newRouter(cfg *config.Config, logger *zap.Logger, c *container) *gin.Engine
 
 	r := gin.New()
 	setupMiddlewares(r, cfg, logger)
+
+	// Prometheus scrape target. Internal-only — keep it off the public ingress.
+	if cfg.MetricsEnabled {
+		r.GET("/metrics", gin.WrapH(metrics.Handler()))
+	}
 
 	// Readiness probe: verifies the process can actually serve traffic by pinging
 	// its hard dependencies (databases + cache). Distinct from the liveness
