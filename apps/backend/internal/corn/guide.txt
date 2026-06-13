@@ -1,0 +1,17 @@
+// services
+dailyProductStatsSvc := analytics.NewDailyProductStatsService(dailyProductStatsRepo)
+dailyRevenueStatsSvc := analytics.NewDailyRevenueStatsService(dailyRevenueStatsRepo)
+searchSummarySvc     := analytics.NewSearchSummaryService(searchSummaryRepo)
+
+// cron jobs
+productStatsJob := cron.NewProductStatsCronJob(db, dailyProductStatsSvc)
+revenueJob      := cron.NewRevenueCronJob(db, dailyRevenueStatsSvc)
+searchJob       := cron.NewSearchCronJob(db, searchSummarySvc)
+
+// runner
+runner := cron.NewRunner()
+runner.Register("0 0 1 * * *", "product-stats", productStatsJob.Run)  // 1:00 AM UTC
+runner.Register("0 15 1 * * *", "revenue-stats", revenueJob.Run)      // 1:15 AM UTC
+runner.Register("0 30 1 * * *", "search-summary", searchJob.Run)      // 1:30 AM UTC
+runner.Start()
+defer runner.Stop()

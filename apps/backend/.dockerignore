@@ -1,0 +1,7 @@
+.git
+.gitignore
+vendor
+bin
+node_modules
+.tmp
+.env

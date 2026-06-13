@@ -1,0 +1,9 @@
+-- +goose Up
+CREATE TABLE IF NOT EXISTS blog_tags (
+    id BIGSERIAL PRIMARY KEY,
+    blog_id BIGINT NOT NULL REFERENCES blogs(id) ON DELETE CASCADE,
+    tag_id BIGINT NOT NULL REFERENCES tags(id) ON DELETE CASCADE
+);
+
+-- +goose Down
+DROP TABLE IF EXISTS blog_tags;

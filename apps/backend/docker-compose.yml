@@ -1,0 +1,113 @@
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg17
+    container_name: rumera_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rumera
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - rumera_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rumera"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  analytics_db:
+    image: timescale/timescaledb:latest-pg17
+    container_name: rumera_analytics
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rumera_analytics
+    ports:
+      - "5433:5432"
+    volumes:
+      - analytics_data:/var/lib/postgresql/data
+    networks:
+      - rumera_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rumera_analytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8-alpine
+    container_name: rumera_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rumera_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.15
+    container_name: rumera_meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: super_secret_key
+      MEILI_ENV: development
+    ports:
+      - "7700:7700"
+    volumes:
+      - meili_data:/meili_data
+    networks:
+      - rumera_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: rumera_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      analytics_db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app                    # live source mount for Air
+      - go_mod_cache:/go/pkg/mod  # persists downloaded modules across restarts
+      - go_build_cache:/root/.cache/go-build  # persists build cache across restarts
+    networks:
+      - rumera_network
+
+volumes:
+  postgres_data:
+  analytics_data:
+  redis_data:
+  meili_data:
+  go_mod_cache:
+  go_build_cache:
+
+networks:
+  rumera_network:
+    driver: bridge

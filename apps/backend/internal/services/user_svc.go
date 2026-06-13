@@ -1,0 +1,170 @@
+package services
+
+import (
+	"context"
+	"errors"
+
+	"github.com/google/uuid"
+	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/internal/repositories"
+	"github.com/tiredbooy/pkg/apperr"
+)
+
+type UserService struct {
+	userRepo repositories.UserRepository
+}
+
+func NewUserService(userRepo repositories.UserRepository) *UserService {
+	return &UserService{userRepo: userRepo}
+}
+
+func (s *UserService) Create(ctx context.Context, req models.CreateUserReq, passwordHash string) (*models.User, error) {
+	if err := validateCreateUserReq(req); err != nil {
+		return nil, err
+	}
+	if passwordHash == "" {
+		return nil, apperr.ErrInvalidRequest
+	}
+
+	exists, err := s.userRepo.ExistsByEmail(ctx, req.Email)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	if exists {
+		return nil, apperr.ErrUserAlreadyExists
+	}
+
+	user, err := s.userRepo.Create(ctx, req, passwordHash)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+
+	return user, nil
+}
+
+func (s *UserService) GetByID(ctx context.Context, userID uuid.UUID) (*models.User, error) {
+	if userID == uuid.Nil {
+		return nil, apperr.ErrInvalidRequest
+	}
+
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrUserNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+
+	return user, nil
+}
+
+func (s *UserService) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+	if email == "" {
+		return nil, apperr.ErrInvalidRequest
+	}
+
+	user, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrUserNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+
+	return user, nil
+}
+
+func (s *UserService) GetAll(ctx context.Context, filter models.UserFilter) ([]*models.User, int64, error) {
+	if err := validateUserFilter(filter); err != nil {
+		return nil, 0, err
+	}
+
+	users, total, err := s.userRepo.GetAll(ctx, filter)
+	if err != nil {
+		return nil, 0, apperr.ErrInternal
+	}
+
+	return users, total, nil
+}
+
+func (s *UserService) Update(ctx context.Context, userID uuid.UUID, req models.UpdateUserReq) (*models.User, error) {
+	if userID == uuid.Nil {
+		return nil, apperr.ErrInvalidRequest
+	}
+
+	exists, err := s.userRepo.ExistsByID(ctx, userID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	if !exists {
+		return nil, apperr.ErrUserNotFound
+	}
+
+	user, err := s.userRepo.Update(ctx, userID, req)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrUserNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+
+	return user, nil
+}
+
+func (s *UserService) Delete(ctx context.Context, userID uuid.UUID) error {
+	if userID == uuid.Nil {
+		return apperr.ErrInvalidRequest
+	}
+
+	err := s.userRepo.Delete(ctx, userID)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return apperr.ErrUserNotFound
+		}
+		return apperr.ErrInternal
+	}
+
+	return nil
+}
+
+func (s *UserService) ExistsByEmail(ctx context.Context, email string) (bool, error) {
+	if email == "" {
+		return false, apperr.ErrInvalidRequest
+	}
+
+	exists, err := s.userRepo.ExistsByEmail(ctx, email)
+	if err != nil {
+		return false, apperr.ErrInternal
+	}
+
+	return exists, nil
+}
+
+func (s *UserService) ExistsByID(ctx context.Context, userID uuid.UUID) (bool, error) {
+	if userID == uuid.Nil {
+		return false, apperr.ErrInvalidRequest
+	}
+
+	exists, err := s.userRepo.ExistsByID(ctx, userID)
+	if err != nil {
+		return false, apperr.ErrInternal
+	}
+
+	return exists, nil
+}
+
+// ── private validators ────────────────────────────────────────────────────────
+
+func validateCreateUserReq(req models.CreateUserReq) error {
+	if req.Email == "" || (req.FirstName == nil || *req.FirstName == "") || (req.LastName == nil || *req.LastName == "") {
+		return apperr.ErrInvalidRequest
+	}
+	return nil
+}
+
+func validateUserFilter(f models.UserFilter) error {
+	if f.Limit <= 0 {
+		return apperr.ErrInvalidRequest
+	}
+	return nil
+}
