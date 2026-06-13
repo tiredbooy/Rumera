@@ -6,16 +6,16 @@ import { Button } from "@/components/ui/button"
 
 const columns = [
   {
-    title: "Shop",
-    links: ["Whisky", "Wine", "Champagne", "Gin", "Rum", "Tequila"],
+    title: "فروشگاه",
+    links: ["ویسکی", "شراب", "شامپاین", "جین", "رام", "تکیلا"],
   },
   {
-    title: "Company",
-    links: ["Our story", "Sustainability", "Stockists", "Careers", "Press"],
+    title: "شرکت",
+    links: ["داستان ما", "پایداری", "فروشگاه‌ها", "فرصت‌های شغلی", "رسانه"],
   },
   {
-    title: "Support",
-    links: ["Help center", "Shipping", "Returns", "Track order", "Contact"],
+    title: "پشتیبانی",
+    links: ["مرکز راهنما", "ارسال", "بازگشت کالا", "پیگیری سفارش", "تماس با ما"],
   },
 ]
 
@@ -30,28 +30,28 @@ export function SiteFooter() {
               <span className="flex size-8 items-center justify-center rounded-xl bg-primary/15 text-primary">
                 <Wine className="size-4.5" />
               </span>
-              <span className="font-serif text-2xl">
-                <span className="text-foil">Rumera</span>
+              <span className="font-serif text-3xl leading-none">
+                <span className="text-foil">رومرا</span>
               </span>
             </Link>
             <p className="mt-4 max-w-sm text-sm text-muted-foreground">
-              A curated cellar of rare spirits, grower champagnes and old-world
-              wine — delivered cold, fast, and beautifully.
+              سردابه‌ای منتخب از اسپیریت‌های نایاب، شامپاین‌های تولیدکننده و
+              شراب‌های دنیای قدیم — خنک، سریع و زیبا تحویل داده می‌شود.
             </p>
             <form className="mt-6 flex max-w-sm items-center gap-2">
               <Input
                 type="email"
                 required
-                placeholder="Email for early access"
+                placeholder="ایمیل برای دسترسی زودهنگام"
                 className="h-10"
               />
               <Button type="submit" className="h-10 shrink-0">
-                Join <Send />
+                عضویت <Send />
               </Button>
             </form>
             <div className="mt-6 flex items-center gap-2">
               {[Camera, AtSign, Send, Rss].map((Icon, i) => (
-                <Button key={i} variant="outline" size="icon" aria-label="Social link">
+                <Button key={i} variant="outline" size="icon" aria-label="شبکه‌های اجتماعی">
                   <Icon />
                 </Button>
               ))}
@@ -62,7 +62,7 @@ export function SiteFooter() {
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
             {columns.map((col) => (
               <div key={col.title}>
-                <h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground">
+                <h4 className="text-xs font-semibold text-foreground">
                   {col.title}
                 </h4>
                 <ul className="mt-4 space-y-2.5">
@@ -83,11 +83,11 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-border/60 pt-8 text-xs text-muted-foreground sm:flex-row">
-          <p>© {new Date().getFullYear()} Rumera. Please drink responsibly.</p>
+          <p>© ۱۴۰۴ رومرا. لطفاً مسئولانه بنوشید.</p>
           <div className="flex items-center gap-5">
-            <Link href="#" className="hover:text-foreground">Privacy</Link>
-            <Link href="#" className="hover:text-foreground">Terms</Link>
-            <Link href="#" className="hover:text-foreground">Drink Aware · 21+</Link>
+            <Link href="#" className="hover:text-foreground">حریم خصوصی</Link>
+            <Link href="#" className="hover:text-foreground">قوانین</Link>
+            <Link href="#" className="hover:text-foreground">نوشیدنِ آگاهانه · +۱۸</Link>
           </div>
         </div>
       </div>

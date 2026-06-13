@@ -54,7 +54,7 @@ func (h *Handler) CategoryTree(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	response.OK(c, data)
+	response.CachedJSON(c, data, categoryTreeCacheTTL)
 }
 
 // GetCategory — GET /categories/:id

@@ -1,27 +1,30 @@
 import { cn } from "@/lib/utils"
-import type { Product } from "@/lib/products"
+
+/** Neutral fallback gradient for products that don't carry their own hue (live API data). */
+const DEFAULT_HUE: [string, string] = ["oklch(0.62 0.13 65)", "oklch(0.32 0.08 50)"]
 
 /**
- * Dependency-free bottle visual: an SVG silhouette filled with the product's
- * gradient and a foil label. Looks intentional and luxe without shipping any
- * product photography, and never renders a broken image.
+ * Dependency-free bottle visual: an SVG silhouette filled with a gradient and a
+ * foil label. Looks intentional and luxe without shipping any product
+ * photography, and never renders a broken image. `hue` is optional so it works
+ * with both the sample data (which carries a hue) and live API products.
  */
 export function Bottle({
   product,
   className,
 }: {
-  product: Pick<Product, "id" | "category" | "maker" | "hue">
+  product: { id: string | number; hue?: [string, string]; maker?: string }
   className?: string
 }) {
   const gradientId = `bottle-${product.id}`
-  const [from, to] = product.hue
+  const [from, to] = product.hue ?? DEFAULT_HUE
 
   return (
     <svg
       viewBox="0 0 120 280"
       className={cn("h-full w-auto drop-shadow-xl", className)}
       role="img"
-      aria-label={`${product.maker} bottle`}
+      aria-label={product.maker ? `بطری ${product.maker}` : "بطری رومرا"}
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">

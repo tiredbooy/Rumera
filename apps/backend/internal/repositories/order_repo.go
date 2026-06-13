@@ -266,20 +266,21 @@ func (r *orderRepository) GetItems(ctx context.Context, orderID int64) ([]models
 		SELECT
 			oi.id,
 			oi.product_id,
-			oi.product_variant_id,          -- ← add this
+			oi.product_variant_id,
 			p.title   AS product_title,
-			(
-				SELECT pi.image_url
-				FROM   product_images pi
-				WHERE  pi.product_id = p.id
-				  AND  pi.is_primary = true
-				LIMIT  1
-			)         AS image_url,
+			img.image_url,
 			oi.quantity,
 			oi.unit_price,
 			oi.total_price
 		FROM order_items oi
 		INNER JOIN products p ON p.id = oi.product_id
+		LEFT JOIN LATERAL (
+			SELECT pi.image_url
+			FROM   product_images pi
+			WHERE  pi.product_id = p.id
+			  AND  pi.is_primary = true
+			LIMIT  1
+		) img ON TRUE
 		WHERE oi.order_id = $1
 		ORDER BY oi.id ASC`
 

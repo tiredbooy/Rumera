@@ -1,6 +1,6 @@
 import Link from "next/link"
 import {
-  ArrowRight,
+  ArrowLeft,
   Truck,
   ShieldCheck,
   Sparkles,
@@ -16,17 +16,20 @@ import { Bottle } from "@/components/bottle"
 import { Reveal } from "@/components/motion/reveal"
 import { BrandMarquee } from "@/components/brand-marquee"
 import { HomeStructuredData } from "@/components/structured-data"
-import { categories, getFeatured, products } from "@/lib/products"
+import { categories, categoryFa, faNum, getFeatured, products } from "@/lib/products"
 
 const perks = [
-  { icon: Truck, title: "Chilled overnight", desc: "Temperature-controlled delivery" },
-  { icon: ShieldCheck, title: "Guaranteed authentic", desc: "Every bottle, sourced direct" },
-  { icon: Sparkles, title: "Curated by sommeliers", desc: "Hand-picked, never algorithmic" },
-  { icon: Leaf, title: "Carbon-neutral", desc: "Offset on every order" },
+  { icon: Truck, title: "ارسال خنک یک‌شبه", desc: "تحویل با کنترل کامل دما" },
+  { icon: ShieldCheck, title: "اصالت تضمین‌شده", desc: "هر بطری، مستقیم از سازنده" },
+  { icon: Sparkles, title: "منتخب سومِلیه‌ها", desc: "دست‌چین، نه الگوریتمی" },
+  { icon: Leaf, title: "بدون ردپای کربن", desc: "جبران کربن در هر سفارش" },
 ]
 
 // Unique makers power the trust marquee — derived so it never drifts from the catalogue.
 const makers = Array.from(new Set(products.map((p) => p.maker)))
+
+// Catalogue filter chips (Persian) — first is the active "all".
+const filters = ["همه", "ویسکی", "شراب", "شامپاین", "اسپیریت"]
 
 export default function Home() {
   const featured = getFeatured()
@@ -42,23 +45,23 @@ export default function Home() {
         <div className="container-px mx-auto grid max-w-7xl items-center gap-12 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:py-28">
           <div className="flex flex-col items-start">
             <p className="eyebrow mb-5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-500">
-              <Sparkles className="size-3.5" /> The cellar, reimagined
+              <Sparkles className="size-3.5" /> سردابه، بازآفرینی‌شده
             </p>
             {/* Hero copy is intentionally NOT JS-animated so it paints instantly (fast LCP). */}
-            <h1 className="font-serif text-5xl leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
-              Rare bottles,
+            <h1 className="font-serif text-6xl leading-[1.05] sm:text-7xl lg:text-8xl">
+              بطری‌های نایاب،
               <br />
-              <span className="text-foil">poured with intent.</span>
+              <span className="text-foil">با وسواس برگزیده.</span>
             </h1>
             <p className="mt-6 max-w-md text-lg text-muted-foreground">
-              A curated collection of single malts, old-world wine and grower
-              champagne — sourced direct from the makers and delivered to your
-              door, cold and fast.
+              مجموعه‌ای منتخب از تک‌مالت‌ها، شراب‌های دنیای قدیم و شامپاین
+              تولیدکننده — مستقیم از سازندگان تهیه و خنک و سریع به درِ خانهٔ شما
+              می‌رسد.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button size="lg" className="h-12 px-6 text-sm" asChild>
                 <Link href="#catalog">
-                  Shop the collection <ArrowRight />
+                  خرید از مجموعه <ArrowLeft />
                 </Link>
               </Button>
               <Button
@@ -67,20 +70,18 @@ export default function Home() {
                 className="h-12 px-6 text-sm"
                 asChild
               >
-                <Link href="#story">Discover Rumera</Link>
+                <Link href="#story">آشنایی با رومرا</Link>
               </Button>
             </div>
             <dl className="mt-12 grid grid-cols-3 gap-8 border-t border-border/60 pt-8">
               {[
-                ["1,200+", "rare labels"],
-                ["38", "countries"],
-                ["4.9★", "from 12k reviews"],
+                ["+۱٬۲۰۰", "برچسب کمیاب"],
+                ["۳۸", "کشور"],
+                ["★۴٫۹", "از ۱۲ هزار نظر"],
               ].map(([stat, label]) => (
                 <div key={label}>
-                  <dt className="font-serif text-3xl text-foil">{stat}</dt>
-                  <dd className="mt-1 text-xs uppercase tracking-[0.15em] text-muted-foreground">
-                    {label}
-                  </dd>
+                  <dt className="font-serif text-4xl text-foil">{stat}</dt>
+                  <dd className="mt-1 text-xs text-muted-foreground">{label}</dd>
                 </div>
               ))}
             </dl>
@@ -95,19 +96,19 @@ export default function Home() {
                   background: `radial-gradient(70% 50% at 50% 110%, ${hero.hue[0]}, transparent 65%)`,
                 }}
               />
-              <Badge className="absolute left-6 top-6 bg-gold text-gold-foreground">
-                Editor&apos;s pick
+              <Badge className="absolute start-6 top-6 bg-gold text-gold-foreground">
+                انتخاب سردبیر
               </Badge>
               <Bottle product={hero} className="relative mb-0 h-[26rem]" />
               <div className="border-hairline absolute bottom-6 left-6 right-6 flex items-center justify-between rounded-2xl bg-background/70 p-4 backdrop-blur-md">
                 <div>
-                  <p className="font-serif text-lg leading-tight">{hero.name}</p>
+                  <p className="font-serif text-xl leading-tight">{hero.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {hero.origin} · {hero.abv}% ABV
+                    {hero.origin} · {faNum(hero.abv)}٪ الکل
                   </p>
                 </div>
                 <span className="inline-flex items-center gap-1 text-sm text-primary">
-                  <Star className="size-3.5 fill-primary" /> {hero.rating}
+                  <Star className="size-3.5 fill-primary" /> {faNum(hero.rating)}
                 </span>
               </div>
             </div>
@@ -138,7 +139,7 @@ export default function Home() {
       <section className="border-b border-border/60 py-8">
         <div className="container-px mx-auto max-w-7xl">
           <p className="eyebrow mb-5 justify-center text-center">
-            Direct from the makers
+            مستقیم از سازندگان
           </p>
           <BrandMarquee items={makers} />
         </div>
@@ -148,12 +149,12 @@ export default function Home() {
       <section id="categories" className="container-px mx-auto max-w-7xl py-20">
         <Reveal className="flex items-end justify-between gap-4">
           <div>
-            <p className="eyebrow mb-3">Browse by craft</p>
-            <h2 className="font-serif text-4xl tracking-tight">Explore the cellar</h2>
+            <p className="eyebrow mb-3">مرور بر اساس هنرِ ساخت</p>
+            <h2 className="font-serif text-5xl">سردابه را کاوش کنید</h2>
           </div>
           <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
             <Link href="#catalog">
-              View all <ArrowRight />
+              مشاهدهٔ همه <ArrowLeft />
             </Link>
           </Button>
         </Reveal>
@@ -176,20 +177,20 @@ export default function Home() {
                   <div
                     className="pointer-events-none absolute inset-0 opacity-60 transition-opacity group-hover/cat:opacity-100"
                     style={{
-                      background: `radial-gradient(80% 70% at 100% 100%, ${sample.hue[0]}, transparent 60%)`,
+                      background: `radial-gradient(80% 70% at 0% 100%, ${sample.hue[0]}, transparent 60%)`,
                     }}
                   />
                   <div className="relative">
-                    <h3 className="font-serif text-2xl">{cat.name}</h3>
+                    <h3 className="font-serif text-3xl">{categoryFa[cat.name]}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">{cat.tagline}</p>
                   </div>
                   <span className="relative mt-4 inline-flex items-center gap-1 text-sm text-primary opacity-0 transition-opacity group-hover/cat:opacity-100">
-                    Shop {cat.name} <ArrowRight className="size-4" />
+                    خرید {categoryFa[cat.name]} <ArrowLeft className="size-4" />
                   </span>
                   {i === 0 ? (
                     <Bottle
                       product={sample}
-                      className="absolute -bottom-6 right-2 h-56 opacity-90"
+                      className="absolute -bottom-6 end-2 h-56 opacity-90"
                     />
                   ) : null}
                 </Link>
@@ -203,11 +204,11 @@ export default function Home() {
       <section id="catalog" className="container-px mx-auto max-w-7xl pb-20">
         <Reveal className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="eyebrow mb-3">Just landed</p>
-            <h2 className="font-serif text-4xl tracking-tight">Featured bottles</h2>
+            <p className="eyebrow mb-3">تازه رسیده</p>
+            <h2 className="font-serif text-5xl">بطری‌های منتخب</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            {["All", "Whisky", "Wine", "Champagne", "Spirits"].map((f, i) => (
+            {filters.map((f, i) => (
               <Button
                 key={f}
                 size="sm"
@@ -246,23 +247,23 @@ export default function Home() {
             </div>
           </Reveal>
           <Reveal delay={0.1}>
-            <p className="eyebrow mb-4">Our story</p>
-            <h2 className="font-serif text-4xl leading-tight tracking-tight sm:text-5xl">
-              We travel the world so your glass doesn&apos;t have to.
+            <p className="eyebrow mb-4">داستان ما</p>
+            <h2 className="font-serif text-5xl leading-tight sm:text-6xl">
+              ما دنیا را می‌گردیم تا گیلاسِ شما نگردد.
             </h2>
             <p className="mt-5 text-muted-foreground">
-              Rumera began with a simple frustration: the best bottles never made
-              it past the distillery gates. So we built relationships with the
-              makers themselves — independent distillers, grower-producers and
-              family estates — and bring their finest releases straight to you.
+              رومرا با یک دلخوریِ ساده آغاز شد: بهترین بطری‌ها هرگز از دروازهٔ
+              تقطیرخانه بیرون نمی‌آمدند. پس ما با خودِ سازندگان رابطه ساختیم —
+              تقطیرکنندگان مستقل، تولیدکنندگان خُرد و املاک خانوادگی — و بهترین
+              محصولاتشان را مستقیم به شما می‌رسانیم.
             </p>
             <p className="mt-4 text-muted-foreground">
-              Every label is tasted and approved by our team before it earns a
-              place in the cellar. No fillers, no middlemen, no compromise.
+              هر برچسب پیش از یافتنِ جایی در سردابه، توسط تیم ما چشیده و تأیید
+              می‌شود. بدون پُرکننده، بدون واسطه، بدون مصالحه.
             </p>
             <Button size="lg" className="mt-8 h-12 px-6 text-sm" asChild>
               <Link href="#catalog">
-                Start exploring <ArrowRight />
+                شروع کاوش <ArrowLeft />
               </Link>
             </Button>
           </Reveal>
@@ -273,17 +274,17 @@ export default function Home() {
       <section className="container-px mx-auto max-w-4xl py-24 text-center">
         <Reveal>
           <Quote className="mx-auto size-10 text-primary/40" />
-          <blockquote className="mt-6 font-serif text-3xl leading-snug tracking-tight sm:text-4xl">
-            “The closest thing to having a sommelier, a whisky buyer and a
-            concierge — all in one beautiful little app.”
+          <blockquote className="mt-6 font-serif text-4xl leading-snug sm:text-5xl">
+            «نزدیک‌ترین چیز به داشتنِ یک سومِلیه، یک خریدارِ ویسکی و یک کنسیِرژ —
+            همه در یک اپلیکیشنِ زیبای کوچک.»
           </blockquote>
           <div className="mt-8 flex items-center justify-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-full bg-primary/15 font-serif text-primary">
-              E
+            <span className="flex size-10 items-center justify-center rounded-full bg-primary/15 font-serif text-lg text-primary">
+              ن
             </span>
-            <div className="text-left">
-              <p className="text-sm font-medium">Elena Marchetti</p>
-              <p className="text-xs text-muted-foreground">Member since 2021</p>
+            <div className="text-start">
+              <p className="text-sm font-medium">نیلوفر مرادی</p>
+              <p className="text-xs text-muted-foreground">عضو از سال ۱۴۰۰</p>
             </div>
           </div>
         </Reveal>
@@ -293,18 +294,18 @@ export default function Home() {
       <section className="container-px mx-auto max-w-7xl pb-24">
         <Reveal y={24}>
           <div className="cellar-glow border-hairline relative overflow-hidden rounded-[2.5rem] px-8 py-16 text-center ring-1 ring-foreground/10 sm:px-16 sm:py-20">
-            <p className="eyebrow mb-4 justify-center">Become a member</p>
-            <h2 className="mx-auto max-w-2xl font-serif text-4xl leading-tight tracking-tight sm:text-5xl">
-              Get first pour on rare releases.
+            <p className="eyebrow mb-4 justify-center">عضو شوید</p>
+            <h2 className="mx-auto max-w-2xl font-serif text-5xl leading-tight sm:text-6xl">
+              نخستین جرعه از عرضه‌های نایاب، از آنِ شما.
             </h2>
             <p className="mx-auto mt-5 max-w-md text-muted-foreground">
-              Members unlock allocation drops, member-only pricing and a complimentary
-              chilled delivery on every order.
+              اعضا به عرضه‌های محدود، قیمت ویژهٔ اعضا و یک ارسالِ خنکِ رایگان روی
+              هر سفارش دسترسی دارند.
             </p>
             <div className="mt-8 flex justify-center">
               <Button size="lg" className="h-12 px-8 text-sm" asChild>
                 <Link href="#catalog">
-                  Join Rumera free <ArrowRight />
+                  عضویت رایگان در رومرا <ArrowLeft />
                 </Link>
               </Button>
             </div>

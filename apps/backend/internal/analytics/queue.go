@@ -50,6 +50,14 @@ func NewQueue(svc *services.EventService, opts ...QueueOption) *Queue {
 	return q
 }
 
+// Depth returns the number of events currently buffered and awaiting flush. It is
+// read by the metrics layer at scrape time; a depth approaching Capacity means the
+// workers are falling behind and Push is about to start dropping events.
+func (q *Queue) Depth() int { return len(q.ch) }
+
+// Capacity returns the fixed size of the event buffer.
+func (q *Queue) Capacity() int { return cap(q.ch) }
+
 // Push is called by middleware — never blocks, drops on full channel.
 func (q *Queue) Push(e *models.EventReq) {
 	select {
