@@ -42,14 +42,15 @@ export function AgeGate() {
         <div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-2xl bg-primary/15 text-primary">
           <Wine className="size-6" />
         </div>
-        <p className="eyebrow justify-center">Please verify</p>
-        <h2 className="mt-3 font-serif text-3xl">Are you of legal drinking age?</h2>
+        <p className="eyebrow justify-center">لطفاً تأیید کنید</p>
+        <h2 className="mt-3 font-serif text-4xl">به سنِ قانونی نوشیدن رسیده‌اید؟</h2>
         <p className="mt-3 text-sm text-muted-foreground">
-          You must be 21 or older to enter Rumera. Please drink responsibly.
+          برای ورود به رومرا باید ۱۸ سال یا بیشتر داشته باشید. لطفاً مسئولانه
+          بنوشید.
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <Button size="lg" className="h-11 flex-1 text-sm" onClick={confirm}>
-            Yes, I&apos;m 21 or older
+            بله، ۱۸ سال یا بیشتر دارم
           </Button>
           <Button
             size="lg"
@@ -59,11 +60,11 @@ export function AgeGate() {
               window.location.href = "https://www.google.com"
             }}
           >
-            No, take me back
+            خیر، مرا بازگردان
           </Button>
         </div>
         <p className="mt-6 text-xs text-muted-foreground/80">
-          By entering you accept our Terms of Service and Privacy Policy.
+          با ورود، شرایط استفاده و سیاست حریم خصوصی ما را می‌پذیرید.
         </p>
       </div>
     </div>

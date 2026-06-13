@@ -157,16 +157,21 @@
     @apply font-sans;
     scroll-behavior: smooth;
   }
+  /*
+    Persian/Arabic script is cursive — letters join. Letter-spacing and
+    uppercase both break that joining, so headings keep natural spacing and we
+    never use `uppercase`/`tracking-*` on Persian copy anywhere in the app.
+  */
   h1, h2, h3, h4, .font-heading {
     @apply font-serif;
-    letter-spacing: -0.01em;
+    letter-spacing: normal;
   }
 }
 
 @layer components {
-  /* Small caps eyebrow used above section titles */
+  /* Accent eyebrow used above section titles (no letter-spacing — see note above) */
   .eyebrow {
-    @apply inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.25em] text-primary;
+    @apply inline-flex items-center gap-2 text-sm font-semibold text-primary;
   }
 
   /* Warm radial spotlight for hero / feature sections */
