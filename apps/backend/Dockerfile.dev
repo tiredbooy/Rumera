@@ -16,6 +16,11 @@ COPY go.mod go.sum ./
 # persists across container restarts without re-downloading
 RUN go mod download
 
+# Bake an initial copy of the source so the container is runnable on its own and
+# Docker Compose Watch has a baseline to sync changes onto. (A bind mount, if
+# used instead, simply overlays this.)
+COPY . .
+
 EXPOSE 8080
 
 CMD ["air", "-c", ".air.toml"]

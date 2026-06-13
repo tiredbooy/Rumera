@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ProductCard } from "@/components/product-card"
 import { Bottle } from "@/components/bottle"
+import { Reveal } from "@/components/motion/reveal"
+import { BrandMarquee } from "@/components/brand-marquee"
+import { HomeStructuredData } from "@/components/structured-data"
 import { categories, getFeatured, products } from "@/lib/products"
 
 const perks = [
@@ -22,19 +25,26 @@ const perks = [
   { icon: Leaf, title: "Carbon-neutral", desc: "Offset on every order" },
 ]
 
+// Unique makers power the trust marquee — derived so it never drifts from the catalogue.
+const makers = Array.from(new Set(products.map((p) => p.maker)))
+
 export default function Home() {
   const featured = getFeatured()
   const hero = products[0]
 
   return (
     <>
+      {/* SEO: Organization + WebSite + ItemList rich results (zero client JS) */}
+      <HomeStructuredData />
+
       {/* ───────────────────────── Hero ───────────────────────── */}
       <section className="cellar-glow relative overflow-hidden border-b border-border/60">
         <div className="container-px mx-auto grid max-w-7xl items-center gap-12 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:py-28">
           <div className="flex flex-col items-start">
-            <p className="eyebrow mb-5">
+            <p className="eyebrow mb-5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-500">
               <Sparkles className="size-3.5" /> The cellar, reimagined
             </p>
+            {/* Hero copy is intentionally NOT JS-animated so it paints instantly (fast LCP). */}
             <h1 className="font-serif text-5xl leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
               Rare bottles,
               <br />
@@ -108,23 +118,35 @@ export default function Home() {
       {/* ───────────────────────── Perks ───────────────────────── */}
       <section className="border-b border-border/60 bg-card/30">
         <div className="container-px mx-auto grid max-w-7xl gap-6 py-10 sm:grid-cols-2 lg:grid-cols-4">
-          {perks.map((perk) => (
-            <div key={perk.title} className="flex items-center gap-4">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <perk.icon className="size-5" />
-              </span>
-              <div>
-                <p className="text-sm font-medium">{perk.title}</p>
-                <p className="text-xs text-muted-foreground">{perk.desc}</p>
+          {perks.map((perk, i) => (
+            <Reveal key={perk.title} delay={i * 0.06} y={12}>
+              <div className="flex items-center gap-4">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <perk.icon className="size-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium">{perk.title}</p>
+                  <p className="text-xs text-muted-foreground">{perk.desc}</p>
+                </div>
               </div>
-            </div>
+            </Reveal>
           ))}
+        </div>
+      </section>
+
+      {/* ───────────────────────── Maker marquee ───────────────────────── */}
+      <section className="border-b border-border/60 py-8">
+        <div className="container-px mx-auto max-w-7xl">
+          <p className="eyebrow mb-5 justify-center text-center">
+            Direct from the makers
+          </p>
+          <BrandMarquee items={makers} />
         </div>
       </section>
 
       {/* ───────────────────────── Categories ───────────────────────── */}
       <section id="categories" className="container-px mx-auto max-w-7xl py-20">
-        <div className="flex items-end justify-between gap-4">
+        <Reveal className="flex items-end justify-between gap-4">
           <div>
             <p className="eyebrow mb-3">Browse by craft</p>
             <h2 className="font-serif text-4xl tracking-tight">Explore the cellar</h2>
@@ -134,39 +156,44 @@ export default function Home() {
               View all <ArrowRight />
             </Link>
           </Button>
-        </div>
+        </Reveal>
 
         <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
           {categories.map((cat, i) => {
             const sample = products.find((p) => p.category === cat.name) ?? products[0]
             return (
-              <Link
+              <Reveal
                 key={cat.name}
-                href="#catalog"
-                className={`group/cat border-hairline relative flex flex-col justify-between overflow-hidden rounded-3xl bg-card p-6 ring-1 ring-foreground/5 transition-all hover:-translate-y-1 hover:ring-primary/30 ${
-                  i === 0 ? "col-span-2 row-span-2 min-h-72" : "min-h-36"
-                }`}
+                delay={Math.min(i, 4) * 0.05}
+                className={i === 0 ? "col-span-2 row-span-2" : undefined}
               >
-                <div
-                  className="pointer-events-none absolute inset-0 opacity-60 transition-opacity group-hover/cat:opacity-100"
-                  style={{
-                    background: `radial-gradient(80% 70% at 100% 100%, ${sample.hue[0]}, transparent 60%)`,
-                  }}
-                />
-                <div className="relative">
-                  <h3 className="font-serif text-2xl">{cat.name}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{cat.tagline}</p>
-                </div>
-                <span className="relative mt-4 inline-flex items-center gap-1 text-sm text-primary opacity-0 transition-opacity group-hover/cat:opacity-100">
-                  Shop {cat.name} <ArrowRight className="size-4" />
-                </span>
-                {i === 0 ? (
-                  <Bottle
-                    product={sample}
-                    className="absolute -bottom-6 right-2 h-56 opacity-90"
+                <Link
+                  href="#catalog"
+                  className={`group/cat border-hairline relative flex h-full flex-col justify-between overflow-hidden rounded-3xl bg-card p-6 ring-1 ring-foreground/5 transition-all hover:-translate-y-1 hover:ring-primary/30 ${
+                    i === 0 ? "min-h-72" : "min-h-36"
+                  }`}
+                >
+                  <div
+                    className="pointer-events-none absolute inset-0 opacity-60 transition-opacity group-hover/cat:opacity-100"
+                    style={{
+                      background: `radial-gradient(80% 70% at 100% 100%, ${sample.hue[0]}, transparent 60%)`,
+                    }}
                   />
-                ) : null}
-              </Link>
+                  <div className="relative">
+                    <h3 className="font-serif text-2xl">{cat.name}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{cat.tagline}</p>
+                  </div>
+                  <span className="relative mt-4 inline-flex items-center gap-1 text-sm text-primary opacity-0 transition-opacity group-hover/cat:opacity-100">
+                    Shop {cat.name} <ArrowRight className="size-4" />
+                  </span>
+                  {i === 0 ? (
+                    <Bottle
+                      product={sample}
+                      className="absolute -bottom-6 right-2 h-56 opacity-90"
+                    />
+                  ) : null}
+                </Link>
+              </Reveal>
             )
           })}
         </div>
@@ -174,7 +201,7 @@ export default function Home() {
 
       {/* ───────────────────────── Catalog ───────────────────────── */}
       <section id="catalog" className="container-px mx-auto max-w-7xl pb-20">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <Reveal className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="eyebrow mb-3">Just landed</p>
             <h2 className="font-serif text-4xl tracking-tight">Featured bottles</h2>
@@ -191,11 +218,13 @@ export default function Home() {
               </Button>
             ))}
           </div>
-        </div>
+        </Reveal>
 
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {featured.map((product) => (
-            <ProductCard key={product.id} product={product} />
+          {featured.map((product, i) => (
+            <Reveal key={product.id} delay={Math.min(i, 4) * 0.05} y={20}>
+              <ProductCard product={product} />
+            </Reveal>
           ))}
         </div>
       </section>
@@ -203,18 +232,20 @@ export default function Home() {
       {/* ───────────────────────── Story ───────────────────────── */}
       <section id="story" className="border-y border-border/60 bg-card/30">
         <div className="container-px mx-auto grid max-w-7xl items-center gap-12 py-20 lg:grid-cols-2">
-          <div className="cellar-glow border-hairline relative flex aspect-square items-center justify-center overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
-            <div className="flex items-end gap-3">
-              {products.slice(2, 6).map((p, i) => (
-                <Bottle
-                  key={p.id}
-                  product={p}
-                  className={`h-48 ${i % 2 ? "h-56" : "h-44"}`}
-                />
-              ))}
+          <Reveal y={24}>
+            <div className="cellar-glow border-hairline relative flex aspect-square items-center justify-center overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
+              <div className="flex items-end gap-3">
+                {products.slice(2, 6).map((p, i) => (
+                  <Bottle
+                    key={p.id}
+                    product={p}
+                    className={`h-48 ${i % 2 ? "h-56" : "h-44"}`}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-          <div>
+          </Reveal>
+          <Reveal delay={0.1}>
             <p className="eyebrow mb-4">Our story</p>
             <h2 className="font-serif text-4xl leading-tight tracking-tight sm:text-5xl">
               We travel the world so your glass doesn&apos;t have to.
@@ -234,47 +265,51 @@ export default function Home() {
                 Start exploring <ArrowRight />
               </Link>
             </Button>
-          </div>
+          </Reveal>
         </div>
       </section>
 
       {/* ───────────────────────── Testimonial ───────────────────────── */}
       <section className="container-px mx-auto max-w-4xl py-24 text-center">
-        <Quote className="mx-auto size-10 text-primary/40" />
-        <blockquote className="mt-6 font-serif text-3xl leading-snug tracking-tight sm:text-4xl">
-          “The closest thing to having a sommelier, a whisky buyer and a
-          concierge — all in one beautiful little app.”
-        </blockquote>
-        <div className="mt-8 flex items-center justify-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-full bg-primary/15 font-serif text-primary">
-            E
-          </span>
-          <div className="text-left">
-            <p className="text-sm font-medium">Elena Marchetti</p>
-            <p className="text-xs text-muted-foreground">Member since 2021</p>
+        <Reveal>
+          <Quote className="mx-auto size-10 text-primary/40" />
+          <blockquote className="mt-6 font-serif text-3xl leading-snug tracking-tight sm:text-4xl">
+            “The closest thing to having a sommelier, a whisky buyer and a
+            concierge — all in one beautiful little app.”
+          </blockquote>
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-full bg-primary/15 font-serif text-primary">
+              E
+            </span>
+            <div className="text-left">
+              <p className="text-sm font-medium">Elena Marchetti</p>
+              <p className="text-xs text-muted-foreground">Member since 2021</p>
+            </div>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* ───────────────────────── Final CTA ───────────────────────── */}
       <section className="container-px mx-auto max-w-7xl pb-24">
-        <div className="cellar-glow border-hairline relative overflow-hidden rounded-[2.5rem] px-8 py-16 text-center ring-1 ring-foreground/10 sm:px-16 sm:py-20">
-          <p className="eyebrow mb-4 justify-center">Become a member</p>
-          <h2 className="mx-auto max-w-2xl font-serif text-4xl leading-tight tracking-tight sm:text-5xl">
-            Get first pour on rare releases.
-          </h2>
-          <p className="mx-auto mt-5 max-w-md text-muted-foreground">
-            Members unlock allocation drops, member-only pricing and a complimentary
-            chilled delivery on every order.
-          </p>
-          <div className="mt-8 flex justify-center">
-            <Button size="lg" className="h-12 px-8 text-sm" asChild>
-              <Link href="#catalog">
-                Join Rumera free <ArrowRight />
-              </Link>
-            </Button>
+        <Reveal y={24}>
+          <div className="cellar-glow border-hairline relative overflow-hidden rounded-[2.5rem] px-8 py-16 text-center ring-1 ring-foreground/10 sm:px-16 sm:py-20">
+            <p className="eyebrow mb-4 justify-center">Become a member</p>
+            <h2 className="mx-auto max-w-2xl font-serif text-4xl leading-tight tracking-tight sm:text-5xl">
+              Get first pour on rare releases.
+            </h2>
+            <p className="mx-auto mt-5 max-w-md text-muted-foreground">
+              Members unlock allocation drops, member-only pricing and a complimentary
+              chilled delivery on every order.
+            </p>
+            <div className="mt-8 flex justify-center">
+              <Button size="lg" className="h-12 px-8 text-sm" asChild>
+                <Link href="#catalog">
+                  Join Rumera free <ArrowRight />
+                </Link>
+              </Button>
+            </div>
           </div>
-        </div>
+        </Reveal>
       </section>
     </>
   )

@@ -1,0 +1,209 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Rumera — PRODUCTION stack (optimized, hardened)
+#
+#   docker compose -f docker-compose.prod.yml up -d --build      # start
+#   docker compose -f docker-compose.prod.yml logs -f backend    # tail
+#   docker compose -f docker-compose.prod.yml down               # stop
+#
+# Differences from dev:
+#   • Multi-stage, minimal, non-root images (no source, no toolchain).
+#   • Databases are NOT published to the host — reachable only on the internal
+#     network. Put a TLS-terminating reverse proxy in front of frontend/backend.
+#   • Secrets are required: the stack refuses to start if they're unset.
+#   • Pinned restart policy, log rotation, healthcheck-gated dependencies and
+#     modest resource limits for predictable behaviour under load.
+#
+# Provide configuration via a .env file next to this one (see .env.example).
+# ──────────────────────────────────────────────────────────────────────────────
+name: rumera
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-restart: &restart-policy
+  restart: unless-stopped
+
+services:
+  # ── Main database ──────────────────────────────────────────────────────────
+  postgres:
+    <<: *restart-policy
+    image: timescale/timescaledb:latest-pg17
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 1g }
+
+  # ── Analytics database ─────────────────────────────────────────────────────
+  analytics_db:
+    <<: *restart-policy
+    image: timescale/timescaledb:latest-pg17
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${ANALYTICS_DB_USER:?ANALYTICS_DB_USER is required}
+      POSTGRES_PASSWORD: ${ANALYTICS_DB_PASSWORD:?ANALYTICS_DB_PASSWORD is required}
+      POSTGRES_DB: ${ANALYTICS_DB_NAME:?ANALYTICS_DB_NAME is required}
+    volumes:
+      - analytics_data:/var/lib/postgresql/data
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ANALYTICS_DB_USER} -d ${ANALYTICS_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 1g }
+
+  # ── Cache ──────────────────────────────────────────────────────────────────
+  redis:
+    <<: *restart-policy
+    image: redis:8-alpine
+    logging: *default-logging
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"
+    volumes:
+      - redis_data:/data
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 384m }
+
+  # ── Search ─────────────────────────────────────────────────────────────────
+  meilisearch:
+    <<: *restart-policy
+    image: getmeili/meilisearch:v1.15
+    logging: *default-logging
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_API_KEY:?MEILI_API_KEY is required}
+      MEILI_ENV: production
+    volumes:
+      - meili_data:/meili_data
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 512m }
+
+  # ── Backend API ────────────────────────────────────────────────────────────
+  backend:
+    <<: *restart-policy
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    image: rumera/backend:latest
+    logging: *default-logging
+    depends_on:
+      postgres: { condition: service_healthy }
+      analytics_db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      meilisearch: { condition: service_healthy }
+    environment:
+      ENV: production
+      SERVER_PORT: "8080"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?set the storefront origin(s)}
+
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSL_MODE: ${DB_SSL_MODE:-disable}
+
+      ANALYTICS_DB_HOST: analytics_db
+      ANALYTICS_DB_PORT: "5432"
+      ANALYTICS_DB_USER: ${ANALYTICS_DB_USER}
+      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD}
+      ANALYTICS_DB_NAME: ${ANALYTICS_DB_NAME}
+      ANALYTICS_DB_SSL_MODE: ${ANALYTICS_DB_SSL_MODE:-disable}
+
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: "0"
+
+      MEILI_HOST: http://meilisearch:7700
+      MEILI_API_KEY: ${MEILI_API_KEY}
+
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-10080}
+
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    # Bind to loopback by default — front this with a reverse proxy / TLS.
+    ports:
+      - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8080}:8080"
+    networks: [rumera_network]
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 512m }
+        reservations: { cpus: "0.25", memory: 128m }
+
+  # ── Frontend storefront ────────────────────────────────────────────────────
+  frontend:
+    <<: *restart-policy
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?NEXT_PUBLIC_SITE_URL is required}
+    image: rumera/frontend:latest
+    logging: *default-logging
+    depends_on:
+      backend: { condition: service_started }
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+      BACKEND_INTERNAL_URL: http://backend:8080
+    ports:
+      - "${FRONTEND_BIND:-0.0.0.0}:${FRONTEND_PORT:-3000}:3000"
+    networks: [rumera_network]
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 512m }
+        reservations: { cpus: "0.25", memory: 128m }
+
+volumes:
+  postgres_data:
+  analytics_data:
+  redis_data:
+  meili_data:
+
+networks:
+  rumera_network:
+    driver: bridge
