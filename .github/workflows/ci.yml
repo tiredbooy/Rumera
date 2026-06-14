@@ -1,0 +1,100 @@
+name: backend-ci
+
+on:
+  push:
+    branches: [dev, master]
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/ci.yml"
+
+defaults:
+  run:
+    working-directory: apps/backend
+
+jobs:
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: apps/backend
+
+  test:
+    name: vet + unit tests + coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
+      - name: go vet
+        run: go vet ./...
+      - name: unit tests with coverage
+        run: go test ./... -coverprofile=coverage.out -covermode=atomic
+      - name: enforce coverage floor
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {print substr($3, 1, length($3)-1)}')
+          echo "total coverage: ${total}%"
+          # Floor is a ratchet — raise it as the money-path/test coverage grows.
+          awk -v t="$total" -v min=5 'BEGIN { if (t+0 < min) { printf "coverage %.1f%% is below the %d%% floor\n", t, min; exit 1 } }'
+
+  migrations:
+    name: migrations up/down
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rumera
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      analytics:
+        image: timescale/timescaledb:latest-pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rumera_analytics
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
+      - name: install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+      - name: main migrations up then down
+        run: |
+          DSN="host=localhost port=5432 user=postgres password=postgres dbname=rumera sslmode=disable"
+          goose -dir migrations/main postgres "$DSN" up
+          goose -dir migrations/main postgres "$DSN" reset
+      - name: analytics migrations up then down
+        run: |
+          DSN="host=localhost port=5433 user=postgres password=postgres dbname=rumera_analytics sslmode=disable"
+          goose -dir migrations/analytics postgres "$DSN" up
+          goose -dir migrations/analytics postgres "$DSN" reset
