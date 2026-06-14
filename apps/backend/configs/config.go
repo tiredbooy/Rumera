@@ -50,6 +50,15 @@ type Config struct {
 	CacheBreakerThreshold int           `envconfig:"CACHE_BREAKER_THRESHOLD" default:"5"`
 	CacheBreakerCooldown  time.Duration `envconfig:"CACHE_BREAKER_COOLDOWN" default:"10s"`
 
+	// ── Database retries ──────────────────────────────────────────────────────
+	// DBRetryMaxAttempts bounds total tries (the first plus retries) for an
+	// operation wrapped in database.WithRetry; <2 disables retrying. Only transient
+	// errors (serialization 40001, deadlock 40P01, connection resets) are retried
+	// — never business errors. DBRetryBaseBackoff is the first backoff; it doubles
+	// each retry.
+	DBRetryMaxAttempts int           `envconfig:"DB_RETRY_MAX_ATTEMPTS" default:"3"`
+	DBRetryBaseBackoff time.Duration `envconfig:"DB_RETRY_BASE_BACKOFF" default:"50ms"`
+
 	// ── JWT ───────────────────────────────────────────────────────────────────
 	JWTSecret          string `envconfig:"JWT_SECRET" required:"true"`
 	JWTAccessTokenTTL  int    `envconfig:"JWT_ACCESS_TTL" default:"15"`     // minutes

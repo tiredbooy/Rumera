@@ -57,6 +57,13 @@ var (
 		},
 		[]string{"result"},
 	)
+
+	dbRetries = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "db_retries_total",
+			Help: "Database operations retried after a transient (serialization/connection) error.",
+		},
+	)
 )
 
 func init() {
@@ -64,6 +71,7 @@ func init() {
 		httpRequests,
 		httpDuration,
 		cacheRequests,
+		dbRetries,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
@@ -99,6 +107,11 @@ func ObserveHTTP(method, route string, status int, d time.Duration) {
 // IncCache records one read-through cache outcome. Use the Cache* constants.
 func IncCache(result string) {
 	cacheRequests.WithLabelValues(result).Inc()
+}
+
+// IncDBRetry records one retried database operation (called per retry attempt).
+func IncDBRetry() {
+	dbRetries.Inc()
 }
 
 // RegisterDBPool exposes a pgx connection pool's live statistics as gauges,

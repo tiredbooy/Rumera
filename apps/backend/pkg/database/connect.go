@@ -20,6 +20,9 @@ func (c *Connections) Close() {
 }
 
 func Connect(cfg *config.Config, log *zap.Logger) (*Connections, error) {
+	// Install the process-wide retry policy before any retried work runs.
+	ConfigureRetry(cfg)
+
 	// ── Main database ─────────────────────────────────────────────────────────
 	db, err := NewDB(cfg, log)
 	if err != nil {
