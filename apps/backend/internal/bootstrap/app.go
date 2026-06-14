@@ -57,10 +57,19 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("database: %w", err)
 	}
 
-	// ── 4. Cache (add when pkg/cache is ready) ───────────────────────────────
-	cacheStore, err := cache.NewRedis(cfg, log)
-	if err != nil {
-		return nil, fmt.Errorf("Cache: %w", err)
+	// ── 4. Cache ─────────────────────────────────────────────────────────────
+	// Redis is an optional dependency: if it is unreachable at boot we log and
+	// continue with no cache rather than refusing to start. Every call site
+	// already handles a nil store (read-through degrades to a direct DB read).
+	var cacheStore cache.Store
+	if store, cacheErr := cache.NewRedis(cfg, log); cacheErr != nil {
+		log.Warn("cache unavailable at startup, continuing without it", zap.Error(cacheErr))
+	} else {
+		// Wrap the live store in a circuit breaker so a mid-life Redis outage
+		// fails fast (reads degrade to a miss) instead of stalling every request
+		// on per-call timeouts.
+		cacheStore = cache.NewBreaker(store, cfg.CacheBreakerThreshold,
+			cfg.CacheBreakerCooldown, log)
 	}
 
 	// ── 5. Search (add when pkg/search is ready) ─────────────────────────────
@@ -165,7 +174,9 @@ func (a *App) shutdown() error {
 	a.queue.Shutdown()
 
 	a.dbs.Close()
-	a.cache.Close()
+	if a.cache != nil {
+		a.cache.Close()
+	}
 
 	// Flush any spans still buffered in the tracer's batch processor last, so it
 	// captures traces from the shutdown path too. No-op when tracing is disabled.
