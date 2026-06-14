@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +43,7 @@ func (h *Handler) Register(c *gin.Context) {
 
 	hash, err := crypto.HashPassword(req.Password)
 	if err != nil {
+		log.Println("FAILED TO HASH PASS")
 		response.InternalError(c)
 		return
 	}

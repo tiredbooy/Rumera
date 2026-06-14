@@ -16,10 +16,34 @@ import { authConfig } from "./auth.config"
 import type { Role } from "@/lib/rbac/roles"
 import "./types"
 
-const API = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+// ── Configuration ─────────────────────────────────────────────────────────────
+
+const getApiBase = () => {
+  // Priority for server-side (inside Docker)
+  if (process.env.BACKEND_INTERNAL_URL) {
+    return process.env.BACKEND_INTERNAL_URL
+  }
+  // Fallback for local dev without Docker
+  if (process.env.API_URL) {
+    return process.env.API_URL
+  }
+  // Browser-safe public URL (should not reach here on server)
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+}
+
+const API = getApiBase()
 const BASE = `${API.replace(/\/$/, "")}/api/v1`
 
-type DecodedAccess = { uid?: number; user_id?: string; role?: string; exp?: number }
+console.log("🔗 Auth using backend base:", BASE) // Helpful for debugging
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+type DecodedAccess = {
+  uid?: number
+  user_id?: string
+  role?: string
+  exp?: number
+}
 
 function decodeJwt(token: string): DecodedAccess {
   try {
@@ -33,14 +57,18 @@ function decodeJwt(token: string): DecodedAccess {
 async function rotate(token: JWT): Promise<JWT> {
   try {
     if (!token.refreshToken) throw new Error("missing refresh token")
+
     const res = await fetch(`${BASE}/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: token.refreshToken }),
     })
+
     if (!res.ok) throw new Error(`refresh failed: ${res.status}`)
+
     const { data } = await res.json()
     const decoded = decodeJwt(data.access_token)
+
     return {
       ...token,
       accessToken: data.access_token,
@@ -49,47 +77,71 @@ async function rotate(token: JWT): Promise<JWT> {
       role: (decoded.role as Role) ?? token.role,
       error: undefined,
     }
-  } catch {
-    // Surfaced on the session so the client can force a re-login.
+  } catch (err) {
+    console.error("Token rotation failed:", err)
     return { ...token, error: "RefreshAccessTokenError" }
   }
 }
 
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  secret: process.env.AUTH_SECRET,
+
   providers: [
     Credentials({
-      credentials: { email: {}, password: {} },
+      credentials: {
+        email: {},
+        password: {},
+      },
       async authorize(creds): Promise<User | null> {
         if (!creds?.email || !creds?.password) return null
-        const res = await fetch(`${BASE}/auth/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: creds.email, password: creds.password }),
-        })
-        if (!res.ok) return null
-        const { data } = await res.json()
-        if (!data?.access_token) return null
-        const decoded = decodeJwt(data.access_token)
-        const fullName = [data.user?.first_name, data.user?.last_name]
-          .filter(Boolean)
-          .join(" ")
-        return {
-          id: data.user?.user_id ?? decoded.user_id,
-          name: fullName || data.user?.email,
-          email: data.user?.email,
-          role: (data.user?.role ?? decoded.role ?? "customer") as Role,
-          accessToken: data.access_token,
-          refreshToken: data.refresh_token,
-          accessTokenExpires: (decoded.exp ?? 0) * 1000,
+
+        try {
+          const res = await fetch(`${BASE}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: creds.email,
+              password: creds.password,
+            }),
+          })
+
+          if (!res.ok) {
+            console.error("Login failed with status:", res.status)
+            return null
+          }
+
+          const { data } = await res.json()
+          if (!data?.access_token) return null
+
+          const decoded = decodeJwt(data.access_token)
+
+          const fullName = [data.user?.first_name, data.user?.last_name]
+            .filter(Boolean)
+            .join(" ")
+
+          return {
+            id: data.user?.user_id ?? decoded.user_id ?? "",
+            name: fullName || data.user?.email,
+            email: data.user?.email,
+            role: (data.user?.role ?? decoded.role ?? "customer") as Role,
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token,
+            accessTokenExpires: (decoded.exp ?? 0) * 1000,
+          }
+        } catch (error) {
+          console.error("❌ Authorize fetch error:", error)
+          return null
         }
       },
     }),
   ],
+
   callbacks: {
     ...authConfig.callbacks,
+
     async jwt({ token, user }) {
-      // 1) Initial sign-in — copy the fields off the authorize() return.
       if (user) {
         token.accessToken = user.accessToken
         token.refreshToken = user.refreshToken
@@ -98,11 +150,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.user = { id: user.id, name: user.name, email: user.email }
         return token
       }
-      // 2) Access token still valid (60s clock-skew guard).
+
       if (token.accessTokenExpires && Date.now() < token.accessTokenExpires - 60_000) {
         return token
       }
-      // 3) Expired — rotate against the backend.
+
       return rotate(token)
     },
   },
