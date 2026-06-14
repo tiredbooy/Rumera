@@ -64,6 +64,13 @@ var (
 			Help: "Database operations retried after a transient (serialization/connection) error.",
 		},
 	)
+
+	cacheCircuitState = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "cache_circuit_state",
+			Help: "Cache circuit breaker state: 0=closed, 1=half-open, 2=open.",
+		},
+	)
 )
 
 func init() {
@@ -72,6 +79,7 @@ func init() {
 		httpDuration,
 		cacheRequests,
 		dbRetries,
+		cacheCircuitState,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
@@ -112,6 +120,19 @@ func IncCache(result string) {
 // IncDBRetry records one retried database operation (called per retry attempt).
 func IncDBRetry() {
 	dbRetries.Inc()
+}
+
+// Cache circuit-breaker state values for SetCacheCircuitState.
+const (
+	CircuitClosed   = 0
+	CircuitHalfOpen = 1
+	CircuitOpen     = 2
+)
+
+// SetCacheCircuitState publishes the current cache circuit-breaker state. Use the
+// Circuit* constants.
+func SetCacheCircuitState(state float64) {
+	cacheCircuitState.Set(state)
 }
 
 // RegisterDBPool exposes a pgx connection pool's live statistics as gauges,
