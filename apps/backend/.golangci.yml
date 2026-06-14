@@ -1,0 +1,33 @@
+# golangci-lint configuration for the Rumera backend.
+# Run locally with `make lint`; CI runs it via golangci-lint-action.
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  # Start from a focused, low-false-positive set. errcheck/staticcheck/unused
+  # catch real bugs; gofmt/goimports/misspell keep the tree tidy. Ratchet more
+  # linters on (revive, gocritic, …) once the baseline is green.
+  disable-all: true
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/tiredbooy
+
+issues:
+  exclude-dirs:
+    - migrations
+  # Show everything rather than capping per-linter, so the first CI run gives a
+  # complete picture to triage.
+  max-issues-per-linter: 0
+  max-same-issues: 0

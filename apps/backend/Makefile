@@ -78,6 +78,25 @@ test:
 tidy:
 	go mod tidy
 
+# ─── Quality gate ─────────────────────────────────────────────────
+.PHONY: lint
+lint:
+	golangci-lint run
+
+.PHONY: test-unit
+test-unit:
+	go test ./...
+
+# Integration suite (tag-gated). Needs Docker for testcontainers.
+.PHONY: test-integration
+test-integration:
+	go test -tags=integration -count=1 ./tests/integration/...
+
+.PHONY: cover
+cover:
+	go test ./... -coverprofile=coverage.out -covermode=atomic
+	go tool cover -func=coverage.out | tail -1
+
 # ─── Docker ───────────────────────────────────────────────────────
 .PHONY: docker-up
 docker-up:
