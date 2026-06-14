@@ -10,6 +10,7 @@ import (
 	"github.com/tiredbooy/internal/middlewares"
 	"github.com/tiredbooy/internal/routes"
 	"github.com/tiredbooy/pkg/metrics"
+	"github.com/tiredbooy/pkg/middleware"
 	"go.uber.org/zap"
 )
 
@@ -37,7 +38,10 @@ func newRouter(cfg *config.Config, logger *zap.Logger, c *container) *gin.Engine
 	// queue and dropped under back-pressure.
 	r.Use(middlewares.Analytics(c.queue))
 
-	routes.Setup(r, c.handler, c.jwt, c.cache)
+	// Idempotency guard for at-least-once callers (payment webhook): backed by a
+	// durable table on the main pool so replays are deduplicated across restarts.
+	idempotency := middleware.Idempotency(middleware.NewIdempotencyStore(c.dbs.DB), logger)
+	routes.Setup(r, c.handler, c.jwt, c.cache, idempotency)
 
 	return r
 }

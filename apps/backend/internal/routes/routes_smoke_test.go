@@ -25,7 +25,7 @@ func TestSetupRegistersWithoutPanic(t *testing.T) {
 		}
 	}()
 
-	Setup(r, h, jwt, nil)
+	Setup(r, h, jwt, nil, func(c *gin.Context) { c.Next() })
 
 	if len(r.Routes()) == 0 {
 		t.Fatal("expected routes to be registered")
