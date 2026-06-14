@@ -17,7 +17,7 @@ import (
 //   - public     — no authentication (catalogue browsing, auth endpoints)
 //   - customer   — any authenticated user (mw.Auth)
 //   - admin      — authenticated + role=admin (mw.Auth + mw.RequireRole)
-func Setup(r *gin.Engine, h *handlers.Handler, jwt token.Manager, store cache.Store) {
+func Setup(r *gin.Engine, h *handlers.Handler, jwt token.Manager, store cache.Store, idempotency gin.HandlerFunc) {
 	r.GET("/health", func(c *gin.Context) {
 		response.OK(c, gin.H{"status": "ok"})
 	})
@@ -25,8 +25,10 @@ func Setup(r *gin.Engine, h *handlers.Handler, jwt token.Manager, store cache.St
 	v1 := r.Group("/api/v1")
 
 	// Webhooks are unauthenticated but signature-verified; keep them outside the
-	// JWT-guarded groups.
-	v1.POST("/webhooks/payment", h.PaymentWebhook)
+	// JWT-guarded groups. The idempotency guard makes at-least-once gateway
+	// callbacks safe — a replayed payment notification returns the stored
+	// response instead of confirming the order (and deducting stock) twice.
+	v1.POST("/webhooks/payment", idempotency, h.PaymentWebhook)
 
 	registerAuthRoutes(v1, h, jwt, store)
 	registerPublicRoutes(v1, h)
