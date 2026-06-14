@@ -11,11 +11,12 @@
 
 ## Status snapshot — end of day 2026-06-13
 
-**Done (4):** C1 (indexes + N+1, code complete — live EXPLAIN pending DB) · C2 (HTTP cache headers + ETag)
-· A1 (Prometheus metrics) · C3 (stats-job CTE — verified byte-identical, **Phase 1 complete**). All
-compile clean, gofmt/vet clean, unit-tested, full suite green.
+**Done (6):** C1 (indexes + N+1, code complete — live EXPLAIN pending DB) · C2 (HTTP cache headers + ETag)
+· A1 (Prometheus metrics) · C3 (stats-job CTE — verified byte-identical, **Phase 1 complete**) ·
+A3 (Grafana dashboard + Prometheus alerts, promtool-validated) · A2 (OpenTelemetry tracing, default off,
+unit-tested — **Phase 2 complete**). All compile clean, gofmt/vet clean, unit-tested, full suite green.
 
-**Remaining (9)** — each with what it is and where it picks up:
+**Remaining (7)** — each with what it is and where it picks up:
 
 | ID | Title | What's left to do |
 |----|-------|-------------------|
@@ -138,20 +139,28 @@ unindexed.
 **Acceptance:** ✅ `/metrics` lists RED + pool + cache + queue series; histogram + counters move under load
 (proven by scrape tests). Live `EXPLAIN`-style load verification optional once the stack is up.
 
-### A2 — OpenTelemetry tracing · `TODO`
-- [ ] Add deps `go.opentelemetry.io/otel`, `otelgin`, OTLP exporter, pgx instrumentation.
-- [ ] New `pkg/tracing/tracing.go`: `Init(cfg) (shutdown func, err)`; endpoint + sampler from
-      config, default off (`OTEL_ENABLED=false`).
-- [ ] Wire `tracing.Init` in `internal/bootstrap/app.go` `New()`; add `otelgin.Middleware` in
-      `setupMiddlewares.go`; add `shutdown()` to ordered teardown in `app.go` (~L142).
-- [ ] Add `trace_id` to zap fields in `pkg/middleware/logger.go` (logs ↔ traces join).
+### A2 — OpenTelemetry tracing · `DONE`
+- [x] Added deps `go.opentelemetry.io/otel` (+ sdk/trace/otlptracegrpc), `otelgin`,
+      `github.com/exaring/otelpgx` (pgx instrumentation).
+- [x] New `pkg/tracing/tracing.go`: `Init(ctx,cfg,log) (ShutdownFunc, err)`; OTLP/gRPC
+      endpoint + parent-based ratio sampler from config, default off (`OTEL_ENABLED=false`,
+      no-op shutdown + no global provider when disabled).
+- [x] Wired `tracing.Init` in `app.go` `New()` **before** DB connect (so the pgx tracer
+      captures the real provider); `otelgin.Middleware` in `setupMiddlewares.go` (gated,
+      placed early); `tracerShutdown` added to the ordered teardown in `app.go`.
+- [x] pgx query spans via `otelpgx.NewTracer()` on both pools when enabled.
+- [x] Added `trace_id` to zap fields in `pkg/middleware/logger.go` (logs ↔ traces join).
+- [x] Tests: `tracing.Init` disabled/enabled paths + logger `traceID` helper. Build/vet/fmt clean.
 
-**Acceptance:** request emits a root span with child DB/cache spans; `trace_id` appears in logs.
+**Acceptance:** ✅ wiring complete & unit-tested; default-off path proven. Live span emission is
+collector-dependent (point `OTEL_EXPORTER_OTLP_ENDPOINT` at a collector + flip `OTEL_ENABLED=true`).
 
-### A3 — Dashboards & alerts · `TODO`
-- [ ] New `apps/backend/deploy/observability/grafana-dashboard.json` (RED + pool + queue).
-- [ ] New `apps/backend/deploy/observability/prometheus-rules.yml` (p99 latency, 5xx rate,
-      pool exhaustion, queue saturation, cache error rate). Config artifacts only.
+### A3 — Dashboards & alerts · `DONE`
+- [x] New `deploy/observability/grafana-dashboard.json` — RED (request rate, 5xx ratio,
+      p50/p95/p99 latency incl. per-route), DB pool conns + utilisation gauge, cache outcomes,
+      analytics queue depth/saturation. Importable; datasource + route are template vars.
+- [x] New `deploy/observability/prometheus-rules.yml` — 5 alerts (p99 latency, 5xx rate,
+      pool exhaustion, queue saturation, cache error rate). Validated with `promtool check rules`.
 
 ---
 
