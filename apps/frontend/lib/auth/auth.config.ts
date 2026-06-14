@@ -13,7 +13,7 @@ import { permissionsForRole, type Role } from "@/lib/rbac/roles"
 import "./types"
 
 export const authConfig = {
-  pages: { signIn: "/login" },
+  pages: { signIn: "/auth/login" },
   session: { strategy: "jwt" },
   callbacks: {
     /**
@@ -31,5 +31,6 @@ export const authConfig = {
       return session
     },
   },
+  secret: process.env.AUTH_SECRET,
   providers: [],
 } satisfies NextAuthConfig

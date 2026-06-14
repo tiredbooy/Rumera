@@ -1,22 +1,10 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Rumera — DEVELOPMENT stack (hot reload for the whole monorepo)
-#
-#   docker compose -f docker-compose.dev.yml up --watch     # start + live reload
-#   docker compose -f docker-compose.dev.yml watch          # same, watch only
-#   docker compose -f docker-compose.dev.yml down           # stop
-#
-# `--watch` activates Docker Compose Watch: source changes are synced into the
-# running containers, where Air (backend) and Next.js Fast Refresh (frontend)
-# pick them up instantly. Dependency-manifest changes (go.mod, package.json)
-# trigger an automatic image rebuild.
-#
-# Every value has a sensible default, so this boots with zero configuration.
-# Override anything by creating a .env file next to this one (see .env.example).
 # ──────────────────────────────────────────────────────────────────────────────
 name: rumera-dev
 
 services:
-  # ── Main database (PostgreSQL / TimescaleDB) ───────────────────────────────
+  # ── Main database ───────────────────────────────────────────────────────────
   postgres:
     image: timescale/timescaledb:latest-pg17
     container_name: rumera_postgres_dev
@@ -36,7 +24,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── Analytics database (TimescaleDB) ───────────────────────────────────────
+  # ── Analytics database ──────────────────────────────────────────────────────
   analytics_db:
     image: timescale/timescaledb:latest-pg17
     container_name: rumera_analytics_dev
@@ -56,7 +44,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── Cache (Redis) ──────────────────────────────────────────────────────────
+  # ── Redis ───────────────────────────────────────────────────────────────────
   redis:
     image: redis:8-alpine
     container_name: rumera_redis_dev
@@ -73,7 +61,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── Search (Meilisearch) ───────────────────────────────────────────────────
+  # ── Meilisearch ─────────────────────────────────────────────────────────────
   meilisearch:
     image: getmeili/meilisearch:v1.15
     container_name: rumera_meilisearch_dev
@@ -92,7 +80,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── Backend API (Go + Air hot reload) ──────────────────────────────────────
+  # ── Backend API (Go + Air) ──────────────────────────────────────────────────
   backend:
     build:
       context: ./apps/backend
@@ -108,6 +96,10 @@ services:
       ENV: development
       SERVER_PORT: "8080"
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+
+      LOG_LEVEL: debug
+      GIN_MODE: debug
+      DEBUG: "true"
 
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -137,13 +129,11 @@ services:
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     volumes:
-      # Persist Go module + build caches across restarts for fast rebuilds.
       - go_mod_cache:/go/pkg/mod
       - go_build_cache:/root/.cache/go-build
     networks: [rumera_network]
     develop:
       watch:
-        # Sync Go sources into the container; Air rebuilds on change.
         - action: sync
           path: ./apps/backend
           target: /app
@@ -152,13 +142,19 @@ services:
             - .git/
             - docs/
             - "*_test.go"
-        # A dependency change needs a fresh image (go mod download layer).
         - action: rebuild
           path: ./apps/backend/go.mod
         - action: rebuild
           path: ./apps/backend/go.sum
+    # Healthcheck for backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]  # Adjust path if needed
+      interval: 8s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
 
-  # ── Frontend storefront (Next.js + Fast Refresh) ───────────────────────────
+  # ── Frontend (Next.js) ──────────────────────────────────────────────────────
   frontend:
     build:
       context: ./apps/frontend
@@ -166,28 +162,30 @@ services:
     container_name: rumera_frontend_dev
     restart: unless-stopped
     depends_on:
-      backend: { condition: service_started }
+      backend: { condition: service_healthy }
     environment:
       NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
+
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
-      # Browser-facing API base (host port) and server-side base (compose DNS).
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+
       BACKEND_INTERNAL_URL: http://backend:8080
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     networks: [rumera_network]
     develop:
       watch:
-        # Sync app source; Next.js Fast Refresh applies it live.
         - action: sync
           path: ./apps/frontend
           target: /app
           ignore:
             - node_modules/
             - .next/
-        # Dependency changes require reinstalling — rebuild the image.
         - action: rebuild
           path: ./apps/frontend/package.json
         - action: rebuild

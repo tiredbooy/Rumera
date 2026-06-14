@@ -9,9 +9,14 @@
 # Run `make help` to list everything.
 # ──────────────────────────────────────────────────────────────────────────────
 
-DC      ?= docker compose
-DEV     := $(DC) -f docker-compose.dev.yml
-PROD    := $(DC) -f docker-compose.prod.yml
+DC       ?= docker compose
+
+# Environment files (explicitly set to avoid default .env)
+DEV_ENV  := --env-file .env.dev        # 👈 changed from .env.dev
+PROD_ENV := --env-file .env.prod   # optional, create later
+
+DEV      := $(DC) $(DEV_ENV) -f docker-compose.dev.yml
+PROD     := $(DC) $(PROD_ENV) -f docker-compose.prod.yml
 
 .DEFAULT_GOAL := help
 
