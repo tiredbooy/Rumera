@@ -1,0 +1,105 @@
+# Prometheus alerting rules for the Rumera backend.
+#
+# These fire off the metrics exposed by pkg/metrics (the A1 work):
+#   http_requests_total{method,route,status}            (counter)
+#   http_request_duration_seconds_{bucket,sum,count}    (histogram, by route)
+#   cache_requests_total{result=hit|miss|error}         (counter)
+#   db_pool_{total,acquired,idle,max}_conns{pool}        (gauges)
+#   analytics_queue_{depth,capacity}{queue}              (gauges)
+#
+# Load by adding this file to Prometheus' `rule_files:` and pointing a scrape
+# job at the backend's internal /metrics endpoint. Validate with:
+#   promtool check rules deploy/observability/prometheus-rules.yml
+#
+# `job="rumera-backend"` assumes the scrape job is named accordingly; adjust the
+# selector if your job label differs. Thresholds are starting points — tune to
+# your SLOs once you have a latency/error baseline.
+
+groups:
+  - name: rumera-backend-availability
+    rules:
+      # p99 request latency over a 5m window, per route. DefBuckets top out at
+      # 10s, so anything riding the top bucket shows here. 1s is a conservative
+      # default ceiling for an API; lower it per route as SLOs tighten.
+      - alert: HighRequestLatencyP99
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le, route) (
+              rate(http_request_duration_seconds_bucket{job="rumera-backend"}[5m])
+            )
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p99 latency on {{ $labels.route }}"
+          description: "p99 latency for {{ $labels.route }} is {{ $value | humanizeDuration }} (>1s) over the last 10m."
+
+      # 5xx ratio across all routes. Guarded by a small request floor so a single
+      # error on an idle service doesn't page anyone.
+      - alert: HighServerErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="rumera-backend",status=~"5.."}[5m]))
+            /
+          sum(rate(http_requests_total{job="rumera-backend"}[5m]))
+            > 0.05
+          and
+          sum(rate(http_requests_total{job="rumera-backend"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "5xx error rate above 5%"
+          description: "{{ $value | humanizePercentage }} of requests are returning 5xx over the last 5m."
+
+  - name: rumera-backend-saturation
+    rules:
+      # Connection pool nearing exhaustion: acquired/max. Sustained >90% means
+      # requests are about to queue on connection acquisition.
+      - alert: DBPoolNearExhaustion
+        expr: |
+          db_pool_acquired_conns{job="rumera-backend"}
+            /
+          db_pool_max_conns{job="rumera-backend"}
+            > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB pool '{{ $labels.pool }}' near exhaustion"
+          description: "Pool '{{ $labels.pool }}' is at {{ $value | humanizePercentage }} of max connections over the last 5m."
+
+      # Analytics ingestion queue backing up: depth/capacity. Past this point the
+      # queue starts dropping events under back-pressure.
+      - alert: AnalyticsQueueSaturated
+        expr: |
+          analytics_queue_depth{job="rumera-backend"}
+            /
+          analytics_queue_capacity{job="rumera-backend"}
+            > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Analytics queue '{{ $labels.queue }}' saturated"
+          description: "Queue '{{ $labels.queue }}' is {{ $value | humanizePercentage }} full; events may be dropped soon."
+
+  - name: rumera-backend-cache
+    rules:
+      # Cache error ratio (transient Redis failures). A sustained climb is the
+      # early signal the cache layer is degrading — see roadmap B2.
+      - alert: HighCacheErrorRate
+        expr: |
+          sum(rate(cache_requests_total{job="rumera-backend",result="error"}[5m]))
+            /
+          sum(rate(cache_requests_total{job="rumera-backend"}[5m]))
+            > 0.05
+          and
+          sum(rate(cache_requests_total{job="rumera-backend"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cache error rate above 5%"
+          description: "{{ $value | humanizePercentage }} of cache operations are erroring over the last 5m."
