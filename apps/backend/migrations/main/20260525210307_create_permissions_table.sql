@@ -8,7 +8,5 @@ CREATE TABLE IF NOT EXISTS permissions (
     UNIQUE (resource, action)
 );
 
-CREATE INDEX ON user_roles (user_id);
-
 -- +goose Down
 DROP TABLE IF EXISTS permissions;

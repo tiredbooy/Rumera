@@ -90,6 +90,9 @@ func registerPublicRoutes(v1 *gin.RouterGroup, h *handlers.Handler) {
 	// Reviews
 	v1.GET("/reviews/:id", h.GetReview)
 
+	// Hero slides (storefront home carousel — active slides only)
+	v1.GET("/hero-slides", h.ListHeroSlides)
+
 	// Blog
 	v1.GET("/blogs", h.ListBlogs)
 	v1.GET("/blogs/:slug", h.GetBlogBySlug)
@@ -250,6 +253,13 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	a.POST("/inventory/variants/:variantID/adjust", h.AdjustVariantStock)
 	a.PATCH("/inventory/variants/:variantID/reorder", h.UpdateVariantReorder)
 	a.GET("/inventory/variants/:variantID/movements", h.VariantMovements)
+
+	// Hero slides
+	a.GET("/hero-slides", h.ListHeroSlidesAdmin)
+	a.POST("/hero-slides", h.CreateHeroSlide)
+	a.GET("/hero-slides/:id", h.GetHeroSlide)
+	a.PATCH("/hero-slides/:id", h.UpdateHeroSlide)
+	a.DELETE("/hero-slides/:id", h.DeleteHeroSlide)
 
 	// Blog
 	a.POST("/blogs", h.CreateBlog)

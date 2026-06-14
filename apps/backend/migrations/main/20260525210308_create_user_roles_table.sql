@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
     UNIQUE (user_id, role_id)
 );
 
+CREATE INDEX ON user_roles (user_id);
 CREATE INDEX ON user_roles (role_id);
 
 -- +goose Down

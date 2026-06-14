@@ -29,6 +29,12 @@ export type Product = {
   reviews: number
   /** Two oklch stops used to paint the bottle/label gradient */
   hue: [string, string]
+  /**
+   * Optional product photo. Recommended 1000×1250 (4:5 portrait), object-cover.
+   * Absent → the card shows a branded gradient placeholder via SmartImage.
+   * See public/images/README.md for the full image-size spec.
+   */
+  image?: string
   badge?: "Limited" | "New" | "Award" | "Rare"
 }
 
