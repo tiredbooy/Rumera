@@ -6,19 +6,20 @@
  */
 import { absoluteUrl, siteConfig } from "@/lib/site"
 import { categories, categoryFa } from "@/lib/products"
-import { recipes } from "@/lib/recipes"
+import { listRecipes } from "@/lib/recipes"
 import { journalPosts } from "@/lib/journal"
 
 export const dynamic = "force-static"
 export const revalidate = 86400
 
-export function GET() {
+export async function GET() {
   const categoryLinks = categories
     .map((c) => `- [${categoryFa[c.name]}](${absoluteUrl(`/categories/${c.name.toLowerCase()}`)}): ${c.tagline}`)
     .join("\n")
 
+  const { results: recipes } = await listRecipes({ limit: 50 })
   const recipeLinks = recipes
-    .map((r) => `- [${r.name}](${absoluteUrl(`/recipes/${r.slug}`)}): ${r.description}`)
+    .map((r) => `- [${r.title}](${absoluteUrl(`/recipes/${r.slug}`)})${r.excerpt ? `: ${r.excerpt}` : ""}`)
     .join("\n")
 
   const journalLinks = journalPosts
