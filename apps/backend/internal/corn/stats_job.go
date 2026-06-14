@@ -11,6 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 	models "github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/services"
+	"github.com/tiredbooy/pkg/database"
 )
 
 type ProductStatsCronJob struct {
@@ -69,21 +70,30 @@ func (j *ProductStatsCronJob) fetchActiveProductIDs(ctx context.Context, date ti
 		  AND created_at < $2
 		  AND payload->>'product_id' IS NOT NULL`
 
-	rows, err := j.db.Query(ctx, query, date, date.AddDate(0, 0, 1))
-	if err != nil {
-		return nil, fmt.Errorf("fetching active product ids: %w", err)
-	}
-	defer rows.Close()
-
+	// Idempotent read: safe to retry on a transient (serialization/connection)
+	// failure. ids is reset each attempt so a retry can't duplicate rows.
 	var ids []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scanning product id: %w", err)
+	err := database.WithRetry(ctx, func(ctx context.Context) error {
+		ids = nil
+		rows, err := j.db.Query(ctx, query, date, date.AddDate(0, 0, 1))
+		if err != nil {
+			return fmt.Errorf("fetching active product ids: %w", err)
 		}
-		ids = append(ids, id)
+		defer rows.Close()
+
+		for rows.Next() {
+			var id uuid.UUID
+			if err := rows.Scan(&id); err != nil {
+				return fmt.Errorf("scanning product id: %w", err)
+			}
+			ids = append(ids, id)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
 	}
-	return ids, rows.Err()
+	return ids, nil
 }
 
 func (j *ProductStatsCronJob) aggregateForProduct(ctx context.Context, productID uuid.UUID, date time.Time) (*models.DailyProductStatsUpsertReq, error) {
@@ -103,7 +113,10 @@ func (j *ProductStatsCronJob) aggregateForProduct(ctx context.Context, productID
 	// queries had, while funnel and device intentionally span all event types.
 	var revenueTotal decimal.Decimal
 	var unitsSold int
-	err := j.db.QueryRow(ctx, `
+	// Idempotent read: the scan overwrites the same fields, so retrying a
+	// transient failure is safe.
+	err := database.WithRetry(ctx, func(ctx context.Context) error {
+		return j.db.QueryRow(ctx, `
 		WITH base AS (
 			SELECT *
 			FROM events
@@ -134,26 +147,27 @@ func (j *ProductStatsCronJob) aggregateForProduct(ctx context.Context, productID
 			COALESCE(SUM((payload->>'amount')::numeric) FILTER (WHERE event_type = 'order_created'), 0)     AS revenue_total,
 			COALESCE(SUM((payload->>'quantity')::int)   FILTER (WHERE event_type = 'order_created'), 0)     AS units_sold
 		FROM base`,
-		productID.String(), from, to,
-	).Scan(
-		&req.ViewsTotal,
-		&req.ViewsUnique,
-		&req.ViewsRegistered,
-		&req.ViewsGuest,
-		&req.AddToCartCount,
-		&req.PurchaseCount,
-		&req.DeviceMobile,
-		&req.DeviceDesktop,
-		&req.DeviceTablet,
-		&req.SourceSearch,
-		&req.SourceCategory,
-		&req.SourceRecommendation,
-		&req.SourceBlog,
-		&req.SourceRecipe,
-		&req.SourceDirect,
-		&revenueTotal,
-		&unitsSold,
-	)
+			productID.String(), from, to,
+		).Scan(
+			&req.ViewsTotal,
+			&req.ViewsUnique,
+			&req.ViewsRegistered,
+			&req.ViewsGuest,
+			&req.AddToCartCount,
+			&req.PurchaseCount,
+			&req.DeviceMobile,
+			&req.DeviceDesktop,
+			&req.DeviceTablet,
+			&req.SourceSearch,
+			&req.SourceCategory,
+			&req.SourceRecommendation,
+			&req.SourceBlog,
+			&req.SourceRecipe,
+			&req.SourceDirect,
+			&revenueTotal,
+			&unitsSold,
+		)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("aggregating product stats: %w", err)
 	}
