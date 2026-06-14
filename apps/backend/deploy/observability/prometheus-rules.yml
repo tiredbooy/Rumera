@@ -103,3 +103,14 @@ groups:
         annotations:
           summary: "Cache error rate above 5%"
           description: "{{ $value | humanizePercentage }} of cache operations are erroring over the last 5m."
+
+      # Circuit breaker open (2) — Redis is being short-circuited and the app is
+      # serving from the database. Sustained open state warrants a look.
+      - alert: CacheCircuitOpen
+        expr: cache_circuit_state{job="rumera-backend"} >= 2
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cache circuit breaker is open"
+          description: "The cache circuit breaker has been open for over a minute; Redis is short-circuited and reads fall back to the database."

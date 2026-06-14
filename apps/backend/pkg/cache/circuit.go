@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tiredbooy/pkg/metrics"
 	"go.uber.org/zap"
 )
 
@@ -84,6 +85,7 @@ func (b *breaker) allow() bool {
 		// Cooldown elapsed: move to half-open and let exactly one probe through.
 		b.state = stateHalfOpen
 		b.probeInFlight = true
+		metrics.SetCacheCircuitState(metrics.CircuitHalfOpen)
 		return true
 	case stateHalfOpen:
 		// A probe is already in flight; keep short-circuiting until it resolves.
@@ -127,6 +129,7 @@ func (b *breaker) trip() {
 	was := b.state
 	b.state = stateOpen
 	b.openedAt = b.now()
+	metrics.SetCacheCircuitState(metrics.CircuitOpen)
 	if was != stateOpen && b.log != nil {
 		b.log.Warn("cache circuit opened", zap.Int("threshold", b.threshold),
 			zap.Duration("cooldown", b.cooldown))
@@ -138,6 +141,7 @@ func (b *breaker) reset() {
 	was := b.state
 	b.state = stateClosed
 	b.failures = 0
+	metrics.SetCacheCircuitState(metrics.CircuitClosed)
 	if was != stateClosed && b.log != nil {
 		b.log.Info("cache circuit closed")
 	}
