@@ -29,6 +29,11 @@ them at request time (`next.config.ts` → `images.formats`).
 > `next.config.ts` (`images.remotePatterns`) — tighten that to your real CDN
 > origin before production.
 
+> **Journal/blog posts** currently have no cover-image field in the backend, so
+> their cards/heroes render SmartImage's branded placeholder. Add a `cover_image`
+> column to `blogs` (16:9, ~1600×900) and surface it in `lib/journal.ts` to light
+> them up.
+
 ## Category slugs
 
 Category tiles resolve `categories/{slug}.jpg` from the lowercase English

@@ -1,18 +1,35 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { Clock, Eye, ArrowLeft, ShoppingBag, Send } from "lucide-react"
 
 import { buildMetadata } from "@/lib/seo/metadata"
 import { JsonLd } from "@/components/json-ld"
 import { breadcrumbLd } from "@/lib/seo/jsonld"
 import { absoluteUrl, siteConfig } from "@/lib/site"
-import { journalPosts, getPost } from "@/lib/journal"
-import { faNum } from "@/lib/products"
+import { SmartImage } from "@/components/smart-image"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { BlogCard } from "@/components/journal/blog-card"
+import { AddToCartButton } from "@/components/catalog/add-to-cart-button"
+import { faNum, formatPrice } from "@/lib/products"
+import { getProductById } from "@/lib/catalog/products"
+import type { ProductDetail } from "@/lib/catalog/types"
+import {
+  getBlogBySlug,
+  getRelatedBlogs,
+  allBlogSlugs,
+  formatBlogDate,
+  readingTime,
+} from "@/lib/journal"
 
-export const revalidate = 86400
+export const revalidate = 3600
 
-export function generateStaticParams() {
-  return journalPosts.map((p) => ({ slug: p.slug }))
+export async function generateStaticParams() {
+  const slugs = await allBlogSlugs()
+  return slugs.map((slug) => ({ slug }))
 }
 
 export async function generateMetadata({
@@ -21,11 +38,11 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>
 }): Promise<Metadata> {
   const { slug } = await params
-  const post = getPost(slug)
+  const post = await getBlogBySlug(slug)
   if (!post) return buildMetadata({ title: "نوشته یافت نشد", index: false })
   return buildMetadata({
-    title: post.title,
-    description: post.excerpt,
+    title: post.meta_title ?? post.title,
+    description: post.meta_description ?? post.excerpt ?? undefined,
     path: `/journal/${post.slug}`,
     type: "article",
   })
@@ -37,20 +54,34 @@ export default async function JournalPostPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const post = getPost(slug)
+  const post = await getBlogBySlug(slug)
   if (!post) notFound()
 
+  // Hydrate linked products (cap a few) for the "shop this article" upsell, plus
+  // pull a few more posts for the read-next rail — concurrently.
+  const [products, related] = await Promise.all([
+    Promise.all((post.product_ids ?? []).slice(0, 4).map((id) => getProductById(id))).then((list) =>
+      list.filter((p): p is ProductDetail => Boolean(p))
+    ),
+    getRelatedBlogs(slug, 3),
+  ])
+
+  const url = absoluteUrl(`/journal/${post.slug}`)
   const articleLd = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     headline: post.title,
-    description: post.excerpt,
+    description: post.excerpt ?? undefined,
     inLanguage: "fa-IR",
-    datePublished: post.date,
-    url: absoluteUrl(`/journal/${post.slug}`),
+    datePublished: post.published_at ?? post.created_at,
+    dateModified: post.updated_at,
+    url,
+    mainEntityOfPage: url,
     author: { "@type": "Organization", name: siteConfig.name },
     publisher: { "@type": "Organization", name: siteConfig.name },
   }
+
+  const shareText = encodeURIComponent(post.title)
 
   return (
     <>
@@ -65,26 +96,170 @@ export default async function JournalPostPage({
         ]}
       />
 
-      <article className="container-px mx-auto max-w-2xl py-16">
-        <nav className="mb-8 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Link href="/" className="hover:text-foreground">خانه</Link>
-          <span>/</span>
-          <Link href="/journal" className="hover:text-foreground">ژورنال</Link>
-        </nav>
+      {/* Hero */}
+      <header className="border-b border-border/60">
+        <div className="container-px mx-auto max-w-3xl py-12">
+          <nav className="mb-6 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Link href="/" className="hover:text-foreground">خانه</Link>
+            <span>/</span>
+            <Link href="/journal" className="hover:text-foreground">ژورنال</Link>
+          </nav>
 
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="text-primary">{post.category}</span>
-          <span>·</span>
-          <span>{faNum(post.readingMinutes)} دقیقه مطالعه</span>
+          {post.categories.length > 0 ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {post.categories.map((c) => (
+                <Badge key={c.id} variant="secondary">{c.name}</Badge>
+              ))}
+            </div>
+          ) : null}
+
+          <h1 className="font-serif text-4xl leading-tight sm:text-5xl">{post.title}</h1>
+
+          {post.excerpt ? (
+            <p className="mt-5 text-lg text-muted-foreground">{post.excerpt}</p>
+          ) : null}
+
+          <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            {post.published_at ? <span>{formatBlogDate(post.published_at)}</span> : null}
+            <span className="inline-flex items-center gap-1">
+              <Clock className="size-4" /> {readingTime(post.time_to_read)}
+            </span>
+            {post.total_reads > 0 ? (
+              <span className="inline-flex items-center gap-1">
+                <Eye className="size-4" /> {faNum(post.total_reads)} بازدید
+              </span>
+            ) : null}
+          </div>
         </div>
-        <h1 className="mt-3 font-serif text-5xl leading-tight">{post.title}</h1>
+      </header>
 
-        <div className="mt-8 space-y-5 text-lg leading-relaxed text-muted-foreground">
-          {post.body.map((para, i) => (
-            <p key={i}>{para}</p>
-          ))}
+      {/* Cover */}
+      <div className="container-px mx-auto max-w-4xl pt-10">
+        <div className="border-hairline relative aspect-[16/9] overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
+          <SmartImage
+            src={null}
+            alt={post.title}
+            monogram={post.title.charAt(0)}
+            fallbackClassName="from-primary/20 via-card to-secondary"
+            priority
+          />
+        </div>
+      </div>
+
+      {/* Body */}
+      <article className="container-px mx-auto max-w-3xl py-12">
+        <div className="space-y-5 text-lg leading-9 text-muted-foreground [&_a]:text-primary [&_a]:underline [&_blockquote]:border-s-2 [&_blockquote]:border-primary/40 [&_blockquote]:ps-4 [&_blockquote]:text-foreground/90 [&_h2]:mt-10 [&_h2]:font-serif [&_h2]:text-2xl [&_h2]:text-foreground [&_h3]:mt-8 [&_h3]:font-serif [&_h3]:text-xl [&_h3]:text-foreground [&_img]:rounded-2xl [&_li]:mt-2 [&_ol]:list-decimal [&_ol]:ps-6 [&_strong]:text-foreground [&_ul]:list-disc [&_ul]:ps-6">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.content}</ReactMarkdown>
+        </div>
+
+        {/* Share */}
+        <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-border/60 pt-6">
+          <span className="text-sm font-medium">هم‌رسانی:</span>
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href={`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${shareText}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Send className="size-4" /> تلگرام
+            </a>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${shareText}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ایکس (توییتر)
+            </a>
+          </Button>
         </div>
       </article>
+
+      {/* Shop this article */}
+      {products.length > 0 ? (
+        <section className="border-t border-border/60 bg-card/30">
+          <div className="container-px mx-auto max-w-5xl py-14">
+            <p className="eyebrow mb-2">
+              <ShoppingBag className="size-3.5" /> از این نوشته
+            </p>
+            <h2 className="font-serif text-3xl">محصولات مرتبط</h2>
+            <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {products.map((p) => (
+                <ArticleProductCard key={p.id} product={p} />
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Read next */}
+      {related.length > 0 ? (
+        <section className="container-px mx-auto max-w-7xl py-14">
+          <div className="flex items-end justify-between gap-4">
+            <h2 className="font-serif text-3xl">ادامه بدهید</h2>
+            <Link
+              href="/journal"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary"
+            >
+              همهٔ نوشته‌ها <ArrowLeft className="size-4" />
+            </Link>
+          </div>
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {related.map((p, i) => (
+              <BlogCard key={p.id} post={p} index={i} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </>
+  )
+}
+
+function ArticleProductCard({ product }: { product: ProductDetail }) {
+  const activeVariants = (product.variants ?? []).filter((v) => v.is_active)
+  const cheapest = activeVariants
+    .slice()
+    .sort((a, b) => a.price - b.price)[0]
+  const image = (product.images ?? []).find((i) => i.is_primary) ?? product.images?.[0]
+  const onSale =
+    cheapest?.compare_at_price != null && cheapest.compare_at_price > cheapest.price
+  const pdp = `/products/${product.slug}`
+
+  return (
+    <article className="border-hairline flex flex-col gap-4 rounded-3xl bg-card p-5 ring-1 ring-foreground/5">
+      <Link href={pdp} className="relative block aspect-square overflow-hidden rounded-2xl">
+        <SmartImage
+          src={image?.image_url}
+          alt={image?.alt_text ?? product.title}
+          sizes="(max-width: 640px) 100vw, 33vw"
+          monogram={product.title.charAt(0)}
+        />
+      </Link>
+      <div className="flex flex-1 flex-col">
+        <h3 className="font-serif text-lg leading-tight">
+          <Link href={pdp}>{product.title}</Link>
+        </h3>
+        {cheapest ? (
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="font-serif text-xl">{formatPrice(cheapest.price)}</span>
+            {onSale ? (
+              <span className="text-xs text-muted-foreground line-through">
+                {formatPrice(cheapest.compare_at_price!)}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="mt-4">
+          {cheapest ? (
+            <AddToCartButton productVariantId={cheapest.id} />
+          ) : (
+            <Button variant="outline" asChild className="h-12 w-full">
+              <Link href={pdp}>مشاهدهٔ محصول</Link>
+            </Button>
+          )}
+        </div>
+      </div>
+    </article>
   )
 }

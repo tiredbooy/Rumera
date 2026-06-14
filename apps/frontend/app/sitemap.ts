@@ -4,7 +4,7 @@ import { absoluteUrl } from "@/lib/site"
 import { listProducts } from "@/lib/catalog/products"
 import { listCategories } from "@/lib/catalog/categories"
 import { allRecipeSlugs } from "@/lib/recipes"
-import { journalPosts } from "@/lib/journal"
+import { listBlogs } from "@/lib/journal"
 
 /**
  * Programmatic sitemap served at /sitemap.xml. Covers every public, indexable
@@ -16,10 +16,11 @@ import { journalPosts } from "@/lib/journal"
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date()
 
-  const [catalogue, categories, recipeSlugs] = await Promise.all([
+  const [catalogue, categories, recipeSlugs, journalPosts] = await Promise.all([
     listProducts({ limit: 100 }),
     listCategories(),
     allRecipeSlugs(),
+    listBlogs(),
   ])
 
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -54,7 +55,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const journalRoutes: MetadataRoute.Sitemap = journalPosts.map((p) => ({
     url: absoluteUrl(`/journal/${p.slug}`),
-    lastModified: new Date(p.date),
+    lastModified: new Date(p.published_at ?? p.updated_at),
     changeFrequency: "monthly",
     priority: 0.5,
   }))
