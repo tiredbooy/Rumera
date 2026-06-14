@@ -17,7 +17,10 @@ A2 (OpenTelemetry tracing, default off — **Phase 2 complete**) · B2 (graceful
 breaker) · B3 (transient-failure retry layer) · B4 (payment/webhook idempotency keys — **Phase 3 complete**).
 All compile clean, gofmt/vet clean, unit-tested, full suite green.
 
-**Remaining (4)** — Phase 4 (Testing & quality gate): D2, D1, D3, D4.
+**Phase 4 progress:** D1 (money-path tests + mocks) ✅ · D4 (CI + golangci-lint + make targets) ✅ ·
+D3 (integration) — harness + docs shipped, implementation **blocked** by the sandbox proxy (testcontainers
+dep 403s; enable on open network/CI) · **D2 remaining** (uniform service interfaces) — mechanical but
+overlaps the active hero_slide WIP in `container.go`/`handler.go`, so best done once that work lands.
 
 | ID | Title | What's left to do |
 |----|-------|-------------------|
@@ -230,23 +233,29 @@ with concrete `*services.XService` (User, Product, Variant, Tag…). Concrete on
 - [ ] Export an interface per concrete service; constructor returns it; update `Deps` field types.
       Mechanical, one service at a time, compiler-guided.
 
-### D1 — Service unit tests + repo mocks · `TODO`
-- [ ] New `internal/mocks/` — mocks for money-path repos (Order, Cart, Coupon, Inventory,
-      Payment, Wallet).
-- [ ] New `internal/services/*_test.go` — table-driven tests for `OrderService.CreateOrder`
-      (cart states, coupon valid/expired, shipping, payment open/fail, compensation),
-      `InventoryService.Reserve/Release/Deduct`, `WalletService` insufficient-funds,
-      `CouponService` validation.
+### D1 — Service unit tests + repo mocks · `DONE`
+- [x] New `internal/mocks/` — hand-written func-field mocks (zero-value defaults, compile-time
+      interface assertions) for the money-path repos (Order, OrderItem, Cart, Coupon,
+      CouponUsage, ShippingMethod, Inventory, Movement, Wallet, Payment) + a no-op `pgx.Tx`.
+- [x] New `internal/services/*_test.go` — table-driven: `OrderService.CreateOrder` (empty cart,
+      invalid shipping, invalid/expired coupon, happy path, insufficient-stock compensation),
+      `InventoryService.Reserve/Release/Deduct`, `WalletService` insufficient-funds + guards,
+      `CouponService.Validate` + pure `computeDiscount`. 17 cases green, vet clean.
 
-### D3 — Integration suite · `TODO`
-- [ ] Add dep `testcontainers-go`.
-- [ ] New `tests/integration/` (build tag `//go:build integration`): Postgres + Redis, run
-      migrations, full checkout flow incl. B4 idempotency replay; assert inventory deducted.
+### D3 — Integration suite · `BLOCKED (env)` — harness + docs shipped
+- [x] `tests/integration/README.md` — harness design (full checkout flow + B4 idempotency
+      replay + inventory-deducted assertion) and one-command enable path. `make test-integration`
+      target shipped with D4.
+- [ ] **Blocked here:** `go get testcontainers-go` 403s on `klauspost/compress@v1.18.5` (a
+      transitive dep) behind the dev sandbox's module proxy. Resolves on an open network / CI —
+      run the `go get` in the README, then implement the cases.
 
-### D4 — CI quality gate · `TODO`
-- [ ] New `.github/workflows/ci.yml`: `golangci-lint` + `go vet` + `go test ./...` + coverage
-      threshold + migration up/down check on throwaway DB.
-- [ ] Add `golangci-lint` config + `make lint` / `make test-integration` targets.
+### D4 — CI quality gate · `DONE`
+- [x] New `.github/workflows/ci.yml`: lint (golangci-lint) · test (`go vet` + `go test ./...`
+      with a 5% coverage floor, a ratchet over today's 6%) · migrations (Postgres + TimescaleDB
+      service containers, goose up + reset for `main` and `analytics`).
+- [x] New `.golangci.yml` (errcheck/govet/ineffassign/staticcheck/unused/gofmt/goimports/
+      misspell/unconvert) + `make lint` / `test-unit` / `test-integration` / `cover` targets.
 
 ---
 
