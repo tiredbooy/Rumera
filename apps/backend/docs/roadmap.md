@@ -11,10 +11,11 @@
 
 ## Status snapshot — end of day 2026-06-13
 
-**Done (3):** C1 (indexes + N+1, code complete — live EXPLAIN pending DB) · C2 (HTTP cache headers + ETag)
-· A1 (Prometheus metrics). All compile clean, gofmt/vet clean, unit-tested, full suite green.
+**Done (4):** C1 (indexes + N+1, code complete — live EXPLAIN pending DB) · C2 (HTTP cache headers + ETag)
+· A1 (Prometheus metrics) · C3 (stats-job CTE — verified byte-identical, **Phase 1 complete**). All
+compile clean, gofmt/vet clean, unit-tested, full suite green.
 
-**Remaining (10)** — each with what it is and where it picks up:
+**Remaining (9)** — each with what it is and where it picks up:
 
 | ID | Title | What's left to do |
 |----|-------|-------------------|
@@ -99,12 +100,18 @@ unindexed.
 
 **Acceptance:** ✅ repeat GET with `If-None-Match` → `304`; first response carries `ETag` + `Cache-Control` (proven by tests).
 
-### C3 — Consolidate stats-job queries · `TODO`
+### C3 — Consolidate stats-job queries · `DONE`
 **Tasks:**
-- [ ] In `internal/corn/stats_job.go` `aggregateForProduct()`, fold the 5 sequential
-      `QueryRow` calls into one CTE (`WITH views AS (...), funnel AS (...) SELECT ...`).
+- [x] In `internal/corn/stats_job.go` `aggregateForProduct()`, folded the 5 sequential
+      `QueryRow` calls into one CTE (`WITH base AS (...) SELECT <conditional aggregates>`).
+      Single scan of the day-and-product event slice; every breakdown computed via
+      `FILTER` clauses that reproduce each former query's `WHERE` exactly (views/source/
+      revenue keep their `event_type` scoping; funnel/device span all types).
+- [x] Verified byte-identical: old-vs-new `EXCEPT` diff against a seeded TimescaleDB
+      hypertable returned `diff_rows = 0` (registered/guest, distinct sessions, every
+      referrer category, device types, revenue sum, plus noise rows correctly excluded).
 
-**Acceptance:** job output identical; one DB round-trip per product.
+**Acceptance:** ✅ job output identical; one DB round-trip per product.
 
 ---
 
