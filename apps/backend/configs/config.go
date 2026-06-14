@@ -164,5 +164,32 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
 	return &cfg, nil
+}
+
+// Validate fails fast on configuration values that are nonsensical rather than
+// letting them surface as confusing runtime behaviour (a sampler that never
+// samples, a breaker that can't trip, a retry loop that never retries). It is
+// called by Load after the environment is parsed.
+func (c *Config) Validate() error {
+	if c.OTELSamplerRatio < 0 || c.OTELSamplerRatio > 1 {
+		return fmt.Errorf("OTEL_SAMPLER_RATIO must be in [0,1], got %v", c.OTELSamplerRatio)
+	}
+	if c.CacheBreakerThreshold < 1 {
+		return fmt.Errorf("CACHE_BREAKER_THRESHOLD must be >= 1, got %d", c.CacheBreakerThreshold)
+	}
+	if c.CacheBreakerCooldown <= 0 {
+		return fmt.Errorf("CACHE_BREAKER_COOLDOWN must be > 0, got %s", c.CacheBreakerCooldown)
+	}
+	if c.DBRetryMaxAttempts < 1 {
+		return fmt.Errorf("DB_RETRY_MAX_ATTEMPTS must be >= 1, got %d", c.DBRetryMaxAttempts)
+	}
+	if c.DBRetryBaseBackoff <= 0 {
+		return fmt.Errorf("DB_RETRY_BASE_BACKOFF must be > 0, got %s", c.DBRetryBaseBackoff)
+	}
+	return nil
 }
