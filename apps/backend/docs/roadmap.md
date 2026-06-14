@@ -11,12 +11,13 @@
 
 ## Status snapshot — end of day 2026-06-13
 
-**Done (6):** C1 (indexes + N+1, code complete — live EXPLAIN pending DB) · C2 (HTTP cache headers + ETag)
-· A1 (Prometheus metrics) · C3 (stats-job CTE — verified byte-identical, **Phase 1 complete**) ·
-A3 (Grafana dashboard + Prometheus alerts, promtool-validated) · A2 (OpenTelemetry tracing, default off,
-unit-tested — **Phase 2 complete**). All compile clean, gofmt/vet clean, unit-tested, full suite green.
+**Done (9):** C1 (indexes + N+1) · C2 (HTTP cache headers + ETag) · A1 (Prometheus metrics) ·
+C3 (stats-job CTE, byte-identical — **Phase 1 complete**) · A3 (Grafana dashboard + Prometheus alerts) ·
+A2 (OpenTelemetry tracing, default off — **Phase 2 complete**) · B2 (graceful Redis degradation + circuit
+breaker) · B3 (transient-failure retry layer) · B4 (payment/webhook idempotency keys — **Phase 3 complete**).
+All compile clean, gofmt/vet clean, unit-tested, full suite green.
 
-**Remaining (7)** — each with what it is and where it picks up:
+**Remaining (4)** — Phase 4 (Testing & quality gate): D2, D1, D3, D4.
 
 | ID | Title | What's left to do |
 |----|-------|-------------------|
@@ -166,36 +167,44 @@ collector-dependent (point `OTEL_EXPORTER_OTLP_ENDPOINT` at a collector + flip `
 
 ## Phase 3 — Reliability (Theme B)
 
-### B2 — Graceful Redis degradation · `TODO`
-**Problem:** `pkg/cache/redis.go:35` hard-fails startup on a Redis ping; a mid-life outage
-surfaces as cache errors. The nil-cache path is already handled everywhere
-(`handlers/cache.go:31,45,61,77`).
-- [ ] In `bootstrap` build/start: on boot ping failure, **log warning and continue with
-      `cache = nil`** instead of aborting.
-- [ ] New `pkg/cache/circuit.go`: `Store` wrapper with a circuit breaker (N consecutive
-      failures → short-circuit `Get/Set` to `ErrNotFound` for a cooldown, then probe). Wrap
-      the real store in `container.go:37` build path.
-- [ ] In readiness (`newRouter.go:63`) report cache as `"degraded"` (still `200`) — don't
-      gate readiness on an optional dependency.
+### B2 — Graceful Redis degradation · `DONE`
+- [x] `app.go` build: on boot ping failure, **logs a warning and continues with
+      `cacheStore = nil`** instead of aborting (`a.cache.Close()` guarded against nil).
+- [x] New `pkg/cache/circuit.go`: `Store` wrapper with a circuit breaker (N consecutive
+      failures → open → short-circuit for a cooldown → single half-open probe). Open-state
+      degrades per op: `Get`→`ErrNotFound` (rebuild), `Set`/`Delete`→no-op,
+      `Incr`/`Exists`/`TTL`/`Ping`→`ErrUnavailable`. A miss never trips it. Wraps the live
+      store in `app.go`. Config `CACHE_BREAKER_THRESHOLD`/`CACHE_BREAKER_COOLDOWN`.
+- [x] Readiness reports cache `"disabled"`/`"degraded"`/`"up"` and never gates the probe.
+- [x] Tests: open-after-threshold, short-circuit-without-store-call, probe recovery,
+      failed-probe re-open, miss-does-not-trip.
 
-**Acceptance:** kill Redis → app keeps serving from DB; breaker opens; Redis returns → auto-resume.
+**Acceptance:** ✅ degradation + breaker state machine unit-proven; live kill-Redis check needs a full app boot.
 
-### B3 — Retry layer for transient failures · `TODO`
-`go-retry` is in `go.mod` but unused.
-- [ ] New `pkg/database/retry.go`: `WithRetry(ctx, fn)` bounded exponential backoff,
-      retrying only transient pgx errors (`40001`, conn reset), never business errors.
-- [ ] Apply to idempotent reads + cron rollups; keep money-path writes out unless idempotent.
+### B3 — Retry layer for transient failures · `DONE`
+- [x] New `pkg/database/retry.go`: `WithRetry(ctx, fn)` (+ `WithRetryPolicy` for tests),
+      bounded exponential backoff via `go-retry`, retrying only transient errors
+      (serialization `40001`, deadlock `40P01`, `pgconn.SafeToRetry`) — never business
+      errors or cancelled contexts. Default policy set from config in `database.Connect`
+      (`DB_RETRY_MAX_ATTEMPTS`/`DB_RETRY_BASE_BACKOFF`); `db_retries_total` metric.
+- [x] Applied to the product-stats cron rollup's idempotent reads.
+- [x] Tests: fail-twice-then-succeed, stop-on-business-error, exhaust, disabled,
+      cancelled-context, `isTransient` table.
 
-**Acceptance:** unit test (fail-twice-then-succeed fake); retry metric counts attempts.
+**Acceptance:** ✅ proven by unit tests; retry metric counts attempts.
 
-### B4 — Idempotency keys for payments/webhooks · `TODO`
-- [ ] New migration `..._create_idempotency_keys.sql`:
-      `idempotency_keys(key PK, request_hash, response_code, response_body, created_at)`.
-- [ ] New `pkg/middleware/idempotency.go`: keyed on `Idempotency-Key` header / `transaction_id`;
-      first call records + processes, duplicate returns stored response without re-running the
-      side effect. Apply to webhook + payment-confirm routes in `routes.go`.
+### B4 — Idempotency keys for payments/webhooks · `DONE`
+- [x] New migration `20260614130000_create_idempotency_keys.sql`:
+      `idempotency_keys(key PK, request_hash, response_code, response_body, created_at)`
+      (+ created_at index). Up/down + atomic-claim verified on live Postgres.
+- [x] New `pkg/middleware/idempotency.go`: keys on the `Idempotency-Key` header else a
+      hash of method+path+body (identical webhook retries dedupe). Atomic claim
+      (`INSERT … ON CONFLICT DO NOTHING`) → run handler → store 2xx response; replay returns
+      it without re-running; in-flight/different-body → 409; non-2xx releases the claim;
+      fail-open on store error. Wired onto `POST /webhooks/payment` in `routes.go`.
+- [x] Tests: replay-processes-once, distinct-bodies-both-process, failed-handler releases claim.
 
-**Acceptance:** replaying a webhook twice processes once; second returns cached response, no double order-paid.
+**Acceptance:** ✅ replaying the webhook processes once; the replay returns the stored response (no double order-paid).
 
 ### B5 — Outbox pattern (saga durability) · `DEFERRED` (stretch)
 **Problem:** order creation commits the order tx, then runs inventory reserve / cart clear
