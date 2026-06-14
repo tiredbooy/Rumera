@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next"
 import { absoluteUrl } from "@/lib/site"
 import { listProducts } from "@/lib/catalog/products"
 import { listCategories } from "@/lib/catalog/categories"
-import { recipes } from "@/lib/recipes"
+import { allRecipeSlugs } from "@/lib/recipes"
 import { journalPosts } from "@/lib/journal"
 
 /**
@@ -16,9 +16,10 @@ import { journalPosts } from "@/lib/journal"
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date()
 
-  const [catalogue, categories] = await Promise.all([
+  const [catalogue, categories, recipeSlugs] = await Promise.all([
     listProducts({ limit: 100 }),
     listCategories(),
+    allRecipeSlugs(),
   ])
 
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -44,8 +45,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }))
 
-  const recipeRoutes: MetadataRoute.Sitemap = recipes.map((r) => ({
-    url: absoluteUrl(`/recipes/${r.slug}`),
+  const recipeRoutes: MetadataRoute.Sitemap = recipeSlugs.map((slug) => ({
+    url: absoluteUrl(`/recipes/${slug}`),
     lastModified: now,
     changeFrequency: "monthly",
     priority: 0.5,
