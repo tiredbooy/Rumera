@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
@@ -42,6 +43,12 @@ type Config struct {
 	RedisAddr     string `envconfig:"REDIS_ADDR" default:"localhost:6379"`
 	RedisPassword string `envconfig:"REDIS_PASSWORD" default:""`
 	RedisDB       int    `envconfig:"REDIS_DB" default:"0"`
+
+	// CacheBreakerThreshold is the number of consecutive cache failures that trips
+	// the circuit breaker open, after which calls short-circuit (reads degrade to
+	// a miss) for CacheBreakerCooldown before a single probe is allowed through.
+	CacheBreakerThreshold int           `envconfig:"CACHE_BREAKER_THRESHOLD" default:"5"`
+	CacheBreakerCooldown  time.Duration `envconfig:"CACHE_BREAKER_COOLDOWN" default:"10s"`
 
 	// ── JWT ───────────────────────────────────────────────────────────────────
 	JWTSecret          string `envconfig:"JWT_SECRET" required:"true"`

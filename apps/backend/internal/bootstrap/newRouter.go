@@ -66,13 +66,16 @@ func registerReadiness(r *gin.Engine, c *container) {
 		} else {
 			deps["analytics_db"] = "up"
 		}
-		if c.cache != nil {
-			if err := c.cache.Ping(checkCtx); err != nil {
-				deps["cache"] = "down"
-				ready = false
-			} else {
-				deps["cache"] = "up"
-			}
+		// Cache is an optional dependency: report its health but never gate
+		// readiness on it — the app serves from the database when Redis is down
+		// (or its breaker is open), so a degraded cache must not fail the probe.
+		switch {
+		case c.cache == nil:
+			deps["cache"] = "disabled"
+		case c.cache.Ping(checkCtx) != nil:
+			deps["cache"] = "degraded"
+		default:
+			deps["cache"] = "up"
 		}
 
 		status := http.StatusOK
