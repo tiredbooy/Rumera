@@ -4,13 +4,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 	config "github.com/tiredbooy/configs"
 	"go.uber.org/zap"
 )
 
 func NewDB(cfg *config.Config, log *zap.Logger) (*pgxpool.Pool, error) {
-	pool, err := newPool(cfg.DSN(), mainPoolConfig())
+	pc := mainPoolConfig()
+	if cfg.OTELEnabled {
+		pc.tracer = otelpgx.NewTracer()
+	}
+	pool, err := newPool(cfg.DSN(), pc)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: %w", err)
 	}

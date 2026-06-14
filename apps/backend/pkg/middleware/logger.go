@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -26,6 +27,9 @@ func Logger(log *zap.Logger) gin.HandlerFunc {
 			zap.Duration("latency", time.Since(start)),
 			zap.String("user_agent", c.Request.UserAgent()),
 			zap.String("user_id", userID),
+			// trace_id joins this log line to its distributed trace. Empty when
+			// tracing is disabled or no span is active on the request context.
+			zap.String("trace_id", traceID(c)),
 		}
 
 		switch {
@@ -37,4 +41,14 @@ func Logger(log *zap.Logger) gin.HandlerFunc {
 			log.Info("request", fields...)
 		}
 	}
+}
+
+// traceID returns the active span's trace ID for the request, or "" when there
+// is no sampled span (tracing disabled or no active trace).
+func traceID(c *gin.Context) string {
+	sc := trace.SpanContextFromContext(c.Request.Context())
+	if !sc.HasTraceID() {
+		return ""
+	}
+	return sc.TraceID().String()
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/database"
 	"github.com/tiredbooy/pkg/metrics"
+	"github.com/tiredbooy/pkg/tracing"
 	"go.uber.org/zap"
 )
 
@@ -27,6 +28,9 @@ type App struct {
 	cron   *cron.Runner
 	router *gin.Engine
 	server *http.Server
+	// tracerShutdown flushes and stops the OpenTelemetry tracer provider. It is a
+	// no-op when tracing is disabled, so it is always safe to call on teardown.
+	tracerShutdown tracing.ShutdownFunc
 }
 
 func New() (*App, error) {
@@ -38,6 +42,14 @@ func New() (*App, error) {
 	log, err := logger.New(cfg.Env, "logs")
 	if err != nil {
 		return nil, fmt.Errorf("logger: %w", err)
+	}
+
+	// Tracing must be initialised before the DB pools: the pgx instrumentation
+	// captures the global tracer provider at construction, so the real provider
+	// has to be installed first (no-op + cheap when OTEL_ENABLED=false).
+	tracerShutdown, err := tracing.Init(context.Background(), cfg, log)
+	if err != nil {
+		return nil, fmt.Errorf("tracing: %w", err)
 	}
 
 	dbs, err := database.Connect(cfg, log)
@@ -90,14 +102,15 @@ func New() (*App, error) {
 	}
 
 	return &App{
-		cfg:    cfg,
-		log:    log,
-		dbs:    dbs,
-		cache:  cacheStore,
-		queue:  c.queue,
-		cron:   c.cron,
-		router: router,
-		server: server,
+		cfg:            cfg,
+		log:            log,
+		dbs:            dbs,
+		cache:          cacheStore,
+		queue:          c.queue,
+		cron:           c.cron,
+		router:         router,
+		server:         server,
+		tracerShutdown: tracerShutdown,
 	}, nil
 }
 
@@ -153,6 +166,14 @@ func (a *App) shutdown() error {
 
 	a.dbs.Close()
 	a.cache.Close()
+
+	// Flush any spans still buffered in the tracer's batch processor last, so it
+	// captures traces from the shutdown path too. No-op when tracing is disabled.
+	if a.tracerShutdown != nil {
+		if err := a.tracerShutdown(shutdownCtx); err != nil {
+			a.log.Warn("tracer shutdown", zap.Error(err))
+		}
+	}
 
 	a.log.Info("shutdown complete")
 	_ = a.log.Sync()
