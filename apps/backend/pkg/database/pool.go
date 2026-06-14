@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -14,6 +15,9 @@ type poolConfig struct {
 	maxConnLifetime   time.Duration
 	maxConnIdleTime   time.Duration
 	healthCheckPeriod time.Duration
+	// tracer instruments every query on the pool when set (OpenTelemetry, wired
+	// in only when tracing is enabled). nil means no per-query tracing.
+	tracer pgx.QueryTracer
 }
 
 func newPool(dsn string, cfg poolConfig) (*pgxpool.Pool, error) {
@@ -32,6 +36,10 @@ func newPool(dsn string, cfg poolConfig) (*pgxpool.Pool, error) {
 	poolCfg.ConnConfig.RuntimeParams["lock_timeout"] = "10000"      // 10s in ms
 	poolCfg.ConnConfig.RuntimeParams["application_name"] = "rumera"
 	poolCfg.ConnConfig.RuntimeParams["timezone"] = "UTC"
+
+	if cfg.tracer != nil {
+		poolCfg.ConnConfig.Tracer = cfg.tracer
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

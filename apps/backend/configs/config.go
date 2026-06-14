@@ -72,6 +72,21 @@ type Config struct {
 	// scraped over an internal network only (do not expose it publicly).
 	MetricsEnabled bool `envconfig:"METRICS_ENABLED" default:"true"`
 
+	// ── Tracing (OpenTelemetry) ───────────────────────────────────────────────
+	// OTELEnabled gates all tracing wiring: the tracer provider, the otelgin HTTP
+	// middleware and pgx query instrumentation. Default off — when false nothing
+	// is installed and the global provider stays the no-op one, so there is zero
+	// overhead and no export attempts.
+	OTELEnabled bool `envconfig:"OTEL_ENABLED" default:"false"`
+	// OTELServiceName labels every span with the emitting service.
+	OTELServiceName string `envconfig:"OTEL_SERVICE_NAME" default:"rumera-backend"`
+	// OTELExporterEndpoint is the OTLP/gRPC collector address (host:port, no
+	// scheme). Exported insecurely (no TLS) — front it with a local collector.
+	OTELExporterEndpoint string `envconfig:"OTEL_EXPORTER_OTLP_ENDPOINT" default:"localhost:4317"`
+	// OTELSamplerRatio is the head-sampling probability for root spans (0..1).
+	// 1.0 samples everything (fine for dev); lower it in production.
+	OTELSamplerRatio float64 `envconfig:"OTEL_SAMPLER_RATIO" default:"1.0"`
+
 	// ── Background jobs (cron) ────────────────────────────────────────────────
 	// Schedules are 6-field cron expressions (the runner is configured WithSeconds),
 	// evaluated in UTC. Set CRON_ENABLED=false to run the API without the

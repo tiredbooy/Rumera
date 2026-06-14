@@ -8,6 +8,7 @@ import (
 	config "github.com/tiredbooy/configs"
 	"github.com/tiredbooy/internal/middlewares"
 	"github.com/tiredbooy/pkg/middleware"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -16,6 +17,12 @@ func setupMiddlewares(r *gin.Engine, cfg *config.Config, log *zap.Logger) {
 
 	r.Use(middleware.Recovery(log))
 	r.Use(middleware.RequestID())
+	// Tracing wraps the rest of the chain so the root span covers the whole
+	// request and its trace_id is in scope for the logger below. Gated: when
+	// OTEL_ENABLED=false this middleware isn't installed at all.
+	if cfg.OTELEnabled {
+		r.Use(otelgin.Middleware(cfg.OTELServiceName))
+	}
 	// Security headers + CORS run early so they apply even to aborted requests.
 	r.Use(middlewares.SecurityHeaders())
 	r.Use(middlewares.CORS(cfg.CORSAllowedOrigins))

@@ -4,13 +4,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 	config "github.com/tiredbooy/configs"
 	"go.uber.org/zap"
 )
 
 func NewAnalytics(cfg *config.Config, log *zap.Logger) (*pgxpool.Pool, error) {
-	pool, err := newPool(cfg.AnalyticsDSN(), analyticsPoolConfig())
+	pc := analyticsPoolConfig()
+	if cfg.OTELEnabled {
+		pc.tracer = otelpgx.NewTracer()
+	}
+	pool, err := newPool(cfg.AnalyticsDSN(), pc)
 	if err != nil {
 		return nil, fmt.Errorf("analytics db: %w", err)
 	}
