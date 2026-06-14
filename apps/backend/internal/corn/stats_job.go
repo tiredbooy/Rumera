@@ -95,105 +95,67 @@ func (j *ProductStatsCronJob) aggregateForProduct(ctx context.Context, productID
 		ProductID: productID,
 	}
 
-	// ── views ────────────────────────────────────────────────────────────────
+	// One scan per product per day: all five breakdowns (views, funnel, device,
+	// source, revenue) are computed from the same day-and-product slice of events
+	// via conditional aggregates, replacing five sequential round-trips. Each
+	// FILTER reproduces its former query's WHERE exactly — the views, source and
+	// revenue aggregates re-apply the `event_type` scoping their standalone
+	// queries had, while funnel and device intentionally span all event types.
+	var revenueTotal decimal.Decimal
+	var unitsSold int
 	err := j.db.QueryRow(ctx, `
+		WITH base AS (
+			SELECT *
+			FROM events
+			WHERE payload->>'product_id' = $1
+			  AND created_at >= $2 AND created_at < $3
+		)
 		SELECT
-			COUNT(*)                                            AS views_total,
-			COUNT(DISTINCT session_id)                          AS views_unique,
-			COUNT(*) FILTER (WHERE user_id IS NOT NULL)         AS views_registered,
-			COUNT(*) FILTER (WHERE user_id IS NULL)             AS views_guest
-		FROM events
-		WHERE event_type = 'product_viewed'
-		  AND payload->>'product_id' = $1
-		  AND created_at >= $2 AND created_at < $3`,
+			-- views (product_viewed only)
+			COUNT(*)                  FILTER (WHERE event_type = 'product_viewed')                          AS views_total,
+			COUNT(DISTINCT session_id) FILTER (WHERE event_type = 'product_viewed')                         AS views_unique,
+			COUNT(*)                  FILTER (WHERE event_type = 'product_viewed' AND user_id IS NOT NULL)  AS views_registered,
+			COUNT(*)                  FILTER (WHERE event_type = 'product_viewed' AND user_id IS NULL)      AS views_guest,
+			-- funnel (all event types)
+			COUNT(*) FILTER (WHERE event_type = 'cart_updated')   AS add_to_cart,
+			COUNT(*) FILTER (WHERE event_type = 'order_created')  AS purchases,
+			-- device breakdown (all event types)
+			COUNT(*) FILTER (WHERE device_type = 'mobile')  AS device_mobile,
+			COUNT(*) FILTER (WHERE device_type = 'desktop') AS device_desktop,
+			COUNT(*) FILTER (WHERE device_type = 'tablet')  AS device_tablet,
+			-- source breakdown (product_viewed only)
+			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer LIKE '%search%')         AS source_search,
+			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer LIKE '%category%')       AS source_category,
+			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer LIKE '%recommendation%') AS source_recommendation,
+			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer LIKE '%blog%')           AS source_blog,
+			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer LIKE '%recipe%')         AS source_recipe,
+			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer IS NULL)                 AS source_direct,
+			-- revenue (order_created only)
+			COALESCE(SUM((payload->>'amount')::numeric) FILTER (WHERE event_type = 'order_created'), 0)     AS revenue_total,
+			COALESCE(SUM((payload->>'quantity')::int)   FILTER (WHERE event_type = 'order_created'), 0)     AS units_sold
+		FROM base`,
 		productID.String(), from, to,
 	).Scan(
 		&req.ViewsTotal,
 		&req.ViewsUnique,
 		&req.ViewsRegistered,
 		&req.ViewsGuest,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("aggregating views: %w", err)
-	}
-
-	// ── funnel ───────────────────────────────────────────────────────────────
-	err = j.db.QueryRow(ctx, `
-		SELECT
-			COUNT(*) FILTER (WHERE event_type = 'cart_updated')     AS add_to_cart,
-			COUNT(*) FILTER (WHERE event_type = 'order_created')    AS purchases
-		FROM events
-		WHERE payload->>'product_id' = $1
-		  AND created_at >= $2 AND created_at < $3`,
-		productID.String(), from, to,
-	).Scan(
 		&req.AddToCartCount,
 		&req.PurchaseCount,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("aggregating funnel: %w", err)
-	}
-
-	// ── device breakdown ─────────────────────────────────────────────────────
-	err = j.db.QueryRow(ctx, `
-		SELECT
-			COUNT(*) FILTER (WHERE device_type = 'mobile')  AS mobile,
-			COUNT(*) FILTER (WHERE device_type = 'desktop') AS desktop,
-			COUNT(*) FILTER (WHERE device_type = 'tablet')  AS tablet
-		FROM events
-		WHERE payload->>'product_id' = $1
-		  AND created_at >= $2 AND created_at < $3`,
-		productID.String(), from, to,
-	).Scan(
 		&req.DeviceMobile,
 		&req.DeviceDesktop,
 		&req.DeviceTablet,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("aggregating devices: %w", err)
-	}
-
-	// ── source breakdown ─────────────────────────────────────────────────────
-	err = j.db.QueryRow(ctx, `
-		SELECT
-			COUNT(*) FILTER (WHERE page_referrer LIKE '%search%')           AS source_search,
-			COUNT(*) FILTER (WHERE page_referrer LIKE '%category%')         AS source_category,
-			COUNT(*) FILTER (WHERE page_referrer LIKE '%recommendation%')   AS source_recommendation,
-			COUNT(*) FILTER (WHERE page_referrer LIKE '%blog%')             AS source_blog,
-			COUNT(*) FILTER (WHERE page_referrer LIKE '%recipe%')           AS source_recipe,
-			COUNT(*) FILTER (WHERE page_referrer IS NULL)                   AS source_direct
-		FROM events
-		WHERE event_type = 'product_viewed'
-		  AND payload->>'product_id' = $1
-		  AND created_at >= $2 AND created_at < $3`,
-		productID.String(), from, to,
-	).Scan(
 		&req.SourceSearch,
 		&req.SourceCategory,
 		&req.SourceRecommendation,
 		&req.SourceBlog,
 		&req.SourceRecipe,
 		&req.SourceDirect,
+		&revenueTotal,
+		&unitsSold,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("aggregating sources: %w", err)
-	}
-
-	// ── revenue (from order events payload) ──────────────────────────────────
-	var revenueTotal decimal.Decimal
-	var unitsSold int
-	err = j.db.QueryRow(ctx, `
-		SELECT
-			COALESCE(SUM((payload->>'amount')::numeric), 0)     AS revenue_total,
-			COALESCE(SUM((payload->>'quantity')::int), 0)       AS units_sold
-		FROM events
-		WHERE event_type = 'order_created'
-		  AND payload->>'product_id' = $1
-		  AND created_at >= $2 AND created_at < $3`,
-		productID.String(), from, to,
-	).Scan(&revenueTotal, &unitsSold)
-	if err != nil {
-		return nil, fmt.Errorf("aggregating revenue: %w", err)
+		return nil, fmt.Errorf("aggregating product stats: %w", err)
 	}
 	req.RevenueTotal = revenueTotal
 	req.UnitsSold = unitsSold
