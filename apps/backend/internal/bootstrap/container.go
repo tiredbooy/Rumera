@@ -192,5 +192,9 @@ func buildCron(
 		cron.NewRecommendationRefreshJob(recommendation,
 			cfg.CronRecsRefreshWindowDays, cfg.CronRecsRefreshMaxUsers).Run)
 
+	// Housekeeping: prune expired idempotency keys from the main DB.
+	runner.Register(cfg.CronIdempotencyCleanupSchedule, "idempotency_cleanup",
+		cron.NewIdempotencyCleanupJob(dbs.DB, cfg.IdempotencyKeyRetention).Run)
+
 	return runner
 }

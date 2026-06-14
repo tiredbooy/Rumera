@@ -121,6 +121,11 @@ type Config struct {
 	CronRecsRefreshSchedule   string `envconfig:"CRON_RECS_REFRESH_SCHEDULE" default:"0 0 3 * * *"`
 	CronRecsRefreshWindowDays int    `envconfig:"CRON_RECS_REFRESH_WINDOW_DAYS" default:"30"`
 	CronRecsRefreshMaxUsers   int    `envconfig:"CRON_RECS_REFRESH_MAX_USERS" default:"5000"`
+
+	// Idempotency-key housekeeping: prune stored payment/webhook responses older
+	// than the retention window so idempotency_keys doesn't grow unbounded.
+	CronIdempotencyCleanupSchedule string        `envconfig:"CRON_IDEMPOTENCY_CLEANUP_SCHEDULE" default:"0 30 3 * * *"`
+	IdempotencyKeyRetention        time.Duration `envconfig:"IDEMPOTENCY_KEY_RETENTION" default:"720h"` // 30 days
 }
 
 // ── DSN helpers ───────────────────────────────────────────────────────────────
