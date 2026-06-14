@@ -20,7 +20,8 @@ them at request time (`next.config.ts` → `images.formats`).
 | Product card | `products/{slug}.jpg` (or `Product.image`) | 4:5 | **1000×1250** | up to `25vw` |
 | Recipe card | recipe `image_url` (API) | 4:3 | **1200×900** | up to `33vw` |
 | Recipe hero | recipe `image_url` / `og_image_url` | 4:3 | **1600×1200** | up to `50vw` |
-| Story / about | `story/rumera-cellar.jpg` | 1:1 | **1200×1200** | up to `50vw` |
+| Story / about (square) | `story/rumera-cellar.jpg` | 1:1 | **1200×1200** | up to `50vw` |
+| About hero | `about/rumera-team.jpg` | 4:3 | **1400×1050** | up to `50vw` |
 | Brand logo (optional) | `brands/{brand}.svg` | — | height ~32px, transparent | — |
 
 > Hero slides are **admin-managed** via the `/hero-slides` API. The `image_url`
