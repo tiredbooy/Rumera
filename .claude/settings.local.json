@@ -62,7 +62,8 @@
       "Bash(grep -nA20 \"export function recipeLd\" apps/frontend/lib/seo/jsonld.ts)",
       "Bash(grep -nA6 \"export type Paginated\" lib/catalog/types.ts)",
       "Bash(grep -rnA3 \"useAddCartItem\\(\\)\" components app)",
-      "Bash(grep -nA20 \"BuildMetadataInput\" lib/seo/metadata.ts)"
+      "Bash(grep -nA20 \"BuildMetadataInput\" lib/seo/metadata.ts)",
+      "Bash(git rm *)"
     ]
   }
 }
