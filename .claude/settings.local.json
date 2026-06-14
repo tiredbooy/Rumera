@@ -50,7 +50,19 @@
       "Bash(grep -rn '\\\\$[0-9]\\\\|@' /home/tehranspeaker/Downloads/Rumera-master/apps/backend/internal/repositories/product_repo.go)",
       "Bash(gofmt -l internal/repositories/order_repo.go)",
       "Bash(git rev-list *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(/bin/ls -la /home/tehranspeaker/Downloads/Rumera-master)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(echo \"TSC_EXIT=$?\")",
+      "Bash(echo \"LINT_EXIT=$?\")",
+      "Bash(grep -E \"Compiled|error|Error|warn|Failed|○ /$|◐|● /$|Route \\\\\\(app\\\\\\)|^├ . / \")",
+      "Bash(grep -E \"^[├└│ ]*[○●ƒ] /\\( |$\\)\")",
+      "Bash(git ls-remote *)",
+      "Bash(grep -nA40 \"func \\(h \\\\*Handler\\) cachedJSON\")",
+      "Bash(grep -nA20 \"export function recipeLd\" apps/frontend/lib/seo/jsonld.ts)",
+      "Bash(grep -nA6 \"export type Paginated\" lib/catalog/types.ts)",
+      "Bash(grep -rnA3 \"useAddCartItem\\(\\)\" components app)",
+      "Bash(grep -nA20 \"BuildMetadataInput\" lib/seo/metadata.ts)"
     ]
   }
 }

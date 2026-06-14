@@ -58,6 +58,8 @@ type Deps struct {
 	Blog         services.BlogService
 	BlogCategory services.BlogCategoryService
 
+	HeroSlide services.HeroSlideService
+
 	Recipe         services.RecipeService
 	Recommendation services.RecommendationService
 
