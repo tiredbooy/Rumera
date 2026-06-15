@@ -105,7 +105,8 @@ config: $(DEV_ENV) ## Validate & render the resolved dev compose config
 	$(DEV) config
 
 .PHONY: health
-health: ## Curl the backend & frontend health endpoints (dev ports)
+health: ## Curl the gateway, backend & frontend health endpoints (dev ports)
+	@echo "→ gateway  http://localhost:$${GATEWAY_PORT:-80}/healthz"        ; curl -fsS http://localhost:$${GATEWAY_PORT:-80}/healthz        && echo "  ✅" || echo "  ❌ not responding"
 	@echo "→ backend  http://localhost:8080/api/v1/health" ; curl -fsS http://localhost:8080/api/v1/health && echo "  ✅" || echo "  ❌ not responding"
 	@echo "→ frontend http://localhost:3000"               ; curl -fsS -o /dev/null http://localhost:3000      && echo "  ✅" || echo "  ❌ not responding"
 
