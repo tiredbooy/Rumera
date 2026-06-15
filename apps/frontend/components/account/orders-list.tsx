@@ -1,82 +1,137 @@
 "use client"
 
-import Link from "next/link"
-import { Loader2, Eye, ShoppingBag } from "lucide-react"
+import * as React from "react"
+import { Loader2, ShoppingBag, ChevronRight, ChevronLeft } from "lucide-react"
 
-import { faNum, formatPrice } from "@/lib/products"
-import { ORDER_STATUS_FA, faDate } from "@/lib/catalog/labels"
-import { Badge } from "@/components/ui/badge"
+import { faNum } from "@/lib/products"
 import { Button } from "@/components/ui/button"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Placeholder } from "@/components/dashboard/placeholder"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useOrders } from "@/lib/api/hooks"
+import type { OrderListItem, OrderStatus } from "@/lib/catalog/types"
+import { OrderCard } from "./order-card"
+import { EmptyState } from "./empty-state"
+
+/** Filter tabs → the set of statuses each one matches (empty = all). */
+const TABS: { value: string; label: string; match: (s: OrderStatus) => boolean }[] = [
+  { value: "all", label: "همه", match: () => true },
+  {
+    value: "processing",
+    label: "در حال پردازش",
+    match: (s) => ["pending", "paid", "processing", "ready_to_ship"].includes(s),
+  },
+  {
+    value: "shipped",
+    label: "ارسال‌شده",
+    match: (s) => ["shipped", "out_for_delivery"].includes(s),
+  },
+  { value: "delivered", label: "تحویل‌شده", match: (s) => s === "delivered" },
+  {
+    value: "cancelled",
+    label: "لغو/بازگشت",
+    match: (s) =>
+      ["cancelled", "refund_requested", "refund_approved", "refunded", "partially_refunded"].includes(
+        s
+      ),
+  },
+]
 
 export function OrdersList() {
-  const { data, isLoading, isError } = useOrders()
+  const [tab, setTab] = React.useState("all")
+  const [page, setPage] = React.useState(1)
+  const { data, isLoading, isError, isFetching, refetch } = useOrders({ page })
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12 text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-      </div>
-    )
-  }
-
-  if (isError || !data || data.results.length === 0) {
-    return (
-      <Placeholder
-        icon={ShoppingBag}
-        title="هنوز سفارشی ثبت نکرده‌اید"
-        description="پس از اولین خرید، سفارش‌های شما اینجا نمایش داده می‌شوند."
-      >
-        <Button asChild>
-          <Link href="/products">شروع خرید</Link>
-        </Button>
-      </Placeholder>
-    )
-  }
+  const matcher = TABS.find((t) => t.value === tab) ?? TABS[0]
+  const all = data?.results ?? []
+  const visible = all.filter((o: OrderListItem) => matcher.match(o.status))
+  const pagination = data?.pagination
 
   return (
-    <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="text-start">شماره</TableHead>
-            <TableHead className="text-start">تاریخ</TableHead>
-            <TableHead className="text-start">مبلغ</TableHead>
-            <TableHead className="text-start">وضعیت</TableHead>
-            <TableHead className="text-end">عملیات</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.results.map((order) => (
-            <TableRow key={order.id}>
-              <TableCell className="font-medium">#{faNum(order.id)}</TableCell>
-              <TableCell className="text-muted-foreground">{faDate(order.created_at)}</TableCell>
-              <TableCell className="font-medium">{formatPrice(order.total_amount)}</TableCell>
-              <TableCell>
-                <Badge variant={order.status === "cancelled" ? "destructive" : "secondary"}>
-                  {ORDER_STATUS_FA[order.status] ?? order.status}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-end">
-                <Button variant="ghost" size="icon" asChild aria-label="مشاهده">
-                  <Link href={`/account/orders/${order.id}`}>
-                    <Eye className="size-4" />
-                  </Link>
-                </Button>
-              </TableCell>
-            </TableRow>
+    <div>
+      <Tabs
+        value={tab}
+        onValueChange={(v) => {
+          setTab(v)
+          setPage(1)
+        }}
+        className="mb-6"
+      >
+        <TabsList className="flex-wrap">
+          {TABS.map((t) => (
+            <TabsTrigger key={t.value} value={t.value} className="cursor-pointer">
+              {t.label}
+            </TabsTrigger>
           ))}
-        </TableBody>
-      </Table>
+        </TabsList>
+      </Tabs>
+
+      {isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-44 rounded-2xl" />
+          ))}
+        </div>
+      ) : isError ? (
+        <div className="border-hairline rounded-2xl bg-card p-6 text-sm text-muted-foreground ring-1 ring-foreground/5">
+          خطا در دریافت سفارش‌ها.{" "}
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="cursor-pointer font-medium text-primary hover:underline"
+          >
+            تلاش دوباره
+          </button>
+        </div>
+      ) : visible.length === 0 ? (
+        <EmptyState
+          icon={ShoppingBag}
+          title={tab === "all" ? "هنوز سفارشی ثبت نکرده‌اید" : "سفارشی در این وضعیت نیست"}
+          description={
+            tab === "all"
+              ? "پس از اولین خرید، سفارش‌های شما اینجا نمایش داده می‌شوند."
+              : "سفارش‌های دیگری را از زبانه‌های بالا ببینید."
+          }
+          actionLabel={tab === "all" ? "شروع خرید" : undefined}
+          actionHref={tab === "all" ? "/products" : undefined}
+        />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {visible.map((order) => (
+            <OrderCard key={order.id} order={order} />
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pagination && pagination.total_pages > 1 ? (
+        <div className="mt-6 flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!pagination.has_prev || isFetching}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            <ChevronRight className="size-4" /> قبلی
+          </Button>
+          <span className="px-2 text-sm text-muted-foreground">
+            {isFetching ? (
+              <Loader2 className="inline size-4 animate-spin" />
+            ) : (
+              <>
+                صفحهٔ {faNum(pagination.page)} از {faNum(pagination.total_pages)}
+              </>
+            )}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!pagination.has_next || isFetching}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            بعدی <ChevronLeft className="size-4" />
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }
