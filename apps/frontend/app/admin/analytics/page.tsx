@@ -1,33 +1,49 @@
-import { Coins, ShoppingCart, Users, Percent, LineChart } from "lucide-react"
+import { Coins, ShoppingCart, Users, Percent } from "lucide-react"
 
 import { requirePermission } from "@/lib/auth/session"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 import { formatPrice, faNum } from "@/lib/products"
+import { dashboardSummary } from "@/lib/admin/data"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { StatCard } from "@/components/dashboard/stat-card"
-import { Placeholder } from "@/components/dashboard/placeholder"
+import { AnalyticsView } from "@/components/admin/analytics-view"
 
 export default async function AdminAnalyticsPage() {
   await requirePermission(PERMISSIONS.ANALYTICS_READ)
+  const s = dashboardSummary
 
   return (
     <>
       <PageHeader title="تحلیل‌ها" description="عملکرد فروش در ۳۰ روز گذشته." />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="درآمد کل" value={formatPrice(1_284_000_000)} icon={Coins} trend={{ value: "+۱۸٪", positive: true }} />
-        <StatCard label="سفارش‌ها" value={faNum(948)} icon={ShoppingCart} trend={{ value: "+۹٪", positive: true }} />
-        <StatCard label="مشتریان فعال" value={faNum(412)} icon={Users} trend={{ value: "+۴٪", positive: true }} />
-        <StatCard label="نرخ تبدیل" value="٪۳٫۲" icon={Percent} trend={{ value: "−۱٪", positive: false }} />
-      </div>
-
-      <div className="mt-6">
-        <Placeholder
-          icon={LineChart}
-          title="نمودار فروش در انتظار اتصال به سرویس"
-          description="GET /api/v1/analytics — با اتصال به سرویس تحلیل‌ها، نمودار درآمد و سفارش‌ها (recharts) اینجا رسم می‌شود."
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="درآمد کل"
+          value={formatPrice(s.revenue30d)}
+          icon={Coins}
+          trend={{ value: s.revenue30dTrend, positive: true }}
+        />
+        <StatCard
+          label="سفارش‌ها"
+          value={faNum(s.orders30d)}
+          icon={ShoppingCart}
+          trend={{ value: s.orders30dTrend, positive: true }}
+        />
+        <StatCard
+          label="مشتریان فعال"
+          value={faNum(s.activeCustomers)}
+          icon={Users}
+          trend={{ value: s.activeCustomersTrend, positive: true }}
+        />
+        <StatCard
+          label="نرخ تبدیل"
+          value={s.conversionRate}
+          icon={Percent}
+          trend={{ value: s.conversionTrend, positive: false }}
         />
       </div>
+
+      <AnalyticsView />
     </>
   )
 }

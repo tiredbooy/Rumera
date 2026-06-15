@@ -1,20 +1,17 @@
-import { Star } from "lucide-react"
-
 import { requirePermission } from "@/lib/auth/session"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
+import { can } from "@/lib/rbac/can"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { Placeholder } from "@/components/dashboard/placeholder"
+import { ReviewsQueue } from "@/components/admin/reviews-queue"
 
 export default async function AdminReviewsPage() {
-  await requirePermission(PERMISSIONS.REVIEWS_READ)
+  const session = await requirePermission(PERMISSIONS.REVIEWS_READ)
+  const canModerate = can(session, PERMISSIONS.REVIEWS_MODERATE)
+
   return (
     <>
       <PageHeader title="دیدگاه‌ها" description="بازبینی و تأیید نظرهای مشتریان." />
-      <Placeholder
-        icon={Star}
-        title="صف بازبینی در انتظار اتصال به سرویس"
-        description="GET /api/v1/reviews — دیدگاه‌های در انتظار تأیید اینجا برای بازبینی نمایش داده می‌شوند."
-      />
+      <ReviewsQueue canModerate={canModerate} />
     </>
   )
 }
