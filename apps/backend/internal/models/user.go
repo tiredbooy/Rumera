@@ -31,12 +31,14 @@ type User struct {
 
 	Role     string `db:"role"`
 	IsActive bool   `db:"is_active"`
+	IsBanned bool   `db:"is_banned"`
 
 	EmailVerifiedAt *time.Time `db:"email_verified_at"`
 	LastLoginAt     *time.Time `db:"last_login_at"`
 
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	BannedAt  *time.Time `db:"banned_at"`
+	CreatedAt time.Time  `db:"created_at"`
+	UpdatedAt time.Time  `db:"updated_at"`
 }
 
 // ─────────────────────────────────────────────────────────────
