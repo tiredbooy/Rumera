@@ -149,7 +149,7 @@ services:
           path: ./apps/backend/go.sum
     # Healthcheck for backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]  # Adjust path if needed
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 8s
       timeout: 5s
       retries: 8
