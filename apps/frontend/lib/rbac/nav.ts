@@ -23,6 +23,9 @@ import {
   Heart,
   Wallet,
   MessageSquare,
+  Sparkles,
+  Award,
+  Repeat,
   type LucideIcon,
 } from "lucide-react"
 
@@ -81,6 +84,9 @@ export const ACCOUNT_NAV: NavGroup[] = [
       { label: "سفارش‌های من", href: "/account/orders", icon: ShoppingBag },
       { label: "آدرس‌ها", href: "/account/addresses", icon: MapPin },
       { label: "علاقه‌مندی‌ها", href: "/account/wishlist", icon: Heart },
+      { label: "سلیقهٔ من", href: "/account/taste", icon: Sparkles },
+      { label: "باشگاه مشتریان", href: "/account/rewards", icon: Award },
+      { label: "اشتراک‌ها", href: "/account/subscriptions", icon: Repeat },
       { label: "کیف پول", href: "/account/wallet", icon: Wallet },
       { label: "دیدگاه‌های من", href: "/account/reviews", icon: MessageSquare },
       { label: "تنظیمات حساب", href: "/account/settings", icon: Settings },

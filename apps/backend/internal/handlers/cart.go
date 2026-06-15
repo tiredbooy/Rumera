@@ -38,6 +38,26 @@ func (h *Handler) AddCartItem(c *gin.Context) {
 	response.Created(c, cart)
 }
 
+// AddCartItems — POST /cart/items/bulk
+// Adds many variants at once (e.g. all of a recipe's ingredients). Returns the
+// refreshed cart plus a list of variants that were skipped (unavailable/unknown).
+func (h *Handler) AddCartItems(c *gin.Context) {
+	userID, ok := h.uid(c)
+	if !ok {
+		return
+	}
+	var req models.AddCartItemsReq
+	if !h.bindJSON(c, &req) {
+		return
+	}
+	result, err := h.Cart.AddItems(c.Request.Context(), userID, req)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	response.Created(c, result)
+}
+
 // UpdateCartItem — PATCH /cart/items/:id
 func (h *Handler) UpdateCartItem(c *gin.Context) {
 	userID, ok := h.uid(c)

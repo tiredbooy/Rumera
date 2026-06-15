@@ -74,6 +74,32 @@ func (s *UserService) GetByEmail(ctx context.Context, email string) (*models.Use
 	return user, nil
 }
 
+// GetOrCreateByPhone returns the customer for a (canonical) phone number,
+// creating a passwordless phone-only account the first time we see it. Used by
+// the SMS OTP login flow after a code is verified.
+func (s *UserService) GetOrCreateByPhone(ctx context.Context, phone string) (*models.User, error) {
+	if phone == "" {
+		return nil, apperr.ErrInvalidRequest
+	}
+
+	user, err := s.userRepo.GetByPhone(ctx, phone)
+	if err == nil {
+		return user, nil
+	}
+	if !errors.Is(err, models.ErrNotFound) {
+		return nil, apperr.ErrInternal
+	}
+
+	// First sighting → create. A synthetic, unique email satisfies the NOT NULL /
+	// UNIQUE email column; the password hash stays NULL (login is via OTP only).
+	email := phone + "@phone.rumera.local"
+	user, err = s.userRepo.CreatePhone(ctx, phone, email)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	return user, nil
+}
+
 func (s *UserService) GetAll(ctx context.Context, filter models.UserFilter) ([]*models.User, int64, error) {
 	if err := validateUserFilter(filter); err != nil {
 		return nil, 0, err
@@ -156,7 +182,11 @@ func (s *UserService) ExistsByID(ctx context.Context, userID uuid.UUID) (bool, e
 // ── private validators ────────────────────────────────────────────────────────
 
 func validateCreateUserReq(req models.CreateUserReq) error {
-	if req.Email == "" || (req.FirstName == nil || *req.FirstName == "") || (req.LastName == nil || *req.LastName == "") {
+	// Email and password are already validated by the request binder
+	// (validate:"required,email" / "required,min=8"). First/last name are
+	// optional — the column is nullable and the DTO marks them optional — so we
+	// must NOT reject a registration just because the customer left them blank.
+	if req.Email == "" {
 		return apperr.ErrInvalidRequest
 	}
 	return nil

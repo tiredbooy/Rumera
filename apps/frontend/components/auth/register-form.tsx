@@ -10,8 +10,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
-
 export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter()
   const [loading, setLoading] = React.useState(false)
@@ -22,18 +20,19 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
     setError(null)
     setLoading(true)
     const form = new FormData(e.currentTarget)
-    const email = String(form.get("email") ?? "")
+    const email = String(form.get("email") ?? "").trim()
     const password = String(form.get("password") ?? "")
 
     try {
-      const res = await fetch(`${API.replace(/\/$/, "")}/api/v1/auth/register`, {
+      // Same-origin proxy → backend /auth/register (works in dev, Docker & prod).
+      const res = await fetch("/api/public/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
           password,
-          first_name: String(form.get("first_name") ?? ""),
-          last_name: String(form.get("last_name") ?? ""),
+          first_name: String(form.get("first_name") ?? "").trim(),
+          last_name: String(form.get("last_name") ?? "").trim(),
         }),
       })
       if (!res.ok) {

@@ -205,6 +205,11 @@ export type Order = {
   tax_amount: number
   total_amount: number
   notes?: string
+  is_gift?: boolean
+  gift_message?: string
+  gift_wrap?: boolean
+  hide_price?: boolean
+  scheduled_delivery_date?: string
   created_at: string
   items: OrderItem[]
 }
@@ -224,4 +229,9 @@ export type PlaceOrderInput = {
   shipping_method_id: number
   coupon_code?: string
   notes?: string
+  is_gift?: boolean
+  gift_message?: string
+  gift_wrap?: boolean
+  hide_price?: boolean
+  scheduled_delivery_date?: string
 }

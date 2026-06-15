@@ -46,6 +46,14 @@ func KeyBlacklist(jti string) string     { return "blacklist:" + jti }
 // scoped by client identifier (IP or email).
 func KeyLoginAttempts(scope string) string { return "rl:login:" + scope }
 
+// OTP login keys, all scoped by canonical phone number:
+//   KeyOTP        — the active code (short TTL).
+//   KeyOTPSend    — fixed-window counter capping codes requested per phone.
+//   KeyOTPVerify  — fixed-window counter capping verify attempts per code.
+func KeyOTP(phone string) string       { return "otp:code:" + phone }
+func KeyOTPSend(phone string) string   { return "otp:send:" + phone }
+func KeyOTPVerify(phone string) string { return "otp:try:" + phone }
+
 // KeyProduct / KeyCategoryTree are read-through cache keys for hot catalogue
 // reads. Bump the version prefix to invalidate the whole namespace at once.
 func KeyProduct(id int64) string { return "product:v1:" + strconv.FormatInt(id, 10) }

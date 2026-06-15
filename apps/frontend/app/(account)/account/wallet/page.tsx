@@ -4,6 +4,7 @@ import { formatPrice } from "@/lib/products"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { Placeholder } from "@/components/dashboard/placeholder"
+import { GiftCardRedeem } from "@/components/wallet/gift-card-redeem"
 
 export default function AccountWalletPage() {
   return (
@@ -23,6 +24,10 @@ export default function AccountWalletPage() {
           <Wallet className="size-4" /> موجودی فعلی
         </div>
         <p className="mt-2 font-serif text-4xl text-foil">{formatPrice(1_250_000)}</p>
+      </div>
+
+      <div className="mb-6">
+        <GiftCardRedeem />
       </div>
 
       <Placeholder

@@ -9,6 +9,7 @@ import (
 	"github.com/tiredbooy/internal/services"
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/notify"
+	"github.com/tiredbooy/pkg/sms"
 	"github.com/tiredbooy/pkg/token"
 	"github.com/tiredbooy/pkg/validator"
 	"go.uber.org/zap"
@@ -28,6 +29,10 @@ type Deps struct {
 	Cache cache.Store
 	// Notify delivers transactional email. Never on the request hot path.
 	Notify notify.Mailer
+	// SMS delivers text messages (OTP login). Sent off the request path.
+	SMS sms.Sender
+	// OTPTTL bounds how long a requested SMS login code stays valid.
+	OTPTTL time.Duration
 	// RefreshTTL mirrors the JWT refresh lifetime so the auth layer can scope the
 	// refresh-token whitelist entries in Redis to the same window.
 	RefreshTTL time.Duration
@@ -38,6 +43,7 @@ type Deps struct {
 	User          *services.UserService
 	PasswordReset *services.PasswordResetService
 	Address       services.AddressService
+	TasteProfile  *services.TasteProfileService
 
 	Product  *services.ProductService
 	Variant  *services.VariantService
@@ -46,10 +52,15 @@ type Deps struct {
 	Tag      *services.TagService
 
 	Cart      *services.CartService
+	Alert     *services.AlertService
 	Coupon    *services.CouponService
 	Order     services.OrderService
 	Wishlist  *services.WishlistService
 	Wallet    *services.WalletService
+	Loyalty   *services.LoyaltyService
+	Referral     *services.ReferralService
+	GiftCard     *services.GiftCardService
+	Subscription *services.SubscriptionService
 	Review    *services.ReviewService
 	Shipping  *services.ShippingService
 	Payment   *services.PaymentService

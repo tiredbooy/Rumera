@@ -8,6 +8,11 @@ import {
   Quote,
   Sparkles,
   Check,
+  Wine,
+  Martini,
+  GlassWater,
+  Grape,
+  type LucideIcon,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -17,10 +22,22 @@ import { SmartImage } from "@/components/smart-image"
 import { Reveal } from "@/components/motion/reveal"
 import { BrandMarquee } from "@/components/brand-marquee"
 import { HeroCarousel } from "@/components/home/hero-carousel"
+import { ForYouRail } from "@/components/home/for-you-rail"
 import { HomeStructuredData } from "@/components/structured-data"
 import { getHeroSlides } from "@/lib/home/hero"
 import { featuredBrands } from "@/lib/home/brands"
-import { categories, categoryFa, getFeatured } from "@/lib/products"
+import { categories, categoryFa, getFeatured, type Category } from "@/lib/products"
+
+// A small glyph per category for the category cards' corner chip.
+const categoryIcon: Record<Category, LucideIcon> = {
+  Whisky: GlassWater,
+  Wine: Wine,
+  Champagne: Sparkles,
+  Gin: Martini,
+  Rum: GlassWater,
+  Tequila: Martini,
+  Vodka: Grape,
+}
 
 // Home is ISR — the hero slides are admin-managed and refetched periodically.
 export const revalidate = 300
@@ -82,6 +99,9 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* ───────────────────────── For you (personalized) ───────────────────────── */}
+      <ForYouRail />
+
       {/* ───────────────────────── Brand marquee ───────────────────────── */}
       <section className="border-b border-border/60 py-8">
         <div className="container-px mx-auto max-w-7xl">
@@ -106,9 +126,10 @@ export default async function Home() {
           </Button>
         </Reveal>
 
-        <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+        <div className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
           {categories.map((cat, i) => {
             const isHero = i === 0
+            const Icon = categoryIcon[cat.name]
             return (
               <Reveal
                 key={cat.name}
@@ -117,12 +138,12 @@ export default async function Home() {
               >
                 <Link
                   href={`/categories/${cat.name.toLowerCase()}`}
-                  className={`group/cat border-hairline relative flex h-full flex-col justify-end overflow-hidden rounded-3xl ring-1 ring-foreground/5 transition-all hover:-translate-y-1 hover:shadow-xl hover:ring-primary/30 ${
-                    isHero ? "min-h-72" : "min-h-40"
+                  className={`group/cat border-hairline relative flex h-full flex-col justify-end overflow-hidden rounded-2xl ring-1 ring-foreground/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-foreground/10 hover:ring-primary/40 sm:rounded-3xl ${
+                    isHero ? "min-h-64 sm:min-h-80" : "min-h-44 sm:min-h-48"
                   }`}
                 >
                   {/* Category image (place 1200×1500 portrait assets at the documented path) */}
-                  <div className="absolute inset-0 transition-transform duration-700 group-hover/cat:scale-105">
+                  <div className="absolute inset-0 transition-transform duration-700 ease-out group-hover/cat:scale-105">
                     <SmartImage
                       src={`/images/categories/${cat.name.toLowerCase()}.jpg`}
                       alt={categoryFa[cat.name]}
@@ -130,12 +151,24 @@ export default async function Home() {
                       monogram={categoryFa[cat.name].charAt(0)}
                     />
                   </div>
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-                  <div className="relative p-5 text-white">
-                    <h3 className="font-serif text-2xl sm:text-3xl">{categoryFa[cat.name]}</h3>
-                    <p className="mt-1 text-sm text-white/75">{cat.tagline}</p>
-                    <span className="mt-3 inline-flex items-center gap-1 text-sm text-primary opacity-0 transition-opacity group-hover/cat:opacity-100">
-                      خرید {categoryFa[cat.name]} <ArrowLeft className="size-4" />
+                  {/* Legibility scrim — deepens slightly on hover */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent transition-opacity duration-300 group-hover/cat:from-black/85" />
+
+                  {/* Corner glyph chip */}
+                  <span className="absolute end-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/10 text-white/90 ring-1 ring-white/20 backdrop-blur-md transition-colors group-hover/cat:bg-primary group-hover/cat:text-primary-foreground sm:end-4 sm:top-4 sm:size-10">
+                    <Icon className="size-4 sm:size-5" />
+                  </span>
+
+                  <div className="relative p-4 text-white sm:p-5">
+                    <h3 className={`font-serif ${isHero ? "text-2xl sm:text-4xl" : "text-xl sm:text-2xl"}`}>
+                      {categoryFa[cat.name]}
+                    </h3>
+                    <p className="mt-1 line-clamp-1 text-xs text-white/75 sm:text-sm">
+                      {cat.tagline}
+                    </p>
+                    <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white ring-1 ring-white/20 backdrop-blur-md transition-colors group-hover/cat:bg-primary group-hover/cat:text-primary-foreground group-hover/cat:ring-primary sm:text-sm">
+                      خرید
+                      <ArrowLeft className="size-3.5 transition-transform group-hover/cat:-translate-x-0.5" />
                     </span>
                   </div>
                 </Link>

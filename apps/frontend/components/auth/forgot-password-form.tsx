@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
-
 export function ForgotPasswordForm() {
   const [loading, setLoading] = React.useState(false)
   const [sent, setSent] = React.useState(false)
@@ -19,10 +17,10 @@ export function ForgotPasswordForm() {
     setLoading(true)
     const form = new FormData(e.currentTarget)
     // The endpoint always returns 202 (enumeration-safe); we mirror that in the UI.
-    await fetch(`${API.replace(/\/$/, "")}/api/v1/auth/password/forgot`, {
+    await fetch("/api/public/auth/password/forgot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: String(form.get("email") ?? "") }),
+      body: JSON.stringify({ email: String(form.get("email") ?? "").trim() }),
     }).catch(() => null)
     setSent(true)
     setLoading(false)

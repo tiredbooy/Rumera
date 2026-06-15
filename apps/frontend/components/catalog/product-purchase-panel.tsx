@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { formatPrice } from "@/lib/products"
 import type { ProductDetail, Variant } from "@/lib/catalog/types"
 import { AddToCartButton } from "./add-to-cart-button"
+import { AlertButton } from "./alert-button"
 
 const variantLabel = (v: Variant) => v.options?.map((o) => o.value).join(" · ") || v.sku
 
@@ -54,8 +55,9 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
         <p className="text-muted-foreground">این محصول در حال حاضر ناموجود است.</p>
       )}
 
-      <div className="mt-7">
+      <div className="mt-7 flex flex-wrap items-center gap-3">
         <AddToCartButton productVariantId={selected?.id} disabled={!selected} />
+        <AlertButton productVariantId={selected?.id} />
       </div>
     </div>
   )

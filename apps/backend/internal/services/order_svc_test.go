@@ -16,7 +16,7 @@ import (
 // into them). Returned mocks are the ones a test typically configures/inspects.
 func buildOrderService(orderRepo *mocks.OrderRepo, cartRepo *mocks.CartRepo, couponRepo *mocks.CouponRepo, shipRepo *mocks.ShippingMethodRepo, invRepo *mocks.InventoryRepo) OrderService {
 	inv := NewInventoryService(invRepo, &mocks.MovementRepo{})
-	pay := NewPaymentService(&mocks.PaymentRepo{}, &mocks.OrderRepo{})
+	pay := NewPaymentService(&mocks.PaymentRepo{}, &mocks.OrderRepo{}, nil, nil)
 	return NewOrderService(orderRepo, &mocks.OrderItemRepo{}, cartRepo, couponRepo,
 		&mocks.CouponUsageRepo{}, shipRepo, inv, pay)
 }

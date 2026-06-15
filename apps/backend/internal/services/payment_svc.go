@@ -13,15 +13,23 @@ import (
 type PaymentService struct {
 	paymentRepo repositories.PaymentTransactionRepository
 	orderRepo   repositories.OrderRepository
+	// loyalty awards points when an order is confirmed paid. Optional (may be nil).
+	loyalty *LoyaltyService
+	// referral completes a pending referral on the referee's first paid order.
+	referral *ReferralService
 }
 
 func NewPaymentService(
 	paymentRepo repositories.PaymentTransactionRepository,
 	orderRepo repositories.OrderRepository,
+	loyalty *LoyaltyService,
+	referral *ReferralService,
 ) *PaymentService {
 	return &PaymentService{
 		paymentRepo: paymentRepo,
 		orderRepo:   orderRepo,
+		loyalty:     loyalty,
+		referral:    referral,
 	}
 }
 
@@ -141,6 +149,16 @@ func (s *PaymentService) Confirm(ctx context.Context, req models.ConfirmPaymentR
 
 	if err = tx.Commit(ctx); err != nil {
 		return nil, apperr.ErrInternal
+	}
+
+	// Award loyalty points for the now-paid order. Idempotent (keyed by order id)
+	// and best-effort: a loyalty error must never undo a confirmed payment.
+	if s.loyalty != nil && pt.UserID != nil && pt.OrderID != nil {
+		_ = s.loyalty.AwardForOrder(ctx, *pt.UserID, *pt.OrderID, pt.Amount)
+	}
+	// Complete a pending referral on the referee's first paid order (best-effort).
+	if s.referral != nil && pt.UserID != nil {
+		_ = s.referral.OnPaidOrder(ctx, *pt.UserID)
 	}
 
 	return pt, nil

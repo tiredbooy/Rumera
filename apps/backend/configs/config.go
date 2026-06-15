@@ -71,6 +71,30 @@ type Config struct {
 	SMTPPassword string `envconfig:"SMTP_PASSWORD"`
 	SMTPFrom     string `envconfig:"SMTP_FROM"`
 
+	// ── SMS / OTP ─────────────────────────────────────────────────────────────
+	// SMSProvider selects the gateway: "kavenegar" for the real provider, or "log"
+	// (default) which just logs the message — fine for dev (the OTP appears in the
+	// logs) and CI. OTPTTL bounds how long a requested code stays valid.
+	SMSProvider string        `envconfig:"SMS_PROVIDER" default:"log"`
+	SMSAPIKey   string        `envconfig:"SMS_API_KEY"`
+	SMSSender   string        `envconfig:"SMS_SENDER"`
+	OTPTTL      time.Duration `envconfig:"OTP_TTL" default:"2m"`
+
+	// PublicSiteURL is the storefront's public origin, used to build links in
+	// outbound emails (e.g. alert "view product" links).
+	PublicSiteURL string `envconfig:"PUBLIC_SITE_URL" default:"http://localhost:3000"`
+
+	// ── Loyalty (Cellar Club) ─────────────────────────────────────────────────
+	// LoyaltyEarnDivisor: Toman of order total per 1 point earned.
+	// LoyaltyRedeemValue: Toman of wallet credit per 1 point redeemed.
+	// LoyaltySignupBonus: points granted once on account creation (0 = off).
+	LoyaltyEarnDivisor float64 `envconfig:"LOYALTY_EARN_DIVISOR" default:"10000"`
+	LoyaltyRedeemValue float64 `envconfig:"LOYALTY_REDEEM_VALUE" default:"1000"`
+	LoyaltySignupBonus int     `envconfig:"LOYALTY_SIGNUP_BONUS" default:"100"`
+	// LoyaltyReferralReward: points granted to BOTH referrer and referee when the
+	// referee's first order is paid.
+	LoyaltyReferralReward int `envconfig:"LOYALTY_REFERRAL_REWARD" default:"300"`
+
 	// ── Storage ───────────────────────────────────────────────────────────────
 	StoragePath string `envconfig:"STORAGE_PATH" default:"./storage"`
 
@@ -126,6 +150,14 @@ type Config struct {
 	// than the retention window so idempotency_keys doesn't grow unbounded.
 	CronIdempotencyCleanupSchedule string        `envconfig:"CRON_IDEMPOTENCY_CLEANUP_SCHEDULE" default:"0 30 3 * * *"`
 	IdempotencyKeyRetention        time.Duration `envconfig:"IDEMPOTENCY_KEY_RETENTION" default:"720h"` // 30 days
+
+	// Product alert checker: scans back-in-stock / price-drop subscriptions and
+	// emails the ones now satisfied. Runs every 15 minutes by default.
+	CronAlertCheckSchedule string `envconfig:"CRON_ALERT_CHECK_SCHEDULE" default:"0 */15 * * * *"`
+
+	// Subscription renewal: emails customers whose cellar box is due and advances
+	// the next renewal date. Runs daily at 04:00 UTC by default.
+	CronSubscriptionSchedule string `envconfig:"CRON_SUBSCRIPTION_SCHEDULE" default:"0 0 4 * * *"`
 }
 
 // ── DSN helpers ───────────────────────────────────────────────────────────────

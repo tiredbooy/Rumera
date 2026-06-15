@@ -6,7 +6,6 @@ import { buildMetadata } from "@/lib/seo/metadata"
 import { JsonLd } from "@/components/json-ld"
 import { breadcrumbLd } from "@/lib/seo/jsonld"
 import { Reveal } from "@/components/motion/reveal"
-import { SmartImage } from "@/components/smart-image"
 import { JournalExplorer } from "@/components/journal/journal-explorer"
 import { listBlogs, formatBlogDate, readingTime } from "@/lib/journal"
 import { faNum } from "@/lib/products"
@@ -67,19 +66,18 @@ export default async function JournalPage() {
               <Reveal>
                 <Link
                   href={`/journal/${featured.slug}`}
-                  className="group/feat border-hairline relative mb-12 grid overflow-hidden rounded-[2rem] bg-card ring-1 ring-foreground/5 transition-all hover:ring-primary/30 lg:grid-cols-2"
+                  className="group/feat border-hairline relative mb-12 grid overflow-hidden rounded-[1.5rem] bg-card ring-1 ring-foreground/5 transition-all hover:shadow-2xl hover:shadow-foreground/5 hover:ring-primary/30 sm:rounded-[2rem] lg:grid-cols-2"
                 >
-                  <div className="relative aspect-[16/10] overflow-hidden lg:aspect-auto">
-                    <div className="absolute inset-0 transition-transform duration-700 group-hover/feat:scale-105">
-                      <SmartImage
-                        src={null}
-                        alt={featured.title}
-                        monogram={featured.title.charAt(0)}
-                        fallbackClassName="from-primary/20 via-card to-secondary"
-                      />
-                    </div>
+                  <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden bg-gradient-to-br from-primary/15 via-card to-secondary lg:aspect-auto">
+                    <div className="cellar-glow absolute inset-0 opacity-70" />
+                    <span
+                      aria-hidden
+                      className="text-foil relative font-serif text-7xl transition-transform duration-500 group-hover/feat:scale-110 sm:text-8xl"
+                    >
+                      {featured.title.charAt(0)}
+                    </span>
                   </div>
-                  <div className="flex flex-col justify-center gap-4 p-8 sm:p-10">
+                  <div className="flex flex-col justify-center gap-4 p-6 sm:p-10">
                     <span className="eyebrow">نوشتهٔ منتخب</span>
                     <h2 className="font-serif text-3xl leading-tight sm:text-4xl">
                       {featured.title}

@@ -6,6 +6,7 @@
 import { SiteHeader, type HeaderCategory } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { AgeGate } from "@/components/age-gate"
+import { ReferralTracker } from "@/components/referral/referral-tracker"
 import { listCategories } from "@/lib/catalog/categories"
 import { categories as sampleCategories, categoryFa } from "@/lib/products"
 
@@ -30,6 +31,7 @@ export default async function StorefrontLayout({
       <main className="flex flex-1 flex-col">{children}</main>
       <SiteFooter />
       <AgeGate />
+      <ReferralTracker />
     </>
   )
 }

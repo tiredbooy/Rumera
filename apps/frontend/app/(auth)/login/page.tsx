@@ -1,4 +1,4 @@
-import { LoginForm } from "@/components/auth/login-form"
+import { LoginTabs } from "@/components/auth/login-tabs"
 
 export default async function LoginPage({
   searchParams,
@@ -6,5 +6,5 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string }>
 }) {
   const { callbackUrl } = await searchParams
-  return <LoginForm callbackUrl={callbackUrl || "/account"} />
+  return <LoginTabs callbackUrl={callbackUrl || "/account"} />
 }
