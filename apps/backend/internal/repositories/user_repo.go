@@ -15,8 +15,12 @@ import (
 
 type UserRepository interface {
 	Create(ctx context.Context, req models.CreateUserReq, passwordHash string) (*models.User, error)
+	// CreatePhone creates a phone-only customer (no password). The caller supplies
+	// a synthetic, unique email to satisfy the NOT NULL/UNIQUE email column.
+	CreatePhone(ctx context.Context, phone, email string) (*models.User, error)
 	GetByID(ctx context.Context, userID uuid.UUID) (*models.User, error)
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
+	GetByPhone(ctx context.Context, phone string) (*models.User, error)
 	GetAll(ctx context.Context, filter models.UserFilter) ([]*models.User, int64, error)
 	Update(ctx context.Context, userID uuid.UUID, req models.UpdateUserReq) (*models.User, error)
 	Delete(ctx context.Context, userID uuid.UUID) error
@@ -63,6 +67,44 @@ func (r *userRepository) Create(ctx context.Context, req models.CreateUserReq, p
 	user, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
 	if err != nil {
 		return nil, fmt.Errorf("userRepository.Create scan: %w", err)
+	}
+	return &user, nil
+}
+
+func (r *userRepository) CreatePhone(ctx context.Context, phone, email string) (*models.User, error) {
+	const q = `
+		INSERT INTO users (user_id, email, phone, role, is_active)
+		VALUES (gen_random_uuid(), @email, @phone, 'customer', true)
+		RETURNING *`
+
+	args := pgx.NamedArgs{"email": email, "phone": phone}
+
+	rows, err := r.db.Query(ctx, q, args)
+	if err != nil {
+		return nil, fmt.Errorf("userRepository.CreatePhone: %w", err)
+	}
+
+	user, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
+	if err != nil {
+		return nil, fmt.Errorf("userRepository.CreatePhone scan: %w", err)
+	}
+	return &user, nil
+}
+
+func (r *userRepository) GetByPhone(ctx context.Context, phone string) (*models.User, error) {
+	const q = `SELECT * FROM users WHERE phone = $1 AND is_active = true`
+
+	rows, err := r.db.Query(ctx, q, phone)
+	if err != nil {
+		return nil, fmt.Errorf("userRepository.GetByPhone: %w", err)
+	}
+
+	user, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("userRepository.GetByPhone scan: %w", err)
 	}
 	return &user, nil
 }

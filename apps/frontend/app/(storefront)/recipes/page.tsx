@@ -1,15 +1,24 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ArrowLeft, ArrowRight, UtensilsCrossed } from "lucide-react"
+import { ArrowLeft, ArrowRight, UtensilsCrossed, Clock, Users, Star } from "lucide-react"
 
 import { buildMetadata } from "@/lib/seo/metadata"
 import { JsonLd } from "@/components/json-ld"
 import { breadcrumbLd } from "@/lib/seo/jsonld"
 import { Reveal } from "@/components/motion/reveal"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { SmartImage } from "@/components/smart-image"
 import { RecipeCard } from "@/components/recipes/recipe-card"
 import { RecipeFilters } from "@/components/recipes/recipe-filters"
-import { listRecipes, type RecipeDifficulty, type RecipeListParams } from "@/lib/recipes"
+import {
+  listRecipes,
+  getFeaturedRecipes,
+  difficultyFa,
+  formatDuration,
+  type RecipeDifficulty,
+  type RecipeListParams,
+} from "@/lib/recipes"
 import { faNum } from "@/lib/products"
 
 export const revalidate = 3600
@@ -67,7 +76,14 @@ function pageHref(sp: Awaited<SearchParams>, page: number): string {
 
 export default async function RecipesPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams
-  const { results: recipes, pagination } = await listRecipes(toParams(sp))
+  // The spotlight only shows on the untouched landing view (no filters / page 1).
+  const isDefaultView = !sp.q && !sp.difficulty && !sp.sort && (!sp.page || sp.page === "1")
+
+  const [{ results: recipes, pagination }, featuredList] = await Promise.all([
+    listRecipes(toParams(sp)),
+    isDefaultView ? getFeaturedRecipes() : Promise.resolve([]),
+  ])
+  const spotlight = featuredList[0]
 
   return (
     <>
@@ -80,7 +96,7 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
 
       {/* Header */}
       <section className="cellar-glow border-b border-border/60">
-        <div className="container-px mx-auto max-w-7xl py-14">
+        <div className="container-px mx-auto max-w-7xl py-12 sm:py-14">
           <Reveal>
             <p className="eyebrow mb-3">
               <UtensilsCrossed className="size-3.5" /> دستورها و ایده‌ها
@@ -96,8 +112,63 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
         </div>
       </section>
 
+      {/* Spotlight (featured) — editorial split card */}
+      {spotlight ? (
+        <section className="container-px mx-auto max-w-7xl pt-10">
+          <Reveal>
+            <Link
+              href={`/recipes/${spotlight.slug}`}
+              className="group/spot border-hairline relative grid overflow-hidden rounded-[1.5rem] bg-card ring-1 ring-foreground/5 transition-all hover:shadow-2xl hover:shadow-foreground/5 hover:ring-primary/30 sm:rounded-[2rem] lg:grid-cols-2"
+            >
+              <div className="relative aspect-[16/10] overflow-hidden lg:aspect-auto">
+                <div className="absolute inset-0 transition-transform duration-700 group-hover/spot:scale-105">
+                  <SmartImage
+                    src={spotlight.image_url}
+                    alt={spotlight.title}
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    monogram={spotlight.title.charAt(0)}
+                    fallbackClassName="from-primary/20 via-card to-secondary"
+                  />
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent lg:bg-gradient-to-l" />
+                <Badge className="absolute start-4 top-4 bg-gold text-gold-foreground shadow-sm">
+                  <Star className="size-3 fill-current" /> دستور منتخب
+                </Badge>
+              </div>
+              <div className="flex flex-col justify-center gap-4 p-6 sm:p-9 lg:p-10">
+                <p className="eyebrow">برای شروع، این را امتحان کنید</p>
+                <h2 className="font-serif text-3xl leading-tight sm:text-4xl">
+                  {spotlight.title}
+                </h2>
+                {spotlight.excerpt ? (
+                  <p className="line-clamp-3 text-muted-foreground">{spotlight.excerpt}</p>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock className="size-4" /> {formatDuration(spotlight.total_time_minutes)}
+                  </span>
+                  {spotlight.servings > 0 ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Users className="size-4" /> {faNum(spotlight.servings)} نفر
+                    </span>
+                  ) : null}
+                  <span>{difficultyFa[spotlight.difficulty]}</span>
+                </div>
+                <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                  خواندن دستور کامل
+                  <ArrowLeft className="size-4 transition-transform group-hover/spot:-translate-x-1" />
+                </span>
+              </div>
+            </Link>
+          </Reveal>
+        </section>
+      ) : null}
+
       <section className="container-px mx-auto max-w-7xl py-10">
-        <RecipeFilters />
+        {/* Sticky filter bar, tucked under the header */}
+        <div className="sticky top-[4.25rem] z-30">
+          <RecipeFilters />
+        </div>
 
         {/* Result count */}
         <p className="mt-6 text-sm text-muted-foreground">
@@ -118,7 +189,7 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
             </Button>
           </div>
         ) : (
-          <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
             {recipes.map((recipe, i) => (
               <Reveal key={recipe.id} delay={Math.min(i, 5) * 0.04} y={16}>
                 <RecipeCard recipe={recipe} />

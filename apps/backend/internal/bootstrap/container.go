@@ -12,6 +12,7 @@ import (
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/database"
 	"github.com/tiredbooy/pkg/notify"
+	"github.com/tiredbooy/pkg/sms"
 	"github.com/tiredbooy/pkg/token"
 	"github.com/tiredbooy/pkg/validator"
 	"go.uber.org/zap"
@@ -59,13 +60,19 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		shippingZoneRepo   = repositories.NewShippingZoneRepository(db)
 		shippingMethodRepo = repositories.NewShippingMethodRepository(db)
 
-		wishlistRepo    = repositories.NewWishlistRepository(db)
-		walletRepo      = repositories.NewWalletRepository(db)
-		reviewRepo      = repositories.NewReviewRepository(db)
-		reviewImageRepo = repositories.NewReviewImageRepository(db)
-		paymentRepo     = repositories.NewPaymentTransactionRepository(db)
-		inventoryRepo   = repositories.NewInventoryRepository(db)
-		movementRepo    = repositories.NewMovementRepository(db)
+		wishlistRepo     = repositories.NewWishlistRepository(db)
+		walletRepo       = repositories.NewWalletRepository(db)
+		alertRepo        = repositories.NewAlertRepository(db)
+		tasteRepo        = repositories.NewTasteProfileRepository(db)
+		loyaltyRepo      = repositories.NewLoyaltyRepository(db)
+		referralRepo     = repositories.NewReferralRepository(db)
+		giftCardRepo     = repositories.NewGiftCardRepository(db)
+		subscriptionRepo = repositories.NewSubscriptionRepository(db)
+		reviewRepo       = repositories.NewReviewRepository(db)
+		reviewImageRepo  = repositories.NewReviewImageRepository(db)
+		paymentRepo      = repositories.NewPaymentTransactionRepository(db)
+		inventoryRepo    = repositories.NewInventoryRepository(db)
+		movementRepo     = repositories.NewMovementRepository(db)
 
 		blogRepo         = repositories.NewBlogRepository(db)
 		blogCategoryRepo = repositories.NewBlogCategoryRepository(db)
@@ -87,6 +94,7 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	// ── Services ─────────────────────────────────────────────────────────────
 	jwt := token.NewManager(cfg, log)
 	mailer := notify.New(cfg, log)
+	smsSender := sms.New(cfg, log)
 	eventService := services.NewEventService(eventRepo)
 
 	// Analytics roll-up and recommendation services are pulled into named vars so
@@ -96,9 +104,19 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	searchSummaryService := services.NewSearchSummaryService(searchSummaryRepo)
 	recommendationService := services.NewRecommendationService(recommendationRepo)
 
+	// Wallet + loyalty are built before payment so the payment service can award
+	// points on a confirmed payment, and loyalty can redeem points into the wallet.
+	walletService := services.NewWalletService(walletRepo)
+	loyaltyService := services.NewLoyaltyService(
+		loyaltyRepo, walletService,
+		cfg.LoyaltyEarnDivisor, cfg.LoyaltyRedeemValue, cfg.LoyaltySignupBonus,
+	)
+	referralService := services.NewReferralService(referralRepo, loyaltyService, cfg.LoyaltyReferralReward)
+	giftCardService := services.NewGiftCardService(giftCardRepo, walletService)
+
 	// Payment and inventory are constructed first because the order service
 	// depends on them for the checkout saga (reserve stock → open payment).
-	paymentService := services.NewPaymentService(paymentRepo, orderRepo)
+	paymentService := services.NewPaymentService(paymentRepo, orderRepo, loyaltyService, referralService)
 	inventoryService := services.NewInventoryService(inventoryRepo, movementRepo)
 	orderService := services.NewOrderService(
 		orderRepo, orderItemRepo, cartRepo,
@@ -112,12 +130,15 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		Log:           log,
 		Cache:         cacheStore,
 		Notify:        mailer,
+		SMS:           smsSender,
+		OTPTTL:        cfg.OTPTTL,
 		RefreshTTL:    time.Duration(cfg.JWTRefreshTokenTTL) * time.Minute,
 		WebhookSecret: cfg.CryptoWebhookKey,
 
 		User:          services.NewUserService(userRepo),
 		PasswordReset: services.NewPasswordResetService(passwordResetRepo, userRepo, mailer),
 		Address:       services.NewAddressService(addressRepo),
+		TasteProfile:  services.NewTasteProfileService(tasteRepo),
 
 		Product:  services.NewProductService(productRepo),
 		Variant:  services.NewVariantService(variantRepo),
@@ -125,15 +146,20 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		Brand:    services.NewBrandService(brandRepo),
 		Tag:      services.NewTagService(tagRepo),
 
-		Cart:      services.NewCartService(cartRepo, variantRepo, db),
-		Coupon:    services.NewCouponService(couponRepo),
-		Order:     orderService,
-		Wishlist:  services.NewWishlistService(wishlistRepo),
-		Wallet:    services.NewWalletService(walletRepo),
-		Review:    services.NewReviewService(reviewRepo, reviewImageRepo),
-		Shipping:  services.NewShippingService(shippingZoneRepo, shippingMethodRepo),
-		Payment:   paymentService,
-		Inventory: inventoryService,
+		Cart:         services.NewCartService(cartRepo, variantRepo, db),
+		Coupon:       services.NewCouponService(couponRepo),
+		Order:        orderService,
+		Wishlist:     services.NewWishlistService(wishlistRepo),
+		Wallet:       walletService,
+		Loyalty:      loyaltyService,
+		Referral:     referralService,
+		GiftCard:     giftCardService,
+		Subscription: services.NewSubscriptionService(subscriptionRepo),
+		Alert:        services.NewAlertService(alertRepo, variantRepo, inventoryRepo),
+		Review:       services.NewReviewService(reviewRepo, reviewImageRepo),
+		Shipping:     services.NewShippingService(shippingZoneRepo, shippingMethodRepo),
+		Payment:      paymentService,
+		Inventory:    inventoryService,
 
 		Blog:         services.NewBlogService(blogRepo, db),
 		BlogCategory: services.NewBlogCategoryService(blogCategoryRepo),
@@ -156,7 +182,7 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		cache:   cacheStore,
 		dbs:     dbs,
 		cron: buildCron(cfg, dbs, productStatsService, revenueStatsService,
-			searchSummaryService, recommendationService),
+			searchSummaryService, recommendationService, alertRepo, subscriptionRepo, mailer),
 	}
 }
 
@@ -174,6 +200,9 @@ func buildCron(
 	revenueStats *services.DailyRevenueStatsService,
 	searchSummary *services.SearchSummaryService,
 	recommendation services.RecommendationService,
+	alertRepo repositories.AlertRepository,
+	subscriptionRepo repositories.SubscriptionRepository,
+	mailer notify.Mailer,
 ) *cron.Runner {
 	if !cfg.CronEnabled {
 		return nil
@@ -195,6 +224,15 @@ func buildCron(
 	// Housekeeping: prune expired idempotency keys from the main DB.
 	runner.Register(cfg.CronIdempotencyCleanupSchedule, "idempotency_cleanup",
 		cron.NewIdempotencyCleanupJob(dbs.DB, cfg.IdempotencyKeyRetention).Run)
+
+	// Product alerts: notify customers when a watched variant restocks or drops
+	// in price.
+	runner.Register(cfg.CronAlertCheckSchedule, "alert_check",
+		cron.NewAlertCheckJob(alertRepo, mailer, cfg.PublicSiteURL).Run)
+
+	// Subscriptions: email customers whose cellar box is due and roll the date.
+	runner.Register(cfg.CronSubscriptionSchedule, "subscription_renewal",
+		cron.NewSubscriptionRenewalJob(subscriptionRepo, mailer, cfg.PublicSiteURL).Run)
 
 	return runner
 }

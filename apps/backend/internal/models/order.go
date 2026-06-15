@@ -44,6 +44,13 @@ type Order struct {
 	CouponID         *int64        `db:"coupon_id"`
 	ShippingMethodID *int64        `db:"shipping_method_id"`
 	Notes            *string       `db:"notes"`
+
+	IsGift                bool       `db:"is_gift"`
+	GiftMessage           *string    `db:"gift_message"`
+	GiftWrap              bool       `db:"gift_wrap"`
+	HidePrice             bool       `db:"hide_price"`
+	ScheduledDeliveryDate *time.Time `db:"scheduled_delivery_date"`
+
 	PaidAt           *time.Time    `db:"paid_at"`
 	ShippedAt        *time.Time    `db:"shipped_at"`
 	DeliveredAt      *time.Time    `db:"delivered_at"`
@@ -70,6 +77,13 @@ type CreateOrderReq struct {
 	ShippingMethodID int64         `json:"shipping_method_id" validate:"required,min=1"`
 	CouponCode       *string       `json:"coupon_code"`
 	Notes            *string       `json:"notes"`
+
+	// Gift mode (all optional).
+	IsGift                bool       `json:"is_gift"`
+	GiftMessage           *string    `json:"gift_message"            validate:"omitempty,max=500"`
+	GiftWrap              bool       `json:"gift_wrap"`
+	HidePrice             bool       `json:"hide_price"`
+	ScheduledDeliveryDate *time.Time `json:"scheduled_delivery_date"`
 }
 
 type UpdateOrderStatusReq struct {
@@ -109,6 +123,13 @@ type OrderResponse struct {
 	TaxAmount      float64             `json:"tax_amount"`
 	TotalAmount    float64             `json:"total_amount"`
 	Notes          *string             `json:"notes,omitempty"`
+
+	IsGift                bool       `json:"is_gift,omitempty"`
+	GiftMessage           *string    `json:"gift_message,omitempty"`
+	GiftWrap              bool       `json:"gift_wrap,omitempty"`
+	HidePrice             bool       `json:"hide_price,omitempty"`
+	ScheduledDeliveryDate *time.Time `json:"scheduled_delivery_date,omitempty"`
+
 	PaidAt         *time.Time          `json:"paid_at,omitempty"`
 	ShippedAt      *time.Time          `json:"shipped_at,omitempty"`
 	DeliveredAt    *time.Time          `json:"delivered_at,omitempty"`

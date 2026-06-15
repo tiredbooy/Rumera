@@ -8,6 +8,7 @@ This is the documentation home. Start here, then follow the links below.
 
 | Guide | What it covers |
 |-------|----------------|
+| [How It Works (plain-language)](./how-it-works.md) | **Non-technical overview** — the whole system explained with everyday analogies, for anyone |
 | [Getting Started](./getting-started.md) | Prerequisites, environment, migrations, running locally and with Docker |
 | [Architecture](./architecture.md) | Layered design, request lifecycle, directory map |
 | [Conventions](./conventions.md) | Response envelope, error model, pagination, filtering, validation |

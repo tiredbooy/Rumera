@@ -34,6 +34,12 @@ type AddCartItemReq struct {
 	UnitPriceSnapshot float64 `json:"-"` // set by service, never from client input
 }
 
+// AddCartItemsReq is the payload for the bulk add endpoint (e.g. "add all recipe
+// ingredients to cart"). Unavailable/unknown variants are skipped, not fatal.
+type AddCartItemsReq struct {
+	Items []AddCartItemReq `json:"items" validate:"required,min=1,max=100,dive"`
+}
+
 type UpdateCartItemReq struct {
 	Quantity int `json:"quantity" validate:"required,min=1,max=999"`
 }
@@ -68,4 +74,19 @@ type CartSummary struct {
 	UniqueItems   int     `json:"unique_items"`
 	Subtotal      float64 `json:"subtotal"`
 	DiscountTotal float64 `json:"discount_total"`
+}
+
+// SkippedCartItem reports a variant the bulk add couldn't honour.
+// Reason ∈ {"invalid","not_found","unavailable"}.
+type SkippedCartItem struct {
+	ProductVariantID int64  `json:"product_variant_id"`
+	Reason           string `json:"reason"`
+}
+
+// BulkAddResult is returned by the bulk add endpoint: the refreshed cart plus a
+// per-variant skip list so the UI can tell the user what couldn't be added.
+type BulkAddResult struct {
+	Cart    *CartResponse     `json:"cart"`
+	Added   int               `json:"added"`
+	Skipped []SkippedCartItem `json:"skipped"`
 }

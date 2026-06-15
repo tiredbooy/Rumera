@@ -74,6 +74,56 @@ func (s *CartService) AddItem(ctx context.Context, userID int64, req models.AddC
 	return s.reload(ctx, cart.ID)
 }
 
+// AddItems adds several variants in one call (e.g. all the products for a
+// recipe). Each variant is validated independently: unknown or inactive variants
+// are recorded in the skip list rather than failing the whole request, so the
+// user still gets everything that *could* be added.
+func (s *CartService) AddItems(ctx context.Context, userID int64, req models.AddCartItemsReq) (*models.BulkAddResult, error) {
+	if len(req.Items) == 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+
+	cart, err := s.cartRepo.GetOrCreate(ctx, userID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+
+	skipped := make([]models.SkippedCartItem, 0)
+	added := 0
+	for _, item := range req.Items {
+		if item.ProductVariantID <= 0 || item.Quantity <= 0 {
+			skipped = append(skipped, models.SkippedCartItem{ProductVariantID: item.ProductVariantID, Reason: "invalid"})
+			continue
+		}
+
+		variant, err := s.variantRepo.GetByID(ctx, item.ProductVariantID)
+		if err != nil {
+			if errors.Is(err, models.ErrNotFound) {
+				skipped = append(skipped, models.SkippedCartItem{ProductVariantID: item.ProductVariantID, Reason: "not_found"})
+				continue
+			}
+			return nil, apperr.ErrInternal
+		}
+		if !variant.IsActive {
+			skipped = append(skipped, models.SkippedCartItem{ProductVariantID: item.ProductVariantID, Reason: "unavailable"})
+			continue
+		}
+
+		// Price is set server-side from the live variant — never trusted from input.
+		item.UnitPriceSnapshot = variant.Price
+		if _, err := s.cartRepo.AddItem(ctx, cart.ID, item); err != nil {
+			return nil, apperr.ErrInternal
+		}
+		added++
+	}
+
+	cartResp, err := s.reload(ctx, cart.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &models.BulkAddResult{Cart: cartResp, Added: added, Skipped: skipped}, nil
+}
+
 // UpdateItem sets the quantity of an existing cart line.
 func (s *CartService) UpdateItem(ctx context.Context, userID, itemID int64, req models.UpdateCartItemReq) (*models.CartResponse, error) {
 	if itemID <= 0 || req.Quantity <= 0 {

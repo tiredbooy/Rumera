@@ -49,11 +49,13 @@ func (r *orderRepository) Create(
 		INSERT INTO orders (
 			user_id, address_id, status, payment_method,
 			subtotal, discount_amount, shipping_cost, tax_amount,
-			coupon_id, shipping_method_id, notes
+			coupon_id, shipping_method_id, notes,
+			is_gift, gift_message, gift_wrap, hide_price, scheduled_delivery_date
 		) VALUES (
 			@user_id, @address_id, 'pending', @payment_method,
 			@subtotal, @discount_amount, @shipping_cost, @tax_amount,
-			@coupon_id, @shipping_method_id, @notes
+			@coupon_id, @shipping_method_id, @notes,
+			@is_gift, @gift_message, @gift_wrap, @hide_price, @scheduled_delivery_date
 		)
 		RETURNING *`
 
@@ -68,6 +70,12 @@ func (r *orderRepository) Create(
 		"coupon_id":          couponID,
 		"shipping_method_id": req.ShippingMethodID,
 		"notes":              req.Notes,
+
+		"is_gift":                 req.IsGift,
+		"gift_message":            req.GiftMessage,
+		"gift_wrap":               req.GiftWrap,
+		"hide_price":              req.HidePrice,
+		"scheduled_delivery_date": req.ScheduledDeliveryDate,
 	}
 
 	rows, err := tx.Query(ctx, q, args)

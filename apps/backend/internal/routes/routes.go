@@ -49,6 +49,10 @@ func registerAuthRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Mana
 	auth.POST("/register", throttle, h.Register)
 	auth.POST("/password/forgot", throttle, h.ForgotPassword)
 
+	// SMS OTP login (phone-first).
+	auth.POST("/otp/request", throttle, h.RequestOTP)
+	auth.POST("/otp/verify", throttle, h.VerifyOTP)
+
 	auth.POST("/refresh", h.Refresh)
 	auth.POST("/logout", h.Logout)
 	auth.GET("/password/validate", h.ValidateResetToken)
@@ -129,8 +133,35 @@ func registerCustomerRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.
 	c.GET("/cart", h.GetCart)
 	c.DELETE("/cart", h.ClearCart)
 	c.POST("/cart/items", h.AddCartItem)
+	c.POST("/cart/items/bulk", h.AddCartItems)
 	c.PATCH("/cart/items/:id", h.UpdateCartItem)
 	c.DELETE("/cart/items/:id", h.RemoveCartItem)
+
+	// Referrals
+	c.GET("/referrals/me", h.GetMyReferral)
+	c.POST("/referrals/claim", h.ClaimReferral)
+
+	// Gift cards (redeem into wallet)
+	c.POST("/gift-cards/redeem", h.RedeemGiftCard)
+
+	// Subscriptions (cellar box)
+	c.GET("/subscriptions", h.ListSubscriptions)
+	c.POST("/subscriptions", h.CreateSubscription)
+	c.PATCH("/subscriptions/:id", h.UpdateSubscription)
+
+	// Loyalty (Cellar Club)
+	c.GET("/loyalty", h.GetLoyaltyAccount)
+	c.GET("/loyalty/transactions", h.GetLoyaltyTransactions)
+	c.POST("/loyalty/redeem", h.RedeemLoyaltyPoints)
+
+	// Taste profile (personalisation quiz)
+	c.GET("/me/taste-profile", h.GetTasteProfile)
+	c.PUT("/me/taste-profile", h.SaveTasteProfile)
+
+	// Product alerts (back-in-stock / price-drop)
+	c.GET("/alerts", h.ListAlerts)
+	c.POST("/alerts", h.CreateAlert)
+	c.DELETE("/alerts/:id", h.DeleteAlert)
 
 	// Coupons (checkout preview)
 	c.POST("/coupons/validate", h.ValidateCoupon)
@@ -217,6 +248,9 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	a.DELETE("/tags/:id", h.DeleteTag)
 
 	// Coupons
+	// Gift cards (issue)
+	a.POST("/gift-cards", h.CreateGiftCards)
+
 	a.POST("/coupons", h.CreateCoupon)
 	a.GET("/coupons", h.ListCoupons)
 	a.GET("/coupons/:id", h.GetCoupon)

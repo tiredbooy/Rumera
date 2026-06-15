@@ -45,6 +45,26 @@ export function useAddCartItem() {
   })
 }
 
+/** Result of POST /cart/items/bulk — refreshed cart + per-variant skip list. */
+export type BulkAddResult = {
+  cart: Cart
+  added: number
+  skipped: { product_variant_id: number; reason: "invalid" | "not_found" | "unavailable" }[]
+}
+
+/** Add many variants at once (e.g. all of a recipe's ingredients). */
+export function useBulkAddCartItems() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (items: { product_variant_id: number; quantity: number }[]) =>
+      storeRequest<{ data: BulkAddResult }>("cart/items/bulk", {
+        method: "POST",
+        body: JSON.stringify({ items }),
+      }).then((b) => b.data),
+    onSuccess: (res) => qc.setQueryData(queryKeys.cart, res.cart),
+  })
+}
+
 export function useUpdateCartItem() {
   const qc = useQueryClient()
   return useMutation({
@@ -73,6 +93,199 @@ export function useClearCart() {
   return useMutation({
     mutationFn: () => storeRequest<void>("cart", { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.cart }),
+  })
+}
+
+// ── Product alerts (restock / price-drop) ────────────────────────────────────
+
+export type ProductAlert = {
+  id: number
+  product_variant_id: number
+  alert_type: "restock" | "price_drop"
+  target_price?: number
+  notified_at?: string | null
+  created_at: string
+}
+
+export function useAlerts(enabled = true) {
+  return useQuery({
+    queryKey: ["alerts"],
+    queryFn: () => storeRequest<{ data: ProductAlert[] }>("alerts").then((b) => b.data),
+    enabled,
+  })
+}
+
+export function useCreateAlert() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: {
+      product_variant_id: number
+      alert_type: "restock" | "price_drop"
+      target_price?: number
+    }) =>
+      storeRequest<{ data: ProductAlert }>("alerts", {
+        method: "POST",
+        body: JSON.stringify(vars),
+      }).then((b) => b.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
+  })
+}
+
+export function useDeleteAlert() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => storeRequest<void>(`alerts/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
+  })
+}
+
+// ── Loyalty (Cellar Club) ────────────────────────────────────────────────────
+
+export type Loyalty = {
+  points_balance: number
+  lifetime_points: number
+  tier: string
+  next_tier?: string
+  points_to_next: number
+}
+export type LoyaltyTx = { delta: number; reason: string; created_at: string }
+
+export function useLoyalty(enabled = true) {
+  return useQuery({
+    queryKey: ["loyalty"],
+    queryFn: () => storeRequest<{ data: Loyalty }>("loyalty").then((b) => b.data),
+    enabled,
+  })
+}
+
+export function useLoyaltyTransactions(enabled = true) {
+  return useQuery({
+    queryKey: ["loyalty", "transactions"],
+    queryFn: () =>
+      storeRequest<{ data: LoyaltyTx[] }>("loyalty/transactions").then((b) => b.data),
+    enabled,
+  })
+}
+
+export function useRedeemPoints() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (points: number) =>
+      storeRequest<{ data: Loyalty }>("loyalty/redeem", {
+        method: "POST",
+        body: JSON.stringify({ points }),
+      }).then((b) => b.data),
+    onSuccess: (l) => {
+      qc.setQueryData(["loyalty"], l)
+      qc.invalidateQueries({ queryKey: ["loyalty", "transactions"] })
+      qc.invalidateQueries({ queryKey: ["wallet"] })
+    },
+  })
+}
+
+// ── Subscriptions ────────────────────────────────────────────────────────────
+
+export type Subscription = {
+  id: number
+  plan: string
+  cadence: "monthly" | "quarterly"
+  status: "active" | "paused" | "cancelled"
+  next_renewal_at: string
+  created_at: string
+}
+
+export function useSubscriptions(enabled = true) {
+  return useQuery({
+    queryKey: ["subscriptions"],
+    queryFn: () => storeRequest<{ data: Subscription[] }>("subscriptions").then((b) => b.data),
+    enabled,
+  })
+}
+
+export function useCreateSubscription() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (cadence: "monthly" | "quarterly") =>
+      storeRequest<{ data: Subscription }>("subscriptions", {
+        method: "POST",
+        body: JSON.stringify({ cadence }),
+      }).then((b) => b.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
+  })
+}
+
+export function useUpdateSubscription() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, action }: { id: number; action: "pause" | "resume" | "cancel" | "skip" }) =>
+      storeRequest<{ data: Subscription }>(`subscriptions/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action }),
+      }).then((b) => b.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
+  })
+}
+
+// ── Gift cards ───────────────────────────────────────────────────────────────
+
+export function useRedeemGiftCard() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (code: string) =>
+      storeRequest<{ data: { amount: number } }>("gift-cards/redeem", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }).then((b) => b.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wallet"] }),
+  })
+}
+
+// ── Referrals ────────────────────────────────────────────────────────────────
+
+export type Referral = { code: string; pending: number; completed: number; reward: number }
+
+export function useReferral(enabled = true) {
+  return useQuery({
+    queryKey: ["referral"],
+    queryFn: () => storeRequest<{ data: Referral }>("referrals/me").then((b) => b.data),
+    enabled,
+  })
+}
+
+export function useClaimReferral() {
+  return useMutation({
+    mutationFn: (code: string) =>
+      storeRequest<void>("referrals/claim", { method: "POST", body: JSON.stringify({ code }) }),
+  })
+}
+
+// ── Taste profile (personalisation) ──────────────────────────────────────────
+
+export type TastePrefs = {
+  categories: string[]
+  budget_max: number
+  flavor: string[]
+  occasions: string[]
+}
+
+export function useTasteProfile(enabled = true) {
+  return useQuery({
+    queryKey: ["taste-profile"],
+    queryFn: () =>
+      storeRequest<{ data: TastePrefs }>("me/taste-profile").then((b) => b.data),
+    enabled,
+  })
+}
+
+export function useSaveTasteProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (prefs: TastePrefs) =>
+      storeRequest<{ data: TastePrefs }>("me/taste-profile", {
+        method: "PUT",
+        body: JSON.stringify(prefs),
+      }).then((b) => b.data),
+    onSuccess: (p) => qc.setQueryData(["taste-profile"], p),
   })
 }
 

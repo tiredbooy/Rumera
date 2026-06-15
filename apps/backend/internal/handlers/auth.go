@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -11,6 +12,19 @@ import (
 	"github.com/tiredbooy/pkg/crypto"
 	"github.com/tiredbooy/pkg/response"
 )
+
+// blankToNil trims a nullable string field and collapses empty values to nil so
+// optional fields (e.g. first/last name) are stored as NULL, not "".
+func blankToNil(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*s)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
 
 // LoginReq is the credentials payload for POST /auth/login.
 type LoginReq struct {
@@ -40,6 +54,9 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 	// Never let a client self-assign a privileged role.
 	req.Role = "customer"
+	// Normalise blank names to NULL so we never store empty strings.
+	req.FirstName = blankToNil(req.FirstName)
+	req.LastName = blankToNil(req.LastName)
 
 	hash, err := crypto.HashPassword(req.Password)
 	if err != nil {
@@ -58,6 +75,11 @@ func (h *Handler) Register(c *gin.Context) {
 	if err != nil {
 		response.InternalError(c)
 		return
+	}
+
+	// Welcome loyalty bonus (idempotent per user; best-effort).
+	if h.Loyalty != nil {
+		_ = h.Loyalty.AwardSignup(c.Request.Context(), user.ID)
 	}
 
 	response.Created(c, AuthResponse{

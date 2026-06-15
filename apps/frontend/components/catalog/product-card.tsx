@@ -24,31 +24,39 @@ export function ProductCard({ product }: { product: ProductListItem }) {
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group/product border-hairline relative flex flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-foreground/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:ring-primary/30"
+      className="group/product border-hairline relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-foreground/5 hover:ring-primary/30 sm:rounded-3xl"
     >
-      <div className="relative flex h-56 items-end justify-center overflow-hidden">
+      <div className="relative flex h-44 items-end justify-center overflow-hidden sm:h-56">
         <div
           className="absolute inset-0 opacity-90 transition-opacity duration-300 group-hover/product:opacity-100"
           style={{ background: `radial-gradient(75% 60% at 50% 120%, ${hue[0]}, transparent 70%)` }}
         />
         <Bottle
           product={{ id: product.id, hue, maker: product.brand }}
-          className="relative h-48 transition-transform duration-500 group-hover/product:-translate-y-1 group-hover/product:scale-105"
+          className="relative h-36 transition-transform duration-500 group-hover/product:-translate-y-1 group-hover/product:scale-105 sm:h-48"
         />
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 border-t border-border/60 p-5">
+      <div className="flex flex-1 flex-col gap-1.5 border-t border-border/60 p-4 sm:gap-2 sm:p-5">
         {product.brand ? (
-          <span className="text-xs text-muted-foreground">{product.brand}</span>
-        ) : null}
-        <h3 className="font-serif text-xl leading-tight">{product.title}</h3>
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <span className="font-serif text-lg text-foreground">
-            {ranged ? "از " : ""}
-            {formatPrice(product.min_price)}
+          <span className="truncate text-[11px] font-medium text-primary sm:text-xs">
+            {product.brand}
           </span>
-          <span className="inline-flex items-center gap-1 text-sm text-primary opacity-0 transition-opacity group-hover/product:opacity-100">
-            مشاهده <ArrowLeft className="size-4" />
+        ) : null}
+        <h3 className="line-clamp-2 font-serif text-base leading-tight transition-colors group-hover/product:text-primary sm:text-xl">
+          {product.title}
+        </h3>
+        <div className="mt-auto flex items-end justify-between gap-2 pt-1.5 sm:pt-2">
+          <span className="flex min-w-0 flex-col leading-tight">
+            {ranged ? (
+              <span className="text-[10px] text-muted-foreground sm:text-[11px]">از</span>
+            ) : null}
+            <span className="truncate font-serif text-base text-foreground sm:text-lg">
+              {formatPrice(product.min_price)}
+            </span>
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary transition-opacity sm:text-sm sm:opacity-0 sm:group-hover/product:opacity-100">
+            مشاهده <ArrowLeft className="size-4 transition-transform group-hover/product:-translate-x-0.5" />
           </span>
         </div>
       </div>

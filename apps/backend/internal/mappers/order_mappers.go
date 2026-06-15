@@ -13,6 +13,13 @@ func ToOrderResponse(o *models.Order, items []models.OrderItemResponse) models.O
 		TaxAmount:      o.TaxAmount,
 		TotalAmount:    o.TotalAmount,
 		Notes:          o.Notes,
+
+		IsGift:                o.IsGift,
+		GiftMessage:           o.GiftMessage,
+		GiftWrap:              o.GiftWrap,
+		HidePrice:             o.HidePrice,
+		ScheduledDeliveryDate: o.ScheduledDeliveryDate,
+
 		PaidAt:         o.PaidAt,
 		ShippedAt:      o.ShippedAt,
 		DeliveredAt:    o.DeliveredAt,

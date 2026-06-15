@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { Reveal } from "@/components/motion/reveal"
 import { RecipeCard } from "@/components/recipes/recipe-card"
 import { AddToCartButton } from "@/components/catalog/add-to-cart-button"
+import { AddAllIngredientsButton } from "@/components/recipes/add-all-button"
 import { faNum, formatPrice } from "@/lib/products"
 import {
   getRecipeBySlug,
@@ -208,13 +209,14 @@ export default async function RecipeDetailPage({
         {/* Shop this recipe */}
         {recipe.products.length > 0 ? (
           <div className="mt-16">
-            <div className="flex items-end justify-between gap-4">
+            <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="eyebrow mb-2">
                   <ShoppingBag className="size-3.5" /> همین دستور را بسازید
                 </p>
                 <h2 className="font-serif text-3xl">محصولات این دستور</h2>
               </div>
+              <AddAllIngredientsButton products={recipe.products} />
             </div>
             <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {recipe.products.map((p) => (

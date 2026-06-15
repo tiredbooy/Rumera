@@ -136,6 +136,46 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       },
     }),
+
+    // SMS OTP login. The code was already requested via /auth/otp/request; here we
+    // exchange (phone, code) for a token pair through /auth/otp/verify.
+    Credentials({
+      id: "otp",
+      credentials: { phone: {}, code: {} },
+      async authorize(creds): Promise<User | null> {
+        if (!creds?.phone || !creds?.code) return null
+
+        try {
+          const res = await fetch(`${BASE}/auth/otp/verify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: creds.phone, code: creds.code }),
+          })
+          if (!res.ok) return null
+
+          const { data } = await res.json()
+          if (!data?.access_token) return null
+
+          const decoded = decodeJwt(data.access_token)
+          const fullName = [data.user?.first_name, data.user?.last_name]
+            .filter(Boolean)
+            .join(" ")
+
+          return {
+            id: data.user?.user_id ?? decoded.user_id ?? "",
+            name: fullName || data.user?.email,
+            email: data.user?.email,
+            role: (data.user?.role ?? decoded.role ?? "customer") as Role,
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token,
+            accessTokenExpires: (decoded.exp ?? 0) * 1000,
+          }
+        } catch (error) {
+          console.error("❌ OTP authorize fetch error:", error)
+          return null
+        }
+      },
+    }),
   ],
 
   callbacks: {

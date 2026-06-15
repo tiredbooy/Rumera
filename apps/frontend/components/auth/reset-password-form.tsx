@@ -9,8 +9,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
-
 export function ResetPasswordForm({ token }: { token: string }) {
   const router = useRouter()
   const [loading, setLoading] = React.useState(false)
@@ -26,7 +24,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
       return
     }
     setLoading(true)
-    const res = await fetch(`${API.replace(/\/$/, "")}/api/v1/auth/password/reset`, {
+    const res = await fetch("/api/public/auth/password/reset", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, new_password: password }),

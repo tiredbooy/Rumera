@@ -4,12 +4,16 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Loader2, Plus, Check, MapPin, Truck, Tag, Wallet, Landmark } from "lucide-react"
+import { Loader2, Plus, Check, MapPin, Truck, Tag, Wallet, Landmark, Gift } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { formatPrice, faNum } from "@/lib/products"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Textarea } from "@/components/ui/textarea"
 import {
   useCart,
   useAddresses,
@@ -85,12 +89,19 @@ export function CheckoutFlow() {
   const [couponCode, setCouponCode] = React.useState("")
   const [coupon, setCoupon] = React.useState<CouponValidation>()
 
-  // Default to the user's default address once loaded.
-  React.useEffect(() => {
-    if (addressId === undefined && addresses?.length) {
-      setAddressId((addresses.find((a) => a.is_default) ?? addresses[0]).id)
-    }
-  }, [addresses, addressId])
+  // Gift mode
+  const [isGift, setIsGift] = React.useState(false)
+  const [giftMessage, setGiftMessage] = React.useState("")
+  const [giftWrap, setGiftWrap] = React.useState(false)
+  const [hidePrice, setHidePrice] = React.useState(true)
+  const [deliveryDate, setDeliveryDate] = React.useState("")
+
+  // Default to the user's default address once it loads. Render-time sync (the
+  // same pattern as recipe-filters) — the guard flips false after the first set,
+  // so it can't loop, and it avoids a setState-in-effect cascade.
+  if (addressId === undefined && addresses?.length) {
+    setAddressId((addresses.find((a) => a.is_default) ?? addresses[0]).id)
+  }
 
   const subtotal = cart?.summary.subtotal ?? 0
   const selectedShipping = shipping.data?.find((m) => m.id === shippingId)
@@ -122,6 +133,17 @@ export function CheckoutFlow() {
         shipping_method_id: shippingId!,
         payment_method: payment,
         coupon_code: coupon?.is_valid ? coupon.coupon.code : undefined,
+        ...(isGift
+          ? {
+              is_gift: true,
+              gift_message: giftMessage.trim() || undefined,
+              gift_wrap: giftWrap,
+              hide_price: hidePrice,
+              scheduled_delivery_date: deliveryDate
+                ? new Date(deliveryDate).toISOString()
+                : undefined,
+            }
+          : {}),
       },
       {
         onSuccess: (order) => {
@@ -247,6 +269,53 @@ export function CheckoutFlow() {
               </SelectRow>
             ))}
           </div>
+        </Section>
+
+        {/* Gift */}
+        <Section icon={Gift} title="ارسال به‌عنوان هدیه">
+          <label className="flex cursor-pointer items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              این سفارش یک هدیه است
+            </span>
+            <Switch checked={isGift} onCheckedChange={setIsGift} aria-label="حالت هدیه" />
+          </label>
+
+          {isGift ? (
+            <div className="mt-5 flex flex-col gap-5 border-t border-border/60 pt-5">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="gift_message">پیام هدیه (اختیاری)</Label>
+                <Textarea
+                  id="gift_message"
+                  value={giftMessage}
+                  onChange={(e) => setGiftMessage(e.target.value.slice(0, 500))}
+                  placeholder="یادداشتی برای گیرنده بنویسید…"
+                  rows={3}
+                />
+              </div>
+
+              <label className="flex cursor-pointer items-center gap-3">
+                <Checkbox checked={giftWrap} onCheckedChange={(v) => setGiftWrap(v === true)} />
+                <span className="text-sm">بسته‌بندی هدیه</span>
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-3">
+                <Checkbox checked={hidePrice} onCheckedChange={(v) => setHidePrice(v === true)} />
+                <span className="text-sm">مخفی‌کردن قیمت در رسید بسته</span>
+              </label>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="delivery_date">تاریخ ترجیحی تحویل (اختیاری)</Label>
+                <Input
+                  id="delivery_date"
+                  type="date"
+                  dir="ltr"
+                  value={deliveryDate}
+                  onChange={(e) => setDeliveryDate(e.target.value)}
+                  className="max-w-xs"
+                />
+              </div>
+            </div>
+          ) : null}
         </Section>
       </div>
 

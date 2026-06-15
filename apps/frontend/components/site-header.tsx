@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Menu,
   Search,
@@ -15,6 +16,7 @@ import {
   BookOpen,
   UtensilsCrossed,
   Info,
+  X,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -45,19 +47,21 @@ export function SiteHeader({ categories }: { categories: HeaderCategory[] }) {
       <div className="bg-foreground text-background">
         <div className="container-px mx-auto flex h-9 max-w-7xl items-center justify-center gap-2 text-xs font-medium">
           <Sparkles className="size-3.5 text-primary" />
-          ارسال رایگان برای سفارش‌های بالای ۵٬۰۰۰٬۰۰۰ تومان — با ضمانت اصالت
+          <span className="truncate">
+            ارسال رایگان برای سفارش‌های بالای ۵٬۰۰۰٬۰۰۰ تومان — با ضمانت اصالت
+          </span>
         </div>
       </div>
 
       <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl">
-        <div className="container-px mx-auto flex h-16 max-w-7xl items-center justify-between gap-4">
+        <div className="container-px mx-auto flex h-16 max-w-7xl items-center gap-3 lg:gap-5">
           {/* Mobile menu */}
-          <div className="flex items-center gap-1 md:hidden">
+          <div className="flex items-center md:hidden">
             <MobileMenu categories={categories} />
           </div>
 
           {/* Wordmark */}
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" className="flex shrink-0 items-center gap-2">
             <span className="flex size-8 items-center justify-center rounded-xl bg-primary/15 text-primary">
               <Wine className="size-4.5" />
             </span>
@@ -67,7 +71,7 @@ export function SiteHeader({ categories }: { categories: HeaderCategory[] }) {
           </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="hidden items-center gap-0.5 md:flex">
             <ProductsMenu categories={categories} />
             {nav.map((item) => (
               <Button key={item.href} variant="ghost" size="sm" asChild>
@@ -76,9 +80,23 @@ export function SiteHeader({ categories }: { categories: HeaderCategory[] }) {
             ))}
           </nav>
 
+          {/* Inline search — grows to fill the gap on large screens */}
+          <div className="hidden flex-1 justify-center px-2 lg:flex">
+            <HeaderSearch />
+          </div>
+
+          {/* Spacer for md (no inline search there) */}
+          <div className="flex-1 lg:hidden" />
+
           {/* Actions */}
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" aria-label="جستجو" asChild>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="جستجو"
+              asChild
+              className="lg:hidden"
+            >
               <Link href="/search">
                 <Search />
               </Link>
@@ -95,6 +113,8 @@ export function SiteHeader({ categories }: { categories: HeaderCategory[] }) {
               </Link>
             </Button>
             <ModeToggle />
+            {/* Divider before the cart so it reads as the primary action */}
+            <span className="mx-1 hidden h-6 w-px bg-border/70 sm:block" />
             <CartButton />
           </div>
         </div>
@@ -104,11 +124,60 @@ export function SiteHeader({ categories }: { categories: HeaderCategory[] }) {
 }
 
 /**
+ * HeaderSearch — inline search field that submits to /search?q=… A plain GET form
+ * so it works without JS and stays SEO/shareable; the icon is the submit button.
+ */
+function HeaderSearch() {
+  const router = useRouter()
+  const [value, setValue] = React.useState("")
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const q = value.trim()
+    router.push(q ? `/search?q=${encodeURIComponent(q)}` : "/search")
+  }
+
+  return (
+    <form
+      onSubmit={onSubmit}
+      role="search"
+      className="group/search relative w-full max-w-md"
+    >
+      <button
+        type="submit"
+        aria-label="جستجو"
+        className="absolute top-1/2 start-2.5 -translate-y-1/2 cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Search className="size-4" />
+      </button>
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="جستجوی محصول، برند یا دسته…"
+        aria-label="جستجوی فروشگاه"
+        className="h-10 w-full rounded-full border border-border/70 bg-secondary/50 ps-9 pe-9 text-sm outline-none transition-all placeholder:text-muted-foreground/80 focus:border-primary/50 focus:bg-background focus:ring-2 focus:ring-primary/20"
+      />
+      {value ? (
+        <button
+          type="button"
+          onClick={() => setValue("")}
+          aria-label="پاک کردن"
+          className="absolute top-1/2 end-2.5 -translate-y-1/2 cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <X className="size-4" />
+        </button>
+      ) : null}
+    </form>
+  )
+}
+
+/**
  * Products mega-menu — opens on hover/focus, closes on leave/blur/Escape. The
  * trigger and panel share one wrapper so moving between them keeps it open; a
  * transparent `pt-2` bridges the gap. Pure CSS-positioned + one boolean of state
- * → light and snappy. The panel content is plain links (no images) so it stays
- * fast.
+ * → light and snappy. Category rows carry a monogram chip (works with any
+ * dynamic category name) and an arrow that slides in on hover.
  */
 function ProductsMenu({ categories }: { categories: HeaderCategory[] }) {
   const [open, setOpen] = React.useState(false)
@@ -121,7 +190,7 @@ function ProductsMenu({ categories }: { categories: HeaderCategory[] }) {
   // Small delay avoids flicker when crossing the trigger→panel gap.
   const closeSoon = () => {
     window.clearTimeout(closeTimer.current)
-    closeTimer.current = window.setTimeout(() => setOpen(false), 120)
+    closeTimer.current = window.setTimeout(() => setOpen(false), 100)
   }
 
   return (
@@ -143,7 +212,7 @@ function ProductsMenu({ categories }: { categories: HeaderCategory[] }) {
         aria-expanded={open}
         aria-haspopup="true"
         onClick={() => setOpen((v) => !v)}
-        className="gap-1"
+        className={cn("cursor-pointer gap-1", open && "bg-accent")}
       >
         محصولات
         <ChevronDown
@@ -153,10 +222,10 @@ function ProductsMenu({ categories }: { categories: HeaderCategory[] }) {
 
       {open ? (
         <div className="absolute start-0 top-full z-50 pt-2">
-          <div className="animate-in fade-in-0 slide-in-from-top-1 w-[min(92vw,640px)] overflow-hidden rounded-3xl border border-border/60 bg-popover shadow-2xl shadow-foreground/10 duration-200">
-            <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr]">
+          <div className="animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 w-[min(94vw,680px)] overflow-hidden rounded-3xl border border-border/60 bg-popover shadow-2xl shadow-foreground/10 duration-150">
+            <div className="grid grid-cols-1 sm:grid-cols-[1.5fr_1fr]">
               {/* Categories */}
-              <div className="p-5">
+              <div className="p-4 sm:p-5">
                 <div className="mb-3 flex items-center justify-between">
                   <p className="eyebrow">
                     <Grid2x2 className="size-3.5" /> دسته‌بندی‌ها
@@ -164,7 +233,7 @@ function ProductsMenu({ categories }: { categories: HeaderCategory[] }) {
                   <Link
                     href="/products"
                     onClick={() => setOpen(false)}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-primary"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                   >
                     همهٔ محصولات <ArrowLeft className="size-3.5" />
                   </Link>
@@ -175,9 +244,12 @@ function ProductsMenu({ categories }: { categories: HeaderCategory[] }) {
                       key={c.slug}
                       href={`/categories/${c.slug}`}
                       onClick={() => setOpen(false)}
-                      className="group/cat flex items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors hover:bg-accent"
+                      className="group/cat flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm transition-colors hover:bg-accent"
                     >
-                      {c.name}
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-serif text-sm text-primary transition-colors group-hover/cat:bg-primary group-hover/cat:text-primary-foreground">
+                        {c.name.charAt(0)}
+                      </span>
+                      <span className="flex-1 truncate">{c.name}</span>
                       <ArrowLeft className="size-3.5 -translate-x-1 text-primary opacity-0 transition-all group-hover/cat:translate-x-0 group-hover/cat:opacity-100" />
                     </Link>
                   ))}
@@ -188,9 +260,11 @@ function ProductsMenu({ categories }: { categories: HeaderCategory[] }) {
               <Link
                 href="/products?sort=discount"
                 onClick={() => setOpen(false)}
-                className="cellar-glow group/promo relative flex flex-col justify-end gap-1 border-t border-border/60 p-5 sm:border-s sm:border-t-0"
+                className="cellar-glow group/promo relative flex flex-col justify-end gap-1 border-t border-border/60 p-5 transition-colors hover:bg-accent/40 sm:border-s sm:border-t-0"
               >
-                <Tag className="size-5 text-primary" />
+                <span className="flex size-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                  <Tag className="size-5" />
+                </span>
                 <p className="mt-2 font-serif text-xl leading-tight">پیشنهادهای ویژه</p>
                 <p className="text-sm text-muted-foreground">
                   منتخب تخفیف‌های این هفته را ببینید.
@@ -216,12 +290,25 @@ function MobileMenu({ categories }: { categories: HeaderCategory[] }) {
           <Menu />
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="w-80 overflow-y-auto">
+      <SheetContent side="right" className="flex w-80 flex-col overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2 font-serif text-2xl">
             <Wine className="size-5 text-primary" /> رومرا
           </SheetTitle>
         </SheetHeader>
+
+        {/* Search inside the drawer */}
+        <form action="/search" role="search" className="relative px-4">
+          <Search className="pointer-events-none absolute top-1/2 start-7 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            name="q"
+            placeholder="جستجو…"
+            aria-label="جستجوی فروشگاه"
+            className="h-11 w-full rounded-full border border-border/70 bg-secondary/50 ps-9 pe-4 text-sm outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+          />
+        </form>
+
         <nav className="mt-2 flex flex-col px-4 pb-8">
           <SheetClose asChild>
             <Link
@@ -256,9 +343,12 @@ function MobileMenu({ categories }: { categories: HeaderCategory[] }) {
               <SheetClose asChild key={c.slug}>
                 <Link
                   href={`/categories/${c.slug}`}
-                  className="rounded-xl px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
-                  {c.name}
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-serif text-xs text-primary">
+                    {c.name.charAt(0)}
+                  </span>
+                  <span className="truncate">{c.name}</span>
                 </Link>
               </SheetClose>
             ))}

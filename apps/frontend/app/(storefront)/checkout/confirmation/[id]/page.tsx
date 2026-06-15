@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { CheckCircle2 } from "lucide-react"
+import { CheckCircle2, Gift } from "lucide-react"
 
 import { serverApi } from "@/lib/api/client"
 import { faNum, formatPrice } from "@/lib/products"
@@ -47,6 +47,26 @@ export default async function OrderConfirmationPage({
           <Badge variant="secondary">{STATUS_FA[order.status] ?? order.status}</Badge>
         </p>
       </div>
+
+      {order.is_gift ? (
+        <div className="cellar-glow border-hairline mt-8 rounded-2xl px-6 py-5 ring-1 ring-foreground/10">
+          <p className="flex items-center gap-2 font-medium text-primary">
+            <Gift className="size-4" /> این سفارش به‌عنوان هدیه ثبت شد
+          </p>
+          {order.gift_message ? (
+            <p className="mt-2 text-sm text-muted-foreground">«{order.gift_message}»</p>
+          ) : null}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {order.gift_wrap ? <span>با بسته‌بندی هدیه</span> : null}
+            {order.hide_price ? <span>قیمت در رسید مخفی می‌شود</span> : null}
+            {order.scheduled_delivery_date ? (
+              <span>
+                تاریخ تحویل: {new Date(order.scheduled_delivery_date).toLocaleDateString("fa-IR")}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="border-hairline mt-10 rounded-2xl bg-card p-6 ring-1 ring-foreground/5">
         <h2 className="font-serif text-2xl">اقلام سفارش</h2>
