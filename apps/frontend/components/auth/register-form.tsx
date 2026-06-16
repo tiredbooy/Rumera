@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
-import { Loader2 } from "lucide-react"
+import { AlertCircle, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -61,8 +61,9 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
 
   return (
     <div>
-      <h1 className="font-serif text-3xl">ساخت حساب</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <span className="eyebrow">عضویت</span>
+      <h1 className="mt-2 font-serif text-3xl">ساخت حساب</h1>
+      <p className="mt-1.5 text-sm text-muted-foreground">
         برای خرید و پیگیری سفارش‌ها، حساب بسازید.
       </p>
 
@@ -70,26 +71,63 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-2">
             <Label htmlFor="first_name">نام</Label>
-            <Input id="first_name" name="first_name" />
+            <Input
+              id="first_name"
+              name="first_name"
+              autoComplete="given-name"
+              className="h-11"
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="last_name">نام خانوادگی</Label>
-            <Input id="last_name" name="last_name" />
+            <Input
+              id="last_name"
+              name="last_name"
+              autoComplete="family-name"
+              className="h-11"
+            />
           </div>
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="email">ایمیل</Label>
-          <Input id="email" name="email" type="email" required dir="ltr" placeholder="you@example.com" />
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            dir="ltr"
+            autoComplete="email"
+            placeholder="you@example.com"
+            aria-invalid={!!error}
+            className="h-11 text-start"
+          />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="password">گذرواژه</Label>
-          <Input id="password" name="password" type="password" required minLength={8} dir="ltr" />
-          <p className="text-xs text-muted-foreground">حداقل ۸ کاراکتر.</p>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            required
+            minLength={8}
+            dir="ltr"
+            autoComplete="new-password"
+            aria-describedby="password-hint"
+            aria-invalid={!!error}
+            className="h-11 text-start"
+          />
+          <p id="password-hint" className="text-xs text-muted-foreground">
+            حداقل ۸ کاراکتر.
+          </p>
         </div>
 
         {error ? (
-          <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
+          <p
+            role="alert"
+            className="flex items-start gap-2 rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+          >
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <span>{error}</span>
           </p>
         ) : null}
 
@@ -101,7 +139,10 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
 
       <p className="mt-6 text-center text-sm text-muted-foreground">
         حساب دارید؟{" "}
-        <Link href="/login" className="text-primary hover:underline">
+        <Link
+          href="/login"
+          className="rounded font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
           ورود
         </Link>
       </p>
