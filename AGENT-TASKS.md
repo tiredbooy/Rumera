@@ -61,7 +61,11 @@
   `POST/GET/PUT/PATCH/DELETE /api/v1/admin/products/:id/images*` (admin group `a`)
   and public `GET /media/*key`. Register in `internal/routes/routes.go`. Content
   negotiation from `Accept` when `f` omitted; long-lived `Cache-Control`.
-- [ ] **A6 · Docker/infra.** Add `libvips` (build + runtime) to the backend
+- [x] **A6 · Docker/infra.** — done: libvips in both Dockerfiles (`-tags vips`, CGO),
+  prod builder stage builds clean against libvips 8.18.2 (verified), runner gets
+  `vips` runtime + writable `/data`; `media_data` volume + `MEDIA_*` env in both
+  compose files; `/media/` routed to the API in dev+prod nginx (prod with edge
+  `proxy_cache`); overridable `GOPROXY`/`GOSUMDB` build args; `.env.example` updated. Add `libvips` (build + runtime) to the backend
   Dockerfile dev+prod stages; add the `MEDIA_ROOT`/`MEDIA_CACHE_DIR` volume to
   `docker-compose.dev.yml` and `docker-compose.prod.yml`; expose the `MEDIA_*`
   env. Route `/media/` to the Go API in `infra/nginx` (same upstream as `/api`),
