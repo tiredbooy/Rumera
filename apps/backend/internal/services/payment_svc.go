@@ -13,6 +13,9 @@ import (
 type PaymentService struct {
 	paymentRepo repositories.PaymentTransactionRepository
 	orderRepo   repositories.OrderRepository
+	// inventory drains committed stock inside the confirm transaction so payment
+	// and stock can't drift apart. Optional (may be nil in narrow unit tests).
+	inventory InventoryService
 	// loyalty awards points when an order is confirmed paid. Optional (may be nil).
 	loyalty *LoyaltyService
 	// referral completes a pending referral on the referee's first paid order.
@@ -22,12 +25,14 @@ type PaymentService struct {
 func NewPaymentService(
 	paymentRepo repositories.PaymentTransactionRepository,
 	orderRepo repositories.OrderRepository,
+	inventory InventoryService,
 	loyalty *LoyaltyService,
 	referral *ReferralService,
 ) *PaymentService {
 	return &PaymentService{
 		paymentRepo: paymentRepo,
 		orderRepo:   orderRepo,
+		inventory:   inventory,
 		loyalty:     loyalty,
 		referral:    referral,
 	}
@@ -145,6 +150,22 @@ func (s *PaymentService) Confirm(ctx context.Context, req models.ConfirmPaymentR
 			return nil, apperr.ErrOrderNotFound
 		}
 		return nil, apperr.ErrInternal
+	}
+
+	// Drain the committed stock in the SAME transaction. Previously this ran in a
+	// separate tx in the webhook handler with its error discarded — so a failed
+	// deduct left the order paid but stock never released (permanent drift). Now
+	// it's atomic: if the deduction fails, the payment is not confirmed.
+	if s.inventory != nil {
+		items, ierr := s.orderRepo.GetItems(ctx, *pt.OrderID)
+		if ierr != nil {
+			// Set the named return so the deferred RollbackOnErr fires.
+			err = ierr
+			return nil, apperr.ErrInternal
+		}
+		if err = s.inventory.DeductForOrderTx(ctx, tx, *pt.OrderID, items); err != nil {
+			return nil, apperr.ErrInternal
+		}
 	}
 
 	if err = tx.Commit(ctx); err != nil {

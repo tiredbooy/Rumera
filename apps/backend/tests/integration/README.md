@@ -1,63 +1,67 @@
-# Integration test suite (D3)
+# Integration test suite
 
-Tag-gated integration tests that exercise the full checkout flow against **real**
-Postgres + Redis containers via [testcontainers-go]. Kept out of the default
-`go test ./...` run by the build tag, so unit runs stay fast.
+Tag-gated tests that exercise money/stock-critical paths against a **real
+Postgres**, kept out of the default `go test ./...` run by the `integration`
+build tag so unit runs stay fast.
 
-> **Status:** harness designed; implementation pending the dependency fetch.
-> The container `go get` is currently blocked in the dev sandbox by a module
-> proxy that 403s `github.com/klauspost/compress@v1.18.5` (a testcontainers
-> transitive dep). It resolves normally on an open network / in CI — see
-> *Enabling* below. The `make test-integration` target already exists.
+## Why not testcontainers
 
-## Enabling
+The original plan used [testcontainers-go]. Its Docker SDK pulls
+`github.com/klauspost/compress`, which the build sandbox's module proxy **403s**,
+so testcontainers can't compile here. Instead the harness connects to a Postgres
+the operator/CI provides via `TEST_DATABASE_URL` — no extra Go dependency, works
+identically locally and in CI (where a `postgres` service is trivial to add).
+When `TEST_DATABASE_URL` is unset the whole suite **skips cleanly**.
+
+## Running it
 
 ```bash
 cd apps/backend
-go get github.com/testcontainers/testcontainers-go@latest \
-       github.com/testcontainers/testcontainers-go/modules/postgres@latest \
-       github.com/testcontainers/testcontainers-go/modules/redis@latest
-go mod tidy
-make test-integration   # go test -tags=integration -count=1 ./tests/integration/...
+
+# 1. throwaway Postgres
+docker run -d --name pg -e POSTGRES_PASSWORD=test -e POSTGRES_USER=test \
+    -e POSTGRES_DB=rumera_test -p 55432:5432 postgres:17-alpine
+
+# 2. point the suite at it and run (make target already exists)
+export TEST_DATABASE_URL='postgres://test:test@localhost:55432/rumera_test?sslmode=disable'
+make test-integration         # go test -tags=integration -count=1 ./tests/integration/...
+
+# 3. cleanup
+docker rm -f pg
 ```
 
-Requires a running Docker daemon (testcontainers talks to it).
+## How it works
 
-## What the suite covers
+`harness_test.go`:
 
-Every test file starts with:
+- `TestMain` connects the pool, runs `migrations/main` from disk via **goose**
+  (the same migrations the app embeds — no embed needed here), then runs the
+  suite. Skips with exit 0 if `TEST_DATABASE_URL` is unset.
+- `requireDB(t)` skips an individual test when there's no database.
+- `resetTables(t, ...)` truncates (RESTART IDENTITY CASCADE) so each test starts
+  clean without re-migrating.
+- `seed_test.go` holds minimal row factories (user, product, variant, inventory,
+  order, order item, payment txn, coupon) so tests read as assertions, not setup.
 
-```go
-//go:build integration
+Tests build real repositories (`internal/repositories`) and services
+(`internal/services`) over the pool — they exercise production wiring, not a
+re-implementation.
 
-package integration
-```
+## What it covers
 
-so it compiles only under `-tags=integration`.
-
-Planned cases (one container set per package, shared via `TestMain`):
-
-1. **Bring-up** — start `timescale/timescaledb:latest-pg17` (main + analytics)
-   and `redis:8-alpine` containers; run `migrations/main` and
-   `migrations/analytics` with the same goose embed used in `pkg/database`.
-2. **Full checkout flow** — seed a user, product, variant, inventory row,
-   shipping zone+method; then:
-   - add-to-cart → validate coupon → `OrderService.CreateOrder`
-   - assert order is `pending` and stock moved available→committed (Reserve)
-   - `PaymentService.Confirm` (or the webhook path) → assert order `paid`
-   - `InventoryService.DeductForOrder` → **assert stock_on_hand deducted**.
-3. **B4 idempotency replay** — POST the payment webhook twice with the same
-   body through the real `pkg/middleware.Idempotency` over the Postgres
-   `idempotency_keys` store; assert the second call returns the stored response
-   and the order is paid/stock deducted **exactly once**.
-4. **B2 degradation (optional)** — stop the Redis container mid-run; assert the
-   read-through cache falls back to the DB and readiness reports `degraded`
-   while staying `200`.
+| File | Proves |
+|------|--------|
+| `harness_test.go` → `TestMigrationsApply` | the full `migrations/main` schema applies cleanly to an empty DB |
+| `payment_test.go` → `TestPaymentConfirm_DeductsStockAtomically` | `PaymentService.Confirm` marks payment succeeded + order paid **and** drains committed stock in one transaction; a replayed callback neither re-confirms nor double-deducts |
+| `coupon_test.go` → `TestCouponUsageLimit_HoldsUnderConcurrency` | two concurrent redemptions of a `max_uses=1` coupon record **exactly one** usage (the `LockByID` + `CountUsagesTx` row-lock re-check closes the TOCTOU race) |
 
 ## Notes
 
-- Reuse `pkg/database` for pool construction + migrations and the real services
-  from `internal/services` so the test exercises production wiring, not a
-  re-implementation.
-- Keep fixtures in a `seed.go` helper (also `//go:build integration`) so each
-  test reads as flow assertions, not setup noise.
+- A clean run of this suite also surfaced (and we fixed) a latent schema bug:
+  `order_items.product_variant_id` was referenced by `BulkCreate`/`GetItems` but
+  never created by a migration, so checkout failed at runtime. Added in
+  `migrations/main/20260616131000_order_items_variant.sql`.
+- Next candidates: idempotency-replay of the payment webhook over the real
+  `idempotency_keys` store, and a full cart→order→confirm flow end-to-end.
+
+[testcontainers-go]: https://github.com/testcontainers/testcontainers-go

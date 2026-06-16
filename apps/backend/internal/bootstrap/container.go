@@ -144,10 +144,10 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	referralService := services.NewReferralService(referralRepo, loyaltyService, cfg.LoyaltyReferralReward)
 	giftCardService := services.NewGiftCardService(giftCardRepo, walletService)
 
-	// Payment and inventory are constructed first because the order service
-	// depends on them for the checkout saga (reserve stock → open payment).
-	paymentService := services.NewPaymentService(paymentRepo, orderRepo, loyaltyService, referralService)
+	// Inventory is constructed first: the payment service deducts stock inside the
+	// confirm transaction, and the order service reserves stock during checkout.
 	inventoryService := services.NewInventoryService(inventoryRepo, movementRepo)
+	paymentService := services.NewPaymentService(paymentRepo, orderRepo, inventoryService, loyaltyService, referralService)
 	orderService := services.NewOrderService(
 		orderRepo, orderItemRepo, cartRepo,
 		couponRepo, couponUsageRepo, shippingMethodRepo,

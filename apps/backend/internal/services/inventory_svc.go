@@ -29,6 +29,9 @@ type InventoryService interface {
 	ReserveForOrderTx(ctx context.Context, tx pgx.Tx, orderID int64, items []models.OrderItemResponse) error
 	ReleaseForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) error
 	DeductForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) error
+	// DeductForOrderTx drains committed stock on a caller-supplied transaction, so
+	// confirming a payment and deducting stock commit atomically.
+	DeductForOrderTx(ctx context.Context, tx pgx.Tx, orderID int64, items []models.OrderItemResponse) error
 }
 
 type inventoryService struct {
@@ -178,21 +181,31 @@ func (s *inventoryService) ReleaseForOrder(ctx context.Context, orderID int64, i
 // DeductForOrder clears committed stock once payment is confirmed.
 // stock_on_hand was already decremented at Reserve time, so we only
 // drain committed_stock here.
-func (s *inventoryService) DeductForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) error {
+func (s *inventoryService) DeductForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) (err error) {
 	tx, err := s.inventoryRepo.BeginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("inventoryService.DeductForOrder: begin tx: %w", err)
 	}
 	defer utils.RollbackOnErr(ctx, tx, &err)
 
-	for _, item := range items {
-		if err = s.inventoryRepo.Deduct(ctx, tx, item.VariantID, item.Quantity, orderID); err != nil {
-			return fmt.Errorf("inventoryService.DeductForOrder variant %d: %w", item.VariantID, err)
-		}
+	if err = s.DeductForOrderTx(ctx, tx, orderID, items); err != nil {
+		return err
 	}
 
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("inventoryService.DeductForOrder: commit: %w", err)
+	}
+	return nil
+}
+
+// DeductForOrderTx drains committed stock for every line on the supplied
+// transaction, so the deduction is atomic with whatever else the caller's tx
+// contains (e.g. confirming the payment + marking the order paid).
+func (s *inventoryService) DeductForOrderTx(ctx context.Context, tx pgx.Tx, orderID int64, items []models.OrderItemResponse) error {
+	for _, item := range items {
+		if err := s.inventoryRepo.Deduct(ctx, tx, item.VariantID, item.Quantity, orderID); err != nil {
+			return fmt.Errorf("inventoryService.DeductForOrderTx variant %d: %w", item.VariantID, err)
+		}
 	}
 	return nil
 }
