@@ -98,6 +98,19 @@ type Config struct {
 	// ── Storage ───────────────────────────────────────────────────────────────
 	StoragePath string `envconfig:"STORAGE_PATH" default:"./storage"`
 
+	// ── Media (product images) ────────────────────────────────────────────────
+	// Uploaded images are stored as originals under MediaRoot and served
+	// resized/recompressed on the fly via GET /media/{key}. Rendered variants are
+	// cached under MediaCacheDir. MediaPublicBaseURL is prepended when building
+	// absolute transform URLs; empty means same-origin (just "/media/...").
+	MediaRoot           string   `envconfig:"MEDIA_ROOT" default:"./storage/media"`
+	MediaCacheDir       string   `envconfig:"MEDIA_CACHE_DIR" default:"./storage/media-cache"`
+	MediaPublicBaseURL  string   `envconfig:"MEDIA_PUBLIC_BASE_URL" default:""`
+	MediaMaxUploadMB    int      `envconfig:"MEDIA_MAX_UPLOAD_MB" default:"15"`
+	MediaAllowedFormats []string `envconfig:"MEDIA_ALLOWED_FORMATS" default:"avif,webp,jpeg,png"`
+	MediaDefaultQuality int      `envconfig:"MEDIA_DEFAULT_QUALITY" default:"80"`
+	MediaMaxDimension   int      `envconfig:"MEDIA_MAX_DIMENSION" default:"4000"`
+
 	// ── Meilisearch ───────────────────────────────────────────────────────────
 	MeiliHost   string `envconfig:"MEILI_HOST" default:"http://localhost:7700"`
 	MeiliAPIKey string `envconfig:"MEILI_API_KEY"`
@@ -227,6 +240,15 @@ func (c *Config) Validate() error {
 	}
 	if c.DBRetryBaseBackoff <= 0 {
 		return fmt.Errorf("DB_RETRY_BASE_BACKOFF must be > 0, got %s", c.DBRetryBaseBackoff)
+	}
+	if c.MediaDefaultQuality < 1 || c.MediaDefaultQuality > 100 {
+		return fmt.Errorf("MEDIA_DEFAULT_QUALITY must be in [1,100], got %d", c.MediaDefaultQuality)
+	}
+	if c.MediaMaxUploadMB < 1 {
+		return fmt.Errorf("MEDIA_MAX_UPLOAD_MB must be >= 1, got %d", c.MediaMaxUploadMB)
+	}
+	if c.MediaMaxDimension < 1 {
+		return fmt.Errorf("MEDIA_MAX_DIMENSION must be >= 1, got %d", c.MediaMaxDimension)
 	}
 	return nil
 }
