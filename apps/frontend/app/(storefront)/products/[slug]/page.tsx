@@ -1,29 +1,21 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import {
-  ChevronLeft,
-  ShieldCheck,
-  Truck,
-  Wallet,
-  Sparkles,
-  ArrowLeft,
-} from "lucide-react"
+import { ChevronLeft, ShieldCheck, Truck, Wallet, Sparkles, Layers } from "lucide-react"
 
 import { buildMetadata } from "@/lib/seo/metadata"
 import { JsonLd } from "@/components/json-ld"
 import { productDetailLd, breadcrumbLd } from "@/lib/seo/jsonld"
-import {
-  getProductBySlug,
-  allProductSlugs,
-  listProducts,
-} from "@/lib/catalog/products"
+import { getProductBySlug, allProductSlugs } from "@/lib/catalog/products"
+import { getSimilar, getFrequentlyBoughtTogether } from "@/lib/catalog/recommendations"
+import { getReviewSummary, listReviews } from "@/lib/catalog/reviews"
 import { faNum } from "@/lib/products"
 import { Bottle } from "@/components/bottle"
-import { Reveal } from "@/components/motion/reveal"
 import { ProductGallery } from "@/components/catalog/product-gallery"
 import { ProductPurchasePanel } from "@/components/catalog/product-purchase-panel"
-import { ProductCard } from "@/components/catalog/product-card"
+import { RecommendationRail } from "@/components/catalog/recommendation-rail"
+import { RecentlyViewedRail } from "@/components/catalog/recently-viewed-rail"
+import { ReviewsSection } from "@/components/catalog/reviews-section"
 
 export const revalidate = 3600
 
@@ -68,12 +60,19 @@ export default async function ProductDetailPage({
     (a, b) => Number(b.is_primary) - Number(a.is_primary) || a.sort_order - b.sort_order
   )
 
-  // Same-category recommendations for the "you may also like" rail.
-  const related = product.category_id
-    ? (await listProducts({ category_id: product.category_id, limit: 5 })).results
-        .filter((p) => p.id !== product.id)
-        .slice(0, 4)
-    : []
+  // Surface the recommendation engine + reviews (all error-safe → empty on failure).
+  const [similar, fbtRaw, reviewSummary, reviewsPage] = await Promise.all([
+    getSimilar(product.id, { limit: 8 }),
+    getFrequentlyBoughtTogether(product.id, { limit: 4 }),
+    getReviewSummary(product.id),
+    listReviews(product.id, { limit: 8 }),
+  ])
+  // FBT falls back to "similar" server-side — drop overlaps so the rails differ.
+  const fbt = fbtRaw.filter((f) => !similar.some((s) => s.product_id === f.product_id))
+
+  // For the recently-viewed memory.
+  const variantPrices = (product.variants ?? []).map((v) => v.price).filter((n) => n > 0)
+  const minPrice = variantPrices.length ? Math.min(...variantPrices) : undefined
 
   // Specs table — only render rows we actually have.
   const specs: { label: string; value: string }[] = [
@@ -89,7 +88,12 @@ export default async function ProductDetailPage({
     <>
       <JsonLd
         data={[
-          productDetailLd(product),
+          productDetailLd(
+            product,
+            reviewSummary
+              ? { value: reviewSummary.average_rating, count: reviewSummary.total_reviews }
+              : undefined
+          ),
           breadcrumbLd([
             { name: "خانه", path: "/" },
             { name: "فروشگاه", path: "/products" },
@@ -128,6 +132,18 @@ export default async function ProductDetailPage({
             ) : null}
             <h1 className="font-serif text-4xl leading-tight sm:text-5xl">{product.title}</h1>
 
+            {reviewSummary && reviewSummary.total_reviews > 0 ? (
+              <Link
+                href="#reviews"
+                className="mt-3 inline-flex w-fit items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <span className="font-medium text-primary">
+                  ★ {faNum(Number(reviewSummary.average_rating.toFixed(1)))}
+                </span>
+                ({faNum(reviewSummary.total_reviews)} نظر)
+              </Link>
+            ) : null}
+
             {product.tags && product.tags.length ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 {product.tags.map((t) => (
@@ -145,7 +161,7 @@ export default async function ProductDetailPage({
               <p className="mt-6 leading-relaxed text-muted-foreground">{product.description}</p>
             ) : null}
 
-            {/* Purchase panel */}
+            {/* Purchase panel (owns variant selection + wishlist) */}
             <div className="mt-7 rounded-3xl border border-border/60 bg-card/50 p-5 sm:p-6">
               <ProductPurchasePanel product={product} />
             </div>
@@ -183,36 +199,50 @@ export default async function ProductDetailPage({
         </div>
       </section>
 
-      {/* You may also like */}
-      {related.length ? (
-        <section className="border-t border-border/60 bg-card/30">
-          <div className="container-px mx-auto max-w-7xl py-16 sm:py-20">
-            <Reveal className="flex items-end justify-between gap-4">
-              <div>
-                <p className="eyebrow mb-3">
-                  <Sparkles className="size-3.5" /> هم‌سلیقه با این
-                </p>
-                <h2 className="font-serif text-3xl sm:text-4xl">شاید این‌ها را هم بپسندید</h2>
-              </div>
-            </Reveal>
-            <div className="mt-10 grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4">
-              {related.map((p, i) => (
-                <Reveal key={p.id} delay={Math.min(i, 4) * 0.05} y={20}>
-                  <ProductCard product={p} />
-                </Reveal>
-              ))}
-            </div>
-            <div className="mt-10 flex justify-center">
-              <Link
-                href="/products"
-                className="inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-foreground"
-              >
-                مشاهدهٔ همهٔ محصولات <ArrowLeft className="size-4" />
-              </Link>
-            </div>
-          </div>
-        </section>
+      {/* Reviews */}
+      <div id="reviews" className="border-t border-border/60 bg-card/30 scroll-mt-24">
+        <ReviewsSection
+          productId={product.id}
+          summary={reviewSummary}
+          initialReviews={reviewsPage.results}
+        />
+      </div>
+
+      {/* Frequently bought together */}
+      {fbt.length ? (
+        <RecommendationRail
+          items={fbt}
+          eyebrow="تکمیل سبد"
+          title="اغلب با هم خریده می‌شوند"
+          icon={Layers}
+          className="container-px mx-auto max-w-7xl py-16 sm:py-20"
+        />
       ) : null}
+
+      {/* Similar products */}
+      {similar.length ? (
+        <div className="border-t border-border/60 bg-card/30">
+          <RecommendationRail
+            items={similar.slice(0, 4)}
+            eyebrow="هم‌سلیقه با این"
+            title="شاید این‌ها را هم بپسندید"
+            icon={Sparkles}
+            className="container-px mx-auto max-w-7xl py-16 sm:py-20"
+          />
+        </div>
+      ) : null}
+
+      {/* Recently viewed (records this product) */}
+      <RecentlyViewedRail
+        current={{
+          slug: product.slug,
+          title: product.title,
+          image: images[0]?.image_url,
+          price: minPrice,
+        }}
+        currentProductId={product.id}
+        className="container-px mx-auto max-w-7xl py-12"
+      />
     </>
   )
 }

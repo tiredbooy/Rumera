@@ -21,7 +21,9 @@ import type {
   Paginated,
   PlaceOrderInput,
   ShippingMethod,
+  Wishlist,
 } from "@/lib/catalog/types"
+import type { RecommendationItem } from "@/lib/catalog/recommendations"
 
 // ── Cart ─────────────────────────────────────────────────────────────────────
 
@@ -379,5 +381,86 @@ export function useCancelOrder() {
   return useMutation({
     mutationFn: (id: number) => storeRequest<void>(`orders/${id}/cancel`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.orders.all }),
+  })
+}
+
+// ── Wishlist ─────────────────────────────────────────────────────────────────
+
+export function useWishlist(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.wishlist,
+    queryFn: () => storeRequest<{ data: Wishlist }>("wishlist").then((b) => b.data),
+    enabled,
+  })
+}
+
+export function useAddWishlistItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (productVariantId: number) =>
+      storeRequest<{ data: { wishlist_id: number } }>("wishlist/items", {
+        method: "POST",
+        body: JSON.stringify({ product_variant_id: productVariantId }),
+      }),
+    onSuccess: (_res, variantId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.wishlist })
+      qc.setQueryData(["wishlist", "has", variantId], true)
+    },
+  })
+}
+
+/** Remove by the wishlist-item row id (NOT the variant id). */
+export function useRemoveWishlistItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (itemId: number) =>
+      storeRequest<void>(`wishlist/items/${itemId}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.wishlist }),
+  })
+}
+
+/** Whether a product variant is wishlisted (keyed by variant id). */
+export function useHasWishlistItem(variantId?: number, enabled = true) {
+  return useQuery({
+    queryKey: ["wishlist", "has", variantId],
+    queryFn: () =>
+      storeRequest<{ data: { has_item: boolean } }>(`wishlist/has/${variantId}`).then(
+        (b) => b.data.has_item
+      ),
+    enabled: enabled && !!variantId,
+  })
+}
+
+// ── Recommendations (personalised) ───────────────────────────────────────────
+
+/** Personalised "for you" products (authenticated). */
+export function useForYou(enabled = true) {
+  return useQuery({
+    queryKey: ["recommendations", "for-you"],
+    queryFn: () =>
+      storeRequest<{ data: RecommendationItem[] }>("recommendations/for-you").then((b) => b.data),
+    enabled,
+  })
+}
+
+/** Fire-and-forget interaction signal that warms personalisation. */
+export function useRecordInteraction() {
+  return useMutation({
+    mutationFn: (vars: {
+      product_id: number
+      interaction_type:
+        | "view"
+        | "add_to_cart"
+        | "purchase"
+        | "wishlist"
+        | "review"
+        | "recipe_view"
+        | "search_click"
+      source?: string
+    }) =>
+      storeRequest<void>("recommendations/interactions", {
+        method: "POST",
+        body: JSON.stringify(vars),
+      }),
   })
 }

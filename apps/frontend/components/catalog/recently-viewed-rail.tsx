@@ -1,0 +1,83 @@
+"use client"
+
+import * as React from "react"
+import Link from "next/link"
+import { History } from "lucide-react"
+
+import { formatPrice } from "@/lib/products"
+import { SmartImage } from "@/components/smart-image"
+import {
+  recordRecentlyViewed,
+  useRecentlyViewed,
+  type RecentProduct,
+} from "@/lib/recently-viewed"
+
+/**
+ * RecentlyViewedRail — shows the visitor's recently-viewed products (localStorage,
+ * works for guests). On a PDP, pass `current` to record this product (and, for
+ * signed-in users, log a `view` interaction to warm recommendations); it's then
+ * excluded from the rail. Renders nothing until there are ≥2 others, so first
+ * visits and SSR show no empty shell.
+ */
+export function RecentlyViewedRail({
+  current,
+  currentProductId,
+  title = "بازدیدهای اخیر",
+  className,
+}: {
+  current?: RecentProduct
+  currentProductId?: number
+  title?: string
+  className?: string
+}) {
+  React.useEffect(() => {
+    if (!current?.slug) return
+    recordRecentlyViewed(current)
+    // Fire-and-forget interaction (the BFF adds auth; ignored for guests/errors).
+    if (currentProductId) {
+      fetch("/api/store/recommendations/interactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ product_id: currentProductId, interaction_type: "view" }),
+      }).catch(() => {})
+    }
+  }, [current, currentProductId])
+
+  const items = useRecentlyViewed(current?.slug)
+  if (items.length < 2) return null
+
+  return (
+    <section className={className}>
+      <p className="eyebrow mb-6">
+        <History className="size-3.5" /> {title}
+      </p>
+      <div className="fade-x -mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
+        {items.map((p) => (
+          <Link
+            key={p.slug}
+            href={`/products/${p.slug}`}
+            className="group/rv hover-lift border-hairline w-40 shrink-0 overflow-hidden rounded-2xl bg-card sm:w-44"
+          >
+            <div className="relative aspect-4/5 overflow-hidden">
+              <SmartImage
+                src={p.image}
+                alt={p.title}
+                sizes="176px"
+                monogram={p.title.charAt(0)}
+                fallbackClassName="from-accent/40 via-card to-secondary"
+              />
+            </div>
+            <div className="p-3">
+              <p className="line-clamp-1 font-serif text-sm leading-tight transition-colors group-hover/rv:text-primary">
+                {p.title}
+              </p>
+              {p.price != null ? (
+                <p className="mt-1 font-serif text-sm text-foreground">{formatPrice(p.price)}</p>
+              ) : null}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}

@@ -8,6 +8,7 @@ import {
   Quote,
   Sparkles,
   Check,
+  TrendingUp,
   Wine,
   Martini,
   GlassWater,
@@ -23,8 +24,10 @@ import { Reveal } from "@/components/motion/reveal"
 import { BrandMarquee } from "@/components/brand-marquee"
 import { HeroCarousel } from "@/components/home/hero-carousel"
 import { ForYouRail } from "@/components/home/for-you-rail"
+import { RecommendationRail } from "@/components/catalog/recommendation-rail"
 import { HomeStructuredData } from "@/components/structured-data"
 import { getHeroSlides } from "@/lib/home/hero"
+import { getTrending } from "@/lib/catalog/recommendations"
 import { featuredBrands } from "@/lib/home/brands"
 import { categories, categoryFa, getFeatured, type Category } from "@/lib/products"
 
@@ -69,7 +72,7 @@ const perks = [
 const filters = ["همه", "ویسکی", "شراب", "شامپاین", "اسپیریت"]
 
 export default async function Home() {
-  const heroSlides = await getHeroSlides()
+  const [heroSlides, trending] = await Promise.all([getHeroSlides(), getTrending({ limit: 8 })])
   const featured = getFeatured()
 
   return (
@@ -215,6 +218,19 @@ export default async function Home() {
           </Button>
         </div>
       </section>
+
+      {/* ───────────────────────── Trending (recommendation engine) ───────────────────────── */}
+      {trending.length ? (
+        <section className="border-y border-border/60 bg-card/30">
+          <RecommendationRail
+            items={trending}
+            eyebrow="پرطرفدارِ این روزها"
+            title="پرفروش‌ها و پرطرفدارها"
+            icon={TrendingUp}
+            className="container-px mx-auto max-w-7xl py-20"
+          />
+        </section>
+      ) : null}
 
       {/* ───────────────────────── Story ───────────────────────── */}
       <section id="story" className="border-y border-border/60 bg-card/30">

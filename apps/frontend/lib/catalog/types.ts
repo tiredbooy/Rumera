@@ -78,6 +78,28 @@ export type Category = {
   children?: Category[]
 }
 
+// ── Wishlist ─────────────────────────────────────────────────────────────────
+
+export type WishlistItem = {
+  id: number // wishlist-item row id (use for DELETE /wishlist/items/:id)
+  product_id: number
+  product_title: string
+  variant_id: number
+  sku?: string
+  price: number
+  compare_at_price?: number
+  image_url?: string
+  options?: { name: string; value: string }[]
+  is_in_stock: boolean
+  added_at: string
+}
+
+export type Wishlist = {
+  id: number
+  items: WishlistItem[]
+  total: number
+}
+
 export type Brand = {
   id: number
   title: string

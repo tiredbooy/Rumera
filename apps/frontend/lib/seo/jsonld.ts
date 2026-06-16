@@ -63,8 +63,9 @@ export function productLd(p: Product) {
   }
 }
 
-/** Product JSON-LD from a live API `ProductDetail`. */
-export function productDetailLd(p: ProductDetail) {
+/** Product JSON-LD from a live API `ProductDetail`. Pass `rating` (from the
+ * reviews summary) to emit AggregateRating for review rich-results. */
+export function productDetailLd(p: ProductDetail, rating?: { value: number; count: number }) {
   const prices = (p.variants ?? []).map((v) => v.price).filter((n) => n > 0)
   const low = prices.length ? Math.min(...prices) : undefined
   const high = prices.length ? Math.max(...prices) : undefined
@@ -76,6 +77,15 @@ export function productDetailLd(p: ProductDetail) {
     sku: p.variants?.[0]?.sku,
     url: absoluteUrl(`/products/${p.slug}`),
     image: (p.images ?? []).map((img) => img.image_url),
+    ...(rating && rating.count > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: Number(rating.value.toFixed(1)),
+            reviewCount: rating.count,
+          },
+        }
+      : {}),
     offers:
       low !== undefined
         ? {
