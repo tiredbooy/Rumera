@@ -4,7 +4,21 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Loader2, Plus, Check, MapPin, Truck, Tag, Wallet, Landmark, Gift } from "lucide-react"
+import {
+  Loader2,
+  Plus,
+  Check,
+  MapPin,
+  Truck,
+  Tag,
+  Wallet,
+  Landmark,
+  Gift,
+  ShieldCheck,
+  Lock,
+  ChevronRight,
+  ChevronLeft,
+} from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { formatPrice, faNum } from "@/lib/products"
@@ -14,6 +28,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
+import { Separator } from "@/components/ui/separator"
 import {
   useCart,
   useAddresses,
@@ -21,11 +36,19 @@ import {
   useValidateCoupon,
   usePlaceOrder,
 } from "@/lib/api/hooks"
-import type { Address, CouponValidation, PaymentMethod } from "@/lib/catalog/types"
+import type { Address, CouponValidation, PaymentMethod, ShippingMethod } from "@/lib/catalog/types"
 import { ApiClientError } from "@/lib/api/store-client"
 import { AddAddressForm } from "./add-address-form"
 
 const SHIP_REGION = "IR"
+
+const STEPS = [
+  { key: "address", label: "آدرس", icon: MapPin },
+  { key: "shipping", label: "ارسال", icon: Truck },
+  { key: "payment", label: "پرداخت", icon: Wallet },
+  { key: "review", label: "بازبینی", icon: Check },
+] as const
+type StepKey = (typeof STEPS)[number]["key"]
 
 function Section({ icon: Icon, title, children }: { icon: typeof MapPin; title: string; children: React.ReactNode }) {
   return (
@@ -36,6 +59,84 @@ function Section({ icon: Icon, title, children }: { icon: typeof MapPin; title: 
       {children}
     </section>
   )
+}
+
+/** Horizontal progress stepper. Past steps are clickable to jump back. */
+function Stepper({
+  current,
+  maxReached,
+  onJump,
+}: {
+  current: number
+  maxReached: number
+  onJump: (i: number) => void
+}) {
+  return (
+    <ol className="flex items-center gap-2" aria-label="مراحل تسویه">
+      {STEPS.map((s, i) => {
+        const done = i < current
+        const active = i === current
+        const reachable = i <= maxReached
+        const Icon = s.icon
+        return (
+          <li key={s.key} className="flex flex-1 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => reachable && onJump(i)}
+              disabled={!reachable}
+              aria-current={active ? "step" : undefined}
+              className={cn(
+                "flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                reachable ? "cursor-pointer" : "cursor-default"
+              )}
+            >
+              <span
+                className={cn(
+                  "flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-medium transition-colors",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : done
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground"
+                )}
+              >
+                {done ? <Check className="size-4" /> : <Icon className="size-4" />}
+              </span>
+              <span
+                className={cn(
+                  "hidden truncate text-sm sm:block",
+                  active ? "font-medium text-foreground" : "text-muted-foreground"
+                )}
+              >
+                {s.label}
+              </span>
+            </button>
+            {i < STEPS.length - 1 ? (
+              <span
+                className={cn(
+                  "h-px flex-1 transition-colors",
+                  i < current ? "bg-primary/40" : "bg-border"
+                )}
+              />
+            ) : null}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+const PAYMENT_LABEL: Record<string, string> = {
+  wallet: "کیف پول رومرا",
+  bank_transfer: "کارت به کارت / انتقال بانکی",
+}
+
+function shippingDays(m?: ShippingMethod) {
+  if (!m) return null
+  const { min_delivery_days: mn, max_delivery_days: mx } = m
+  if (mn && mx) return mn === mx ? `${faNum(mn)} روز کاری` : `${faNum(mn)} تا ${faNum(mx)} روز کاری`
+  if (mx) return `تا ${faNum(mx)} روز کاری`
+  return null
 }
 
 function SelectRow({
@@ -89,6 +190,15 @@ export function CheckoutFlow() {
   const [couponCode, setCouponCode] = React.useState("")
   const [coupon, setCoupon] = React.useState<CouponValidation>()
 
+  // Wizard navigation. `maxReached` keeps already-visited steps clickable.
+  const [step, setStep] = React.useState(0)
+  const [maxReached, setMaxReached] = React.useState(0)
+  const goTo = React.useCallback((i: number) => {
+    const clamped = Math.max(0, Math.min(STEPS.length - 1, i))
+    setStep(clamped)
+    setMaxReached((m) => Math.max(m, clamped))
+  }, [])
+
   // Gift mode
   const [isGift, setIsGift] = React.useState(false)
   const [giftMessage, setGiftMessage] = React.useState("")
@@ -109,6 +219,16 @@ export function CheckoutFlow() {
   const shippingCost = coupon?.free_shipping ? 0 : selectedShipping?.estimated_cost ?? 0
   const total = Math.max(0, subtotal - discount + shippingCost)
   const canPlace = !!addressId && !!shippingId && !!cart?.items.length
+
+  const selectedAddress = addresses?.find((a) => a.id === addressId)
+  const currentKey: StepKey = STEPS[step].key
+  // Whether the user may advance past the current step.
+  const stepValid =
+    currentKey === "address"
+      ? !!addressId
+      : currentKey === "shipping"
+        ? !!shippingId
+        : true
 
   function applyCoupon() {
     if (!couponCode.trim()) return
@@ -186,162 +306,325 @@ export function CheckoutFlow() {
   return (
     <div className="mt-8 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
       <div className="flex flex-col gap-6">
-        {/* Address */}
-        <Section icon={MapPin} title="آدرس تحویل">
-          <div className="flex flex-col gap-2">
-            {addresses?.map((a: Address) => (
-              <SelectRow key={a.id} selected={addressId === a.id} onClick={() => setAddressId(a.id)}>
-                <span className="block font-medium">{a.full_name}</span>
-                <span className="block truncate text-sm text-muted-foreground">
-                  {a.address_line1}، {a.city}
-                </span>
-              </SelectRow>
-            ))}
-          </div>
-          {adding ? (
-            <div className="mt-3">
-              <AddAddressForm
-                onCreated={(addr) => {
-                  setAddressId(addr.id)
-                  setAdding(false)
-                }}
-                onCancel={() => setAdding(false)}
-              />
-            </div>
-          ) : (
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => setAdding(true)}>
-              <Plus className="size-4" /> آدرس جدید
-            </Button>
-          )}
-        </Section>
+        {/* Progress stepper */}
+        <div className="border-hairline rounded-2xl bg-card/80 p-4 backdrop-blur-sm ring-1 ring-foreground/5">
+          <Stepper current={step} maxReached={maxReached} onJump={goTo} />
+        </div>
 
-        {/* Shipping */}
-        <Section icon={Truck} title="روش ارسال">
-          {shipping.isLoading ? (
-            <div className="py-4 text-sm text-muted-foreground">در حال دریافت روش‌های ارسال…</div>
-          ) : shipping.data?.length ? (
+        {/* Step 1 — Address */}
+        {currentKey === "address" ? (
+          <Section icon={MapPin} title="آدرس تحویل">
             <div className="flex flex-col gap-2">
-              {shipping.data.map((m) => (
-                <SelectRow key={m.id} selected={shippingId === m.id} onClick={() => setShippingId(m.id)}>
-                  <span className="flex items-center justify-between gap-3">
-                    <span className="font-medium">{m.name}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {m.estimated_cost > 0 ? formatPrice(m.estimated_cost) : "رایگان"}
-                    </span>
+              {addresses?.map((a: Address) => (
+                <SelectRow key={a.id} selected={addressId === a.id} onClick={() => setAddressId(a.id)}>
+                  <span className="block font-medium">{a.full_name}</span>
+                  <span className="block truncate text-sm text-muted-foreground">
+                    {a.address_line1}، {a.city}
                   </span>
                 </SelectRow>
               ))}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">روش ارسالی برای منطقهٔ شما یافت نشد.</p>
-          )}
-        </Section>
-
-        {/* Coupon */}
-        <Section icon={Tag} title="کد تخفیف">
-          <div className="flex gap-2">
-            <Input
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value)}
-              placeholder="کد تخفیف را وارد کنید"
-              dir="ltr"
-              className="max-w-xs"
-            />
-            <Button variant="outline" onClick={applyCoupon} disabled={validateCoupon.isPending}>
-              {validateCoupon.isPending ? <Loader2 className="animate-spin" /> : null} اعمال
-            </Button>
-          </div>
-          {coupon?.is_valid ? (
-            <p className="mt-2 text-sm text-emerald-500">
-              تخفیف اعمال‌شده: {formatPrice(coupon.discount_amount)}
-            </p>
-          ) : null}
-        </Section>
-
-        {/* Payment */}
-        <Section icon={Wallet} title="روش پرداخت">
-          <div className="flex flex-col gap-2">
-            {PAYMENTS.map((p) => (
-              <SelectRow key={p.value} selected={payment === p.value} onClick={() => setPayment(p.value)}>
-                <span className="flex items-center gap-2 font-medium">
-                  <p.icon className="size-4 text-muted-foreground" /> {p.label}
-                </span>
-              </SelectRow>
-            ))}
-          </div>
-        </Section>
-
-        {/* Gift */}
-        <Section icon={Gift} title="ارسال به‌عنوان هدیه">
-          <label className="flex cursor-pointer items-center justify-between gap-3">
-            <span className="text-sm text-muted-foreground">
-              این سفارش یک هدیه است
-            </span>
-            <Switch checked={isGift} onCheckedChange={setIsGift} aria-label="حالت هدیه" />
-          </label>
-
-          {isGift ? (
-            <div className="mt-5 flex flex-col gap-5 border-t border-border/60 pt-5">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="gift_message">پیام هدیه (اختیاری)</Label>
-                <Textarea
-                  id="gift_message"
-                  value={giftMessage}
-                  onChange={(e) => setGiftMessage(e.target.value.slice(0, 500))}
-                  placeholder="یادداشتی برای گیرنده بنویسید…"
-                  rows={3}
+            {adding ? (
+              <div className="mt-3">
+                <AddAddressForm
+                  onCreated={(addr) => {
+                    setAddressId(addr.id)
+                    setAdding(false)
+                  }}
+                  onCancel={() => setAdding(false)}
                 />
               </div>
+            ) : (
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => setAdding(true)}>
+                <Plus className="size-4" /> آدرس جدید
+              </Button>
+            )}
+          </Section>
+        ) : null}
 
-              <label className="flex cursor-pointer items-center gap-3">
-                <Checkbox checked={giftWrap} onCheckedChange={(v) => setGiftWrap(v === true)} />
-                <span className="text-sm">بسته‌بندی هدیه</span>
-              </label>
-
-              <label className="flex cursor-pointer items-center gap-3">
-                <Checkbox checked={hidePrice} onCheckedChange={(v) => setHidePrice(v === true)} />
-                <span className="text-sm">مخفی‌کردن قیمت در رسید بسته</span>
-              </label>
-
+        {/* Step 2 — Shipping */}
+        {currentKey === "shipping" ? (
+          <Section icon={Truck} title="روش ارسال">
+            {shipping.isLoading ? (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="delivery_date">تاریخ ترجیحی تحویل (اختیاری)</Label>
+                {[0, 1].map((i) => (
+                  <div key={i} className="h-14 animate-pulse rounded-xl bg-muted/50" aria-hidden />
+                ))}
+                <span className="sr-only">در حال دریافت روش‌های ارسال…</span>
+              </div>
+            ) : shipping.data?.length ? (
+              <div className="flex flex-col gap-2">
+                {shipping.data.map((m) => (
+                  <SelectRow key={m.id} selected={shippingId === m.id} onClick={() => setShippingId(m.id)}>
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className="block font-medium">{m.name}</span>
+                        {shippingDays(m) ? (
+                          <span className="block text-xs text-muted-foreground">{shippingDays(m)}</span>
+                        ) : null}
+                      </span>
+                      <span className="shrink-0 text-sm font-medium text-muted-foreground">
+                        {m.estimated_cost > 0 ? formatPrice(m.estimated_cost) : "رایگان"}
+                      </span>
+                    </span>
+                  </SelectRow>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">روش ارسالی برای منطقهٔ شما یافت نشد.</p>
+            )}
+          </Section>
+        ) : null}
+
+        {/* Step 3 — Payment + Coupon + Gift */}
+        {currentKey === "payment" ? (
+          <>
+            <Section icon={Wallet} title="روش پرداخت">
+              <div className="flex flex-col gap-2">
+                {PAYMENTS.map((p) => (
+                  <SelectRow key={p.value} selected={payment === p.value} onClick={() => setPayment(p.value)}>
+                    <span className="flex items-center gap-2 font-medium">
+                      <p.icon className="size-4 text-muted-foreground" /> {p.label}
+                    </span>
+                  </SelectRow>
+                ))}
+              </div>
+            </Section>
+
+            <Section icon={Tag} title="کد تخفیف">
+              <div className="flex gap-2">
                 <Input
-                  id="delivery_date"
-                  type="date"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      applyCoupon()
+                    }
+                  }}
+                  placeholder="کد تخفیف را وارد کنید"
                   dir="ltr"
-                  value={deliveryDate}
-                  onChange={(e) => setDeliveryDate(e.target.value)}
+                  aria-label="کد تخفیف"
                   className="max-w-xs"
                 />
+                <Button variant="outline" onClick={applyCoupon} disabled={validateCoupon.isPending}>
+                  {validateCoupon.isPending ? <Loader2 className="animate-spin" /> : null} اعمال
+                </Button>
               </div>
-            </div>
-          ) : null}
-        </Section>
+              {coupon?.is_valid ? (
+                <p className="mt-2 inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
+                  <Check className="size-4" /> تخفیف اعمال‌شده: {formatPrice(coupon.discount_amount)}
+                </p>
+              ) : null}
+            </Section>
+
+            <Section icon={Gift} title="ارسال به‌عنوان هدیه">
+              <label className="flex cursor-pointer items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground">این سفارش یک هدیه است</span>
+                <Switch checked={isGift} onCheckedChange={setIsGift} aria-label="حالت هدیه" />
+              </label>
+
+              {isGift ? (
+                <div className="mt-5 flex flex-col gap-5 border-t border-border/60 pt-5">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="gift_message">پیام هدیه (اختیاری)</Label>
+                    <Textarea
+                      id="gift_message"
+                      value={giftMessage}
+                      onChange={(e) => setGiftMessage(e.target.value.slice(0, 500))}
+                      placeholder="یادداشتی برای گیرنده بنویسید…"
+                      rows={3}
+                    />
+                  </div>
+
+                  <label className="flex cursor-pointer items-center gap-3">
+                    <Checkbox checked={giftWrap} onCheckedChange={(v) => setGiftWrap(v === true)} />
+                    <span className="text-sm">بسته‌بندی هدیه</span>
+                  </label>
+
+                  <label className="flex cursor-pointer items-center gap-3">
+                    <Checkbox checked={hidePrice} onCheckedChange={(v) => setHidePrice(v === true)} />
+                    <span className="text-sm">مخفی‌کردن قیمت در رسید بسته</span>
+                  </label>
+
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="delivery_date">تاریخ ترجیحی تحویل (اختیاری)</Label>
+                    <Input
+                      id="delivery_date"
+                      type="date"
+                      dir="ltr"
+                      value={deliveryDate}
+                      onChange={(e) => setDeliveryDate(e.target.value)}
+                      className="max-w-xs"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </Section>
+          </>
+        ) : null}
+
+        {/* Step 4 — Review */}
+        {currentKey === "review" ? (
+          <Section icon={Check} title="بازبینی و تأیید">
+            <dl className="divide-y divide-border/60">
+              <ReviewRow icon={MapPin} label="آدرس تحویل" onEdit={() => goTo(0)}>
+                {selectedAddress ? (
+                  <>
+                    <span className="block font-medium text-foreground">{selectedAddress.full_name}</span>
+                    <span className="block">
+                      {selectedAddress.address_line1}، {selectedAddress.city}
+                    </span>
+                  </>
+                ) : (
+                  "—"
+                )}
+              </ReviewRow>
+              <ReviewRow icon={Truck} label="روش ارسال" onEdit={() => goTo(1)}>
+                <span className="text-foreground">{selectedShipping?.name ?? "—"}</span>
+                {shippingDays(selectedShipping) ? (
+                  <span className="block text-xs">{shippingDays(selectedShipping)}</span>
+                ) : null}
+              </ReviewRow>
+              <ReviewRow icon={Wallet} label="روش پرداخت" onEdit={() => goTo(2)}>
+                <span className="text-foreground">{PAYMENT_LABEL[payment] ?? payment}</span>
+              </ReviewRow>
+              {isGift ? (
+                <ReviewRow icon={Gift} label="هدیه" onEdit={() => goTo(2)}>
+                  <span className="text-foreground">این سفارش به‌عنوان هدیه ارسال می‌شود</span>
+                  {giftMessage ? <span className="mt-0.5 block">«{giftMessage}»</span> : null}
+                </ReviewRow>
+              ) : null}
+            </dl>
+
+            <ul className="mt-5 divide-y divide-border/60 border-t border-border/60">
+              {cart.items.map((item) => (
+                <li key={item.id} className="flex items-center justify-between gap-3 py-3 text-sm">
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{item.product_title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {faNum(item.quantity)} × {formatPrice(item.unit_price_snapshot)}
+                    </span>
+                  </span>
+                  <span className="font-medium tabular-nums">{formatPrice(item.line_total)}</span>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        ) : null}
+
+        {/* Step navigation */}
+        <div className="flex items-center justify-between gap-3">
+          <Button
+            variant="ghost"
+            onClick={() => goTo(step - 1)}
+            disabled={step === 0 || placeOrder.isPending}
+            className={cn(step === 0 && "invisible")}
+          >
+            <ChevronRight className="size-4" /> مرحلهٔ قبل
+          </Button>
+
+          {currentKey === "review" ? (
+            <Button
+              size="lg"
+              className="h-12 min-w-44"
+              disabled={!canPlace || placeOrder.isPending}
+              onClick={submit}
+            >
+              {placeOrder.isPending ? <Loader2 className="animate-spin" /> : <Lock className="size-4" />} ثبت و پرداخت
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              className="h-12 min-w-36"
+              disabled={!stepValid}
+              onClick={() => goTo(step + 1)}
+            >
+              ادامه <ChevronLeft className="size-4" />
+            </Button>
+          )}
+        </div>
+
+        {currentKey !== "review" && !stepValid ? (
+          <p className="-mt-3 text-center text-xs text-muted-foreground">
+            {currentKey === "address" ? "یک آدرس تحویل انتخاب کنید." : "یک روش ارسال انتخاب کنید."}
+          </p>
+        ) : null}
       </div>
 
-      {/* Summary */}
+      {/* Summary rail (sticky desktop) */}
       <aside className="h-fit lg:sticky lg:top-24">
         <div className="border-hairline rounded-2xl bg-card p-6 ring-1 ring-foreground/5">
           <h2 className="font-serif text-2xl">خلاصهٔ سفارش</h2>
           <div className="mt-4 space-y-2 text-sm">
             <Row label={`جمع جزء (${faNum(cart.summary.total_items)} قلم)`} value={formatPrice(subtotal)} />
             {discount > 0 ? <Row label="تخفیف" value={`− ${formatPrice(discount)}`} accent /> : null}
-            <Row label="ارسال" value={shippingCost > 0 ? formatPrice(shippingCost) : "رایگان"} />
+            <Row
+              label="ارسال"
+              value={
+                selectedShipping || shippingCost > 0
+                  ? shippingCost > 0
+                    ? formatPrice(shippingCost)
+                    : "رایگان"
+                  : "—"
+              }
+            />
           </div>
-          <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-4">
+          <Separator className="my-4" />
+          <div className="flex items-baseline justify-between">
             <span className="font-medium">مبلغ قابل پرداخت</span>
-            <span className="font-serif text-2xl text-foil">{formatPrice(total)}</span>
+            <span className="font-serif text-2xl text-foil tabular-nums">{formatPrice(total)}</span>
           </div>
-          <Button size="lg" className="mt-6 h-12 w-full" disabled={!canPlace || placeOrder.isPending} onClick={submit}>
-            {placeOrder.isPending ? <Loader2 className="animate-spin" /> : null} ثبت سفارش
-          </Button>
-          {!canPlace ? (
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              آدرس و روش ارسال را انتخاب کنید.
-            </p>
+
+          {/* Primary place-order CTA also lives here for the final step */}
+          {currentKey === "review" ? (
+            <Button
+              size="lg"
+              className="mt-6 h-12 w-full"
+              disabled={!canPlace || placeOrder.isPending}
+              onClick={submit}
+            >
+              {placeOrder.isPending ? <Loader2 className="animate-spin" /> : <Lock className="size-4" />} ثبت و پرداخت
+            </Button>
           ) : null}
+
+          <ul className="mt-6 space-y-2.5 border-t border-border/60 pt-5 text-xs text-muted-foreground">
+            <li className="flex items-center gap-2">
+              <ShieldCheck className="size-4 shrink-0 text-primary" /> پرداخت امن و رمزگذاری‌شده
+            </li>
+            <li className="flex items-center gap-2">
+              <Truck className="size-4 shrink-0 text-primary" /> ارسال محتاطانه و بسته‌بندی محافظت‌شده
+            </li>
+          </ul>
         </div>
       </aside>
+    </div>
+  )
+}
+
+function ReviewRow({
+  icon: Icon,
+  label,
+  onEdit,
+  children,
+}: {
+  icon: typeof MapPin
+  label: string
+  onEdit: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-3">
+      <div className="flex min-w-0 gap-3">
+        <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
+        <div className="min-w-0">
+          <dt className="text-xs text-muted-foreground">{label}</dt>
+          <dd className="mt-0.5 text-sm text-muted-foreground">{children}</dd>
+        </div>
+      </div>
+      <Button variant="ghost" size="sm" className="h-8 shrink-0 px-2 text-xs text-primary" onClick={onEdit}>
+        ویرایش
+      </Button>
     </div>
   )
 }

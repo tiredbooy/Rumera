@@ -48,8 +48,12 @@ export function CartButton() {
           {authed ? (
             <CartLines enabled={open} />
           ) : (
-            <div className="flex flex-col items-center justify-center py-14 text-center">
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <span className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-secondary text-primary ring-1 ring-primary/15">
+                <ShoppingBag className="size-5" />
+              </span>
               <p className="font-medium">برای مشاهدهٔ سبد وارد شوید</p>
+              <p className="mt-1 text-sm text-muted-foreground">سبد شما در همهٔ دستگاه‌ها همگام می‌ماند.</p>
               <Button asChild className="mt-5" onClick={() => setOpen(false)}>
                 <Link href="/login?callbackUrl=/cart">ورود به حساب</Link>
               </Button>
@@ -59,14 +63,18 @@ export function CartButton() {
 
         {authed && count > 0 ? (
           <SheetFooter className="border-t border-border/60 px-5 py-4">
-            <div className="mb-3 flex items-center justify-between text-sm">
+            <div className="mb-1 flex items-center justify-between text-sm">
               <span className="text-muted-foreground">جمع جزء</span>
-              <span className="font-serif text-xl">{formatPrice(cart!.summary.subtotal)}</span>
+              <span className="font-serif text-xl text-foil tabular-nums">{formatPrice(cart!.summary.subtotal)}</span>
             </div>
+            <p className="mb-3 text-xs text-muted-foreground">هزینهٔ ارسال در مرحلهٔ تسویه محاسبه می‌شود.</p>
             <Button asChild size="lg" className="h-12 w-full" onClick={() => setOpen(false)}>
               <Link href="/checkout">
                 ادامه به تسویه <ArrowLeft />
               </Link>
+            </Button>
+            <Button asChild variant="ghost" size="sm" className="mt-1 w-full" onClick={() => setOpen(false)}>
+              <Link href="/cart">مشاهدهٔ سبد کامل</Link>
             </Button>
           </SheetFooter>
         ) : null}
