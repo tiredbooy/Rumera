@@ -43,11 +43,14 @@ type TagResponse struct {
 }
 
 type ImageResponse struct {
-	ID        int64   `json:"id"`
-	ImageURL  string  `json:"image_url"`
-	AltText   *string `json:"alt_text,omitempty"`
-	SortOrder int     `json:"sort_order"`
-	IsPrimary bool    `json:"is_primary"`
+	ID         int64   `json:"id"`
+	ImageURL   string  `json:"image_url"`             // canonical serving URL (/media/{key} for uploads)
+	StorageKey *string `json:"storage_key,omitempty"` // backend key; build transforms as /media/{key}?f=&q=&w=
+	AltText    *string `json:"alt_text,omitempty"`
+	SortOrder  int     `json:"sort_order"`
+	IsPrimary  bool    `json:"is_primary"`
+	Width      *int    `json:"width,omitempty"`
+	Height     *int    `json:"height,omitempty"`
 }
 
 type VariantResponse struct {

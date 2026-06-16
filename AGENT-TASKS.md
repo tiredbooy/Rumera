@@ -48,7 +48,8 @@
 - [ ] **A2 · Config + DI.** Add the `MEDIA_*` env vars to `internal/config`, wire
   `Storage` + media service into `internal/bootstrap/container.go`. Defaults per
   spec table.
-- [ ] **A3 · DB migration.** Goose migration in `migrations/main` adding
+- [x] **A3 · DB migration.** — done: migration adds `storage_key`,`width`,`height`;
+  `ProductImage` + `ImageResponse` + `ToImageResponse` updated; build green. Goose migration in `migrations/main` adding
   `storage_key TEXT` (nullable) to `product_images`. Up + Down. Update
   `models/product.go` (`ProductImage.StorageKey *string`) and the mapper/response.
 - [ ] **A4 · Media service.** Implement upload (validate MIME/size/dimensions →
