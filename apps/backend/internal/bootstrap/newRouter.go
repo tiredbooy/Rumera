@@ -20,6 +20,17 @@ func newRouter(cfg *config.Config, logger *zap.Logger, c *container) *gin.Engine
 	}
 
 	r := gin.New()
+
+	// Trust only the configured proxies for X-Forwarded-For, so c.ClientIP() (and
+	// the per-IP rate limiters built on it) can't be spoofed by a forged header.
+	// Empty config leaves Gin's default; set TRUSTED_PROXIES to your ingress range
+	// in production. An invalid value fails loudly rather than silently mis-trusting.
+	if len(cfg.TrustedProxies) > 0 {
+		if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+			logger.Fatal("invalid TRUSTED_PROXIES", zap.Error(err))
+		}
+	}
+
 	setupMiddlewares(r, cfg, logger)
 
 	// Prometheus scrape target. Internal-only — keep it off the public ingress.

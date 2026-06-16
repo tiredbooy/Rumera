@@ -187,7 +187,9 @@ func registerCustomerRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.
 
 	// Wallet
 	c.GET("/wallet", h.GetWallet)
-	c.POST("/wallet/deposit", h.DepositToWallet)
+	// NOTE: no public /wallet/deposit — wallet credit must originate only from a
+	// verified payment, refund, gift-card/loyalty redemption or an admin action.
+	// A self-service deposit let any signed-in user mint spendable balance.
 	c.POST("/wallet/withdraw", h.WithdrawFromWallet)
 	c.GET("/wallet/transactions", h.WalletTransactions)
 

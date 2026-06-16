@@ -14,7 +14,7 @@ func (h *Handler) CreateBrand(c *gin.Context) {
 	}
 	brand, err := h.Brand.Create(c.Request.Context(), req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.Created(c, brand)
@@ -30,7 +30,7 @@ func (h *Handler) ListBrands(c *gin.Context) {
 
 	brands, total, err := h.Brand.GetAll(c.Request.Context(), filter)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.Paginated(c, brands, paginate(filter.Page, filter.Limit, total))
@@ -44,7 +44,7 @@ func (h *Handler) GetBrand(c *gin.Context) {
 	}
 	brand, err := h.Brand.GetByID(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, brand)
@@ -62,7 +62,7 @@ func (h *Handler) UpdateBrand(c *gin.Context) {
 	}
 	brand, err := h.Brand.Update(c.Request.Context(), id, req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, brand)
@@ -75,7 +75,7 @@ func (h *Handler) DeleteBrand(c *gin.Context) {
 		return
 	}
 	if err := h.Brand.Delete(c.Request.Context(), id); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.NoContent(c)

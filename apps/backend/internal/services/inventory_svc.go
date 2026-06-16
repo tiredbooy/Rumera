@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/pkg/utils"
@@ -22,6 +23,10 @@ type InventoryService interface {
 
 	// Order lifecycle — called by OrderService
 	ReserveForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) error
+	// ReserveForOrderTx reserves stock on a caller-supplied transaction, so order
+	// creation and stock reservation commit atomically (no oversell window, no
+	// dangling pending order on crash).
+	ReserveForOrderTx(ctx context.Context, tx pgx.Tx, orderID int64, items []models.OrderItemResponse) error
 	ReleaseForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) error
 	DeductForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) error
 }
@@ -115,26 +120,36 @@ func (s *inventoryService) UpdateReorder(ctx context.Context, variantID int64, r
 // ReserveForOrder moves stock from available → committed for every item in the
 // order. The entire batch is atomic — if any variant has insufficient stock the
 // transaction rolls back and no inventory is touched.
-func (s *inventoryService) ReserveForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) error {
+func (s *inventoryService) ReserveForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) (err error) {
 	tx, err := s.inventoryRepo.BeginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("inventoryService.ReserveForOrder: begin tx: %w", err)
 	}
 	defer utils.RollbackOnErr(ctx, tx, &err)
 
+	if err = s.ReserveForOrderTx(ctx, tx, orderID, items); err != nil {
+		return err
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("inventoryService.ReserveForOrder: commit: %w", err)
+	}
+	return nil
+}
+
+// ReserveForOrderTx reserves every line on the supplied transaction. The batch is
+// atomic with whatever else the caller's tx contains — if any variant is short,
+// the error propagates and the caller's deferred rollback undoes the whole unit.
+func (s *inventoryService) ReserveForOrderTx(ctx context.Context, tx pgx.Tx, orderID int64, items []models.OrderItemResponse) error {
 	for _, item := range items {
-		if err = s.inventoryRepo.Reserve(ctx, tx, item.VariantID, item.Quantity, orderID); err != nil {
+		if err := s.inventoryRepo.Reserve(ctx, tx, item.VariantID, item.Quantity, orderID); err != nil {
 			// ErrInsufficientStock bubbles up as-is so the caller can map it
 			// to a 409/422 without wrapping it into oblivion.
 			if isBusinessError(err) {
 				return err
 			}
-			return fmt.Errorf("inventoryService.ReserveForOrder variant %d: %w", item.VariantID, err)
+			return fmt.Errorf("inventoryService.ReserveForOrderTx variant %d: %w", item.VariantID, err)
 		}
-	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return fmt.Errorf("inventoryService.ReserveForOrder: commit: %w", err)
 	}
 	return nil
 }

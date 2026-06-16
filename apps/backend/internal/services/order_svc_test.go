@@ -124,16 +124,16 @@ func TestCreateOrder_HappyPath(t *testing.T) {
 	}
 }
 
-func TestCreateOrder_InsufficientStockCompensates(t *testing.T) {
+// Stock reservation now runs inside the order transaction, so a shortfall must
+// roll the whole order back — nothing is committed and no compensating cancel is
+// needed (the order never became durable).
+func TestCreateOrder_InsufficientStockRollsBack(t *testing.T) {
 	tx := &mocks.FakeTx{}
 	cancelled := false
 	orderRepo := &mocks.OrderRepo{
 		Tx: tx,
 		CreateFn: func(context.Context, pgx.Tx, models.CreateOrderReq, int64, float64, float64, float64, float64, *int64) (*models.Order, error) {
 			return &models.Order{ID: 100, TotalAmount: 59}, nil
-		},
-		GetItemsFn: func(context.Context, int64) ([]models.OrderItemResponse, error) {
-			return []models.OrderItemResponse{{VariantID: 10, Quantity: 2}}, nil
 		},
 		CancelFn: func(context.Context, int64, int64) error { cancelled = true; return nil },
 	}
@@ -150,8 +150,14 @@ func TestCreateOrder_InsufficientStockCompensates(t *testing.T) {
 	if !errors.Is(err, models.ErrInsufficientStock) {
 		t.Fatalf("err = %v; want ErrInsufficientStock", err)
 	}
-	if !cancelled {
-		t.Fatal("order was not cancelled (compensation) after stock failure")
+	if tx.Committed {
+		t.Fatal("tx must NOT commit when stock reservation fails")
+	}
+	if !tx.RolledBack {
+		t.Fatal("tx should roll back on stock failure")
+	}
+	if cancelled {
+		t.Fatal("no compensating cancel expected — the rollback already undid the order")
 	}
 }
 

@@ -21,7 +21,7 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 	}
 	cat, err := h.Category.Create(c.Request.Context(), req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	h.invalidate(c.Request.Context(), cache.KeyCategoryTree())
@@ -38,7 +38,7 @@ func (h *Handler) ListCategories(c *gin.Context) {
 
 	cats, total, err := h.Category.GetAll(c.Request.Context(), filter)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.Paginated(c, toCategoryResponses(cats), paginate(filter.Page, filter.Limit, total))
@@ -51,7 +51,7 @@ func (h *Handler) CategoryTree(c *gin.Context) {
 		return h.Category.GetTree(ctx)
 	})
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.CachedJSON(c, data, categoryTreeCacheTTL)
@@ -65,7 +65,7 @@ func (h *Handler) GetCategory(c *gin.Context) {
 	}
 	cat, err := h.Category.GetByID(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, toCategoryResponse(cat))
@@ -79,7 +79,7 @@ func (h *Handler) CategoryChildren(c *gin.Context) {
 	}
 	children, err := h.Category.GetChildren(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, toCategoryResponses(children))
@@ -97,7 +97,7 @@ func (h *Handler) UpdateCategory(c *gin.Context) {
 	}
 	cat, err := h.Category.Update(c.Request.Context(), id, req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	h.invalidate(c.Request.Context(), cache.KeyCategoryTree())
@@ -111,7 +111,7 @@ func (h *Handler) DeleteCategory(c *gin.Context) {
 		return
 	}
 	if err := h.Category.Delete(c.Request.Context(), id); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	h.invalidate(c.Request.Context(), cache.KeyCategoryTree())

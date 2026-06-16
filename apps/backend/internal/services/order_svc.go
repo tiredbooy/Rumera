@@ -136,32 +136,30 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req models
 		}
 	}
 
+	// Reserve stock INSIDE the same transaction as the order + items + coupon
+	// usage, so they all commit (or roll back) together. This closes the previous
+	// oversell window (order committed, then reserved separately) and means a
+	// crash mid-flight leaves nothing behind — no dangling pending order. The
+	// reservation list is built from the in-memory cart since the order items are
+	// not yet visible outside this uncommitted tx.
+	reservation := make([]models.OrderItemResponse, len(cartItems))
+	for i, ci := range cartItems {
+		reservation[i] = models.OrderItemResponse{VariantID: ci.VariantID, Quantity: ci.Quantity}
+	}
+	if err = s.inventory.ReserveForOrderTx(ctx, tx, order.ID, reservation); err != nil {
+		// ErrInsufficientStock (and friends) bubble up for a clean 409; the
+		// deferred RollbackOnErr undoes the order entirely — no compensation needed.
+		return nil, err
+	}
+
 	if err = tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("orderService.CreateOrder: commit: %w", err)
 	}
 
-	// ── Post-commit saga ─────────────────────────────────────────────────────
-	// The order now exists in 'pending'. Reserve stock; if any line is short,
-	// compensate by cancelling the order. The cart is intentionally left intact
-	// until reservation succeeds, so a stock failure never loses the basket.
-	items, err := s.orderRepo.GetItems(ctx, order.ID)
-	if err != nil {
-		return nil, fmt.Errorf("orderService.CreateOrder: load items: %w", err)
-	}
-
-	if err = s.inventory.ReserveForOrder(ctx, order.ID, items); err != nil {
-		// Compensating action — best-effort cancel so we never leave a dangling
-		// pending order holding no stock. The reservation error (e.g.
-		// ErrInsufficientStock) bubbles up for a clean 409.
-		_ = s.orderRepo.Cancel(ctx, order.ID, userID)
-		return nil, err
-	}
-
-	// Stock is now committed — safe to empty the cart. A failure here is
-	// non-fatal: the order is placed, and a stale cart is recoverable.
+	// ── Post-commit ──────────────────────────────────────────────────────────
+	// Order + stock are durable. Empty the cart (non-fatal on error — a stale
+	// cart is recoverable) and open a pending payment for the gateway/webhook.
 	_ = s.clearCart(ctx, cart.ID)
-
-	// Open a pending payment record for the gateway/webhook to later confirm.
 	s.createPendingPayment(ctx, order, userID, req.PaymentMethod)
 
 	return order, nil

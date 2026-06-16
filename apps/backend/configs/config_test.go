@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -51,5 +52,58 @@ func TestConfig_Validate_Rejects(t *testing.T) {
 				t.Fatalf("expected validation error for %q", tc.name)
 			}
 		})
+	}
+}
+
+// validProdConfig extends validConfig with the fields the production-only guards
+// inspect, so each guard test can flip exactly one of them.
+func validProdConfig() Config {
+	c := validConfig()
+	c.Env = "production"
+	c.JWTSecret = strings.Repeat("x", 32)
+	c.CORSAllowedOrigins = []string{"https://rumera.example"}
+	c.CryptoWebhookKey = "whk_live_secret_value"
+	c.SMSProvider = "kavenegar"
+	return c
+}
+
+func TestConfig_Validate_ProductionOK(t *testing.T) {
+	c := validProdConfig()
+	if err := c.Validate(); err != nil {
+		t.Fatalf("valid production config rejected: %v", err)
+	}
+}
+
+func TestConfig_Validate_ProductionGuards(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{"short JWT secret", func(c *Config) { c.JWTSecret = "too-short" }},
+		{"wildcard CORS", func(c *Config) { c.CORSAllowedOrigins = []string{"https://ok.example", "*"} }},
+		{"empty webhook key", func(c *Config) { c.CryptoWebhookKey = "" }},
+		{"log SMS provider", func(c *Config) { c.SMSProvider = "log" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := validProdConfig()
+			tc.mutate(&c)
+			if err := c.Validate(); err == nil {
+				t.Fatalf("expected production validation error for %q", tc.name)
+			}
+		})
+	}
+}
+
+func TestConfig_Validate_DevelopmentSkipsProductionGuards(t *testing.T) {
+	c := validProdConfig()
+	c.Env = "development"
+	// All four would fail the production guards; in development they're allowed.
+	c.JWTSecret = "dev"
+	c.CORSAllowedOrigins = []string{"*"}
+	c.CryptoWebhookKey = ""
+	c.SMSProvider = "log"
+	if err := c.Validate(); err != nil {
+		t.Fatalf("development config should skip production guards: %v", err)
 	}
 }

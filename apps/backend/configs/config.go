@@ -18,6 +18,12 @@ type Config struct {
 	// Defaults to "*" for development; set explicit origins in production.
 	CORSAllowedOrigins []string `envconfig:"CORS_ALLOWED_ORIGINS" default:"*"`
 
+	// TrustedProxies is the set of proxy IPs/CIDRs to trust for client-IP
+	// resolution (X-Forwarded-For). Empty leaves the framework default. Set this
+	// to your ingress/CDN ranges in production so per-IP rate limits can't be
+	// spoofed via a forged X-Forwarded-For header.
+	TrustedProxies []string `envconfig:"TRUSTED_PROXIES"`
+
 	// Admin bootstrap — when both are set, an admin account is created on first
 	// boot if one does not already exist.
 	AdminEmail    string `envconfig:"ADMIN_EMAIL"`
@@ -249,6 +255,26 @@ func (c *Config) Validate() error {
 	}
 	if c.MediaMaxDimension < 1 {
 		return fmt.Errorf("MEDIA_MAX_DIMENSION must be >= 1, got %d", c.MediaMaxDimension)
+	}
+
+	// Production-only guards against fail-open / insecure defaults that are fine
+	// for local dev but dangerous if they ship. Each would otherwise surface as a
+	// silent security hole rather than a loud boot failure.
+	if c.IsProduction() {
+		if len(c.JWTSecret) < 32 {
+			return fmt.Errorf("JWT_SECRET must be at least 32 characters in production, got %d", len(c.JWTSecret))
+		}
+		for _, o := range c.CORSAllowedOrigins {
+			if o == "*" {
+				return fmt.Errorf("CORS_ALLOWED_ORIGINS must not be \"*\" in production — set explicit origins")
+			}
+		}
+		if c.CryptoWebhookKey == "" {
+			return fmt.Errorf("CRYPTO_WEBHOOK_KEY is required in production (payment webhooks fail closed without it, so orders never confirm)")
+		}
+		if c.SMSProvider == "log" {
+			return fmt.Errorf("SMS_PROVIDER must be a real gateway in production, not \"log\" (which writes OTP codes to the logs)")
+		}
 	}
 	return nil
 }

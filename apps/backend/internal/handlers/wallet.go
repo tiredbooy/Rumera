@@ -23,23 +23,10 @@ func (h *Handler) GetWallet(c *gin.Context) {
 	response.OK(c, mappers.ToWalletResponse(wallet))
 }
 
-// DepositToWallet — POST /wallet/deposit
-func (h *Handler) DepositToWallet(c *gin.Context) {
-	userID, ok := h.uid(c)
-	if !ok {
-		return
-	}
-	var req models.DepositReq
-	if !h.bindJSON(c, &req) {
-		return
-	}
-	tx, err := h.Wallet.Deposit(c.Request.Context(), userID, req.Amount, nil, req.Description)
-	if err != nil {
-		response.HandleError(c, err)
-		return
-	}
-	response.Created(c, mappers.ToWalletTransactionResponse(tx))
-}
+// DepositToWallet was removed: a public self-service deposit endpoint let any
+// authenticated user credit their own spendable balance for free. Wallet credit
+// now flows only through verified payments, refunds, gift-card/loyalty
+// redemption and admin actions (which call WalletService.Deposit directly).
 
 // WithdrawFromWallet — POST /wallet/withdraw
 func (h *Handler) WithdrawFromWallet(c *gin.Context) {
