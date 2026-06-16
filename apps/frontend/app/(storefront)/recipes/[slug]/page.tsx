@@ -89,27 +89,27 @@ export default async function RecipeDetailPage({
       />
 
       {/* Hero */}
-      <section className="border-b border-border/60">
-        <div className="container-px mx-auto max-w-6xl py-10">
-          <nav className="mb-6 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Link href="/" className="hover:text-foreground">خانه</Link>
-            <span>/</span>
-            <Link href="/recipes" className="hover:text-foreground">دستورها</Link>
-            <span>/</span>
+      <section className="cellar-glow border-b border-border/60">
+        <div className="container-px mx-auto max-w-6xl py-12 sm:py-16">
+          <nav className="mb-8 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Link href="/" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">خانه</Link>
+            <span aria-hidden>/</span>
+            <Link href="/recipes" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">دستورها</Link>
+            <span aria-hidden>/</span>
             <span className="text-foreground">{recipe.title}</span>
           </nav>
 
-          <div className="grid items-center gap-10 lg:grid-cols-2">
+          <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
             <Reveal>
               <div>
                 {recipe.cocktail_type ? (
-                  <p className="eyebrow mb-3">{recipe.cocktail_type}</p>
+                  <p className="eyebrow mb-4">{recipe.cocktail_type}</p>
                 ) : null}
-                <h1 className="font-serif text-4xl leading-tight sm:text-5xl lg:text-6xl">
+                <h1 className="text-balance font-serif text-4xl leading-[1.05] sm:text-5xl lg:text-6xl">
                   {recipe.title}
                 </h1>
                 {recipe.description || recipe.excerpt ? (
-                  <p className="mt-5 text-lg text-muted-foreground">
+                  <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
                     {recipe.description ?? recipe.excerpt}
                   </p>
                 ) : null}
@@ -151,23 +151,27 @@ export default async function RecipeDetailPage({
       </section>
 
       {/* Body */}
-      <section className="container-px mx-auto max-w-6xl py-14">
-        <div className="grid gap-10 lg:grid-cols-[0.9fr_1.4fr]">
+      <section className="container-px mx-auto max-w-6xl py-16 sm:py-20">
+        <div className="grid gap-10 lg:grid-cols-[0.9fr_1.4fr] lg:gap-14">
           {/* Ingredients */}
           <aside className="lg:sticky lg:top-24 lg:self-start">
-            <div className="border-hairline rounded-3xl bg-card p-6 ring-1 ring-foreground/5">
-              <h2 className="font-serif text-2xl">مواد لازم</h2>
+            <div className="border-hairline rounded-3xl bg-card p-6 ring-1 ring-foreground/5 sm:p-7">
+              <p className="eyebrow mb-3">مواد لازم</p>
+              <h2 className="font-serif text-2xl">آنچه نیاز دارید</h2>
               {recipe.servings > 0 ? (
                 <p className="mt-1 text-sm text-muted-foreground">
                   برای {faNum(recipe.servings)} نفر
                 </p>
               ) : null}
-              <ul className="mt-5 space-y-3 text-sm">
+              <ul className="mt-6 space-y-3.5 text-sm">
                 {recipe.ingredients.map((ing) => (
-                  <li key={ing.id} className="flex items-start gap-3">
+                  <li
+                    key={ing.id}
+                    className="flex items-start gap-3 border-b border-border/40 pb-3.5 last:border-0 last:pb-0"
+                  >
                     <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
-                    <span>
-                      <span className="font-medium">{ing.ingredient_name}</span>
+                    <span className="leading-relaxed">
+                      <span className="font-medium text-foreground">{ing.ingredient_name}</span>
                       {ing.quantity ? (
                         <span className="text-muted-foreground">
                           {" — "}
@@ -190,17 +194,18 @@ export default async function RecipeDetailPage({
 
           {/* Instructions */}
           <div>
-            <h2 className="font-serif text-2xl">طرز تهیه</h2>
-            <div className="mt-5 space-y-4 leading-8 text-muted-foreground [&_a]:text-primary [&_a]:underline [&_h2]:mt-8 [&_h2]:font-serif [&_h2]:text-xl [&_h2]:text-foreground [&_h3]:mt-6 [&_h3]:font-serif [&_h3]:text-lg [&_h3]:text-foreground [&_li]:mt-1.5 [&_ol]:list-decimal [&_ol]:space-y-2 [&_ol]:ps-6 [&_strong]:text-foreground [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:ps-6">
+            <p className="eyebrow mb-3">طرز تهیه</p>
+            <h2 className="font-serif text-3xl">گام به گام</h2>
+            <div className="mt-6 space-y-4 text-lg leading-8 text-foreground/90 [&_a]:text-primary [&_a]:underline [&_h2]:mt-10 [&_h2]:font-serif [&_h2]:text-xl [&_h2]:text-foreground [&_h3]:mt-8 [&_h3]:font-serif [&_h3]:text-lg [&_h3]:text-foreground [&_li]:mt-2 [&_li]:ps-1.5 [&_li]:leading-relaxed [&_li]:marker:font-serif [&_li]:marker:text-primary [&_ol]:list-decimal [&_ol]:space-y-3 [&_ol]:ps-6 [&_strong]:text-foreground [&_ul]:list-disc [&_ul]:space-y-3 [&_ul]:ps-6 [&_ul]:marker:text-primary">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {recipe.content}
               </ReactMarkdown>
             </div>
 
             {recipe.serving_suggestion ? (
-              <div className="border-hairline mt-8 rounded-2xl bg-accent/40 p-5">
-                <p className="text-sm font-semibold text-foreground">پیشنهاد سِرو</p>
-                <p className="mt-1 text-sm text-muted-foreground">{recipe.serving_suggestion}</p>
+              <div className="border-hairline mt-10 rounded-2xl border-s-2 border-s-primary/50 bg-accent/40 p-6">
+                <p className="eyebrow mb-2">پیشنهاد سِرو</p>
+                <p className="leading-relaxed text-foreground/90">{recipe.serving_suggestion}</p>
               </div>
             ) : null}
           </div>
@@ -208,17 +213,17 @@ export default async function RecipeDetailPage({
 
         {/* Shop this recipe */}
         {recipe.products.length > 0 ? (
-          <div className="mt-16">
-            <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="mt-20 border-t border-border/60 pt-14">
+            <div className="flex flex-wrap items-end justify-between gap-5">
               <div>
                 <p className="eyebrow mb-2">
                   <ShoppingBag className="size-3.5" /> همین دستور را بسازید
                 </p>
-                <h2 className="font-serif text-3xl">محصولات این دستور</h2>
+                <h2 className="font-serif text-3xl sm:text-4xl">محصولات این دستور</h2>
               </div>
               <AddAllIngredientsButton products={recipe.products} />
             </div>
-            <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
               {recipe.products.map((p) => (
                 <ShoppableCard key={p.recipe_product_id} product={p} />
               ))}
@@ -230,17 +235,21 @@ export default async function RecipeDetailPage({
       {/* Related */}
       {related.length > 0 ? (
         <section className="border-t border-border/60 bg-card/30">
-          <div className="container-px mx-auto max-w-6xl py-14">
+          <div className="container-px mx-auto max-w-6xl py-16 sm:py-20">
             <div className="flex items-end justify-between gap-4">
-              <h2 className="font-serif text-3xl">دستورهای مرتبط</h2>
+              <div>
+                <p className="eyebrow mb-2">برای کاوش بیشتر</p>
+                <h2 className="font-serif text-3xl sm:text-4xl">دستورهای مرتبط</h2>
+              </div>
               <Link
                 href="/recipes"
-                className="inline-flex items-center gap-1 text-sm font-medium text-primary"
+                className="group/all inline-flex items-center gap-1.5 rounded text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
-                همهٔ دستورها <ArrowLeft className="size-4" />
+                همهٔ دستورها
+                <ArrowLeft className="size-4 transition-transform duration-300 group-hover/all:-translate-x-1" />
               </Link>
             </div>
-            <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
               {related.slice(0, 3).map((r) => (
                 <RecipeCard key={r.id} recipe={r} />
               ))}

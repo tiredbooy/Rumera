@@ -60,7 +60,8 @@ export function AddAllIngredientsButton({ products }: { products: ShoppableProdu
       size="lg"
       onClick={onClick}
       disabled={bulkAdd.isPending}
-      className="h-12 shrink-0 cursor-pointer px-5 text-sm"
+      aria-label={`افزودن همهٔ مواد (${faNum(available.length)} مورد)`}
+      className="h-12 shrink-0 cursor-pointer px-6 text-sm"
     >
       {bulkAdd.isPending ? (
         <Loader2 className="animate-spin" />
@@ -69,7 +70,7 @@ export function AddAllIngredientsButton({ products }: { products: ShoppableProdu
       ) : (
         <ShoppingBag />
       )}
-      افزودن همهٔ مواد ({faNum(available.length)})
+      {done ? "افزوده شد" : `افزودن همهٔ مواد (${faNum(available.length)})`}
     </Button>
   )
 }
