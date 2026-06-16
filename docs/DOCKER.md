@@ -7,10 +7,10 @@ production.
 
 | Stack | File | Use it for |
 |-------|------|-----------|
-| **Development** | [`docker-compose.dev.yml`](./docker-compose.dev.yml) | Local work with live reload (Compose Watch) |
-| **Production** | [`docker-compose.prod.yml`](./docker-compose.prod.yml) | Optimized, minimal, non-root images |
+| **Development** | [`docker-compose.dev.yml`](../docker-compose.dev.yml) | Local work with live reload (Compose Watch) |
+| **Production** | [`docker-compose.prod.yml`](../docker-compose.prod.yml) | Optimized, minimal, non-root images |
 
-> Convenience wrapper: a root [`Makefile`](./Makefile) exposes `make dev`,
+> Convenience wrapper: a root [`Makefile`](../Makefile) exposes `make dev`,
 > `make prod`, etc. Run `make help` for the full list.
 
 ---
@@ -124,7 +124,7 @@ These must be set in `.env` or the stack won't start:
 `ANALYTICS_DB_NAME`, `REDIS_PASSWORD`, `MEILI_API_KEY`, `JWT_SECRET`,
 `CORS_ALLOWED_ORIGINS`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_API_URL`.
 
-See [`.env.example`](./.env.example) for the full annotated list.
+See [`.env.example`](../.env.example) for the full annotated list.
 
 > **Note on `NEXT_PUBLIC_SITE_URL`:** it is *inlined into the frontend build*
 > (used for canonical/OG tags, `sitemap.xml`, `robots.txt`). It's passed as a

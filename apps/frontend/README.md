@@ -19,7 +19,7 @@ npm run dev          # http://localhost:3000
 ```
 
 Or run the whole platform (storefront + API + databases) with Docker — see
-[`../../DOCKER.md`](../../DOCKER.md):
+[`../../docs/DOCKER.md`](../../docs/DOCKER.md):
 
 ```bash
 # from the repo root
