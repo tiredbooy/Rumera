@@ -4,10 +4,30 @@ import { ArrowRight } from "lucide-react"
 
 import { requirePermission } from "@/lib/auth/session"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { products } from "@/lib/products"
+import { serverApi, ApiError } from "@/lib/api/client"
+import type { Brand, Category, Paginated, ProductDetail } from "@/lib/catalog/types"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { ProductForm } from "@/components/admin/product-form"
+
+type AdminTag = { id: number; title: string }
+
+async function fetchList<T>(path: string): Promise<T[]> {
+  try {
+    return (await serverApi<Paginated<T>>(path)).results ?? []
+  } catch {
+    return []
+  }
+}
+
+async function loadOptions() {
+  const [categories, brands, tags] = await Promise.all([
+    fetchList<Category>("/categories?limit=200"),
+    fetchList<Brand>("/brands?limit=200"),
+    fetchList<AdminTag>("/tags?limit=200"),
+  ])
+  return { categories, brands, tags }
+}
 
 export default async function AdminEditProductPage({
   params,
@@ -16,14 +36,22 @@ export default async function AdminEditProductPage({
 }) {
   await requirePermission(PERMISSIONS.PRODUCTS_READ)
   const { id } = await params
-  const product = products.find((p) => p.slug === id || p.id === id)
-  if (!product) notFound()
+
+  let product: ProductDetail
+  try {
+    product = await serverApi<ProductDetail>(`/products/${id}`)
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) notFound()
+    throw e
+  }
+
+  const { categories, brands, tags } = await loadOptions()
 
   return (
     <>
       <PageHeader
         title="ویرایش محصول"
-        description={product.name}
+        description={product.title}
         actions={
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin/products">
@@ -32,7 +60,14 @@ export default async function AdminEditProductPage({
           </Button>
         }
       />
-      <ProductForm product={product} submitLabel="ذخیرهٔ تغییرات" />
+      <ProductForm
+        mode="edit"
+        product={product}
+        categories={categories}
+        brands={brands}
+        tags={tags}
+        submitLabel="ذخیرهٔ تغییرات"
+      />
     </>
   )
 }

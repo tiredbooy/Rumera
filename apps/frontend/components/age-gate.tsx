@@ -12,16 +12,29 @@ const STORAGE_KEY = "rumera:age-verified"
  * localStorage so returning visitors are not interrupted. Required dressing for
  * anything selling alcohol — also sets the tone the moment the page loads.
  */
-export function AgeGate() {
-  const [verified, setVerified] = React.useState<boolean | null>(null)
+const VERIFIED_EVENT = "rumera:age-verified"
 
-  React.useEffect(() => {
-    setVerified(window.localStorage.getItem(STORAGE_KEY) === "true")
-  }, [])
+export function AgeGate() {
+  // Read the persisted choice from localStorage as an external store. The server
+  // snapshot is `true` (gate hidden) so there's no SSR flash; the client then
+  // re-reads and shows the gate for unverified visitors. `confirm()` dispatches
+  // a custom event so the store re-reads without a manual setState.
+  const verified = React.useSyncExternalStore(
+    (notify) => {
+      window.addEventListener(VERIFIED_EVENT, notify)
+      window.addEventListener("storage", notify)
+      return () => {
+        window.removeEventListener(VERIFIED_EVENT, notify)
+        window.removeEventListener("storage", notify)
+      }
+    },
+    () => window.localStorage.getItem(STORAGE_KEY) === "true",
+    () => true
+  )
 
   // Lock body scroll while the gate is open.
   React.useEffect(() => {
-    if (verified === false) {
+    if (!verified) {
       document.body.style.overflow = "hidden"
       return () => {
         document.body.style.overflow = ""
@@ -29,11 +42,11 @@ export function AgeGate() {
     }
   }, [verified])
 
-  if (verified !== false) return null
+  if (verified) return null
 
   function confirm() {
     window.localStorage.setItem(STORAGE_KEY, "true")
-    setVerified(true)
+    window.dispatchEvent(new Event(VERIFIED_EVENT))
   }
 
   return (
