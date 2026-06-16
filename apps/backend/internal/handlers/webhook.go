@@ -56,21 +56,16 @@ func (h *Handler) PaymentWebhook(c *gin.Context) {
 
 	switch req.Status {
 	case "succeeded":
-		pt, err := h.Payment.Confirm(ctx, models.ConfirmPaymentReq{
+		// Confirm marks the payment succeeded, marks the order paid, AND drains the
+		// committed stock — all in a single transaction (PaymentService.Confirm).
+		// A duplicate/late callback for an already-settled transaction returns
+		// ErrNotFound (no longer pending), which we acknowledge so the gateway stops.
+		if _, err := h.Payment.Confirm(ctx, models.ConfirmPaymentReq{
 			TransactionID: req.TransactionID,
 			RawResponse:   raw,
-		})
-		if err != nil {
-			// A duplicate/late callback for an already-settled transaction is not
-			// an error worth retrying — acknowledge it so the gateway stops.
+		}); err != nil {
 			response.HandleError(c, err)
 			return
-		}
-		// Payment + order are now marked paid; clear the committed stock.
-		if pt.OrderID != nil {
-			if items, err := h.Order.GetOrderItems(ctx, *pt.OrderID); err == nil {
-				_ = h.Inventory.DeductForOrder(ctx, *pt.OrderID, items)
-			}
 		}
 
 	case "failed":

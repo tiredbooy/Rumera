@@ -14,10 +14,15 @@
 - **#8 Missing indexes** — migration `20260616130000_money_integrity_indexes.sql` adds CONCURRENTLY indexes on `payment_transactions(transaction_id)` / `(order_id,status)`, `wallet_transactions(wallet_id,created_at)`, `inventory_movements(product_variant_id,created_at)` / `(reference_order_id)`, `orders(paid_at)`.
 - **#9 (partial) Proxy spoofing** — added `TRUSTED_PROXIES` config + `SetTrustedProxies` wiring so per-IP rate limits can't be spoofed via `X-Forwarded-For` (set it to the ingress range in prod).
 
-**Deliberately deferred (higher-risk; need integration tests against a real DB, which the sandbox proxy currently blocks):**
-- **#4 Payment→stock atomicity** — moving `Inventory.DeductForOrder` inside `Payment.Confirm`'s tx touches the most critical (webhook) path; safer to land with an integration test. Plan: thread the confirm tx into a `DeductForOrderTx`, mirroring #3.
-- **#5 Coupon usage-limit TOCTOU** — needs a `FOR UPDATE` re-check (or partial unique constraint) inside the recording tx; a blanket `UNIQUE(coupon_id,user_id)` would break multi-use coupons.
-- **#9 (rest) Login limiter fail-open** — failing closed risks locking users out during a Redis blip; wants a per-IP in-memory fallback rather than a hard fail-closed.
+**Previously deferred — now DONE 2026-06-16 (with an integration harness):**
+- **Integration harness** — `tests/integration` now runs against a real Postgres via `TEST_DATABASE_URL` (no testcontainers: its dep `klauspost/compress` is 403-blocked by the sandbox proxy). `make test-integration`; skips cleanly when no DB. Runs `migrations/main` via goose, truncate-per-test isolation, real repos/services. See `tests/integration/README.md`.
+- **#4 Payment→stock atomicity** — `Inventory.DeductForOrderTx` now runs inside `Payment.Confirm`'s transaction (`payment_svc.go`); the separate, error-discarding deduct was removed from the webhook handler. A failed deduct rolls back the confirm. Proven by `TestPaymentConfirm_DeductsStockAtomically` (also asserts no double-deduct on replay).
+- **#5 Coupon usage-limit TOCTOU** — `CouponRepository.LockByID` (SELECT … FOR UPDATE) + `CountUsagesTx` give a row-locked re-check inside the order tx (`order_svc.enforceCouponLimitsTx`); the unlocked pre-tx check was removed. Proven under genuine concurrency by `TestCouponUsageLimit_HoldsUnderConcurrency`.
+- **#9 Login limiter fail-open** — `LoginRateLimit` now falls back to a per-IP in-memory fixed-window limiter when Redis is absent/erroring, instead of allowing the request unconditionally. Unit-tested in `ratelimit_test.go`.
+
+**Bonus bug found by the harness:** `order_items.product_variant_id` was referenced by `BulkCreate`/`GetItems` but never added by a migration — so **checkout failed at runtime**. Fixed in `migrations/main/20260616131000_order_items_variant.sql`.
+
+**Still open (lower priority):** see the P2/P3 section (negative-stock guards, loyalty `Spend` idempotency, gift-card saga, `SELECT *` column-order fragility, etc.).
 
 ---
 

@@ -148,9 +148,12 @@ func (m *CartRepo) RemoveItem(context.Context, int64, int64) error { return nil 
 // ── CouponRepository ─────────────────────────────────────────────────────────
 
 type CouponRepo struct {
-	GetByCodeFn         func(ctx context.Context, code string) (*models.Coupon, error)
-	CountUsagesFn       func(ctx context.Context, couponID int64) (int, error)
-	CountUsagesByUserFn func(ctx context.Context, couponID, userID int64) (int, error)
+	GetByCodeFn           func(ctx context.Context, code string) (*models.Coupon, error)
+	CountUsagesFn         func(ctx context.Context, couponID int64) (int, error)
+	CountUsagesByUserFn   func(ctx context.Context, couponID, userID int64) (int, error)
+	LockByIDFn            func(ctx context.Context, tx pgx.Tx, id int64) error
+	CountUsagesTxFn       func(ctx context.Context, tx pgx.Tx, couponID int64) (int, error)
+	CountUsagesByUserTxFn func(ctx context.Context, tx pgx.Tx, couponID, userID int64) (int, error)
 }
 
 func (m *CouponRepo) GetByCode(ctx context.Context, code string) (*models.Coupon, error) {
@@ -183,6 +186,24 @@ func (m *CouponRepo) Update(context.Context, int64, models.UpdateCouponReq) (*mo
 }
 func (m *CouponRepo) Delete(context.Context, int64) error                { return nil }
 func (m *CouponRepo) ExistsByCode(context.Context, string) (bool, error) { return false, nil }
+func (m *CouponRepo) LockByID(ctx context.Context, tx pgx.Tx, id int64) error {
+	if m.LockByIDFn != nil {
+		return m.LockByIDFn(ctx, tx, id)
+	}
+	return nil
+}
+func (m *CouponRepo) CountUsagesTx(ctx context.Context, tx pgx.Tx, couponID int64) (int, error) {
+	if m.CountUsagesTxFn != nil {
+		return m.CountUsagesTxFn(ctx, tx, couponID)
+	}
+	return 0, nil
+}
+func (m *CouponRepo) CountUsagesByUserTx(ctx context.Context, tx pgx.Tx, couponID, userID int64) (int, error) {
+	if m.CountUsagesByUserTxFn != nil {
+		return m.CountUsagesByUserTxFn(ctx, tx, couponID, userID)
+	}
+	return 0, nil
+}
 
 // ── CouponUsageRepository ────────────────────────────────────────────────────
 

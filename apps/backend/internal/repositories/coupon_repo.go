@@ -28,6 +28,15 @@ type CouponRepository interface {
 	// CountUsagesByUser returns how many times a specific user used a coupon.
 	CountUsagesByUser(ctx context.Context, couponID int64, userID int64) (int, error)
 
+	// LockByID takes a row lock on the coupon (SELECT ... FOR UPDATE) within tx,
+	// so concurrent redemptions of the same coupon serialize and the usage-limit
+	// re-check below is race-free.
+	LockByID(ctx context.Context, tx pgx.Tx, id int64) error
+	// CountUsagesTx / CountUsagesByUserTx count usages on the supplied tx (used
+	// for the locked re-check inside order creation).
+	CountUsagesTx(ctx context.Context, tx pgx.Tx, couponID int64) (int, error)
+	CountUsagesByUserTx(ctx context.Context, tx pgx.Tx, couponID int64, userID int64) (int, error)
+
 	ExistsByCode(ctx context.Context, code string) (bool, error)
 }
 
@@ -306,6 +315,34 @@ func (r *couponRepository) CountUsagesByUser(ctx context.Context, couponID int64
 	var count int
 	if err := r.db.QueryRow(ctx, q, couponID, userID).Scan(&count); err != nil {
 		return 0, fmt.Errorf("couponRepository.CountUsagesByUser: %w", err)
+	}
+	return count, nil
+}
+
+func (r *couponRepository) LockByID(ctx context.Context, tx pgx.Tx, id int64) error {
+	var x int
+	err := tx.QueryRow(ctx, `SELECT 1 FROM coupons WHERE id = $1 FOR UPDATE`, id).Scan(&x)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.ErrNotFound
+		}
+		return fmt.Errorf("couponRepository.LockByID: %w", err)
+	}
+	return nil
+}
+
+func (r *couponRepository) CountUsagesTx(ctx context.Context, tx pgx.Tx, couponID int64) (int, error) {
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM coupon_usages WHERE coupon_id = $1`, couponID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("couponRepository.CountUsagesTx: %w", err)
+	}
+	return count, nil
+}
+
+func (r *couponRepository) CountUsagesByUserTx(ctx context.Context, tx pgx.Tx, couponID int64, userID int64) (int, error) {
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM coupon_usages WHERE coupon_id = $1 AND user_id = $2`, couponID, userID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("couponRepository.CountUsagesByUserTx: %w", err)
 	}
 	return count, nil
 }

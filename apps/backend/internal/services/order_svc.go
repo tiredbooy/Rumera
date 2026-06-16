@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/pkg/crypto"
@@ -131,6 +132,12 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req models
 	}
 
 	if appliedCoupon != nil {
+		// Re-check usage limits under a row lock INSIDE the tx, then record — this
+		// closes the TOCTOU race where two concurrent orders both read "under the
+		// limit" and both redeem a single-use coupon.
+		if err = s.enforceCouponLimitsTx(ctx, tx, appliedCoupon, userID); err != nil {
+			return nil, err
+		}
 		if err = s.couponUsageRepo.Record(ctx, tx, appliedCoupon.ID, userID, order.ID, discountAmount); err != nil {
 			return nil, fmt.Errorf("orderService.CreateOrder: record coupon usage: %w", err)
 		}
@@ -224,29 +231,45 @@ func (s *orderService) validateAndComputeDiscount(
 		return nil, 0, models.ErrOrderBelowMinimum
 	}
 
-	if coupon.MaxUses != nil {
-		used, err := s.couponRepo.CountUsages(ctx, coupon.ID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("orderService: count coupon usages: %w", err)
-		}
-		if used >= *coupon.MaxUses {
-			return nil, 0, models.ErrCouponUsageLimitReached
-		}
-	}
-
-	// MaxUsesPerUser is a plain int, not a pointer
-	if coupon.MaxUsesPerUser > 0 {
-		usedByUser, err := s.couponRepo.CountUsagesByUser(ctx, coupon.ID, userID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("orderService: count coupon usages by user: %w", err)
-		}
-		if usedByUser >= coupon.MaxUsesPerUser {
-			return nil, 0, models.ErrCouponUserLimitReached
-		}
-	}
+	// NOTE: usage-limit (MaxUses / MaxUsesPerUser) checks are intentionally NOT
+	// done here. They run later under a row lock inside the order transaction
+	// (enforceCouponLimitsTx) to avoid a TOCTOU race; checking them here without a
+	// lock would be both redundant and unsafe.
 
 	discount := computeDiscount(coupon, subtotal)
 	return coupon, discount, nil
+}
+
+// enforceCouponLimitsTx re-validates a coupon's usage limits while holding a row
+// lock on the coupon, inside the order transaction. Concurrent redemptions of the
+// same coupon serialize on the lock, so each sees the others' recorded usage and
+// the MaxUses / MaxUsesPerUser caps hold exactly.
+func (s *orderService) enforceCouponLimitsTx(ctx context.Context, tx pgx.Tx, coupon *models.Coupon, userID int64) error {
+	if coupon.MaxUses == nil && coupon.MaxUsesPerUser <= 0 {
+		return nil
+	}
+	if err := s.couponRepo.LockByID(ctx, tx, coupon.ID); err != nil {
+		return fmt.Errorf("orderService: lock coupon: %w", err)
+	}
+	if coupon.MaxUses != nil {
+		used, err := s.couponRepo.CountUsagesTx(ctx, tx, coupon.ID)
+		if err != nil {
+			return fmt.Errorf("orderService: count coupon usages: %w", err)
+		}
+		if used >= *coupon.MaxUses {
+			return models.ErrCouponUsageLimitReached
+		}
+	}
+	if coupon.MaxUsesPerUser > 0 {
+		usedByUser, err := s.couponRepo.CountUsagesByUserTx(ctx, tx, coupon.ID, userID)
+		if err != nil {
+			return fmt.Errorf("orderService: count coupon usages by user: %w", err)
+		}
+		if usedByUser >= coupon.MaxUsesPerUser {
+			return models.ErrCouponUserLimitReached
+		}
+	}
+	return nil
 }
 
 func computeDiscount(coupon *models.Coupon, subtotal float64) float64 {
