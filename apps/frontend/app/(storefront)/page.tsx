@@ -85,7 +85,7 @@ export default async function Home() {
         <div className="container-px mx-auto grid max-w-7xl gap-6 py-10 sm:grid-cols-2 lg:grid-cols-4">
           {perks.map((perk, i) => (
             <Reveal key={perk.title} delay={i * 0.06} y={12}>
-              <div className="flex items-center gap-4">
+              <div className="hover-lift flex h-full items-center gap-4 rounded-2xl border border-border/60 bg-card/50 p-4">
                 <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <perk.icon className="size-5" />
                 </span>
