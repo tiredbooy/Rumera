@@ -27,6 +27,7 @@ const ALLOW = new Set([
   "referrals",
   "gift-cards",
   "subscriptions",
+  "recommendations",
 ])
 
 async function handle(req: NextRequest, segments: string[]) {
