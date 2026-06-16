@@ -10,6 +10,7 @@ import {
   HeartHandshake,
   Search,
   PackageCheck,
+  Milestone,
 } from "lucide-react"
 
 import { buildMetadata } from "@/lib/seo/metadata"
@@ -74,6 +75,29 @@ const steps = [
     icon: PackageCheck,
     title: "به‌دستتان می‌رسانیم",
     desc: "سفارش با بسته‌بندی ایمن و سریع، درست به مقصد می‌رسد.",
+  },
+]
+
+const timeline: { year: string; title: string; desc: string }[] = [
+  {
+    year: "۱۳۹۸",
+    title: "آغاز با یک باور",
+    desc: "رومرا با این ایده شکل گرفت که خریدِ چیزهای خوب باید آسان، مطمئن و لذت‌بخش باشد.",
+  },
+  {
+    year: "۱۴۰۰",
+    title: "گزینش برندها",
+    desc: "همکاری مستقیم با برندها و واردکنندگان رسمی، تا اصالت هر کالا تضمین شود.",
+  },
+  {
+    year: "۱۴۰۲",
+    title: "گسترش به سراسر کشور",
+    desc: "شبکهٔ ارسالِ مطمئن با بسته‌بندی ایمن، حالا ۳۲ استان را زیر پوشش می‌گیرد.",
+  },
+  {
+    year: "امروز",
+    title: "مجموعه‌ای دست‌چین",
+    desc: "بیش از ۱٬۲۰۰ محصول منتخب از ۸۰ برند معتبر، با همان وسواسِ روز نخست.",
   },
 ]
 
@@ -174,6 +198,34 @@ export default function AboutPage() {
             هدف ساده است: جایی که بتوانید با اطمینان خرید کنید و دوباره برگردید.
           </p>
         </Reveal>
+      </section>
+
+      {/* Story timeline */}
+      <section className="border-t border-border/60">
+        <div className="container-px mx-auto max-w-3xl py-20 lg:py-24">
+          <Reveal>
+            <p className="eyebrow mb-3">
+              <Milestone className="size-3.5" /> مسیر ما
+            </p>
+            <h2 className="font-serif text-3xl sm:text-4xl">داستان رومرا، گام به گام</h2>
+          </Reveal>
+
+          <ol className="relative mt-12 space-y-10 border-border ps-8 [border-inline-start-width:2px]">
+            {timeline.map((item, i) => (
+              <Reveal key={item.year} delay={Math.min(i, 4) * 0.06} y={16}>
+                <li className="relative">
+                  <span
+                    aria-hidden
+                    className="absolute top-1.5 size-3.5 rounded-full bg-primary ring-4 ring-background [inset-inline-start:-2.4375rem]"
+                  />
+                  <span className="font-serif text-2xl text-foil">{item.year}</span>
+                  <h3 className="mt-1 font-serif text-xl">{item.title}</h3>
+                  <p className="mt-2 text-muted-foreground">{item.desc}</p>
+                </li>
+              </Reveal>
+            ))}
+          </ol>
+        </div>
       </section>
 
       {/* Values */}
