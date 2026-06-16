@@ -41,6 +41,19 @@ export const SLICE_COLORS = [
 const faTick = (v: number) => faNum(v)
 const faMoneyTick = (v: number) => `${faNum(Math.round(v / 1_000_000))}م`
 
+/** True when the user has asked the OS to minimise motion — gates chart animation. */
+function usePrefersReducedMotion() {
+  return React.useSyncExternalStore(
+    (notify) => {
+      const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
+      mq.addEventListener("change", notify)
+      return () => mq.removeEventListener("change", notify)
+    },
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    () => false
+  )
+}
+
 /** Framed chart panel matching the dashboard card system. */
 export function ChartCard({
   title,
@@ -85,6 +98,7 @@ export function RevenueAreaChart({
   data: { day: string; revenue: number }[]
   className?: string
 }) {
+  const reduced = usePrefersReducedMotion()
   const config = {
     revenue: { label: "درآمد (تومان)", color: GOLD },
   } satisfies ChartConfig
@@ -116,6 +130,7 @@ export function RevenueAreaChart({
           stroke={GOLD}
           strokeWidth={2}
           fill="url(#fillRevenue)"
+          isAnimationActive={!reduced}
         />
       </AreaChart>
     </ChartContainer>
@@ -131,6 +146,7 @@ export function OrdersBarChart({
   data: { day: string; orders: number }[]
   className?: string
 }) {
+  const reduced = usePrefersReducedMotion()
   const config = { orders: { label: "سفارش‌ها", color: BLUE } } satisfies ChartConfig
   return (
     <ChartContainer config={config} className={cn("aspect-auto h-64 w-full", className)}>
@@ -141,7 +157,7 @@ export function OrdersBarChart({
         <ChartTooltip
           content={<ChartTooltipContent formatter={(value) => faNum(Number(value))} />}
         />
-        <Bar dataKey="orders" fill={BLUE} radius={[6, 6, 0, 0]} />
+        <Bar dataKey="orders" fill={BLUE} radius={[6, 6, 0, 0]} isAnimationActive={!reduced} />
       </BarChart>
     </ChartContainer>
   )
@@ -160,6 +176,7 @@ export function DonutChart({
   centerLabel?: string
   centerValue?: string
 }) {
+  const reduced = usePrefersReducedMotion()
   const config: ChartConfig = Object.fromEntries(
     data.map((d, i) => [d.label, { label: d.label, color: SLICE_COLORS[i % SLICE_COLORS.length] }])
   )
@@ -178,6 +195,7 @@ export function DonutChart({
           paddingAngle={2}
           strokeWidth={2}
           stroke="var(--card)"
+          isAnimationActive={!reduced}
         >
           {data.map((_, i) => (
             <Cell key={i} fill={SLICE_COLORS[i % SLICE_COLORS.length]} />

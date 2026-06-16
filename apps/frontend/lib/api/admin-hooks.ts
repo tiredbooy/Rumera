@@ -11,7 +11,7 @@
  * Server components should read `lib/admin/data.ts` directly (they already run
  * on the server); these hooks are for interactive client surfaces only.
  */
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   adminOrders,
@@ -23,6 +23,17 @@ import {
   getCustomer,
   type ReviewStatus,
 } from "@/lib/admin/data"
+import {
+  createProduct,
+  updateProduct,
+  listProductImages,
+  reorderProductImages,
+  setPrimaryImage,
+  updateImageAlt,
+  deleteProductImage,
+  type CreateProductInput,
+  type UpdateProductInput,
+} from "@/lib/api/admin-client"
 
 export const adminKeys = {
   orders: (params?: Record<string, unknown>) => ["admin", "orders", params ?? {}] as const,
@@ -70,4 +81,59 @@ export function useAdminReviews(status: ReviewStatus | "all" = "all") {
 
 export function useAdminRecipes() {
   return useQuery({ queryKey: adminKeys.recipes(), queryFn: () => resolve(adminRecipes) })
+}
+
+// ── Products & images (real backend via the /api/admin BFF proxy) ─────────────
+
+export const productKeys = {
+  images: (productId: number) => ["admin", "products", productId, "images"] as const,
+}
+
+export function useCreateProduct() {
+  return useMutation({ mutationFn: (input: CreateProductInput) => createProduct(input) })
+}
+
+export function useUpdateProduct(id: number) {
+  return useMutation({ mutationFn: (input: UpdateProductInput) => updateProduct(id, input) })
+}
+
+export function useProductImages(productId: number, enabled = true) {
+  return useQuery({
+    queryKey: productKeys.images(productId),
+    queryFn: () => listProductImages(productId),
+    enabled: enabled && productId > 0,
+  })
+}
+
+export function useReorderProductImages(productId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: number[]) => reorderProductImages(productId, ids),
+    onSuccess: () => qc.invalidateQueries({ queryKey: productKeys.images(productId) }),
+  })
+}
+
+export function useSetPrimaryImage(productId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (imageId: number) => setPrimaryImage(productId, imageId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: productKeys.images(productId) }),
+  })
+}
+
+export function useUpdateImageAlt(productId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ imageId, altText }: { imageId: number; altText: string }) =>
+      updateImageAlt(productId, imageId, altText),
+    onSuccess: () => qc.invalidateQueries({ queryKey: productKeys.images(productId) }),
+  })
+}
+
+export function useDeleteProductImage(productId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (imageId: number) => deleteProductImage(productId, imageId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: productKeys.images(productId) }),
+  })
 }

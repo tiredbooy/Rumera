@@ -8,9 +8,13 @@ import { Button } from "@/components/ui/button"
 
 export function ModeToggle() {
   const { resolvedTheme, setTheme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => setMounted(true), [])
+  // Avoid a hydration mismatch: the server can't know the resolved theme, so the
+  // icon stays neutral until the client has mounted (server snapshot → false).
+  const mounted = React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  )
 
   const isDark = resolvedTheme === "dark"
 
