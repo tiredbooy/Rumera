@@ -95,16 +95,16 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
       />
 
       {/* Header */}
-      <section className="cellar-glow border-b border-border/60">
-        <div className="container-px mx-auto max-w-7xl py-12 sm:py-14">
+      <section className="cellar-glow relative overflow-hidden border-b border-border/60">
+        <div className="container-px mx-auto max-w-7xl py-16 sm:py-20 lg:py-24">
           <Reveal>
-            <p className="eyebrow mb-3">
+            <p className="eyebrow mb-4">
               <UtensilsCrossed className="size-3.5" /> دستورها و ایده‌ها
             </p>
-            <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl">
+            <h1 className="max-w-3xl text-balance font-serif text-4xl leading-[1.05] sm:text-5xl lg:text-6xl">
               چه چیزی میل دارید بسازید؟
             </h1>
-            <p className="mt-4 max-w-xl text-lg text-muted-foreground">
+            <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground">
               از کلاسیک‌های بی‌زمان تا ترکیب‌های تازه — جستجو کنید، فیلتر بزنید و
               محصولات لازم را مستقیم از همان صفحه تهیه کنید.
             </p>
@@ -114,14 +114,14 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
 
       {/* Spotlight (featured) — editorial split card */}
       {spotlight ? (
-        <section className="container-px mx-auto max-w-7xl pt-10">
+        <section className="container-px mx-auto max-w-7xl pt-12 sm:pt-16">
           <Reveal>
             <Link
               href={`/recipes/${spotlight.slug}`}
-              className="group/spot border-hairline relative grid overflow-hidden rounded-[1.5rem] bg-card ring-1 ring-foreground/5 transition-all hover:shadow-2xl hover:shadow-foreground/5 hover:ring-primary/30 sm:rounded-[2rem] lg:grid-cols-2"
+              className="group/spot border-hairline relative grid overflow-hidden rounded-[1.5rem] bg-card ring-1 ring-foreground/5 transition-all duration-300 hover:shadow-2xl hover:shadow-foreground/10 hover:ring-primary/30 sm:rounded-[2rem] lg:grid-cols-2"
             >
               <div className="relative aspect-[16/10] overflow-hidden lg:aspect-auto">
-                <div className="absolute inset-0 transition-transform duration-700 group-hover/spot:scale-105">
+                <div className="absolute inset-0 transition-transform duration-[1200ms] ease-out group-hover/spot:scale-[1.05]">
                   <SmartImage
                     src={spotlight.image_url}
                     alt={spotlight.title}
@@ -135,13 +135,13 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
                   <Star className="size-3 fill-current" /> دستور منتخب
                 </Badge>
               </div>
-              <div className="flex flex-col justify-center gap-4 p-6 sm:p-9 lg:p-10">
+              <div className="flex flex-col justify-center gap-4 p-6 sm:p-10 lg:p-12">
                 <p className="eyebrow">برای شروع، این را امتحان کنید</p>
-                <h2 className="font-serif text-3xl leading-tight sm:text-4xl">
+                <h2 className="font-serif text-3xl leading-tight transition-colors group-hover/spot:text-primary sm:text-4xl">
                   {spotlight.title}
                 </h2>
                 {spotlight.excerpt ? (
-                  <p className="line-clamp-3 text-muted-foreground">{spotlight.excerpt}</p>
+                  <p className="line-clamp-3 leading-relaxed text-muted-foreground">{spotlight.excerpt}</p>
                 ) : null}
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5">
@@ -154,9 +154,9 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
                   ) : null}
                   <span>{difficultyFa[spotlight.difficulty]}</span>
                 </div>
-                <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                <span className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
                   خواندن دستور کامل
-                  <ArrowLeft className="size-4 transition-transform group-hover/spot:-translate-x-1" />
+                  <ArrowLeft className="size-4 transition-transform duration-300 group-hover/spot:-translate-x-1" />
                 </span>
               </div>
             </Link>
@@ -164,14 +164,14 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
         </section>
       ) : null}
 
-      <section className="container-px mx-auto max-w-7xl py-10">
+      <section className="container-px mx-auto max-w-7xl py-12 sm:py-16">
         {/* Sticky filter bar, tucked under the header */}
         <div className="sticky top-[4.25rem] z-30">
           <RecipeFilters />
         </div>
 
         {/* Result count */}
-        <p className="mt-6 text-sm text-muted-foreground">
+        <p className="mt-6 text-sm text-muted-foreground" aria-live="polite">
           {pagination.total_items > 0
             ? `${faNum(pagination.total_items)} دستور یافت شد`
             : null}
@@ -189,7 +189,7 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
             </Button>
           </div>
         ) : (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+          <div className="mt-6 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
             {recipes.map((recipe, i) => (
               <Reveal key={recipe.id} delay={Math.min(i, 5) * 0.04} y={16}>
                 <RecipeCard recipe={recipe} />

@@ -97,35 +97,35 @@ export default async function JournalPostPage({
       />
 
       {/* Hero */}
-      <header className="border-b border-border/60">
-        <div className="container-px mx-auto max-w-3xl py-12">
-          <nav className="mb-6 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Link href="/" className="hover:text-foreground">خانه</Link>
-            <span>/</span>
-            <Link href="/journal" className="hover:text-foreground">ژورنال</Link>
+      <header className="cellar-glow border-b border-border/60">
+        <div className="container-px mx-auto max-w-3xl py-14 sm:py-16 text-center">
+          <nav className="mb-8 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+            <Link href="/" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">خانه</Link>
+            <span aria-hidden>/</span>
+            <Link href="/journal" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">ژورنال</Link>
           </nav>
 
           {post.categories.length > 0 ? (
-            <div className="mb-4 flex flex-wrap gap-2">
+            <div className="mb-5 flex flex-wrap justify-center gap-2">
               {post.categories.map((c) => (
                 <Badge key={c.id} variant="secondary">{c.name}</Badge>
               ))}
             </div>
           ) : null}
 
-          <h1 className="font-serif text-4xl leading-tight sm:text-5xl">{post.title}</h1>
+          <h1 className="text-balance font-serif text-4xl leading-[1.1] sm:text-5xl">{post.title}</h1>
 
           {post.excerpt ? (
-            <p className="mt-5 text-lg text-muted-foreground">{post.excerpt}</p>
+            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">{post.excerpt}</p>
           ) : null}
 
-          <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {post.published_at ? <span>{formatBlogDate(post.published_at)}</span> : null}
-            <span className="inline-flex items-center gap-1">
+            <span className="inline-flex items-center gap-1.5">
               <Clock className="size-4" /> {readingTime(post.time_to_read)}
             </span>
             {post.total_reads > 0 ? (
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1.5">
                 <Eye className="size-4" /> {faNum(post.total_reads)} بازدید
               </span>
             ) : null}
@@ -134,7 +134,7 @@ export default async function JournalPostPage({
       </header>
 
       {/* Cover */}
-      <div className="container-px mx-auto max-w-4xl pt-10">
+      <div className="container-px mx-auto max-w-4xl pt-12">
         <div className="border-hairline relative aspect-[16/9] overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
           <SmartImage
             src={null}
@@ -147,13 +147,13 @@ export default async function JournalPostPage({
       </div>
 
       {/* Body */}
-      <article className="container-px mx-auto max-w-3xl py-12">
-        <div className="space-y-5 text-lg leading-9 text-muted-foreground [&_a]:text-primary [&_a]:underline [&_blockquote]:border-s-2 [&_blockquote]:border-primary/40 [&_blockquote]:ps-4 [&_blockquote]:text-foreground/90 [&_h2]:mt-10 [&_h2]:font-serif [&_h2]:text-2xl [&_h2]:text-foreground [&_h3]:mt-8 [&_h3]:font-serif [&_h3]:text-xl [&_h3]:text-foreground [&_img]:rounded-2xl [&_li]:mt-2 [&_ol]:list-decimal [&_ol]:ps-6 [&_strong]:text-foreground [&_ul]:list-disc [&_ul]:ps-6">
+      <article className="container-px mx-auto max-w-3xl py-14 sm:py-16">
+        <div className="space-y-6 text-lg leading-9 text-foreground/85 [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-4 [&_blockquote]:my-8 [&_blockquote]:border-s-2 [&_blockquote]:border-primary/50 [&_blockquote]:ps-6 [&_blockquote]:font-serif [&_blockquote]:text-2xl [&_blockquote]:leading-relaxed [&_blockquote]:text-foreground [&_h2]:mt-12 [&_h2]:font-serif [&_h2]:text-2xl [&_h2]:text-foreground [&_h3]:mt-10 [&_h3]:font-serif [&_h3]:text-xl [&_h3]:text-foreground [&_img]:my-8 [&_img]:rounded-2xl [&_img]:ring-1 [&_img]:ring-foreground/10 [&_li]:mt-2 [&_li]:leading-relaxed [&_li]:marker:text-primary [&_ol]:list-decimal [&_ol]:ps-6 [&_strong]:text-foreground [&_ul]:list-disc [&_ul]:ps-6">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.content}</ReactMarkdown>
         </div>
 
         {/* Share */}
-        <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-border/60 pt-6">
+        <div className="mt-12 flex flex-wrap items-center gap-3 border-t border-border/60 pt-8">
           <span className="text-sm font-medium">هم‌رسانی:</span>
           <Button variant="outline" size="sm" asChild>
             <a
@@ -179,12 +179,12 @@ export default async function JournalPostPage({
       {/* Shop this article */}
       {products.length > 0 ? (
         <section className="border-t border-border/60 bg-card/30">
-          <div className="container-px mx-auto max-w-5xl py-14">
+          <div className="container-px mx-auto max-w-5xl py-16 sm:py-20">
             <p className="eyebrow mb-2">
               <ShoppingBag className="size-3.5" /> از این نوشته
             </p>
-            <h2 className="font-serif text-3xl">محصولات مرتبط</h2>
-            <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <h2 className="font-serif text-3xl sm:text-4xl">محصولات مرتبط</h2>
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
               {products.map((p) => (
                 <ArticleProductCard key={p.id} product={p} />
               ))}
@@ -195,17 +195,21 @@ export default async function JournalPostPage({
 
       {/* Read next */}
       {related.length > 0 ? (
-        <section className="container-px mx-auto max-w-7xl py-14">
+        <section className="container-px mx-auto max-w-7xl py-16 sm:py-20">
           <div className="flex items-end justify-between gap-4">
-            <h2 className="font-serif text-3xl">ادامه بدهید</h2>
+            <div>
+              <p className="eyebrow mb-2">ادامه بدهید</p>
+              <h2 className="font-serif text-3xl sm:text-4xl">بیشتر بخوانید</h2>
+            </div>
             <Link
               href="/journal"
-              className="inline-flex items-center gap-1 text-sm font-medium text-primary"
+              className="group/all inline-flex items-center gap-1.5 rounded text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
-              همهٔ نوشته‌ها <ArrowLeft className="size-4" />
+              همهٔ نوشته‌ها
+              <ArrowLeft className="size-4 transition-transform duration-300 group-hover/all:-translate-x-1" />
             </Link>
           </div>
-          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-10 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
             {related.map((p, i) => (
               <BlogCard key={p.id} post={p} index={i} />
             ))}

@@ -38,7 +38,7 @@ export function JournalExplorer({ posts }: { posts: BlogPost[] }) {
 
   return (
     <div>
-      <div className="border-hairline flex flex-col gap-4 rounded-3xl bg-card/60 p-4 ring-1 ring-foreground/5 sm:flex-row sm:items-center sm:p-3">
+      <div className="border-hairline flex flex-col gap-4 rounded-3xl bg-card/80 p-4 shadow-sm shadow-foreground/5 ring-1 ring-foreground/5 backdrop-blur-sm sm:flex-row sm:items-center sm:p-3">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -71,7 +71,7 @@ export function JournalExplorer({ posts }: { posts: BlogPost[] }) {
                 onClick={() => setSort(s.value)}
                 aria-pressed={active}
                 className={cn(
-                  "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+                  "cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                   active
                     ? "bg-primary text-primary-foreground"
                     : "bg-secondary text-secondary-foreground hover:bg-accent"
@@ -97,7 +97,7 @@ export function JournalExplorer({ posts }: { posts: BlogPost[] }) {
           </p>
         </div>
       ) : (
-        <div className="mt-2 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-2 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
           {filtered.map((post, i) => (
             <BlogCard key={post.id} post={post} index={i} />
           ))}

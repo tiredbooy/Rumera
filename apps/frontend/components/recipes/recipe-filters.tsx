@@ -77,7 +77,7 @@ export function RecipeFilters() {
   return (
     <div
       className={cn(
-        "border-hairline flex flex-col gap-4 rounded-3xl bg-card/60 p-4 ring-1 ring-foreground/5 transition-opacity sm:flex-row sm:items-center sm:p-3",
+        "border-hairline flex flex-col gap-4 rounded-3xl bg-card/80 p-4 shadow-sm shadow-foreground/5 ring-1 ring-foreground/5 backdrop-blur-sm transition-opacity sm:flex-row sm:items-center sm:p-3",
         isPending && "opacity-60"
       )}
     >
@@ -115,7 +115,7 @@ export function RecipeFilters() {
               onClick={() => apply({ difficulty: d.value || null })}
               aria-pressed={active}
               className={cn(
-                "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+                "cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                 active
                   ? "bg-primary text-primary-foreground"
                   : "bg-secondary text-secondary-foreground hover:bg-accent"
@@ -145,7 +145,7 @@ export function RecipeFilters() {
           <button
             type="button"
             onClick={() => startTransition(() => router.replace(pathname, { scroll: false }))}
-            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            className="cursor-pointer rounded-md px-1 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             پاک‌سازی
           </button>
