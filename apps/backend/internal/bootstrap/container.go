@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"strings"
 	"time"
 
 	config "github.com/tiredbooy/configs"
@@ -11,8 +12,10 @@ import (
 	"github.com/tiredbooy/internal/services"
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/database"
+	"github.com/tiredbooy/pkg/imaging"
 	"github.com/tiredbooy/pkg/notify"
 	"github.com/tiredbooy/pkg/sms"
+	"github.com/tiredbooy/pkg/storage"
 	"github.com/tiredbooy/pkg/token"
 	"github.com/tiredbooy/pkg/validator"
 	"go.uber.org/zap"
@@ -45,11 +48,12 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		passwordResetRepo = repositories.NewPasswordResetRepository(db)
 		addressRepo       = repositories.NewAddressRepository(db)
 
-		productRepo  = repositories.NewProductRepository(db)
-		variantRepo  = repositories.NewVariantRepository(db)
-		categoryRepo = repositories.NewCategoryRepository(db)
-		brandRepo    = repositories.NewBrandRepository(db)
-		tagRepo      = repositories.NewTagRepository(db)
+		productRepo      = repositories.NewProductRepository(db)
+		productImageRepo = repositories.NewProductImageRepository(db)
+		variantRepo      = repositories.NewVariantRepository(db)
+		categoryRepo     = repositories.NewCategoryRepository(db)
+		brandRepo        = repositories.NewBrandRepository(db)
+		tagRepo          = repositories.NewTagRepository(db)
 
 		orderRepo       = repositories.NewOrderRepository(db)
 		orderItemRepo   = repositories.NewOrderItemRepository(db)
@@ -97,6 +101,32 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	smsSender := sms.New(cfg, log)
 	eventService := services.NewEventService(eventRepo)
 
+	// Media: originals live under MediaRoot, rendered variants under MediaCacheDir.
+	// Both directories are created at boot; a failure here is a fatal misconfig.
+	mediaStore, err := storage.NewLocalStorage(cfg.MediaRoot)
+	if err != nil {
+		log.Fatal("media storage init", zap.Error(err))
+	}
+	mediaCache, err := storage.NewLocalStorage(cfg.MediaCacheDir)
+	if err != nil {
+		log.Fatal("media cache init", zap.Error(err))
+	}
+	allowedFormats := make(map[imaging.Format]bool, len(cfg.MediaAllowedFormats))
+	for _, f := range cfg.MediaAllowedFormats {
+		if fm, e := imaging.ParseFormat(strings.TrimSpace(f)); e == nil {
+			allowedFormats[fm] = true
+		}
+	}
+	mediaService := services.NewMediaService(
+		mediaStore, mediaCache, productImageRepo, productRepo, imaging.New(),
+		services.MediaConfig{
+			PublicBaseURL:  cfg.MediaPublicBaseURL,
+			MaxUploadBytes: int64(cfg.MediaMaxUploadMB) * 1024 * 1024,
+			DefaultQuality: cfg.MediaDefaultQuality,
+			MaxDimension:   cfg.MediaMaxDimension,
+			AllowedOutput:  allowedFormats,
+		}, log)
+
 	// Analytics roll-up and recommendation services are pulled into named vars so
 	// the cron runner (built below) can reach them as well as the HTTP handlers.
 	productStatsService := services.NewDailyProductStatsService(dailyProductStatsRepo)
@@ -141,6 +171,7 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		TasteProfile:  services.NewTasteProfileService(tasteRepo),
 
 		Product:  services.NewProductService(productRepo),
+		Media:    mediaService,
 		Variant:  services.NewVariantService(variantRepo),
 		Category: services.NewCategoryService(categoryRepo),
 		Brand:    services.NewBrandService(brandRepo),

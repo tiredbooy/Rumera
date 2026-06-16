@@ -22,6 +22,10 @@ func Setup(r *gin.Engine, h *handlers.Handler, jwt token.Manager, store cache.St
 		response.OK(c, gin.H{"status": "ok"})
 	})
 
+	// Public on-the-fly image transform endpoint (outside /api/v1): serves
+	// resized/recompressed variants of stored originals.
+	r.GET("/media/*key", h.ServeMedia)
+
 	v1 := r.Group("/api/v1")
 
 	// Webhooks are unauthenticated but signature-verified; keep them outside the
@@ -226,6 +230,14 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	a.PUT("/products/:id/tags", h.SyncProductTags)
 	a.DELETE("/products/:id/tags", h.DetachProductTags)
 	a.POST("/products/:id/variants", h.CreateVariant)
+
+	// Product images (admin media pipeline)
+	a.GET("/products/:id/images", h.ListProductImages)
+	a.POST("/products/:id/images", h.UploadProductImage)
+	a.PUT("/products/:id/images/order", h.ReorderProductImages)
+	a.PATCH("/products/:id/images/:imageId", h.UpdateProductImage)
+	a.PUT("/products/:id/images/:imageId/primary", h.SetPrimaryProductImage)
+	a.DELETE("/products/:id/images/:imageId", h.DeleteProductImage)
 
 	// Variants
 	a.PATCH("/variants/:id", h.UpdateVariant)
