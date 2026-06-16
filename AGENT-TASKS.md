@@ -38,7 +38,7 @@
 
 ## Agent A — Backend image optimization + infra (`apps/backend`, infra, docs)
 
-- [ ] **A0 · Housekeeping.** Move `DOCKER.md` → `docs/DOCKER.md` and
+- [x] **A0 · Housekeeping.** — done: `git mv` to `docs/`, fixed links in DOCKER.md + frontend README + job comment. Move `DOCKER.md` → `docs/DOCKER.md` and
   `FEATURE-ROADMAP.md` → `docs/FEATURE-ROADMAP.md` (`git mv`); fix any links that
   reference them. Verify nothing else points at the old paths. Commit `chore(docs): move root docs into docs/`.
 - [ ] **A1 · Storage layer.** Add `pkg/storage` with a `Storage` interface

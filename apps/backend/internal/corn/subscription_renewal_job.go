@@ -13,7 +13,7 @@ import (
 
 // SubscriptionRenewalJob emails customers whose cellar box is due and advances
 // the subscription's next renewal date. Charging is intentionally NOT done here
-// yet — it awaits a tokenized recurring payment method (see FEATURE-ROADMAP.md).
+// yet — it awaits a tokenized recurring payment method (see docs/FEATURE-ROADMAP.md).
 type SubscriptionRenewalJob struct {
 	subs    repositories.SubscriptionRepository
 	mailer  notify.Mailer
