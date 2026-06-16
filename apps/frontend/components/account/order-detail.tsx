@@ -9,6 +9,7 @@ import {
   FileDown,
   MessageSquarePlus,
   MapPin,
+  Truck,
 } from "lucide-react"
 
 import { faNum, formatPrice } from "@/lib/products"
@@ -49,6 +50,7 @@ export function OrderDetail({ id }: { id: string }) {
   // Shipping address isn't guaranteed on the order payload — render only if present.
   const shipping = (order as { shipping_address?: Address }).shipping_address
   const isDelivered = order.status === "delivered"
+  const isTrackable = ["shipped", "out_for_delivery"].includes(order.status)
 
   function doReorder() {
     if (!order) return
@@ -78,7 +80,7 @@ export function OrderDetail({ id }: { id: string }) {
           <ul className="divide-y divide-border/60">
             {order.items.map((item) => (
               <li key={item.id} className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
-                <div className="relative size-16 shrink-0 overflow-hidden rounded-xl">
+                <div className="relative size-16 shrink-0 overflow-hidden rounded-xl ring-1 ring-foreground/5">
                   <SmartImage
                     src={item.image_url}
                     alt={item.product_title}
@@ -177,6 +179,16 @@ export function OrderDetail({ id }: { id: string }) {
             )}
             سفارش مجدد
           </Button>
+          {isTrackable ? (
+            <Button
+              variant="outline"
+              className="justify-start"
+              onClick={() => toast.info("رهگیری مرسوله به‌زودی فعال می‌شود")}
+            >
+              {/* TODO(api): wire to shipment tracking once a carrier integration lands */}
+              <Truck className="size-4" /> رهگیری مرسوله
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             className="justify-start"

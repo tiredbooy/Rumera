@@ -87,9 +87,11 @@ export function OrderStatusStepper({
                 <span
                   className={cn(
                     "flex size-8 items-center justify-center rounded-full transition-colors",
-                    done || current
+                    done
                       ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-muted-foreground"
+                      : current
+                        ? "bg-primary text-primary-foreground ring-4 ring-primary/15"
+                        : "bg-secondary text-muted-foreground"
                   )}
                 >
                   <Icon className="size-4" />
@@ -97,7 +99,7 @@ export function OrderStatusStepper({
                 {i < STEPS.length - 1 ? (
                   <span
                     className={cn(
-                      "mt-1 w-px flex-1",
+                      "mt-1 w-px flex-1 transition-colors",
                       done ? "bg-primary" : "bg-border"
                     )}
                   />
@@ -106,8 +108,12 @@ export function OrderStatusStepper({
               <div className="pt-1">
                 <p
                   className={cn(
-                    "text-sm",
-                    current ? "font-medium text-foreground" : "text-muted-foreground"
+                    "text-sm transition-colors",
+                    current
+                      ? "font-medium text-foreground"
+                      : done
+                        ? "text-foreground/80"
+                        : "text-muted-foreground"
                   )}
                 >
                   {step.label}
@@ -132,9 +138,11 @@ export function OrderStatusStepper({
               <span
                 className={cn(
                   "flex size-8 items-center justify-center rounded-full transition-colors",
-                  done || current
+                  done
                     ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-muted-foreground"
+                    : current
+                      ? "bg-primary text-primary-foreground ring-4 ring-primary/15"
+                      : "bg-secondary text-muted-foreground"
                 )}
               >
                 <Icon className="size-4" />

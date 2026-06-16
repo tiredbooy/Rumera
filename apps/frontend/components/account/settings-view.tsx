@@ -136,7 +136,7 @@ function ProfileTab({ defaultName, defaultEmail }: { defaultName: string; defaul
               {/* TODO(api): wire avatar upload to uploadthing */}
               تغییر تصویر
             </Button>
-            <p className="mt-1 text-xs text-muted-foreground">به‌زودی</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">به‌زودی در دسترس</p>
           </div>
         </div>
 
@@ -221,8 +221,8 @@ function SecurityTab() {
       <AccountSection title="ورود دومرحله‌ای">
         <label className="flex cursor-pointer items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-medium">تأیید پیامکی هنگام ورود</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="font-medium">تأیید پیامکی هنگام ورود</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
               برای امنیت بیشتر، یک کد یک‌بارمصرف هنگام هر ورود دریافت کنید.
             </p>
           </div>
@@ -266,8 +266,8 @@ function NotificationsTab() {
           className="flex cursor-pointer items-center justify-between gap-4 px-5 py-4 sm:px-6"
         >
           <div>
-            <p className="text-sm font-medium">{o.label}</p>
-            <p className="text-xs text-muted-foreground">{o.desc}</p>
+            <p className="font-medium">{o.label}</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">{o.desc}</p>
           </div>
           <Switch
             checked={state[o.key]}
@@ -289,8 +289,8 @@ function PrivacyTab() {
       <AccountSection title="داده‌های شما">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium">دریافت یک نسخه از اطلاعات</p>
-            <p className="text-xs text-muted-foreground">سفارش‌ها، آدرس‌ها و فعالیت حساب شما.</p>
+            <p className="font-medium">دریافت یک نسخه از اطلاعات</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">سفارش‌ها، آدرس‌ها و فعالیت حساب شما.</p>
           </div>
           <Button
             variant="outline"
@@ -305,8 +305,8 @@ function PrivacyTab() {
       <AccountSection title="حذف حساب">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-destructive">حذف دائمی حساب کاربری</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="font-medium text-destructive">حذف دائمی حساب کاربری</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
               تمام اطلاعات شما حذف می‌شود و این عمل قابل بازگشت نیست.
             </p>
           </div>

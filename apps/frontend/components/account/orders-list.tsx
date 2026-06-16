@@ -72,15 +72,14 @@ export function OrdersList() {
           ))}
         </div>
       ) : isError ? (
-        <div className="border-hairline rounded-2xl bg-card p-6 text-sm text-muted-foreground ring-1 ring-foreground/5">
-          خطا در دریافت سفارش‌ها.{" "}
-          <button
-            type="button"
-            onClick={() => refetch()}
-            className="cursor-pointer font-medium text-primary hover:underline"
-          >
+        <div className="border-hairline flex flex-col items-center gap-3 rounded-2xl border-dashed bg-card/40 px-6 py-12 text-center">
+          <span className="flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+            <ShoppingBag className="size-6" />
+          </span>
+          <p className="text-sm text-muted-foreground">خطا در دریافت سفارش‌ها.</p>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
             تلاش دوباره
-          </button>
+          </Button>
         </div>
       ) : visible.length === 0 ? (
         <EmptyState

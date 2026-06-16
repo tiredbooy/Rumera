@@ -114,11 +114,12 @@ function TopUpDialog() {
                 key={p}
                 type="button"
                 onClick={() => setAmount(String(p))}
+                aria-pressed={Number(amount) === p}
                 className={cn(
-                  "cursor-pointer rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  "inline-flex min-h-11 cursor-pointer items-center rounded-full px-4 py-2 text-sm font-medium ring-1 transition-colors duration-200",
                   Number(amount) === p
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground hover:bg-accent"
+                    ? "bg-primary text-primary-foreground ring-primary"
+                    : "bg-secondary text-secondary-foreground ring-transparent hover:bg-accent"
                 )}
               >
                 {formatPrice(p)}
@@ -164,13 +165,14 @@ export function WalletView() {
       <div className="cellar-glow border-hairline mb-6 overflow-hidden rounded-3xl px-6 py-7 ring-1 ring-foreground/10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Wallet className="size-4" /> موجودی فعلی
-            </div>
+            <p className="eyebrow">
+              <Wallet className="size-3.5" /> کیف پول رومرا
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">موجودی فعلی</p>
             {wallet.isLoading ? (
-              <Skeleton className="mt-3 h-10 w-44" />
+              <Skeleton className="mt-2 h-12 w-48" />
             ) : (
-              <p className="mt-2 font-serif text-4xl text-foil">
+              <p className="mt-1 font-serif text-5xl text-foil">
                 {wallet.data ? formatPrice(wallet.data.balance) : formatPrice(0)}
               </p>
             )}
@@ -256,8 +258,8 @@ export function WalletView() {
                     <TableCell className="text-muted-foreground">{faDate(t.created_at)}</TableCell>
                     <TableCell
                       className={cn(
-                        "text-end font-medium",
-                        credit ? "text-emerald-500" : "text-foreground"
+                        "text-end font-medium tabular-nums",
+                        credit ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"
                       )}
                       dir="ltr"
                     >
