@@ -4,6 +4,23 @@
 
 ---
 
+## ✅ Epic E status — shipped 2026-06-16 (commit on `dev`)
+
+**Done (build + `go test ./...` green):**
+- **#1 Free-money wallet top-up** — removed the public `POST /wallet/deposit` route + handler (`routes.go`, `handlers/wallet.go`). Wallet credit now only flows from payments/refunds/redemptions/admin.
+- **#2 `models.Err*` → 500** — `category` and `brand` handlers now use `h.handleError`, so not-found/conflict map to 404/409.
+- **#3 Order↔stock atomicity** — stock reservation moved **inside** the order-creation transaction via new `InventoryService.ReserveForOrderTx` (`order_svc.go`, `inventory_svc.go`). Closes the oversell window and the dangling-pending-order-on-crash case; on shortfall the whole order rolls back (no compensating cancel). Test updated → `TestCreateOrder_InsufficientStockRollsBack`.
+- **#6 Insecure-default guards** — `Config.Validate()` now rejects, in production: JWT secret < 32 chars, CORS `*`, empty `CRYPTO_WEBHOOK_KEY`, and `SMS_PROVIDER=log` (which logs OTP codes). New `config_test.go` cases.
+- **#8 Missing indexes** — migration `20260616130000_money_integrity_indexes.sql` adds CONCURRENTLY indexes on `payment_transactions(transaction_id)` / `(order_id,status)`, `wallet_transactions(wallet_id,created_at)`, `inventory_movements(product_variant_id,created_at)` / `(reference_order_id)`, `orders(paid_at)`.
+- **#9 (partial) Proxy spoofing** — added `TRUSTED_PROXIES` config + `SetTrustedProxies` wiring so per-IP rate limits can't be spoofed via `X-Forwarded-For` (set it to the ingress range in prod).
+
+**Deliberately deferred (higher-risk; need integration tests against a real DB, which the sandbox proxy currently blocks):**
+- **#4 Payment→stock atomicity** — moving `Inventory.DeductForOrder` inside `Payment.Confirm`'s tx touches the most critical (webhook) path; safer to land with an integration test. Plan: thread the confirm tx into a `DeductForOrderTx`, mirroring #3.
+- **#5 Coupon usage-limit TOCTOU** — needs a `FOR UPDATE` re-check (or partial unique constraint) inside the recording tx; a blanket `UNIQUE(coupon_id,user_id)` would break multi-use coupons.
+- **#9 (rest) Login limiter fail-open** — failing closed risks locking users out during a Redis blip; wants a per-IP in-memory fallback rather than a hard fail-closed.
+
+---
+
 ## 🔴 P0 — Fix first (money / auth / data integrity)
 
 ### 1. ⚑ Free-money wallet top-up — any customer can mint balance
