@@ -216,6 +216,73 @@
       transparent
     );
   }
+
+  /* ── Shared redesign vocabulary (Agent A foundation — used app-wide) ── */
+
+  /* Restrained glass panel — the app's signature floating surface. */
+  .glass {
+    @apply border border-border/60 bg-card/70 backdrop-blur-xl;
+  }
+
+  /* Consistent card elevation + hover. Lifts and warms the ring on hover;
+     stays flat for reduced-motion users. Use on product/category/content cards. */
+  .hover-lift {
+    @apply ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 ease-out;
+  }
+  .hover-lift:hover {
+    @apply -translate-y-1 shadow-2xl shadow-foreground/10 ring-primary/30;
+  }
+
+  /* Eyebrow + serif title pairing used as the heading of every major section. */
+  .section-title {
+    @apply font-serif text-4xl leading-tight sm:text-5xl;
+  }
+
+  /* Long-form editorial typography for the Journal, Recipes and About pages.
+     Tuned for Persian: generous line-height, serif headings, gold links, no
+     letter-spacing. Wrap an article body in `.prose-rumera`. */
+  .prose-rumera {
+    @apply text-[1.0625rem] leading-[1.95] text-foreground/85;
+  }
+  .prose-rumera > * + * {
+    margin-top: 1.4em;
+  }
+  .prose-rumera h2 {
+    @apply mb-0 mt-12 font-serif text-3xl leading-tight text-foreground;
+  }
+  .prose-rumera h3 {
+    @apply mb-0 mt-10 font-serif text-2xl leading-tight text-foreground;
+  }
+  .prose-rumera a {
+    @apply text-primary underline decoration-primary/40 underline-offset-4 transition-colors hover:decoration-primary;
+  }
+  .prose-rumera strong {
+    @apply font-semibold text-foreground;
+  }
+  .prose-rumera ul {
+    @apply list-disc ps-5 marker:text-primary/60;
+  }
+  .prose-rumera ol {
+    @apply list-decimal ps-5 marker:text-primary/60;
+  }
+  .prose-rumera li + li {
+    margin-top: 0.5em;
+  }
+  .prose-rumera blockquote {
+    @apply border-s-2 border-primary/40 ps-5 font-serif text-xl italic text-foreground/80;
+  }
+  .prose-rumera img {
+    @apply my-8 rounded-2xl;
+  }
+  .prose-rumera hr {
+    @apply my-12 border-border/60;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hover-lift:hover {
+    transform: none;
+  }
 }
 
 /*

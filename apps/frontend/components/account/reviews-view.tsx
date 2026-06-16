@@ -109,7 +109,7 @@ export function ReviewsView() {
                   <AccountSection key={r.id} bodyClassName="flex gap-4">
                     <Link
                       href={productHref(r.product_slug, r.product_id)}
-                      className="relative size-16 shrink-0 overflow-hidden rounded-xl"
+                      className="relative size-16 shrink-0 overflow-hidden rounded-xl ring-1 ring-foreground/5"
                       aria-label={r.product_title}
                     >
                       <SmartImage
@@ -180,7 +180,7 @@ export function ReviewsView() {
                   key={`${p.order_id}-${p.product_id}`}
                   bodyClassName="flex items-center gap-4"
                 >
-                  <div className="relative size-14 shrink-0 overflow-hidden rounded-xl">
+                  <div className="relative size-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-foreground/5">
                     <SmartImage
                       src={p.image_url}
                       alt={p.product_title}
@@ -241,15 +241,14 @@ export function ReviewsView() {
 
 function ErrorBox({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="border-hairline rounded-2xl bg-card p-6 text-sm text-muted-foreground ring-1 ring-foreground/5">
-      خطا در دریافت دیدگاه‌ها.{" "}
-      <button
-        type="button"
-        onClick={onRetry}
-        className="cursor-pointer font-medium text-primary hover:underline"
-      >
+    <div className="border-hairline flex flex-col items-center gap-3 rounded-2xl border-dashed bg-card/40 px-6 py-12 text-center">
+      <span className="flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+        <MessageSquare className="size-6" />
+      </span>
+      <p className="text-sm text-muted-foreground">خطا در دریافت دیدگاه‌ها.</p>
+      <Button variant="outline" size="sm" onClick={onRetry}>
         تلاش دوباره
-      </button>
+      </Button>
     </div>
   )
 }

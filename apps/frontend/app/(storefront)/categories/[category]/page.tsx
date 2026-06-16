@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 import { notFound } from "next/navigation"
-import { PackageOpen } from "lucide-react"
+import { PackageOpen, ChevronLeft } from "lucide-react"
 
 import { buildMetadata } from "@/lib/seo/metadata"
 import { JsonLd } from "@/components/json-ld"
@@ -56,27 +57,43 @@ export default async function CategoryPage({
         ]}
       />
 
-      <section className="container-px mx-auto max-w-7xl py-14">
-        <p className="eyebrow mb-3">دسته‌بندی</p>
-        <h1 className="font-serif text-5xl">{cat.name}</h1>
-        <p className="mt-3 max-w-xl text-muted-foreground">
-          {cat.description ?? `${faNum(pagination.total_items)} محصول در این دسته`}
-        </p>
+      {/* Category hero */}
+      <section className="cellar-glow border-b border-border/60">
+        <div className="container-px mx-auto max-w-7xl py-12 sm:py-16">
+          <nav
+            aria-label="مسیر"
+            className="mb-6 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
+          >
+            <Link href="/" className="transition-colors hover:text-foreground">خانه</Link>
+            <ChevronLeft className="size-3.5 opacity-50" />
+            <Link href="/products" className="transition-colors hover:text-foreground">فروشگاه</Link>
+            <ChevronLeft className="size-3.5 opacity-50" />
+            <span className="font-medium text-foreground">{cat.name}</span>
+          </nav>
+          <p className="eyebrow mb-3">دسته‌بندی</p>
+          <h1 className="section-title">{cat.name}</h1>
+          {cat.description ? (
+            <p className="mt-4 max-w-2xl text-muted-foreground">{cat.description}</p>
+          ) : null}
+          <p className="mt-4 text-sm text-muted-foreground">
+            {`${faNum(pagination.total_items)} محصول در این دسته`}
+          </p>
+        </div>
+      </section>
 
+      <section className="container-px mx-auto max-w-7xl py-12 sm:py-14">
         {results.length ? (
-          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {results.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
         ) : (
-          <div className="mt-10">
-            <Placeholder
-              icon={PackageOpen}
-              title="محصولی در این دسته نیست"
-              description="به‌زودی محصولاتی در این دسته اضافه می‌شود."
-            />
-          </div>
+          <Placeholder
+            icon={PackageOpen}
+            title="محصولی در این دسته نیست"
+            description="به‌زودی محصولاتی در این دسته اضافه می‌شود."
+          />
         )}
       </section>
     </>

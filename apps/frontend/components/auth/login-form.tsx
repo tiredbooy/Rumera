@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
-import { Loader2 } from "lucide-react"
+import { AlertCircle, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,32 +36,56 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
 
   return (
     <div>
-      <h1 className="font-serif text-3xl">ورود به حساب</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <span className="eyebrow">ورود با ایمیل</span>
+      <h1 className="mt-2 font-serif text-3xl">ورود به حساب</h1>
+      <p className="mt-1.5 text-sm text-muted-foreground">
         برای ادامه، وارد حساب کاربری خود شوید.
       </p>
 
       <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor="email">ایمیل</Label>
-          <Input id="email" name="email" type="email" required dir="ltr" placeholder="you@example.com" />
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            dir="ltr"
+            autoComplete="email"
+            placeholder="you@example.com"
+            aria-invalid={!!error}
+            className="h-11 text-start"
+          />
         </div>
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <Label htmlFor="password">گذرواژه</Label>
             <Link
               href="/forgot-password"
-              className="text-xs text-primary hover:underline"
+              className="rounded text-xs text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               فراموشی گذرواژه؟
             </Link>
           </div>
-          <Input id="password" name="password" type="password" required dir="ltr" />
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            required
+            dir="ltr"
+            autoComplete="current-password"
+            aria-invalid={!!error}
+            className="h-11 text-start"
+          />
         </div>
 
         {error ? (
-          <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
+          <p
+            role="alert"
+            className="flex items-start gap-2 rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+          >
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <span>{error}</span>
           </p>
         ) : null}
 
@@ -73,7 +97,10 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
 
       <p className="mt-6 text-center text-sm text-muted-foreground">
         حساب ندارید؟{" "}
-        <Link href="/register" className="text-primary hover:underline">
+        <Link
+          href="/register"
+          className="rounded font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
           ساخت حساب جدید
         </Link>
       </p>

@@ -91,15 +91,14 @@ export function AddressesView() {
           <Skeleton className="h-44 rounded-2xl" />
         </div>
       ) : isError ? (
-        <div className="border-hairline rounded-2xl bg-card p-6 text-sm text-muted-foreground ring-1 ring-foreground/5">
-          خطا در دریافت آدرس‌ها.{" "}
-          <button
-            type="button"
-            onClick={() => refetch()}
-            className="cursor-pointer font-medium text-primary hover:underline"
-          >
+        <div className="border-hairline flex flex-col items-center gap-3 rounded-2xl border-dashed bg-card/40 px-6 py-12 text-center">
+          <span className="flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+            <MapPin className="size-6" />
+          </span>
+          <p className="text-sm text-muted-foreground">خطا در دریافت آدرس‌ها.</p>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
             تلاش دوباره
-          </button>
+          </Button>
         </div>
       ) : !data || data.length === 0 ? (
         <EmptyState
@@ -114,11 +113,14 @@ export function AddressesView() {
           {data.map((addr) => (
             <AccountSection
               key={addr.id}
+              className={
+                addr.is_default ? "ring-primary/30 transition-colors" : "transition-colors hover:ring-foreground/10"
+              }
               title={
                 <span className="flex items-center gap-2">
                   {addr.title || "آدرس"}
                   {addr.is_default ? (
-                    <Badge variant="secondary" className="gap-1">
+                    <Badge className="gap-1 bg-gold text-gold-foreground">
                       <Star className="size-3 fill-current" /> پیش‌فرض
                     </Badge>
                   ) : null}

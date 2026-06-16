@@ -3,9 +3,16 @@
 import * as React from "react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { Heart, Plus, ShoppingCart, Trash2, Check } from "lucide-react"
+import { Heart, Plus, ShoppingCart, Check } from "lucide-react"
 
-import { faNum, formatPrice, products, categoryFa, type Product } from "@/lib/products"
+import {
+  faNum,
+  formatPrice,
+  products,
+  categoryFa,
+  badgeFa,
+  type Product,
+} from "@/lib/products"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { SmartImage } from "@/components/smart-image"
@@ -51,74 +58,112 @@ export function WishlistView() {
 
   return (
     <>
-      <div className="mb-5 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{faNum(items.length)} مورد</p>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{faNum(items.length)}</span> مورد ذخیره‌شده
+        </p>
         <Button size="sm" variant="outline" onClick={moveAllToCart}>
           <ShoppingCart className="size-4" /> افزودن همه به سبد
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
         {items.map((p) => {
           const onSale = p.compareAt && p.compareAt > p.price
+          const discount = onSale
+            ? Math.round((1 - p.price / p.compareAt!) * 100)
+            : 0
           return (
             <article
               key={p.id}
-              className="border-hairline group/wish flex gap-4 overflow-hidden rounded-2xl bg-card p-4 ring-1 ring-foreground/5 transition-colors hover:ring-foreground/10"
+              className="group/product border-hairline relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl hover:shadow-foreground/5 hover:ring-primary/30 sm:rounded-3xl"
             >
-              <Link
-                href={`/products/${p.slug}`}
-                className="relative aspect-4/5 w-24 shrink-0 overflow-hidden rounded-xl"
-                aria-label={p.name}
-              >
-                <SmartImage
-                  src={p.image}
-                  alt={p.name}
-                  sizes="96px"
-                  monogram={p.name.charAt(0)}
-                  label={categoryFa[p.category]}
-                  fallbackClassName="from-accent/40 via-card to-secondary"
-                />
-              </Link>
-
-              <div className="flex min-w-0 flex-1 flex-col">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-xs text-primary">{categoryFa[p.category]}</p>
-                    <h3 className="line-clamp-1 font-serif text-base leading-tight">
-                      <Link href={`/products/${p.slug}`} className="hover:text-primary">
-                        {p.name}
-                      </Link>
-                    </h3>
-                    <p className="truncate text-xs text-muted-foreground">{p.maker}</p>
+              {/* Visual */}
+              <div className="relative aspect-4/5 overflow-hidden">
+                <Link href={`/products/${p.slug}`} className="absolute inset-0" aria-label={p.name}>
+                  <div className="absolute inset-0 transition-transform duration-700 ease-out group-hover/product:scale-105">
+                    <SmartImage
+                      src={p.image}
+                      alt={p.name}
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                      monogram={p.name.charAt(0)}
+                      label={categoryFa[p.category]}
+                      fallbackClassName="from-accent/40 via-card to-secondary"
+                    />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => remove(p.id)}
-                    aria-label="حذف از علاقه‌مندی‌ها"
-                    className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                </Link>
+
+                {/* Badges */}
+                <div className="pointer-events-none absolute start-3 top-3 z-10 flex flex-col gap-1.5 sm:start-4 sm:top-4">
+                  {p.badge ? (
+                    <Badge className="bg-gold text-gold-foreground shadow-sm">{badgeFa[p.badge]}</Badge>
+                  ) : null}
+                  {onSale ? (
+                    <Badge className="bg-wine text-wine-foreground shadow-sm">٪{faNum(discount)}-</Badge>
+                  ) : null}
                 </div>
 
-                <div className="mt-1.5">
-                  <Badge variant="secondary" className="gap-1">
+                {/* Remove from wishlist — filled heart, always reachable */}
+                <button
+                  type="button"
+                  onClick={() => remove(p.id)}
+                  aria-label="حذف از علاقه‌مندی‌ها"
+                  className="absolute end-3 top-3 z-10 flex size-9 cursor-pointer items-center justify-center rounded-full bg-background/80 text-wine shadow-sm backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-wine hover:text-wine-foreground sm:end-4 sm:top-4"
+                >
+                  <Heart className="size-4 fill-current" />
+                </button>
+
+                {/* Move to cart — slides up on hover (hover-capable devices only) */}
+                <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10 hidden translate-y-3 opacity-0 transition-all duration-300 group-hover/product:translate-y-0 group-hover/product:opacity-100 [@media(hover:hover)]:block">
+                  <Button
+                    type="button"
+                    className="pointer-events-auto h-11 w-full cursor-pointer rounded-2xl shadow-lg"
+                    onClick={() => addToCart(p)}
+                  >
+                    <Plus /> افزودن به سبد
+                  </Button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="flex flex-1 flex-col gap-2 p-4 sm:gap-2.5 sm:p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-[11px] font-medium text-primary sm:text-xs">
+                    {categoryFa[p.category]}
+                  </span>
+                  <Badge variant="secondary" className="gap-1 px-2 py-0 text-[10px]">
                     <Check className="size-3" /> موجود
                   </Badge>
                 </div>
 
-                <div className="mt-auto flex items-end justify-between gap-2 pt-3">
-                  <span className="flex flex-col">
-                    <span className="font-serif text-lg">{formatPrice(p.price)}</span>
-                    {onSale ? (
-                      <span className="text-xs text-muted-foreground line-through">
-                        {formatPrice(p.compareAt!)}
+                <div>
+                  <h3 className="line-clamp-1 font-serif text-base leading-tight transition-colors group-hover/product:text-primary sm:text-xl">
+                    <Link href={`/products/${p.slug}`}>{p.name}</Link>
+                  </h3>
+                  <p className="truncate text-[11px] text-muted-foreground sm:text-xs">{p.maker}</p>
+                </div>
+
+                <div className="mt-auto flex items-end justify-between gap-2 pt-1.5 sm:pt-2">
+                  <span className="flex min-w-0 flex-col leading-tight">
+                    <span className="flex flex-wrap items-baseline gap-x-1.5">
+                      <span className="font-serif text-lg text-foreground sm:text-2xl">
+                        {formatPrice(p.price)}
                       </span>
-                    ) : null}
+                      {onSale ? (
+                        <span className="text-[10px] text-muted-foreground line-through sm:text-xs">
+                          {formatPrice(p.compareAt!)}
+                        </span>
+                      ) : null}
+                    </span>
                   </span>
-                  <Button size="sm" onClick={() => addToCart(p)}>
-                    <Plus className="size-4" /> افزودن به سبد
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="size-10 shrink-0 cursor-pointer rounded-xl transition-colors group-hover/product:bg-primary group-hover/product:text-primary-foreground sm:size-11 sm:rounded-2xl [@media(hover:hover)]:hidden"
+                    aria-label={`افزودن ${p.name} به سبد خرید`}
+                    onClick={() => addToCart(p)}
+                  >
+                    <Plus />
                   </Button>
                 </div>
               </div>

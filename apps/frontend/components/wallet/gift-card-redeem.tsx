@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { useRedeemGiftCard } from "@/lib/api/hooks"
 import { formatPrice } from "@/lib/products"
 import { ApiClientError } from "@/lib/api/store-client"
@@ -40,21 +41,25 @@ export function GiftCardRedeem() {
       <h2 className="flex items-center gap-2 font-serif text-2xl">
         <Gift className="size-5 text-primary" /> کارت هدیه
       </h2>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="mt-1.5 text-base leading-relaxed text-muted-foreground">
         کد کارت هدیه را وارد کنید تا به موجودی کیف پول افزوده شود.
       </p>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Input
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="XXXX-XXXX-XXXX-XXXX"
-          dir="ltr"
-          className="h-11 min-w-0 flex-1 text-start tracking-widest"
-        />
-        <Button type="submit" disabled={redeem.isPending || !code.trim()} className="h-11 cursor-pointer">
-          {redeem.isPending ? <Loader2 className="animate-spin" /> : <Gift className="size-4" />}
-          استفاده
-        </Button>
+      <div className="mt-4 flex flex-col gap-2">
+        <Label htmlFor="gift-card-code">کد کارت هدیه</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            id="gift-card-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="XXXX-XXXX-XXXX-XXXX"
+            dir="ltr"
+            className="h-11 min-w-0 flex-1 text-start tracking-widest"
+          />
+          <Button type="submit" disabled={redeem.isPending || !code.trim()} className="h-11 cursor-pointer">
+            {redeem.isPending ? <Loader2 className="size-4 animate-spin" /> : <Gift className="size-4" />}
+            استفاده
+          </Button>
+        </div>
       </div>
     </form>
   )
