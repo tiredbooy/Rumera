@@ -1,7 +1,9 @@
 # ── Dev image: Go + Air (hot reload) ──────────────────────────────────────────
 FROM golang:1.25-alpine
 
-RUN apk add --no-cache git gcc musl-dev curl
+# gcc/musl-dev + pkgconf + vips-dev: the image pipeline links libvips (cgo)
+# under the `vips` build tag (see .air.toml). curl powers the healthcheck.
+RUN apk add --no-cache git gcc musl-dev curl pkgconf vips-dev
 
 RUN go env -w GOSUMDB=off
 RUN go env -w GOPROXY=https://go.devneeds.ir,direct

@@ -16,7 +16,15 @@
 FROM golang:1.25-alpine AS builder
 WORKDIR /app
 
-RUN apk add --no-cache git
+# build-base + vips-dev: the image pipeline uses libvips (cgo) under the `vips`
+# build tag for AVIF/WebP/JPEG/PNG transforms.
+RUN apk add --no-cache git build-base vips-dev
+
+# Module proxy is overridable so builds behind a region-restricted network can
+# point at a reachable mirror (e.g. --build-arg GOPROXY=https://<mirror>,direct).
+ARG GOPROXY=https://proxy.golang.org,direct
+ARG GOSUMDB=sum.golang.org
+ENV GOPROXY=${GOPROXY} GOSUMDB=${GOSUMDB}
 
 # Download modules first — cached until go.mod/go.sum change.
 COPY go.mod go.sum ./
@@ -25,20 +33,26 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 COPY . .
 
-# Static, stripped, reproducible binary. CGO off so it runs on a bare runtime.
-ENV CGO_ENABLED=0 GOOS=linux
+# Dynamically linked against libvips (CGO on); built with the `vips` tag so the
+# libvips transformer is compiled in. Stripped + trimmed for a lean binary.
+ENV CGO_ENABLED=1 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -trimpath -ldflags="-s -w" -o /app/server ./cmd/server/main.go
+    go build -trimpath -tags vips -ldflags="-s -w" -o /app/server ./cmd/server/main.go
 
 # ── runner ────────────────────────────────────────────────────────────────────
 FROM alpine:3.21 AS runner
 WORKDIR /app
 
-# TLS roots for outbound calls; wget (busybox) powers the healthcheck.
-RUN apk add --no-cache ca-certificates tzdata \
+# TLS roots for outbound calls; wget (busybox) powers the healthcheck; vips is
+# the libvips runtime the cgo binary links against. /data holds uploaded
+# originals + the rendered cache and must be writable by the unprivileged user
+# (a fresh named volume inherits this ownership on first mount).
+RUN apk add --no-cache ca-certificates tzdata vips \
  && addgroup --system --gid 1001 rumera \
- && adduser --system --uid 1001 --ingroup rumera rumera
+ && adduser --system --uid 1001 --ingroup rumera rumera \
+ && mkdir -p /data/media /data/media-cache \
+ && chown -R rumera:rumera /data
 
 # Binary + migrations only. No .env, no source.
 COPY --from=builder --chown=rumera:rumera /app/server ./server

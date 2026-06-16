@@ -5,7 +5,7 @@ tmp_dir = "tmp"
 [build]
   args_bin = []
   bin = "./tmp/main"
-  cmd = "go build -o ./tmp/main ./cmd/server/main.go"
+  cmd = "go build -tags vips -o ./tmp/main ./cmd/server/main.go"
   delay = 1000                # ms to wait before rebuild after a change
   exclude_dir = [
     "assets", "tmp", "vendor",

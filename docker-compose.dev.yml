@@ -127,11 +127,20 @@ services:
 
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@rumera.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+
+      # Media (product images): originals + rendered cache live on a named volume
+      # outside the synced source tree.
+      MEDIA_ROOT: /data/media
+      MEDIA_CACHE_DIR: /data/media-cache
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-}
+      MEDIA_MAX_UPLOAD_MB: ${MEDIA_MAX_UPLOAD_MB:-15}
+      MEDIA_DEFAULT_QUALITY: ${MEDIA_DEFAULT_QUALITY:-80}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     volumes:
       - go_mod_cache:/go/pkg/mod
       - go_build_cache:/root/.cache/go-build
+      - media_data:/data
     networks: [rumera_network]
     develop:
       watch:
@@ -232,6 +241,7 @@ volumes:
   meili_data:
   go_mod_cache:
   go_build_cache:
+  media_data:
 
 networks:
   rumera_network:

@@ -162,9 +162,18 @@ services:
 
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+
+      # Media (product images): originals + rendered cache on a persistent volume.
+      MEDIA_ROOT: /data/media
+      MEDIA_CACHE_DIR: /data/media-cache
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-}
+      MEDIA_MAX_UPLOAD_MB: ${MEDIA_MAX_UPLOAD_MB:-15}
+      MEDIA_DEFAULT_QUALITY: ${MEDIA_DEFAULT_QUALITY:-80}
     # Bind to loopback by default — front this with a reverse proxy / TLS.
     ports:
       - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - media_data:/data
     networks: [rumera_network]
     deploy:
       resources:
@@ -235,6 +244,7 @@ volumes:
   analytics_data:
   redis_data:
   meili_data:
+  media_data:
 
 networks:
   rumera_network:
