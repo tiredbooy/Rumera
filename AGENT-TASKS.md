@@ -52,7 +52,7 @@
   `ProductImage` + `ImageResponse` + `ToImageResponse` updated; build green. Goose migration in `migrations/main` adding
   `storage_key TEXT` (nullable) to `product_images`. Up + Down. Update
   `models/product.go` (`ProductImage.StorageKey *string`) and the mapper/response.
-- [ ] **A4 · Media service.** Implement upload (validate MIME/size/dimensions →
+- [x] **A4 · Media service.** — done: `pkg/imaging` (build-tag split: pure-Go default + libvips `-tags vips`), `ProductImageRepository`, `MediaService` (upload/list/reorder/primary/alt/delete + cached on-the-fly transform); cache-key + normalize + geometry tests green; `go get` bimg+x/image. Implement upload (validate MIME/size/dimensions →
   store original → insert `product_images` row) and transform (cache lookup →
   bimg decode/resize/encode → write `MEDIA_CACHE_DIR` → return bytes + content
   type). Add the param parser + cache-key hasher with unit tests. Use
