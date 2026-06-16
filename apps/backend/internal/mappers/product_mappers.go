@@ -47,11 +47,14 @@ func ToVariantResponse(
 
 func ToImageResponse(i *models.ProductImage) models.ImageResponse {
 	return models.ImageResponse{
-		ID:        i.ID,
-		ImageURL:  i.ImageURL,
-		AltText:   i.AltText,
-		SortOrder: i.SortOrder,
-		IsPrimary: i.IsPrimary,
+		ID:         i.ID,
+		ImageURL:   i.ImageURL,
+		StorageKey: i.StorageKey,
+		AltText:    i.AltText,
+		SortOrder:  i.SortOrder,
+		IsPrimary:  i.IsPrimary,
+		Width:      i.Width,
+		Height:     i.Height,
 	}
 }
 
