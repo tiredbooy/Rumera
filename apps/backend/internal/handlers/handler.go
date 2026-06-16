@@ -46,25 +46,26 @@ type Deps struct {
 	TasteProfile  *services.TasteProfileService
 
 	Product  *services.ProductService
+	Media    *services.MediaService
 	Variant  *services.VariantService
 	Category services.CategoryService
 	Brand    services.BrandService
 	Tag      *services.TagService
 
-	Cart      *services.CartService
-	Alert     *services.AlertService
-	Coupon    *services.CouponService
-	Order     services.OrderService
-	Wishlist  *services.WishlistService
-	Wallet    *services.WalletService
-	Loyalty   *services.LoyaltyService
+	Cart         *services.CartService
+	Alert        *services.AlertService
+	Coupon       *services.CouponService
+	Order        services.OrderService
+	Wishlist     *services.WishlistService
+	Wallet       *services.WalletService
+	Loyalty      *services.LoyaltyService
 	Referral     *services.ReferralService
 	GiftCard     *services.GiftCardService
 	Subscription *services.SubscriptionService
-	Review    *services.ReviewService
-	Shipping  *services.ShippingService
-	Payment   *services.PaymentService
-	Inventory services.InventoryService
+	Review       *services.ReviewService
+	Shipping     *services.ShippingService
+	Payment      *services.PaymentService
+	Inventory    services.InventoryService
 
 	Blog         services.BlogService
 	BlogCategory services.BlogCategoryService

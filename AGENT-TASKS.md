@@ -45,7 +45,7 @@
   (`Put`, `Open`, `Exists`, `Delete`) and a `LocalStorage` impl writing under
   `MEDIA_ROOT`, keys `products/{uuid}.{ext}`. Unit-test path-safety (no `..`
   escape). `go build ./... && go vet ./...`.
-- [ ] **A2 · Config + DI.** Add the `MEDIA_*` env vars to `internal/config`, wire
+- [x] **A2 · Config + DI.** — done: `MEDIA_*` config + validation (committed in `feat(config)`); `LocalStorage` (media+cache), `imaging.New()`, `ProductImageRepository` and `MediaService` wired into `container.go`, `Deps.Media` added. Add the `MEDIA_*` env vars to `internal/config`, wire
   `Storage` + media service into `internal/bootstrap/container.go`. Defaults per
   spec table.
 - [x] **A3 · DB migration.** — done: migration adds `storage_key`,`width`,`height`;
@@ -57,7 +57,7 @@
   bimg decode/resize/encode → write `MEDIA_CACHE_DIR` → return bytes + content
   type). Add the param parser + cache-key hasher with unit tests. Use
   `github.com/h2non/bimg` (`go get`).
-- [ ] **A5 · Handlers + routes.** Implement the endpoints in the frozen contract:
+- [x] **A5 · Handlers + routes.** — done: `handlers/media.go` (upload/list/reorder/primary/alt/delete + public `ServeMedia` with Accept negotiation, q/w/h/fit parsing, immutable cache headers); routes registered (`/api/v1/admin/products/:id/images*` + `GET /media/*key`); matches B's client paths/methods exactly; routes smoke test green. Implement the endpoints in the frozen contract:
   `POST/GET/PUT/PATCH/DELETE /api/v1/admin/products/:id/images*` (admin group `a`)
   and public `GET /media/*key`. Register in `internal/routes/routes.go`. Content
   negotiation from `Accept` when `f` omitted; long-lived `Cache-Control`.

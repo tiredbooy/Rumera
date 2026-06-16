@@ -220,8 +220,9 @@ func (s *MediaService) assertImageBelongs(ctx context.Context, productID, imageI
 
 // DefaultQuality and AllowedOutput let the handler validate query params against
 // the same configuration the service uses.
-func (s *MediaService) DefaultQuality() int { return s.cfg.DefaultQuality }
-func (s *MediaService) MaxDimension() int   { return s.cfg.MaxDimension }
+func (s *MediaService) DefaultQuality() int   { return s.cfg.DefaultQuality }
+func (s *MediaService) MaxDimension() int     { return s.cfg.MaxDimension }
+func (s *MediaService) MaxUploadBytes() int64 { return s.cfg.MaxUploadBytes }
 func (s *MediaService) OutputAllowed(f imaging.Format) bool {
 	if len(s.cfg.AllowedOutput) == 0 {
 		return true
