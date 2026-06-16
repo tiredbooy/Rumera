@@ -29,11 +29,11 @@ export function ForgotPasswordForm() {
   if (sent) {
     return (
       <div className="text-center">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-primary/20">
           <MailCheck className="size-6" />
         </div>
         <h1 className="font-serif text-2xl">ایمیل را بررسی کنید</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mx-auto mt-2 max-w-xs text-sm text-muted-foreground">
           اگر این ایمیل در سیستم ثبت شده باشد، لینک بازیابی گذرواژه برایتان ارسال
           می‌شود.
         </p>
@@ -46,15 +46,25 @@ export function ForgotPasswordForm() {
 
   return (
     <div>
-      <h1 className="font-serif text-3xl">بازیابی گذرواژه</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <span className="eyebrow">بازیابی حساب</span>
+      <h1 className="mt-2 font-serif text-3xl">بازیابی گذرواژه</h1>
+      <p className="mt-1.5 text-sm text-muted-foreground">
         ایمیل حساب خود را وارد کنید تا لینک بازیابی ارسال شود.
       </p>
 
       <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor="email">ایمیل</Label>
-          <Input id="email" name="email" type="email" required dir="ltr" placeholder="you@example.com" />
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            dir="ltr"
+            autoComplete="email"
+            placeholder="you@example.com"
+            className="h-11 text-start"
+          />
         </div>
         <Button type="submit" size="lg" className="mt-1 h-11" disabled={loading}>
           {loading ? <Loader2 className="animate-spin" /> : null}
@@ -63,7 +73,10 @@ export function ForgotPasswordForm() {
       </form>
 
       <p className="mt-6 text-center text-sm text-muted-foreground">
-        <Link href="/login" className="text-primary hover:underline">
+        <Link
+          href="/login"
+          className="rounded font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
           بازگشت به ورود
         </Link>
       </p>

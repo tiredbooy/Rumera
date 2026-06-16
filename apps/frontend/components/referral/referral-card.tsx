@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { useReferral } from "@/lib/api/hooks"
 import { faNum } from "@/lib/products"
 
@@ -55,28 +56,37 @@ export function ReferralCard() {
       <h2 className="flex items-center gap-2 font-serif text-2xl">
         <Users className="size-5 text-primary" /> دعوت دوستان
       </h2>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="mt-1.5 text-base leading-relaxed text-muted-foreground">
         با هر دعوت موفق، شما و دوستتان هرکدام {faNum(data.reward)} امتیاز می‌گیرید.
       </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Input value={link} readOnly dir="ltr" className="h-11 min-w-0 flex-1 text-start" />
-        <Button onClick={copy} variant="outline" className="h-11 cursor-pointer">
-          {copied ? <Check className="size-4" /> : <Copy className="size-4" />} کپی
-        </Button>
-        <Button onClick={share} className="h-11 cursor-pointer">
-          <Share2 className="size-4" /> اشتراک‌گذاری
-        </Button>
+      <div className="mt-4 flex flex-col gap-2">
+        <Label htmlFor="referral-link">لینک دعوت شما</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            id="referral-link"
+            value={link}
+            readOnly
+            dir="ltr"
+            className="h-11 min-w-0 flex-1 text-start"
+          />
+          <Button onClick={copy} variant="outline" className="h-11 cursor-pointer" aria-label="کپی لینک دعوت">
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />} کپی
+          </Button>
+          <Button onClick={share} className="h-11 cursor-pointer">
+            <Share2 className="size-4" /> اشتراک‌گذاری
+          </Button>
+        </div>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 text-center">
-        <div className="rounded-2xl bg-secondary/60 py-3">
-          <p className="font-serif text-2xl">{faNum(data.completed)}</p>
-          <p className="text-xs text-muted-foreground">دعوت موفق</p>
+        <div className="rounded-2xl bg-secondary/60 py-4">
+          <p className="font-serif text-3xl text-foil">{faNum(data.completed)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">دعوت موفق</p>
         </div>
-        <div className="rounded-2xl bg-secondary/60 py-3">
-          <p className="font-serif text-2xl">{faNum(data.pending)}</p>
-          <p className="text-xs text-muted-foreground">در انتظار</p>
+        <div className="rounded-2xl bg-secondary/60 py-4">
+          <p className="font-serif text-3xl">{faNum(data.pending)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">در انتظار</p>
         </div>
       </div>
     </div>

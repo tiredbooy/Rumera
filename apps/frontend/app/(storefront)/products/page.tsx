@@ -11,6 +11,7 @@ import { listCategories } from "@/lib/catalog/categories"
 import { faNum } from "@/lib/products"
 import { Button } from "@/components/ui/button"
 import { ProductCard } from "@/components/catalog/product-card"
+import { ProductSort } from "@/components/catalog/product-sort"
 import { Placeholder } from "@/components/dashboard/placeholder"
 
 export const metadata: Metadata = buildMetadata({
@@ -20,7 +21,7 @@ export const metadata: Metadata = buildMetadata({
   path: "/products",
 })
 
-type SP = { page?: string; search?: string; sortBy?: string }
+type SP = { page?: string; search?: string; sortBy?: string; orderBy?: "asc" | "desc" }
 
 export default async function ProductsPage({
   searchParams,
@@ -32,12 +33,13 @@ export default async function ProductsPage({
   const search = sp.search?.trim() || undefined
 
   const [data, categories] = await Promise.all([
-    listProducts({ page, limit: 12, search, sortBy: sp.sortBy }),
+    listProducts({ page, limit: 12, search, sortBy: sp.sortBy, orderBy: sp.orderBy }),
     listCategories(),
   ])
   const { results, pagination } = data
 
-  const pageHref = (p: number) => `/products${buildQuery({ page: p, search, sortBy: sp.sortBy })}`
+  const pageHref = (p: number) =>
+    `/products${buildQuery({ page: p, search, sortBy: sp.sortBy, orderBy: sp.orderBy })}`
 
   return (
     <>
@@ -77,7 +79,15 @@ export default async function ProductsPage({
 
         {results.length ? (
           <>
-            <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {/* Toolbar — result count + sort */}
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-6">
+              <p className="text-sm text-muted-foreground">
+                {`نمایش ${faNum(results.length)} از ${faNum(pagination.total_items)} محصول`}
+              </p>
+              <ProductSort />
+            </div>
+
+            <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {results.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
