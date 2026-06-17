@@ -1,0 +1,31 @@
+1. Need a panel for creating categories and brand in admin dashboard
+2. Need to fix error 400 for creating product ({"error":{"code":"INVALID_REQUEST","message":"invalid request"}})
+
+3. Need to fix nextjs automatic redirect user to login if token is invalid but its better to automaticly refresh the token
+so user don't get logout to often 
+
+4. Need to make Edit User and make the user management in admin dashboard more feature rich and more control
+and RBAC is very important for here
+
+5. Need to Create Product Detail page
+
+6. Need to make recipe Detail page
+
+7. Need to make Create Recipe form in admin dashboard
+
+8. Need to improve admin dashboard settings and add more things for more managable site
+
+9. Need To Make subscription More Clear and more underestanding in Account dashboard
+
+10. Need to Imrpvoe Wallet in account dashboard
+
+11. Need to improve Account Setting dashboard
+
+12. Need to make Product Categories Page
+
+13. Need to make journal Card and make a journal detail page and use mock data but exactly like the one we will have if using api
+
+14. i wnat you to for recipes Page add some mock data and like journal Exactly like the api data
+
+15. Nvm to add hardcode mock data make me script to automaticly insert or create item for each one like products 
+recipes journals and everything we need to test the app better
