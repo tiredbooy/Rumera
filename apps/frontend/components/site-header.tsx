@@ -41,19 +41,40 @@ const nav = [
 ]
 
 export function SiteHeader({ categories }: { categories: HeaderCategory[] }) {
+  // Scroll-aware chrome: the header tightens and deepens its elevation once the
+  // page leaves the very top, giving an "app-like" floating bar.
+  const [scrolled, setScrolled] = React.useState(false)
+  React.useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+
   return (
     <>
       {/* Thin promo strip — sets the premium-delivery tone before the header. */}
-      <div className="bg-foreground text-background">
+      <div className="group/promo relative overflow-hidden bg-foreground text-background">
         <div className="container-px mx-auto flex h-9 max-w-7xl items-center justify-center gap-2 text-xs font-medium">
           <Sparkles className="size-3.5 text-primary" />
           <span className="truncate">
             ارسال رایگان برای سفارش‌های بالای ۵٬۰۰۰٬۰۰۰ تومان — با ضمانت اصالت
           </span>
         </div>
+        <span
+          aria-hidden
+          className="sheen pointer-events-none absolute inset-0 -translate-x-full opacity-0 transition-all duration-1000 group-hover/promo:translate-x-full group-hover/promo:opacity-100"
+        />
       </div>
 
-      <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl">
+      <header
+        className={cn(
+          "sticky top-0 z-50 w-full border-b backdrop-blur-xl transition-[background-color,border-color,box-shadow] duration-300",
+          scrolled
+            ? "border-border/60 bg-background/85 shadow-e1"
+            : "border-transparent bg-background/60"
+        )}
+      >
         <div className="container-px mx-auto flex h-16 max-w-7xl items-center gap-3 lg:gap-5">
           {/* Mobile menu */}
           <div className="flex items-center md:hidden">
@@ -61,9 +82,13 @@ export function SiteHeader({ categories }: { categories: HeaderCategory[] }) {
           </div>
 
           {/* Wordmark */}
-          <Link href="/" className="flex shrink-0 items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-xl bg-primary/15 text-primary">
-              <Wine className="size-4.5" />
+          <Link
+            href="/"
+            aria-label="رومرا — خانه"
+            className="group/brand flex shrink-0 items-center gap-2"
+          >
+            <span className="flex size-8 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/15 transition-all duration-300 group-hover/brand:bg-primary/25 group-hover/brand:ring-primary/30">
+              <Wine className="size-4.5 transition-transform duration-500 group-hover/brand:-rotate-12" />
             </span>
             <span className="font-serif text-3xl leading-none">
               <span className="text-foil">رومرا</span>
@@ -222,7 +247,7 @@ function ProductsMenu({ categories }: { categories: HeaderCategory[] }) {
 
       {open ? (
         <div className="absolute start-0 top-full z-50 pt-2">
-          <div className="animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 w-[min(94vw,680px)] overflow-hidden rounded-3xl border border-border/60 bg-popover shadow-2xl shadow-foreground/10 duration-150">
+          <div className="animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 shadow-e3 w-[min(94vw,680px)] overflow-hidden rounded-3xl border border-border/60 bg-popover/95 backdrop-blur-xl duration-150">
             <div className="grid grid-cols-1 sm:grid-cols-[1.5fr_1fr]">
               {/* Categories */}
               <div className="p-4 sm:p-5">

@@ -60,7 +60,9 @@ const trust = [
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border/60 bg-card/40">
+    <footer className="relative border-t border-border/60 bg-card/40">
+      {/* Gold hairline crowning the footer — ties it back to the brand foil. */}
+      <div aria-hidden className="rule-gold absolute inset-x-0 top-0" />
       <div className="container-px mx-auto max-w-7xl py-16">
         <div className="grid gap-12 lg:grid-cols-[1.4fr_2fr]">
           {/* Brand + newsletter */}
@@ -97,6 +99,7 @@ export function SiteFooter() {
                   size="icon"
                   aria-label={label}
                   asChild
+                  className="rounded-full transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
                 >
                   <Link href={href}>
                     <Icon />
@@ -110,7 +113,7 @@ export function SiteFooter() {
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
             {columns.map((col) => (
               <div key={col.title}>
-                <h4 className="text-xs font-semibold text-foreground">
+                <h4 className="text-xs font-semibold text-primary">
                   {col.title}
                 </h4>
                 <ul className="mt-4 space-y-2.5">
@@ -152,13 +155,16 @@ export function SiteFooter() {
         </div>
 
         {/* Trust strip */}
-        <div className="mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 rounded-2xl bg-background/50 py-4">
+        <div className="shadow-e1 mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 rounded-2xl border border-border/50 bg-background/50 py-4">
           {trust.map(({ Icon, label }) => (
             <span
               key={label}
               className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground"
             >
-              <Icon className="size-4 text-primary" /> {label}
+              <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Icon className="size-4" />
+              </span>
+              {label}
             </span>
           ))}
         </div>

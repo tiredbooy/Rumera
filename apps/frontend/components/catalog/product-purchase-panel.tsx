@@ -66,10 +66,10 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
                 type="button"
                 onClick={() => setSelectedId(v.id)}
                 className={cn(
-                  "rounded-xl border px-4 py-2 text-sm transition-colors",
+                  "cursor-pointer rounded-xl border px-4 py-2 text-sm transition-all duration-200",
                   v.id === selectedId
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border hover:border-primary/40"
+                    ? "border-primary bg-primary/10 font-medium text-primary ring-1 ring-primary/30"
+                    : "border-border hover:border-primary/40 hover:bg-accent/40"
                 )}
               >
                 {variantLabel(v)}

@@ -27,7 +27,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </span>
       </Link>
 
-      <main className="border-hairline w-full max-w-md rounded-3xl bg-card/80 p-7 shadow-xl ring-1 ring-foreground/5 backdrop-blur-sm sm:p-9">
+      <main className="border-hairline shadow-e3 relative w-full max-w-md overflow-hidden rounded-3xl bg-card/80 p-7 ring-1 ring-foreground/5 backdrop-blur-xl sm:p-9">
+        <div aria-hidden className="rule-gold absolute inset-x-8 top-0" />
         {children}
       </main>
 

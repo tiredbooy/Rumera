@@ -24,16 +24,21 @@ export function ProductCard({ product }: { product: ProductListItem }) {
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group/product border-hairline relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-foreground/5 hover:ring-primary/30 sm:rounded-3xl"
+      className="group/product press border-hairline shadow-e1 hover:shadow-e3 relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:ring-primary/30 sm:rounded-3xl"
     >
       <div className="relative flex h-44 items-end justify-center overflow-hidden sm:h-56">
         <div
           className="absolute inset-0 opacity-90 transition-opacity duration-300 group-hover/product:opacity-100"
           style={{ background: `radial-gradient(75% 60% at 50% 120%, ${hue[0]}, transparent 70%)` }}
         />
+        {/* Sheen sweep on hover — premium catch-light across the bottle stage. */}
+        <span
+          aria-hidden
+          className="sheen pointer-events-none absolute inset-0 -translate-x-full opacity-0 transition-all duration-700 ease-out group-hover/product:translate-x-full group-hover/product:opacity-100 motion-reduce:hidden"
+        />
         <Bottle
           product={{ id: product.id, hue, maker: product.brand }}
-          className="relative h-36 transition-transform duration-500 group-hover/product:-translate-y-1 group-hover/product:scale-105 sm:h-48"
+          className="relative h-36 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/product:-translate-y-1.5 group-hover/product:scale-105 sm:h-48"
         />
       </div>
 

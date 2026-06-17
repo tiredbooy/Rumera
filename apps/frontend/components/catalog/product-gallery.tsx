@@ -27,7 +27,7 @@ export function ProductGallery({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="cellar-glow border-hairline relative flex aspect-square items-center justify-center overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
+      <div className="cellar-glow border-hairline shadow-e2 relative flex aspect-square items-center justify-center overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
         {current ? (
           <Image
             key={current.id}

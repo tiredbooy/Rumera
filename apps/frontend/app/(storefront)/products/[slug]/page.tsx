@@ -162,7 +162,8 @@ export default async function ProductDetailPage({
             ) : null}
 
             {/* Purchase panel (owns variant selection + wishlist) */}
-            <div className="mt-7 rounded-3xl border border-border/60 bg-card/50 p-5 sm:p-6">
+            <div className="shadow-e2 relative mt-7 overflow-hidden rounded-3xl border border-border/60 bg-card/60 p-5 backdrop-blur-sm sm:p-6">
+              <div aria-hidden className="rule-gold absolute inset-x-6 top-0" />
               <ProductPurchasePanel product={product} />
             </div>
 
@@ -183,9 +184,9 @@ export default async function ProductDetailPage({
               {TRUST.map((t) => (
                 <div
                   key={t.title}
-                  className="flex items-center gap-3 rounded-2xl bg-secondary/40 p-3 sm:flex-col sm:items-start sm:gap-1.5 sm:p-4"
+                  className="flex items-center gap-3 rounded-2xl border border-border/50 bg-secondary/40 p-3 transition-colors hover:border-primary/30 sm:flex-col sm:items-start sm:gap-1.5 sm:p-4"
                 >
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10">
                     <t.icon className="size-4.5" />
                   </span>
                   <div className="leading-tight">

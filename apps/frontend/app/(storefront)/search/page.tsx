@@ -42,7 +42,7 @@ export default async function SearchPage({
               autoFocus
               placeholder="نام محصول، برند یا دسته…"
               aria-label="جستجوی فروشگاه"
-              className="h-14 w-full rounded-full border border-border/70 bg-background/80 ps-12 pe-28 text-base shadow-sm outline-none backdrop-blur-sm transition-all placeholder:text-muted-foreground/80 focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+              className="shadow-e2 h-14 w-full rounded-full border border-border/70 bg-background/80 ps-12 pe-28 text-base outline-none backdrop-blur-sm transition-all placeholder:text-muted-foreground/80 focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
             />
             <Button
               type="submit"

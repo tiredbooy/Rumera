@@ -56,6 +56,11 @@ export function RecommendationRail({
                     fallbackClassName="from-accent/40 via-card to-secondary"
                   />
                 </div>
+                {/* Sheen catch-light on hover, matching the product cards. */}
+                <span
+                  aria-hidden
+                  className="sheen pointer-events-none absolute inset-0 -translate-x-full opacity-0 transition-all duration-700 ease-out group-hover/rec:translate-x-full group-hover/rec:opacity-100 motion-reduce:hidden"
+                />
               </div>
               <div className="flex flex-1 flex-col gap-1.5 p-4 sm:p-5">
                 {item.brand ? (

@@ -54,6 +54,19 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Motion vocabulary — premium, calm easing. Consume via ease-cellar /
+     duration-cellar in markup, or reference the vars directly. */
+  --ease-cellar: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-cellar-in: cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-duration: 320ms;
+
+  /* Elevation scale — warm, low-spread shadows tuned for both themes.
+     Use as shadow-e1 / shadow-e2 / shadow-e3 / shadow-glow. */
+  --shadow-e1: var(--elev-1);
+  --shadow-e2: var(--elev-2);
+  --shadow-e3: var(--elev-3);
+  --shadow-glow: var(--elev-glow);
 }
 
 /*
@@ -102,6 +115,12 @@
   --sidebar-accent-foreground: oklch(0.28 0.05 50);
   --sidebar-border: oklch(0.89 0.012 75);
   --sidebar-ring: oklch(0.66 0.13 72);
+
+  /* Warm, ink-tinted elevation for the parchment theme. */
+  --elev-1: 0 1px 2px -1px oklch(0.22 0.02 55 / 0.10), 0 2px 8px -3px oklch(0.22 0.02 55 / 0.10);
+  --elev-2: 0 4px 12px -4px oklch(0.22 0.02 55 / 0.12), 0 10px 24px -8px oklch(0.22 0.02 55 / 0.12);
+  --elev-3: 0 8px 20px -6px oklch(0.22 0.02 55 / 0.14), 0 24px 48px -14px oklch(0.22 0.02 55 / 0.16);
+  --elev-glow: 0 12px 40px -8px oklch(0.66 0.13 72 / 0.28);
 }
 
 .dark {
@@ -143,6 +162,12 @@
   --sidebar-accent-foreground: oklch(0.92 0.04 85);
   --sidebar-border: oklch(1 0 0 / 9%);
   --sidebar-ring: oklch(0.8 0.13 78);
+
+  /* Deeper, near-black elevation for the cellar theme — depth without grey haze. */
+  --elev-1: 0 1px 2px -1px oklch(0.08 0.01 50 / 0.55), 0 2px 10px -4px oklch(0.06 0.01 50 / 0.5);
+  --elev-2: 0 6px 16px -6px oklch(0.06 0.01 50 / 0.6), 0 14px 32px -10px oklch(0.05 0.01 50 / 0.55);
+  --elev-3: 0 10px 26px -8px oklch(0.05 0.01 50 / 0.65), 0 30px 60px -16px oklch(0.04 0.01 50 / 0.6);
+  --elev-glow: 0 14px 48px -10px oklch(0.82 0.13 80 / 0.34);
 }
 
 @layer base {
@@ -222,15 +247,50 @@
   /* Restrained glass panel — the app's signature floating surface. */
   .glass {
     @apply border border-border/60 bg-card/70 backdrop-blur-xl;
+    box-shadow: var(--elev-1);
   }
 
   /* Consistent card elevation + hover. Lifts and warms the ring on hover;
      stays flat for reduced-motion users. Use on product/category/content cards. */
   .hover-lift {
-    @apply ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 ease-out;
+    @apply ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300;
+    transition-timing-function: var(--ease-cellar);
   }
   .hover-lift:hover {
-    @apply -translate-y-1 shadow-2xl shadow-foreground/10 ring-primary/30;
+    @apply -translate-y-1 ring-primary/30;
+    box-shadow: var(--elev-3);
+  }
+
+  /* Tactile press feedback for interactive cards/buttons that aren't shadcn
+     Buttons — pairs well with .hover-lift. */
+  .press {
+    @apply transition-transform;
+    transition-timing-function: var(--ease-cellar);
+  }
+  .press:active {
+    @apply scale-[0.985];
+  }
+
+  /* Hairline gold rule used to separate editorial sections. */
+  .rule-gold {
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      color-mix(in oklch, var(--gold) 45%, transparent),
+      transparent
+    );
+  }
+
+  /* Soft sheen sweep for premium CTAs / featured chips. Apply to an absolutely
+     positioned overlay inside a `group`; reveals on group-hover. */
+  .sheen {
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      color-mix(in oklch, white 22%, transparent) 50%,
+      transparent 65%
+    );
   }
 
   /* Eyebrow + serif title pairing used as the heading of every major section. */
