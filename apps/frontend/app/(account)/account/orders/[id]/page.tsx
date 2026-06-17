@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react"
 
 import { faNum } from "@/lib/products"
 import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/dashboard/page-header"
+import { AccountPageHeader } from "@/components/account/account-page-header"
 import { OrderDetail } from "@/components/account/order-detail"
 
 export default async function AccountOrderDetailPage({
@@ -14,7 +14,8 @@ export default async function AccountOrderDetailPage({
   const { id } = await params
   return (
     <>
-      <PageHeader
+      <AccountPageHeader
+        eyebrow="جزئیات سفارش"
         title={`سفارش #${faNum(Number(id) || 0)}`}
         description="جزئیات اقلام، پرداخت و وضعیت ارسال."
         actions={

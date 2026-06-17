@@ -9,13 +9,16 @@ import {
   ArrowLeft,
   Sparkles,
   MapPinOff,
+  Heart,
+  Repeat,
+  MessageSquare,
 } from "lucide-react"
 
 import { faNum, formatPrice } from "@/lib/products"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
-import { StatCard } from "@/components/dashboard/stat-card"
+import { AccountStatCard } from "./account-stat-card"
 import { SmartImage } from "@/components/smart-image"
 import {
   useOrders,
@@ -46,8 +49,16 @@ const ACTIVE_STATUSES: OrderStatus[] = [
   "out_for_delivery",
 ]
 
+/** Tap-targets for the most common account journeys. */
+const QUICK_ACTIONS = [
+  { label: "علاقه‌مندی‌ها", href: "/account/wishlist", icon: Heart },
+  { label: "اشتراک‌ها", href: "/account/subscriptions", icon: Repeat },
+  { label: "دیدگاه‌ها", href: "/account/reviews", icon: MessageSquare },
+  { label: "سلیقهٔ من", href: "/account/taste", icon: Sparkles },
+] as const
+
 function KpiSkeleton() {
-  return <Skeleton className="h-[116px] rounded-2xl" />
+  return <Skeleton className="h-[128px] rounded-2xl" />
 }
 
 export function AccountOverview() {
@@ -84,39 +95,47 @@ export function AccountOverview() {
         {orders.isLoading ? (
           <KpiSkeleton />
         ) : (
-          <StatCard
+          <AccountStatCard
             label="سفارش‌های فعال"
             value={faNum(activeCount)}
             icon={ShoppingBag}
             hint="در حال پردازش"
+            href="/account/orders"
+            accent="primary"
           />
         )}
         {wallet.isLoading ? (
           <KpiSkeleton />
         ) : (
-          <StatCard
+          <AccountStatCard
             label="موجودی کیف پول"
             value={wallet.data ? formatPrice(wallet.data.balance) : "—"}
             icon={Wallet}
+            href="/account/wallet"
+            accent="gold"
           />
         )}
         {loyalty.isLoading ? (
           <KpiSkeleton />
         ) : (
-          <StatCard
+          <AccountStatCard
             label="امتیاز باشگاه"
             value={loyalty.data ? faNum(loyalty.data.points_balance) : "—"}
             icon={Award}
             hint={loyalty.data ? `سطح ${tierFa[loyalty.data.tier] ?? loyalty.data.tier}` : undefined}
+            href="/account/rewards"
+            accent="wine"
           />
         )}
         {addresses.isLoading ? (
           <KpiSkeleton />
         ) : (
-          <StatCard
+          <AccountStatCard
             label="آدرس‌ها"
             value={faNum(addresses.data?.length ?? 0)}
             icon={MapPin}
+            href="/account/addresses"
+            accent="primary"
           />
         )}
       </div>
@@ -158,6 +177,27 @@ export function AccountOverview() {
           ) : null}
         </div>
       ) : null}
+
+      {/* Quick actions */}
+      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {QUICK_ACTIONS.map((a) => {
+          const Icon = a.icon
+          return (
+            <Link
+              key={a.href}
+              href={a.href}
+              className="border-hairline group/qa flex flex-col items-center gap-2.5 rounded-2xl bg-card p-4 text-center ring-1 ring-foreground/5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-foreground/5 hover:ring-primary/20"
+            >
+              <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15 transition-transform duration-300 group-hover/qa:scale-105">
+                <Icon className="size-5" />
+              </span>
+              <span className="text-sm font-medium transition-colors group-hover/qa:text-primary">
+                {a.label}
+              </span>
+            </Link>
+          )
+        })}
+      </div>
 
       {/* Recent orders */}
       <div className="mt-8 flex items-center justify-between">

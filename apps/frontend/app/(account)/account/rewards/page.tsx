@@ -1,11 +1,12 @@
-import { PageHeader } from "@/components/dashboard/page-header"
+import { AccountPageHeader } from "@/components/account/account-page-header"
 import { RewardsView } from "@/components/loyalty/rewards-view"
 import { ReferralCard } from "@/components/referral/referral-card"
 
 export default function AccountRewardsPage() {
   return (
     <>
-      <PageHeader
+      <AccountPageHeader
+        eyebrow="باشگاه"
         title="باشگاه مشتریان"
         description="با هر خرید امتیاز بگیرید و آن را به اعتبار کیف پول تبدیل کنید."
       />

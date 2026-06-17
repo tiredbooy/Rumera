@@ -1,5 +1,5 @@
 import { getSession } from "@/lib/auth/session"
-import { PageHeader } from "@/components/dashboard/page-header"
+import { AccountPageHeader } from "@/components/account/account-page-header"
 import { SettingsView } from "@/components/account/settings-view"
 
 export default async function AccountSettingsPage() {
@@ -7,7 +7,11 @@ export default async function AccountSettingsPage() {
 
   return (
     <>
-      <PageHeader title="تنظیمات حساب" description="اطلاعات شخصی، امنیت و حریم خصوصی." />
+      <AccountPageHeader
+        eyebrow="پیکربندی"
+        title="تنظیمات حساب"
+        description="اطلاعات شخصی، امنیت و حریم خصوصی."
+      />
       <SettingsView
         defaultName={session?.user?.name ?? ""}
         defaultEmail={session?.user?.email ?? ""}

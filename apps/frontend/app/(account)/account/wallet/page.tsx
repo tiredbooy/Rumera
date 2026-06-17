@@ -1,10 +1,14 @@
-import { PageHeader } from "@/components/dashboard/page-header"
+import { AccountPageHeader } from "@/components/account/account-page-header"
 import { WalletView } from "@/components/account/wallet-view"
 
 export default function AccountWalletPage() {
   return (
     <>
-      <PageHeader title="کیف پول" description="موجودی و تراکنش‌های کیف پول رومرا." />
+      <AccountPageHeader
+        eyebrow="اعتبار"
+        title="کیف پول"
+        description="موجودی و تراکنش‌های کیف پول رومرا."
+      />
       <WalletView />
     </>
   )

@@ -1,10 +1,11 @@
-import { PageHeader } from "@/components/dashboard/page-header"
+import { AccountPageHeader } from "@/components/account/account-page-header"
 import { WishlistView } from "@/components/account/wishlist-view"
 
 export default function AccountWishlistPage() {
   return (
     <>
-      <PageHeader
+      <AccountPageHeader
+        eyebrow="ذخیره‌شده‌ها"
         title="علاقه‌مندی‌ها"
         description="بطری‌هایی که برای بعد ذخیره کرده‌اید."
       />

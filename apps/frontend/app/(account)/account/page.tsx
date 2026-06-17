@@ -1,5 +1,5 @@
 import { getSession } from "@/lib/auth/session"
-import { PageHeader } from "@/components/dashboard/page-header"
+import { AccountPageHeader } from "@/components/account/account-page-header"
 import { AccountOverview } from "@/components/account/account-overview"
 
 export default async function AccountOverviewPage() {
@@ -8,7 +8,8 @@ export default async function AccountOverviewPage() {
 
   return (
     <>
-      <PageHeader
+      <AccountPageHeader
+        eyebrow="خوش آمدید"
         title={`سلام، ${firstName}`}
         description="خلاصه‌ای از حساب، سفارش‌ها و کیف پول شما."
       />
