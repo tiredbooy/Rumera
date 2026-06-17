@@ -140,7 +140,10 @@
       "Bash(cat lib/api/account-hooks.ts)",
       "Bash(timeout 120 docker pull postgres:17-alpine)",
       "Bash(export TEST_DATABASE_URL='postgres://test:test@localhost:55432/rumera_test?sslmode=disable')",
-      "Bash(export TEST_DATABASE_URL='postgres://test:test@localhost:55432/rumera_fresh?sslmode=disable')"
+      "Bash(export TEST_DATABASE_URL='postgres://test:test@localhost:55432/rumera_fresh?sslmode=disable')",
+      "Bash(echo \"=== tsc exit: $? ===\")",
+      "Read(//home/tehranspeaker/.claude/skills/ui-ux-pro-max/**)",
+      "Bash(python3 scripts/search.py \"premium wine spirits ecommerce customer account dashboard elegant dark\" --design-system -p \"Rumera Account\")"
     ]
   }
 }
