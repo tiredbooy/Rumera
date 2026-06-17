@@ -43,6 +43,15 @@ export default async function AdminCustomerDetailPage({
   return (
     <>
       <PageHeader
+        eyebrow={
+          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-label="مسیر">
+            <Link href="/admin/customers" className="transition-colors hover:text-foreground">
+              مشتریان
+            </Link>
+            <span aria-hidden>/</span>
+            <span className="text-foreground">{customer.name}</span>
+          </nav>
+        }
         title={customer.name}
         description={customer.email}
         actions={
@@ -71,8 +80,8 @@ export default async function AdminCustomerDetailPage({
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <h2 className="mb-3 font-serif text-2xl">تاریخچهٔ سفارش‌ها</h2>
-          <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5">
+          <h2 className="mb-3 font-serif text-lg">تاریخچهٔ سفارش‌ها</h2>
+          <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
             {orders.length === 0 ? (
               <p className="p-8 text-center text-sm text-muted-foreground">
                 این مشتری هنوز سفارشی ثبت نکرده است.
@@ -80,17 +89,17 @@ export default async function AdminCustomerDetailPage({
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="text-start">شماره</TableHead>
-                    <TableHead className="text-start">تاریخ</TableHead>
-                    <TableHead className="text-start">مبلغ</TableHead>
-                    <TableHead className="text-start">پرداخت</TableHead>
-                    <TableHead className="text-end">ارسال</TableHead>
+                  <TableRow className="border-border/60 bg-muted/30 hover:bg-muted/30">
+                    <TableHead className="h-10 text-xs font-medium text-muted-foreground">شماره</TableHead>
+                    <TableHead className="h-10 text-xs font-medium text-muted-foreground">تاریخ</TableHead>
+                    <TableHead className="h-10 text-xs font-medium text-muted-foreground">مبلغ</TableHead>
+                    <TableHead className="h-10 text-xs font-medium text-muted-foreground">پرداخت</TableHead>
+                    <TableHead className="h-10 text-end text-xs font-medium text-muted-foreground">ارسال</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {orders.map((o) => (
-                    <TableRow key={o.id} className="cursor-pointer">
+                    <TableRow key={o.id} className="cursor-pointer border-border/40">
                       <TableCell className="font-medium">
                         <Link href={`/admin/orders/${o.id}`}>#{faNum(o.number)}</Link>
                       </TableCell>
@@ -106,8 +115,8 @@ export default async function AdminCustomerDetailPage({
           </div>
         </div>
 
-        <div className="border-hairline h-fit rounded-2xl bg-card p-5 ring-1 ring-foreground/5">
-          <p className="mb-4 font-serif text-lg">مشخصات</p>
+        <div className="border-hairline h-fit rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
+          <p className="mb-4 font-serif text-base">مشخصات</p>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between">
               <dt className="text-muted-foreground">وضعیت</dt>

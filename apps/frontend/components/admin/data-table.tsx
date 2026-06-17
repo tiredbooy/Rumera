@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Inbox,
+  X,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -137,9 +138,9 @@ export function DataTable<T>({
   const hasToolbar = Boolean(searchText) || filters.length > 0 || toolbarExtra
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {hasToolbar ? (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {searchText ? (
             <div className="relative w-full sm:max-w-xs">
               <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground" />
@@ -147,9 +148,19 @@ export function DataTable<T>({
                 value={query}
                 onChange={(e) => setQueryReset(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="ps-9"
+                className="h-9 ps-9 pe-9"
                 aria-label="جستجو"
               />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQueryReset("")}
+                  aria-label="پاک کردن جستجو"
+                  className="absolute inset-y-0 end-2.5 my-auto flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -159,7 +170,7 @@ export function DataTable<T>({
               value={facets[f.id] ?? "all"}
               onValueChange={(v) => setFacetReset(f.id, v)}
             >
-              <SelectTrigger size="sm" className="w-auto min-w-36">
+              <SelectTrigger size="sm" className="h-9 w-auto min-w-36">
                 <SelectValue placeholder={f.label} />
               </SelectTrigger>
               <SelectContent>
@@ -175,17 +186,17 @@ export function DataTable<T>({
 
           <div className="ms-auto flex items-center gap-3">
             {toolbarExtra}
-            <span className="text-sm text-muted-foreground">
+            <span className="rounded-md bg-muted/60 px-2 py-1 text-xs font-medium tabular-nums text-muted-foreground">
               {faNum(filtered.length)} مورد
             </span>
           </div>
         </div>
       ) : null}
 
-      <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5">
+      <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
         <Table>
           <TableHeader>
-            <TableRow className="hover:bg-transparent">
+            <TableRow className="border-border/60 bg-muted/30 hover:bg-muted/30">
               {columns.map((col) => {
                 const active = sort?.id === col.id
                 const alignCls =
@@ -195,25 +206,32 @@ export function DataTable<T>({
                       ? "text-center"
                       : "text-start"
                 return (
-                  <TableHead key={col.id} className={cn(alignCls, col.className)}>
+                  <TableHead
+                    key={col.id}
+                    className={cn(
+                      "h-10 text-xs font-medium text-muted-foreground",
+                      alignCls,
+                      col.className
+                    )}
+                  >
                     {col.sortValue ? (
                       <button
                         type="button"
                         onClick={() => toggleSort(col.id)}
                         className={cn(
-                          "inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-foreground",
+                          "-mx-1 inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 transition-colors hover:text-foreground",
                           active ? "text-foreground" : "text-muted-foreground"
                         )}
                       >
                         {col.header}
                         {active ? (
                           sort?.dir === "asc" ? (
-                            <ChevronUp className="size-3.5" />
+                            <ChevronUp className="size-3.5 text-primary" />
                           ) : (
-                            <ChevronDown className="size-3.5" />
+                            <ChevronDown className="size-3.5 text-primary" />
                           )
                         ) : (
-                          <ChevronsUpDown className="size-3.5 opacity-50" />
+                          <ChevronsUpDown className="size-3.5 opacity-40" />
                         )}
                       </button>
                     ) : (
@@ -227,9 +245,11 @@ export function DataTable<T>({
           <TableBody>
             {paged.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={columns.length} className="h-40">
-                  <div className="flex flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-                    <Inbox className="size-7 opacity-60" />
+                <TableCell colSpan={columns.length} className="h-44">
+                  <div className="flex flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+                    <span className="flex size-12 items-center justify-center rounded-2xl bg-muted/60 ring-1 ring-border/60">
+                      <Inbox className="size-6 opacity-70" />
+                    </span>
                     <p className="text-sm">{emptyMessage}</p>
                   </div>
                 </TableCell>
@@ -241,7 +261,10 @@ export function DataTable<T>({
                   <TableRow
                     key={getRowKey(row)}
                     onClick={href ? () => router.push(href) : undefined}
-                    className={cn(href && "cursor-pointer")}
+                    className={cn(
+                      "border-border/40 transition-colors",
+                      href && "cursor-pointer"
+                    )}
                   >
                     {columns.map((col) => {
                       const alignCls =
@@ -265,14 +288,16 @@ export function DataTable<T>({
       </div>
 
       {pageCount > 1 ? (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            صفحهٔ {faNum(current + 1)} از {faNum(pageCount)}
+        <div className="flex items-center justify-between px-1">
+          <p className="text-xs text-muted-foreground">
+            صفحهٔ <span className="font-medium text-foreground tabular-nums">{faNum(current + 1)}</span> از{" "}
+            <span className="tabular-nums">{faNum(pageCount)}</span>
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Button
               variant="outline"
               size="sm"
+              className="h-8 gap-1"
               disabled={current === 0}
               onClick={() => setPage(current - 1)}
             >
@@ -281,6 +306,7 @@ export function DataTable<T>({
             <Button
               variant="outline"
               size="sm"
+              className="h-8 gap-1"
               disabled={current >= pageCount - 1}
               onClick={() => setPage(current + 1)}
             >

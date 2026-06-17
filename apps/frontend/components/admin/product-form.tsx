@@ -112,10 +112,21 @@ function defaults(product?: ProductDetail): FormValues {
 
 // ── Layout helpers ────────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description?: string
+  children: React.ReactNode
+}) {
   return (
-    <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/5 sm:p-6">
-      <legend className="px-1 font-serif text-lg">{title}</legend>
+    <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
+      <legend className="px-1 font-serif text-base">{title}</legend>
+      {description ? (
+        <p className="-mt-0.5 text-xs text-muted-foreground">{description}</p>
+      ) : null}
       <div className="mt-4 grid gap-4 sm:grid-cols-2">{children}</div>
     </fieldset>
   )
@@ -355,8 +366,8 @@ export function ProductForm({
           </Field>
         </Section>
 
-        <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/5 sm:p-6">
-          <legend className="px-1 font-serif text-lg">قیمت‌گذاری و تنوع‌ها</legend>
+        <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
+          <legend className="px-1 font-serif text-base">قیمت‌گذاری و تنوع‌ها</legend>
           <p className="mt-2 text-xs text-muted-foreground">
             هر محصول می‌تواند چند تنوع (مثلاً حجم‌های مختلف) با قیمت جداگانه داشته باشد.
           </p>
@@ -369,7 +380,7 @@ export function ProductForm({
             {fields.map((f, i) => (
               <div
                 key={f.id}
-                className="grid items-end gap-3 rounded-xl border border-border/60 p-3 sm:grid-cols-[1fr_1fr_1fr_auto]"
+                className="grid items-end gap-3 rounded-xl border border-border/60 bg-muted/20 p-3 transition-colors hover:border-border sm:grid-cols-[1fr_1fr_1fr_auto]"
               >
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor={`variants.${i}.sku`} className="text-xs">
@@ -426,8 +437,8 @@ export function ProductForm({
           </div>
         </fieldset>
 
-        <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/5 sm:p-6">
-          <legend className="px-1 font-serif text-lg">تصاویر محصول</legend>
+        <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
+          <legend className="px-1 font-serif text-base">تصاویر محصول</legend>
           {mode === "create" ? (
             <p className="mt-2 text-xs text-muted-foreground">
               تصاویر پس از ذخیرهٔ محصول بارگذاری می‌شوند.
@@ -491,34 +502,36 @@ export function ProductForm({
       </div>
 
       <aside className="flex flex-col gap-6">
-        <div className="border-hairline rounded-2xl bg-card p-6 text-center ring-1 ring-foreground/5">
-          <p className="mb-4 text-sm text-muted-foreground">پیش‌نمایش</p>
-          <span className="relative mx-auto flex aspect-[4/5] w-32 items-end justify-center overflow-hidden rounded-xl bg-muted">
-            <OptimizedImage
-              src={primaryImage?.image_url}
-              alt={title || "تصویر محصول"}
-              width={256}
-              className="h-full w-full"
-            />
-          </span>
-          <p className="mt-4 font-medium">{title || "نام محصول"}</p>
-          <p className="text-xs text-muted-foreground">{brandName ?? "برند"}</p>
-        </div>
+        <div className="lg:sticky lg:top-20 lg:flex lg:flex-col lg:gap-6">
+          <div className="border-hairline rounded-2xl bg-card p-6 text-center ring-1 ring-foreground/[0.04]">
+            <p className="mb-4 text-xs font-medium text-muted-foreground">پیش‌نمایش</p>
+            <span className="relative mx-auto flex aspect-[4/5] w-32 items-end justify-center overflow-hidden rounded-xl bg-muted ring-1 ring-foreground/[0.04]">
+              <OptimizedImage
+                src={primaryImage?.image_url}
+                alt={title || "تصویر محصول"}
+                width={256}
+                className="h-full w-full"
+              />
+            </span>
+            <p className="mt-4 font-medium">{title || "نام محصول"}</p>
+            <p className="text-xs text-muted-foreground">{brandName ?? "برند"}</p>
+          </div>
 
-        <div className="flex flex-col gap-2 lg:sticky lg:top-6">
-          <Button type="submit" size="lg" disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
-            {submitLabel}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            disabled={isSubmitting}
-            onClick={() => router.push("/admin/products")}
-          >
-            انصراف
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button type="submit" size="lg" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+              {submitLabel}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              disabled={isSubmitting}
+              onClick={() => router.push("/admin/products")}
+            >
+              انصراف
+            </Button>
+          </div>
         </div>
       </aside>
     </form>

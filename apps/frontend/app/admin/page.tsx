@@ -26,6 +26,8 @@ import { ChartCard, RevenueAreaChart, DonutChart, DonutLegend } from "@/componen
 export default function AdminDashboard() {
   const s = dashboardSummary
   const totalOrders = ordersByStatus.reduce((a, b) => a + b.value, 0)
+  const revSpark = revenueSeries.slice(-12).map((d) => d.revenue)
+  const orderSpark = revenueSeries.slice(-12).map((d) => d.orders)
 
   return (
     <>
@@ -38,6 +40,7 @@ export default function AdminDashboard() {
           icon={Coins}
           trend={{ value: s.revenueTodayTrend, positive: true }}
           hint="نسبت به دیروز"
+          spark={revSpark}
         />
         <StatCard
           label="سفارش‌های امروز"
@@ -45,6 +48,7 @@ export default function AdminDashboard() {
           icon={ShoppingCart}
           trend={{ value: s.ordersTodayTrend, positive: true }}
           hint="نسبت به دیروز"
+          spark={orderSpark}
         />
         <StatCard
           label="مشتریان جدید"
@@ -92,29 +96,29 @@ export default function AdminDashboard() {
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-serif text-2xl">سفارش‌های اخیر</h2>
-            <Button variant="ghost" size="sm" asChild>
+            <h2 className="font-serif text-lg">سفارش‌های اخیر</h2>
+            <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground" asChild>
               <Link href="/admin/orders">
                 مشاهدهٔ همه <ArrowLeft className="size-4" />
               </Link>
             </Button>
           </div>
-          <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5">
+          <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="text-start">شماره</TableHead>
-                  <TableHead className="text-start">مشتری</TableHead>
-                  <TableHead className="text-start">مبلغ</TableHead>
-                  <TableHead className="text-start">وضعیت</TableHead>
+                <TableRow className="border-border/60 bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="h-10 text-xs font-medium text-muted-foreground">شماره</TableHead>
+                  <TableHead className="h-10 text-xs font-medium text-muted-foreground">مشتری</TableHead>
+                  <TableHead className="h-10 text-xs font-medium text-muted-foreground">مبلغ</TableHead>
+                  <TableHead className="h-10 text-xs font-medium text-muted-foreground">وضعیت</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recentOrders.map((o) => (
-                  <TableRow key={o.id}>
-                    <TableCell className="font-medium">#{faNum(o.number)}</TableCell>
+                  <TableRow key={o.id} className="border-border/40">
+                    <TableCell className="font-medium tabular-nums">#{faNum(o.number)}</TableCell>
                     <TableCell>{o.customerName}</TableCell>
-                    <TableCell className="font-medium">{formatPrice(o.total)}</TableCell>
+                    <TableCell className="font-medium tabular-nums">{formatPrice(o.total)}</TableCell>
                     <TableCell>
                       <FulfilmentBadge status={o.fulfilment} />
                     </TableCell>
@@ -127,24 +131,27 @@ export default function AdminDashboard() {
 
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-serif text-2xl">موجودی رو به اتمام</h2>
-            <Button variant="ghost" size="sm" asChild>
+            <h2 className="font-serif text-lg">موجودی رو به اتمام</h2>
+            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" asChild>
               <Link href="/admin/inventory">
                 <Boxes className="size-4" /> انبار
               </Link>
             </Button>
           </div>
-          <div className="border-hairline divide-y divide-border/60 overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5">
+          <div className="border-hairline divide-y divide-border/50 overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
             {lowStock.length === 0 ? (
               <p className="p-6 text-center text-sm text-muted-foreground">
                 موجودی همهٔ کالاها سالم است.
               </p>
             ) : (
               lowStock.map((r) => (
-                <div key={r.product.id} className="flex items-center gap-3 px-4 py-3">
+                <div
+                  key={r.product.id}
+                  className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/30"
+                >
                   <div className="min-w-0 flex-1 leading-tight">
                     <p className="truncate text-sm font-medium">{r.product.name}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground tabular-nums">
                       موجودی قابل فروش: {faNum(r.available)}
                     </p>
                   </div>

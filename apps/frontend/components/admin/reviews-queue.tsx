@@ -61,11 +61,14 @@ export function ReviewsQueue({ canModerate }: { canModerate: boolean }) {
       </Tabs>
 
       {rows.length === 0 ? (
-        <div className="border-hairline rounded-2xl border-dashed bg-card/40 py-16 text-center text-sm text-muted-foreground">
-          دیدگاهی در این بخش نیست.
+        <div className="border-hairline flex flex-col items-center justify-center gap-3 rounded-2xl border-dashed bg-card/40 py-16 text-center">
+          <span className="flex size-12 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground ring-1 ring-border/60">
+            <Star className="size-5" />
+          </span>
+          <p className="text-sm text-muted-foreground">دیدگاهی در این بخش نیست.</p>
         </div>
       ) : (
-        <ul className="flex flex-col gap-4">
+        <ul className="flex flex-col gap-3">
           {rows.map((review) => (
             <ReviewCard key={review.id} review={review} canModerate={canModerate} />
           ))}
@@ -77,10 +80,10 @@ export function ReviewsQueue({ canModerate }: { canModerate: boolean }) {
 
 function ReviewCard({ review, canModerate }: { review: AdminReview; canModerate: boolean }) {
   return (
-    <li className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/5">
+    <li className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] transition-colors hover:ring-foreground/[0.08]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/15 font-serif text-primary">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/15 font-serif text-primary ring-1 ring-primary/15">
             {review.reviewer.trim().charAt(0)}
           </span>
           <div className="leading-tight">
@@ -99,7 +102,7 @@ function ReviewCard({ review, canModerate }: { review: AdminReview; canModerate:
       <p className="mt-3 font-medium">{review.title}</p>
       <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{review.body}</p>
 
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-3">
         <span className="text-xs text-muted-foreground" dir="ltr">{review.date}</span>
         {canModerate ? (
           <div className="flex items-center gap-2">
