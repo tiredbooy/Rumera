@@ -62,7 +62,7 @@ export default async function ProductsPage({
 
         {categories.length ? (
           <div className="mt-8 flex flex-wrap gap-2">
-            <span className="rounded-full bg-primary px-4 py-1.5 text-sm text-primary-foreground">
+            <span className="shadow-e1 rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground">
               همه
             </span>
             {categories.map((c) => (

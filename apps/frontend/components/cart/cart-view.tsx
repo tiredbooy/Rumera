@@ -100,12 +100,18 @@ export function CartView() {
 
       {/* Desktop sticky summary rail */}
       <aside className="hidden h-fit lg:sticky lg:top-24 lg:block">
-        <div className="border-hairline rounded-3xl bg-card p-6 ring-1 ring-foreground/5">{summary}</div>
+        <div className="border-hairline shadow-e2 relative overflow-hidden rounded-3xl bg-card p-6 ring-1 ring-foreground/5">
+          <div aria-hidden className="rule-gold absolute inset-x-6 top-0" />
+          {summary}
+        </div>
       </aside>
 
       {/* Mobile: full summary inline, plus a sticky bottom checkout bar */}
       <div className="lg:hidden">
-        <div className="border-hairline rounded-3xl bg-card p-6 ring-1 ring-foreground/5">{summary}</div>
+        <div className="border-hairline shadow-e2 relative overflow-hidden rounded-3xl bg-card p-6 ring-1 ring-foreground/5">
+          <div aria-hidden className="rule-gold absolute inset-x-6 top-0" />
+          {summary}
+        </div>
       </div>
 
       {hasItems ? (

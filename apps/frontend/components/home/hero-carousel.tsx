@@ -145,7 +145,9 @@ function HeroSlideView({ slide, priority }: { slide: HeroSlide; priority: boolea
         />
         {/* Legibility scrim — stronger toward the reading (start) edge in RTL. */}
         <div className="absolute inset-0 bg-gradient-to-l from-black/75 via-black/45 to-black/20" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/15" />
+        {/* Seam fade — melts the bottom edge into the page below for a seamless join. */}
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background to-transparent" />
 
         {/* Content */}
         <div className="container-px absolute inset-0 z-10 mx-auto flex max-w-7xl items-center">
@@ -159,12 +161,12 @@ function HeroSlideView({ slide, priority }: { slide: HeroSlide; priority: boolea
               </p>
             ) : null}
 
-            <h1 className="font-serif text-5xl leading-[1.06] text-white drop-shadow-sm sm:text-6xl lg:text-7xl">
+            <h1 className="font-serif text-5xl leading-[1.06] text-white [text-shadow:0_2px_24px_rgba(0,0,0,0.45)] sm:text-6xl lg:text-7xl">
               {slide.title}
             </h1>
 
             {slide.subtitle ? (
-              <p className="mt-5 max-w-md text-base text-white/85 sm:text-lg">
+              <p className="mt-5 max-w-md text-base text-white/90 [text-shadow:0_1px_12px_rgba(0,0,0,0.5)] sm:text-lg">
                 {slide.subtitle}
               </p>
             ) : null}

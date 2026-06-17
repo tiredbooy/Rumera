@@ -92,9 +92,9 @@ function Stepper({
             >
               <span
                 className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-medium transition-colors",
+                  "flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-medium transition-all duration-300",
                   active
-                    ? "border-primary bg-primary text-primary-foreground"
+                    ? "border-primary bg-primary text-primary-foreground ring-4 ring-primary/15"
                     : done
                       ? "border-primary/40 bg-primary/10 text-primary"
                       : "border-border text-muted-foreground"
@@ -554,7 +554,8 @@ export function CheckoutFlow() {
 
       {/* Summary rail (sticky desktop) */}
       <aside className="h-fit lg:sticky lg:top-24">
-        <div className="border-hairline rounded-2xl bg-card p-6 ring-1 ring-foreground/5">
+        <div className="border-hairline shadow-e2 relative overflow-hidden rounded-2xl bg-card p-6 ring-1 ring-foreground/5">
+          <div aria-hidden className="rule-gold absolute inset-x-6 top-0" />
           <h2 className="font-serif text-2xl">خلاصهٔ سفارش</h2>
           <div className="mt-4 space-y-2 text-sm">
             <Row label={`جمع جزء (${faNum(cart.summary.total_items)} قلم)`} value={formatPrice(subtotal)} />

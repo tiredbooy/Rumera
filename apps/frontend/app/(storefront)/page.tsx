@@ -88,8 +88,8 @@ export default async function Home() {
         <div className="container-px mx-auto grid max-w-7xl gap-6 py-10 sm:grid-cols-2 lg:grid-cols-4">
           {perks.map((perk, i) => (
             <Reveal key={perk.title} delay={i * 0.06} y={12}>
-              <div className="hover-lift flex h-full items-center gap-4 rounded-2xl border border-border/60 bg-card/50 p-4">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <div className="hover-lift group/perk flex h-full items-center gap-4 rounded-2xl border border-border/60 bg-card/50 p-4">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10 transition-colors duration-300 group-hover/perk:bg-primary group-hover/perk:text-primary-foreground">
                   <perk.icon className="size-5" />
                 </span>
                 <div>
@@ -272,7 +272,8 @@ export default async function Home() {
       {/* ───────────────────────── Testimonial ───────────────────────── */}
       <section className="container-px mx-auto max-w-3xl py-20 text-center">
         <Reveal>
-          <div className="border-hairline rounded-[2rem] bg-card/50 px-6 py-10 ring-1 ring-foreground/5 sm:px-12">
+          <div className="border-hairline shadow-e2 relative overflow-hidden rounded-[2rem] bg-card/60 px-6 py-10 ring-1 ring-foreground/5 sm:px-12">
+            <div aria-hidden className="rule-gold absolute inset-x-12 top-0" />
             <Quote className="mx-auto size-8 text-primary/40" />
             <blockquote className="mt-5 font-serif text-2xl leading-snug sm:text-3xl">
               «نزدیک‌ترین چیز به یک مشاور خرید همیشه‌همراه — انتخاب مطمئن، ارسال
@@ -294,7 +295,7 @@ export default async function Home() {
       {/* ───────────────────────── Newsletter / signup ───────────────────────── */}
       <section className="container-px mx-auto max-w-7xl pb-24">
         <Reveal y={24}>
-          <div className="cellar-glow border-hairline relative overflow-hidden rounded-[2.5rem] px-6 py-14 ring-1 ring-foreground/10 sm:px-16 sm:py-16">
+          <div className="cellar-glow border-hairline shadow-e3 relative overflow-hidden rounded-[2.5rem] px-6 py-14 ring-1 ring-foreground/10 sm:px-16 sm:py-16">
             <div className="mx-auto grid max-w-5xl items-center gap-10 lg:grid-cols-2">
               <div className="text-center lg:text-start">
                 <p className="eyebrow mb-4 justify-center lg:justify-start">

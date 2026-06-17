@@ -154,7 +154,7 @@ export default function FaqPage() {
             <Reveal key={group.id} delay={Math.min(gi, 4) * 0.05} y={16}>
               <div className="scroll-mt-24" id={group.id}>
                 <div className="flex items-start gap-4">
-                  <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">
                     <group.icon className="size-5" />
                   </span>
                   <div>
@@ -170,7 +170,7 @@ export default function FaqPage() {
                 <Accordion
                   type="single"
                   collapsible
-                  className="mt-5 bg-card/40"
+                  className="border-hairline shadow-e1 mt-5 overflow-hidden rounded-2xl bg-card/40 px-4"
                 >
                   {group.items.map((f, i) => (
                     <AccordionItem key={i} value={`${group.id}-${i}`}>
@@ -192,8 +192,8 @@ export default function FaqPage() {
       {/* Contact-support CTA */}
       <section className="container-px mx-auto max-w-3xl pb-20 sm:pb-24">
         <Reveal y={24}>
-          <div className="cellar-glow border-hairline relative overflow-hidden rounded-3xl px-6 py-12 text-center ring-1 ring-foreground/10 sm:px-12">
-            <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <div className="cellar-glow border-hairline shadow-e3 relative overflow-hidden rounded-3xl px-6 py-12 text-center ring-1 ring-foreground/10 sm:px-12">
+            <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15">
               <Headphones className="size-6" />
             </span>
             <h2 className="mt-5 font-serif text-2xl leading-tight sm:text-3xl">

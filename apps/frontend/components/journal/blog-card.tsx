@@ -34,7 +34,7 @@ export function BlogCard({
 
   if (featured) {
     return (
-      <article className="group/feat border-hairline relative grid overflow-hidden rounded-[1.5rem] bg-card ring-1 ring-foreground/5 transition-all duration-300 hover:shadow-2xl hover:shadow-foreground/10 hover:ring-primary/30 sm:rounded-[2rem] lg:grid-cols-2">
+      <article className="group/feat border-hairline shadow-e1 hover:shadow-e3 relative grid overflow-hidden rounded-[1.5rem] bg-card ring-1 ring-foreground/5 transition-[box-shadow,border-color] duration-300 hover:ring-primary/30 sm:rounded-[2rem] lg:grid-cols-2">
         <Link href={href} className="relative block" aria-label={post.title}>
           <div
             className={cn(
@@ -81,7 +81,7 @@ export function BlogCard({
   }
 
   return (
-    <article className="group/post border-hairline relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-all duration-300 hover:shadow-2xl hover:shadow-foreground/10 hover:ring-primary/30 sm:rounded-3xl">
+    <article className="group/post press border-hairline shadow-e1 hover:shadow-e3 relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:ring-primary/30 sm:rounded-3xl">
       <Link href={href} className="relative block" aria-label={post.title}>
         <div
           className={cn(

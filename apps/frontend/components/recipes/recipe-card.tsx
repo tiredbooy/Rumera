@@ -27,7 +27,7 @@ export function RecipeCard({ recipe }: { recipe: RecipeListItem }) {
   const href = `/recipes/${recipe.slug}`
 
   return (
-    <article className="group/recipe border-hairline relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-all duration-300 hover:shadow-2xl hover:shadow-foreground/10 hover:ring-primary/30 sm:rounded-3xl">
+    <article className="group/recipe press border-hairline shadow-e1 hover:shadow-e3 relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:ring-primary/30 sm:rounded-3xl">
       <div className="relative aspect-[4/3] overflow-hidden">
         <Link href={href} className="absolute inset-0" aria-label={recipe.title}>
           <div className="absolute inset-0 transition-transform duration-[1200ms] ease-out group-hover/recipe:scale-[1.06]">

@@ -62,7 +62,7 @@ export function LoginTabs({ callbackUrl }: { callbackUrl: string }) {
               className={cn(
                 "inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40",
                 active
-                  ? "bg-background text-foreground shadow-sm ring-1 ring-foreground/5"
+                  ? "shadow-e1 bg-background text-foreground ring-1 ring-foreground/5"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >

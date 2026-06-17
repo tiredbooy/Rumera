@@ -238,8 +238,8 @@ export default function AboutPage() {
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {values.map((v, i) => (
               <Reveal key={v.title} delay={Math.min(i, 4) * 0.05} y={16}>
-                <div className="border-hairline h-full rounded-3xl bg-card p-6 ring-1 ring-foreground/5">
-                  <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <div className="hover-lift border-hairline group/val h-full rounded-3xl bg-card p-6">
+                  <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10 transition-colors duration-300 group-hover/val:bg-primary group-hover/val:text-primary-foreground">
                     <v.icon className="size-5" />
                   </span>
                   <h3 className="mt-4 font-serif text-xl">{v.title}</h3>
@@ -260,9 +260,9 @@ export default function AboutPage() {
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           {steps.map((s, i) => (
             <Reveal key={s.title} delay={i * 0.07} y={16}>
-              <div className="border-hairline relative h-full rounded-3xl bg-card p-7 ring-1 ring-foreground/5">
+              <div className="hover-lift border-hairline group/step relative h-full rounded-3xl bg-card p-7">
                 <span className="font-serif text-5xl text-foil/30">{faNum(i + 1)}</span>
-                <span className="mt-2 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <span className="mt-2 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10 transition-colors duration-300 group-hover/step:bg-primary group-hover/step:text-primary-foreground">
                   <s.icon className="size-5" />
                 </span>
                 <h3 className="mt-4 font-serif text-xl">{s.title}</h3>
@@ -276,7 +276,7 @@ export default function AboutPage() {
       {/* CTA */}
       <section className="container-px mx-auto max-w-7xl pb-24">
         <Reveal y={24}>
-          <div className="cellar-glow border-hairline relative overflow-hidden rounded-[2.5rem] px-8 py-16 text-center ring-1 ring-foreground/10 sm:px-16 sm:py-20">
+          <div className="cellar-glow border-hairline shadow-e3 relative overflow-hidden rounded-[2.5rem] px-8 py-16 text-center ring-1 ring-foreground/10 sm:px-16 sm:py-20">
             <h2 className="mx-auto max-w-2xl font-serif text-3xl leading-tight sm:text-5xl">
               آماده‌اید با خیال راحت خرید کنید؟
             </h2>
