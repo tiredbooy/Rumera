@@ -151,7 +151,7 @@ export function OrderDetail({ id }: { id: string }) {
       </div>
 
       {/* Side column: status + actions */}
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-5 lg:sticky lg:top-6 lg:self-start">
         <AccountSection title="وضعیت سفارش">
           <div className="mb-4 flex items-center gap-2">
             <Badge variant={order.status === "cancelled" ? "destructive" : "secondary"}>

@@ -7,7 +7,7 @@ import type { Metadata } from "next"
 
 import { requireUser } from "@/lib/auth/session"
 import { ROLE_LABELS } from "@/lib/rbac/roles"
-import { DashboardShell } from "@/components/dashboard/dashboard-shell"
+import { AccountShell } from "@/components/account/account-shell"
 import { noindexMetadata } from "@/lib/seo/metadata"
 
 export const dynamic = "force-dynamic"
@@ -21,9 +21,7 @@ export default async function AccountLayout({
   const session = await requireUser()
 
   return (
-    <DashboardShell
-      variant="account"
-      permissions={session.permissions}
+    <AccountShell
       user={{
         name: session.user.name,
         email: session.user.email,
@@ -31,6 +29,6 @@ export default async function AccountLayout({
       }}
     >
       {children}
-    </DashboardShell>
+    </AccountShell>
   )
 }
