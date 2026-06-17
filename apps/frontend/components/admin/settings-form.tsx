@@ -13,10 +13,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 const selectCls =
   "h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
 
-function Panel({ children }: { children: React.ReactNode }) {
+function Panel({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <div className="border-hairline max-w-2xl rounded-2xl bg-card p-6 ring-1 ring-foreground/5">
-      {children}
+    <div className="border-hairline max-w-2xl overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
+      {title ? (
+        <div className="border-b border-border/50 bg-muted/20 px-6 py-3.5">
+          <p className="font-serif text-base">{title}</p>
+        </div>
+      ) : null}
+      <div className="p-6">{children}</div>
     </div>
   )
 }
@@ -31,8 +36,8 @@ function Toggle({
   defaultChecked?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3">
-      <div>
+    <div className="flex items-center justify-between gap-4 py-3.5">
+      <div className="min-w-0">
         <p className="text-sm font-medium">{label}</p>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
@@ -67,7 +72,7 @@ export function SettingsForm() {
       </TabsList>
 
       <TabsContent value="store" className="mt-5">
-        <Panel>
+        <Panel title="اطلاعات فروشگاه">
           <form onSubmit={save("فروشگاه")} className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2 sm:col-span-2">
               <Label htmlFor="store_name">نام فروشگاه</Label>
@@ -100,7 +105,7 @@ export function SettingsForm() {
       </TabsContent>
 
       <TabsContent value="shipping" className="mt-5">
-        <Panel>
+        <Panel title="قوانین ارسال">
           <form onSubmit={save("ارسال")} className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="free_shipping">آستانهٔ ارسال رایگان (تومان)</Label>
@@ -121,7 +126,7 @@ export function SettingsForm() {
       </TabsContent>
 
       <TabsContent value="payments" className="mt-5">
-        <Panel>
+        <Panel title="درگاه‌های پرداخت">
           <form onSubmit={save("پرداخت")}>
             <div className="divide-y divide-border/60">
               <Toggle label="درگاه زرین‌پال" description="پرداخت آنلاین از طریق زرین‌پال." defaultChecked />
@@ -136,7 +141,7 @@ export function SettingsForm() {
       </TabsContent>
 
       <TabsContent value="notifications" className="mt-5">
-        <Panel>
+        <Panel title="اعلان‌ها و هشدارها">
           <form onSubmit={save("اعلان‌ها")}>
             <div className="divide-y divide-border/60">
               <Toggle label="ایمیل سفارش جدید" description="ارسال ایمیل به مدیر هنگام ثبت سفارش." defaultChecked />

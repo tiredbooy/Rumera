@@ -3,7 +3,7 @@ import { Coins, ShoppingCart, Users, Percent } from "lucide-react"
 import { requirePermission } from "@/lib/auth/session"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 import { formatPrice, faNum } from "@/lib/products"
-import { dashboardSummary } from "@/lib/admin/data"
+import { dashboardSummary, revenueSeries } from "@/lib/admin/data"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { StatCard } from "@/components/dashboard/stat-card"
 import { AnalyticsView } from "@/components/admin/analytics-view"
@@ -11,6 +11,8 @@ import { AnalyticsView } from "@/components/admin/analytics-view"
 export default async function AdminAnalyticsPage() {
   await requirePermission(PERMISSIONS.ANALYTICS_READ)
   const s = dashboardSummary
+  const revSpark = revenueSeries.slice(-14).map((d) => d.revenue)
+  const orderSpark = revenueSeries.slice(-14).map((d) => d.orders)
 
   return (
     <>
@@ -22,12 +24,14 @@ export default async function AdminAnalyticsPage() {
           value={formatPrice(s.revenue30d)}
           icon={Coins}
           trend={{ value: s.revenue30dTrend, positive: true }}
+          spark={revSpark}
         />
         <StatCard
           label="سفارش‌ها"
           value={faNum(s.orders30d)}
           icon={ShoppingCart}
           trend={{ value: s.orders30dTrend, positive: true }}
+          spark={orderSpark}
         />
         <StatCard
           label="مشتریان فعال"

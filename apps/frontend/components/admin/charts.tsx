@@ -71,18 +71,18 @@ export function ChartCard({
   return (
     <div
       className={cn(
-        "border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/5",
+        "border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]",
         className
       )}
     >
       <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-serif text-lg">{title}</h3>
+        <div className="min-w-0">
+          <h3 className="font-serif text-base leading-tight sm:text-lg">{title}</h3>
           {description ? (
             <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
           ) : null}
         </div>
-        {action}
+        {action ? <div className="shrink-0">{action}</div> : null}
       </div>
       {children}
     </div>

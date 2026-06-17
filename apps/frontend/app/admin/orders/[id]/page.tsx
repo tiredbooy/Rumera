@@ -37,6 +37,15 @@ export default async function AdminOrderDetailPage({
   return (
     <>
       <PageHeader
+        eyebrow={
+          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-label="مسیر">
+            <Link href="/admin/orders" className="transition-colors hover:text-foreground">
+              سفارش‌ها
+            </Link>
+            <span aria-hidden>/</span>
+            <span className="text-foreground tabular-nums">#{faNum(order.number)}</span>
+          </nav>
+        }
         title={`سفارش #${faNum(order.number)}`}
         description={`ثبت‌شده در ${order.date}`}
         actions={
@@ -58,19 +67,19 @@ export default async function AdminOrderDetailPage({
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5">
+          <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="text-start">محصول</TableHead>
-                  <TableHead className="text-center">تعداد</TableHead>
-                  <TableHead className="text-start">قیمت واحد</TableHead>
-                  <TableHead className="text-end">جمع</TableHead>
+                <TableRow className="border-border/60 bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="h-10 text-xs font-medium text-muted-foreground">محصول</TableHead>
+                  <TableHead className="h-10 text-center text-xs font-medium text-muted-foreground">تعداد</TableHead>
+                  <TableHead className="h-10 text-xs font-medium text-muted-foreground">قیمت واحد</TableHead>
+                  <TableHead className="h-10 text-end text-xs font-medium text-muted-foreground">جمع</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {order.lines.map((l) => (
-                  <TableRow key={l.productId}>
+                  <TableRow key={l.productId} className="border-border/40">
                     <TableCell className="font-medium">{l.name}</TableCell>
                     <TableCell className="text-center tabular-nums">{faNum(l.qty)}</TableCell>
                     <TableCell className="text-muted-foreground">{formatPrice(l.price)}</TableCell>
@@ -103,7 +112,7 @@ export default async function AdminOrderDetailPage({
         </div>
 
         <div className="flex flex-col gap-6">
-          <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/5">
+          <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium">
               <User className="size-4 text-muted-foreground" /> مشتری
             </div>
@@ -114,14 +123,14 @@ export default async function AdminOrderDetailPage({
             </Button>
           </div>
 
-          <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/5">
+          <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium">
               <MapPin className="size-4 text-muted-foreground" /> نشانی ارسال
             </div>
             <p className="text-sm leading-relaxed text-muted-foreground">{order.address}</p>
           </div>
 
-          <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/5">
+          <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
             <p className="mb-4 text-sm font-medium">روند سفارش</p>
             <ol className="relative space-y-5 ps-6">
               <span className="absolute inset-y-1 start-[7px] w-px bg-border" />

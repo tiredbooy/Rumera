@@ -33,16 +33,17 @@ export function AnalyticsView() {
   const series = revenueSeries.slice(-take)
 
   const rangeToggle = (
-    <div className="inline-flex items-center gap-1 rounded-lg bg-muted p-0.5">
+    <div className="inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/50 p-0.5">
       {RANGES.map((r) => (
         <button
           key={r.id}
           type="button"
+          aria-pressed={range === r.id}
           onClick={() => setRange(r.id)}
           className={
             "cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors " +
             (range === r.id
-              ? "bg-card text-foreground shadow-sm"
+              ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/[0.06]"
               : "text-muted-foreground hover:text-foreground")
           }
         >

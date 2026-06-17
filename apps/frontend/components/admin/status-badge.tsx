@@ -18,11 +18,11 @@ import type {
 type Tone = "amber" | "emerald" | "blue" | "destructive" | "muted"
 
 const TONE: Record<Tone, string> = {
-  amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  destructive: "bg-destructive/10 text-destructive",
-  muted: "bg-muted text-muted-foreground",
+  amber: "bg-amber-500/10 text-amber-600 ring-amber-500/20 dark:text-amber-400",
+  emerald: "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400",
+  blue: "bg-blue-500/10 text-blue-600 ring-blue-500/20 dark:text-blue-400",
+  destructive: "bg-destructive/10 text-destructive ring-destructive/20",
+  muted: "bg-muted text-muted-foreground ring-border/60",
 }
 
 const DOT: Record<Tone, string> = {
@@ -37,7 +37,7 @@ function Pill({ tone, label }: { tone: Tone; label: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
         TONE[tone]
       )}
     >
