@@ -1,0 +1,14 @@
+# Auto-creates the Prometheus datasource on Grafana start-up.
+#
+# The dashboard's DS_PROMETHEUS template variable (type: datasource, query:
+# prometheus) resolves to this datasource automatically, so the panels bind with
+# no manual import step.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
