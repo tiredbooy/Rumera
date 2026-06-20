@@ -30,6 +30,8 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | [Inventory](./inventory.md) | 🛡️ Stock levels, adjustments, movements |
 | [Blog](./blog.md) | Blog posts and categories |
 | [Recipes](./recipes.md) | Recipes with shoppable products & SEO |
+| [Hero slides](./hero-slides.md) | Storefront home-carousel slides |
+| [Site settings](./site-settings.md) | Global store/contact/social/SEO/maintenance config |
 | [Recommendations](./recommendations.md) | Trending, similar, FBT, personalized "for you" |
 | [Analytics](./analytics.md) | 🛡️ Revenue, product, and search analytics |
 
@@ -70,6 +72,8 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | GET | `/reviews/:id` | 🌐 |
 | GET | `/blogs` · `/blogs/:slug` | 🌐 |
 | GET | `/blog-categories` · `/blog-categories/:id` | 🌐 |
+| GET | `/hero-slides` | 🌐 |
+| GET | `/settings` | 🌐 |
 | GET | `/recipes` · `/recipes/featured` · `/recipes/sitemap` | 🌐 |
 | GET | `/recipes/:slug` · `/recipes/:slug/related` | 🌐 |
 | GET | `/products/:id/recipes` | 🌐 |
@@ -125,6 +129,8 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | GET·POST·PATCH | `/admin/inventory/...` | 🛡️ |
 | POST·GET·PATCH·DELETE | `/admin/blogs` · `/admin/blog-categories` … | 🛡️ |
 | GET·POST·PATCH·DELETE | `/admin/recipes` · `/admin/recipes/:id` | 🛡️ |
+| GET·POST·PATCH·DELETE | `/admin/hero-slides` · `/admin/hero-slides/:id` | 🛡️ |
+| GET·PUT | `/admin/settings` | 🛡️ |
 | GET | `/admin/analytics/...` | 🛡️ |
 
 > The full, exact list of admin routes is documented on each resource page.

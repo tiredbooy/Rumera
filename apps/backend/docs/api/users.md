@@ -100,7 +100,9 @@ Authorization: Bearer <access_token>
 
 All fields optional; only supplied fields are updated. Any `password_hash` in the body is **ignored** — password changes go through the [reset flow](../authentication.md#password-reset-flow).
 
-**Request body** — `UpdateUserReq`:
+This route accepts the same editable profile fields as [`/auth/me`](./auth.md) **plus two privileged, admin-only fields** — `role` and `is_active` — which are not bindable on the self-service route. Both are optional, so an admin can patch profile data without touching access control. Setting `is_active: true` here is also how a deactivated account is **reactivated** (existence is not pre-filtered on the active flag for this route).
+
+**Request body** — `AdminUpdateUserReq`:
 
 | Field | Type | Validation |
 |-------|------|------------|
@@ -110,17 +112,25 @@ All fields optional; only supplied fields are updated. Any `password_hash` in th
 | `national_code` | string | |
 | `birth_date` | string (date-time) | |
 | `gender` | string | one of `male` `female` `other` |
+| `role` | string | 🛡️ admin-only · one of `customer` `admin` `vendor` |
+| `is_active` | bool | 🛡️ admin-only |
 
 ```json
 {
-  "first_name": "Jane",
-  "gender": "female"
+  "role": "vendor",
+  "is_active": true
 }
 ```
 
+> **Self lock-out guard.** An admin may **not** strip their own `admin` role or set
+> their own `is_active` to `false`. If the caller's id equals `:userID` and the body
+> would demote or deactivate them, the request is rejected with `403 ACCESS_DENIED`
+> before any write — this prevents an admin from locking themselves (and potentially
+> every admin) out of the console.
+
 **Response** `200 OK` — updated `UserAdminResponse`.
 
-**Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `400 INVALID_PARAMS`, `422 VALIDATION_ERROR`, `404 USER_NOT_FOUND`.
+**Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS` / `ACCESS_DENIED` (self lock-out), `400 INVALID_PARAMS`, `422 VALIDATION_ERROR`, `404 USER_NOT_FOUND`.
 
 ---
 
