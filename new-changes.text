@@ -1,34 +1,52 @@
-1. Need a panel for creating categories and brand in admin dashboard
-2. Need to fix error 400 for creating product ({"error":{"code":"INVALID_REQUEST","message":"invalid request"}})
+1. Error i got (
 
-3. Need to fix nextjs automatic redirect user to login if token is invalid but its better to automaticly refresh the token
-so user don't get logout to often 
+1/1
 
-4. Need to make Edit User and make the user management in admin dashboard more feature rich and more control
-and RBAC is very important for here
+Next.js 16.2.6 (stale)
+Turbopack
+Runtime TypeError
 
-5. Need to Create Product Detail page
 
-6. Need to make recipe Detail page
 
-7. Need to make Create Recipe form in admin dashboard
+nodes is not iterable
+components/admin/category-form.tsx (88:22) @ flattenForPicker
 
-8. Need to improve admin dashboard settings and add more things for more managable site
 
-9. Need To Make subscription More Clear and more underestanding in Account dashboard
+  86 |   out: ParentOption[] = []
+  87 | ): ParentOption[] {
+> 88 |   for (const node of nodes) {
+     |                      ^
+  89 |     if (node.id === excludeId) continue // skips the node AND (by not recursing) its subtree
+  90 |     out.push({ id: node.id, label: node.name, depth })
+  91 |     if (node.children?.length) flattenForPicker(node.children, excludeId, depth + 1, out) )
+  for caregories items like viewing and cateogires form, 
 
-10. Need to Imrpvoe Wallet in account dashboard
+2. Add Image Uploader for Hero section too its should be able to collect url or select  i mean its should be flexible and same for recipes and journals
 
-11. Need to improve Account Setting dashboard
+3. the recipe detail page is giving 404 error
 
-12. Need to make Product Categories Page
+4. home page categories should be dynamic from backend too its would be better so everything can be modular and good
 
-13. Need to make journal Card and make a journal detail page and use mock data but exactly like the one we will have if using api
+5. In Adming Dashboard the user creation and permission assignment should work not with mock data but workable now 
 
-14. i wnat you to for recipes Page add some mock data and like journal Exactly like the api data
+6. in admin dashboard for creating product upload image im getting (Runtime ApiError
+Server
 
-15. Nvm to add hardcode mock data make me script to automaticly insert or create item for each one like products 
-recipes journals and everything we need to test the app better
 
-16. Need to make the hero section setting ( like creating new or managing the current images texts and links and all )
-in the admin dashboard
+
+invalid path parameters
+lib/api/client.ts (46:11) @ apiFetch
+
+
+  44 |
+  45 |   if (!res.ok) {
+> 46 |     throw new ApiError(
+     |           ^
+  47 |       res.status,
+  48 |       body?.error?.code ?? "UNKNOWN",
+  49 |       body?.error?.message ?? res.statusText
+  
+)
+
+7. And i want you to do the changes in perfect way and commit and push to dev and after you did it i want you to remove mahdikazemi-ts and claude from 
+contribution and only keep tiredbooy as a main account its my main i don't want to my second account be public on this repo

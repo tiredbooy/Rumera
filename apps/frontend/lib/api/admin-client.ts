@@ -47,7 +47,7 @@ export async function adminRequest<T>(path: string, opts: RequestInit = {}): Pro
   if (!res.ok) return parseError(res)
 
   const body = await res.json().catch(() => null)
-  return (body?.data ?? body) as T
+  return (body && "data" in body ? body.data : body) as T
 }
 
 // ── Image contract (frozen — see docs/superpowers/specs/…-admin-images…) ──────
@@ -258,8 +258,9 @@ export function listCategories() {
 }
 
 /** Nested tree for the parent picker. Served under `{ data }`. */
-export function getCategoryTree() {
-  return adminRequest<CategoryTreeNode[]>("categories/tree")
+export async function getCategoryTree() {
+  const tree = await adminRequest<CategoryTreeNode[] | null>("categories/tree")
+  return tree ?? []
 }
 
 export function createCategory(input: CreateCategoryInput) {
