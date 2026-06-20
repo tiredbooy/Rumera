@@ -30,11 +30,14 @@ The `Blog` object:
 | `slug` | string | URL-safe identifier |
 | `content` | string | |
 | `excerpt` | string \| null | |
+| `image_url` | string \| null | cover image |
 | `time_to_read` | int | minutes |
 | `total_reads` | int64 | read counter |
+| `status` | string | `draft` · `published` · `archived` |
+| `is_featured` | bool | surface on featured shelves |
 | `meta_title` | string \| null | SEO |
 | `meta_description` | string \| null | SEO |
-| `published_at` | string (date-time) \| null | |
+| `published_at` | string (date-time) \| null | stamped automatically the first time a post goes live |
 | `created_at` | string (date-time) | |
 | `updated_at` | string (date-time) | |
 
@@ -58,27 +61,52 @@ The `BlogCategory` object:
 GET /blogs
 ```
 
-**Response** `200 OK` — a `data` array of `Blog` objects:
+The public listing is **always published-only** — the handler forces
+`status=published`, so drafts and archived posts are never exposed on the
+storefront. Results are **paginated** and return the lightweight `BlogListItem`
+card (no full `content` body).
+
+**Query parameters** (plus standard pagination/sorting — `page`, `limit`, `sortBy`,
+`orderBy` — see [Conventions](../conventions.md)). Default sort is `published_at`.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `is_featured` | bool | Only featured posts |
+| `category_id` | int64 | Only posts assigned to this blog category |
+
+> `status` is accepted on the filter but is **overridden to `published`** on this
+> public route — you cannot list drafts here. Admin status filtering is done via
+> the dedicated admin reads.
+
+**Response** `200 OK` — paginated `BlogListItem[]`:
 
 ```json
 {
-  "data": [
+  "results": [
     {
       "id": 1,
       "author_id": 42,
       "title": "Tasting Notes 101",
       "slug": "tasting-notes-101",
-      "content": "…",
       "excerpt": "A primer on tasting.",
+      "image_url": "https://cdn.example.com/blog/1.jpg",
       "time_to_read": 6,
       "total_reads": 1280,
-      "meta_title": null,
-      "meta_description": null,
+      "status": "published",
+      "is_featured": true,
       "published_at": "2026-05-01T09:00:00Z",
       "created_at": "2026-04-28T12:00:00Z",
       "updated_at": "2026-05-01T09:00:00Z"
     }
-  ]
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total_items": 1,
+    "total_pages": 1,
+    "has_next": false,
+    "has_prev": false
+  }
 }
 ```
 
@@ -103,8 +131,11 @@ Fetches a single published blog by its `slug`. Each successful fetch **records a
     "slug": "tasting-notes-101",
     "content": "…",
     "excerpt": "A primer on tasting.",
+    "image_url": "https://cdn.example.com/blog/1.jpg",
     "time_to_read": 6,
     "total_reads": 1280,
+    "status": "published",
+    "is_featured": true,
     "meta_title": null,
     "meta_description": null,
     "published_at": "2026-05-01T09:00:00Z",
@@ -173,19 +204,27 @@ Authorization: Bearer <access_token>
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `title` | string | |
-| `slug` | string | URL-safe identifier |
-| `content` | string | |
+| `title` | string | required, max 255 |
+| `slug` | string | optional, max 255 — derived (uniquely) from `title` when omitted |
+| `content` | string | required |
 | `excerpt` | string \| null | |
-| `time_to_read` | int | minutes |
-| `meta_title` | string \| null | SEO |
+| `image_url` | string \| null | cover image |
+| `time_to_read` | int | minutes; defaults to `1` when ≤ 0 |
+| `status` | string | one of `draft` `published` `archived`; defaults to `draft` |
+| `is_featured` | bool | |
+| `meta_title` | string \| null | SEO, max 255 |
 | `meta_description` | string \| null | SEO |
-| `published_at` | string (date-time) \| null | omit/leave null to keep as a draft |
+| `published_at` | string (date-time) \| null | see auto-stamp note below |
 | `category_ids` | int64[] | blog categories to assign |
 | `product_ids` | int64[] | related products to link |
 | `tag_ids` | int64[] | tags to link |
 
 > `author_id` is set **server-side** from the authenticated admin's user id. Clients do not supply it; any value sent in the body is overwritten.
+>
+> **Status & publishing.** Omitting `status` creates a **draft**. If a post is
+> created with `status=published` and no `published_at`, the server stamps
+> `published_at` to now. Slug collisions never fail creation — when `slug` is
+> omitted a unique one is derived from the title (with a numeric suffix if needed).
 
 ```json
 {
@@ -193,8 +232,10 @@ Authorization: Bearer <access_token>
   "slug": "tasting-notes-101",
   "content": "…",
   "excerpt": "A primer on tasting.",
+  "image_url": "https://cdn.example.com/blog/1.jpg",
   "time_to_read": 6,
-  "published_at": "2026-05-01T09:00:00Z",
+  "status": "published",
+  "is_featured": true,
   "category_ids": [3],
   "product_ids": [10, 11],
   "tag_ids": [5]
@@ -218,17 +259,28 @@ All fields optional; only supplied fields are updated (`BlogUpdateReq`).
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `title` | string | |
-| `slug` | string | |
+| `title` | string | max 255 |
+| `slug` | string | max 255; normalised, must stay unique |
 | `content` | string | |
 | `excerpt` | string \| null | |
-| `time_to_read` | int | minutes |
-| `meta_title` | string \| null | |
+| `image_url` | string \| null | cover image |
+| `time_to_read` | int | minutes (min 1) |
+| `status` | string | one of `draft` `published` `archived` |
+| `is_featured` | bool | |
+| `meta_title` | string \| null | max 255 |
 | `meta_description` | string \| null | |
-| `published_at` | string (date-time) \| null | |
+| `published_at` | string (date-time) \| null | see auto-stamp note below |
 | `category_ids` | int64[] | replaces the assigned categories |
 | `product_ids` | int64[] | replaces the linked products |
 | `tag_ids` | int64[] | replaces the linked tags |
+
+> **Auto-stamp.** Setting `status=published` on a post that has never been
+> published (no existing `published_at`) and not sending `published_at` causes the
+> server to stamp `published_at` to now.
+>
+> **Relation semantics.** For `category_ids` / `product_ids` / `tag_ids`: **omit**
+> the field to leave that relation untouched, send `[]` to clear it, or send a list
+> to replace it.
 
 **Response** `200 OK` — the updated `BlogDetail` inside `data`.
 
