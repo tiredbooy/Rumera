@@ -24,7 +24,10 @@ func (s *ProductService) Create(ctx context.Context, req models.CreateProductReq
 		return nil, err
 	}
 
-	if err := s.assertSlugAndCodeUnique(ctx, *req.Slug, *req.Code); err != nil {
+	// Slug and code are optional (nullable in DB, omitempty in DTO). Only check
+	// uniqueness for whichever is actually provided — dereferencing them
+	// unconditionally panicked when the frontend sent a title-only product.
+	if err := s.assertSlugAndCodeUnique(ctx, derefOr(req.Slug, ""), derefOr(req.Code, "")); err != nil {
 		return nil, err
 	}
 
@@ -242,34 +245,50 @@ func (s *ProductService) assertProductExists(ctx context.Context, id int64) erro
 	return nil
 }
 
-// assertSlugAndCodeUnique is used on Create to check both unique fields
-// before hitting the DB insert, giving clean conflict errors.
+// assertSlugAndCodeUnique is used on Create to check the unique fields before
+// hitting the DB insert, giving clean conflict errors. Slug and code are
+// optional, so an empty value is skipped — multiple products may legitimately
+// have a NULL slug/code.
 func (s *ProductService) assertSlugAndCodeUnique(ctx context.Context, slug, code string) error {
-	slugExists, err := s.productRepo.ExistsBySlug(ctx, slug)
-	if err != nil {
-		return apperr.ErrInternal
-	}
-	if slugExists {
-		return apperr.ErrConflict
+	if slug != "" {
+		slugExists, err := s.productRepo.ExistsBySlug(ctx, slug)
+		if err != nil {
+			return apperr.ErrInternal
+		}
+		if slugExists {
+			return apperr.ErrConflict
+		}
 	}
 
-	codeExists, err := s.productRepo.ExistsByCode(ctx, code)
-	if err != nil {
-		return apperr.ErrInternal
-	}
-	if codeExists {
-		return apperr.ErrConflict
+	if code != "" {
+		codeExists, err := s.productRepo.ExistsByCode(ctx, code)
+		if err != nil {
+			return apperr.ErrInternal
+		}
+		if codeExists {
+			return apperr.ErrConflict
+		}
 	}
 
 	return nil
 }
 
+// validateCreateProductReq enforces the only genuinely-required invariant:
+// a non-empty title. Slug, code and category_id are nullable in the DB and
+// omitempty in the DTO, so the frontend may legitimately send them as null for
+// a title-only product; requiring them here produced an opaque 400.
 func validateCreateProductReq(req models.CreateProductReq) error {
-	if req.Title == "" || (req.Slug == nil || *req.Slug == "") || (req.Code == nil || *req.Code == "") {
-		return apperr.ErrInvalidRequest
-	}
-	if req.CategoryID == nil || *req.CategoryID <= 0 {
+	if req.Title == "" {
 		return apperr.ErrInvalidRequest
 	}
 	return nil
+}
+
+// derefOr returns *p when p is non-nil, otherwise the fallback. Used to safely
+// read optional pointer request fields without a nil-deref panic.
+func derefOr[T any](p *T, fallback T) T {
+	if p == nil {
+		return fallback
+	}
+	return *p
 }

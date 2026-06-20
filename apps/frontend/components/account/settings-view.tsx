@@ -11,35 +11,25 @@ import {
   ShieldCheck,
   Bell,
   Database,
-  KeyRound,
-  Trash2,
-  Download,
+  Clock,
+  Mail,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { useUpdateProfile } from "@/lib/api/account-hooks"
+import { useProfile, useUpdateProfile } from "@/lib/api/account-hooks"
 import { AccountSection } from "./account-section"
 
 const profileSchema = z.object({
-  name: z.string().trim().min(2, "نام را وارد کنید"),
-  email: z.string().trim().email("ایمیل معتبر نیست"),
-  phone_number: z
+  first_name: z.string().trim().min(2, "نام را وارد کنید"),
+  last_name: z.string().trim().min(2, "نام خانوادگی را وارد کنید"),
+  phone: z
     .string()
     .trim()
     .regex(/^09\d{9}$/, "شمارهٔ موبایل معتبر نیست")
@@ -47,17 +37,14 @@ const profileSchema = z.object({
 })
 type ProfileValues = z.infer<typeof profileSchema>
 
-const passwordSchema = z
-  .object({
-    current: z.string().min(1, "رمز فعلی را وارد کنید"),
-    next: z.string().min(8, "رمز جدید حداقل ۸ کاراکتر باشد"),
-    confirm: z.string(),
-  })
-  .refine((v) => v.next === v.confirm, {
-    message: "تکرار رمز مطابقت ندارد",
-    path: ["confirm"],
-  })
-type PasswordValues = z.infer<typeof passwordSchema>
+/** A small "coming soon" pill reused across the honest, not-yet-wired tabs. */
+function ComingSoonBadge() {
+  return (
+    <Badge variant="outline" className="shrink-0">
+      <Clock className="size-3" aria-hidden /> به‌زودی
+    </Badge>
+  )
+}
 
 export function SettingsView({
   defaultName,
@@ -99,31 +86,103 @@ export function SettingsView({
   )
 }
 
+function splitName(full: string): { first: string; last: string } {
+  const parts = full.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return { first: "", last: "" }
+  if (parts.length === 1) return { first: parts[0], last: "" }
+  return { first: parts[0], last: parts.slice(1).join(" ") }
+}
+
 function ProfileTab({ defaultName, defaultEmail }: { defaultName: string; defaultEmail: string }) {
+  // Seed from the real profile endpoint (GET /auth/me); fall back to the
+  // session-derived name/email until it loads or if it errors.
+  const profile = useProfile()
   const update = useUpdateProfile()
+
+  const seed = splitName(defaultName)
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    reset,
+    formState: { errors, isDirty },
   } = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
-    defaultValues: { name: defaultName, email: defaultEmail, phone_number: "" },
+    defaultValues: { first_name: seed.first, last_name: seed.last, phone: "" },
   })
+
+  // Once the authoritative profile arrives, reseed the form (unless the user has
+  // already started editing).
+  React.useEffect(() => {
+    if (!profile.data) return
+    reset({
+      first_name: profile.data.first_name ?? seed.first,
+      last_name: profile.data.last_name ?? seed.last,
+      phone: profile.data.phone ?? "",
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.data])
+
+  const email = profile.data?.email ?? defaultEmail
+  const displayName =
+    [profile.data?.first_name, profile.data?.last_name].filter(Boolean).join(" ") || defaultName
+  const initial = (displayName || email || "?").trim().charAt(0)
 
   function onSubmit(values: ProfileValues) {
     update.mutate(
-      { name: values.name, email: values.email, phone_number: values.phone_number || undefined },
       {
-        onSuccess: () => toast.success("پروفایل به‌روزرسانی شد"),
-        onError: () => toast.error("به‌روزرسانی هم‌اکنون در دسترس نیست"),
+        first_name: values.first_name,
+        last_name: values.last_name,
+        // Empty string clears the phone (stored as NULL by the backend).
+        phone: values.phone || null,
+      },
+      {
+        onSuccess: (next) => {
+          toast.success("پروفایل به‌روزرسانی شد")
+          reset({
+            first_name: next.first_name ?? values.first_name,
+            last_name: next.last_name ?? values.last_name,
+            phone: next.phone ?? "",
+          })
+        },
+        onError: () => toast.error("به‌روزرسانی پروفایل ناموفق بود. دوباره تلاش کنید."),
       }
     )
   }
 
-  const initial = (defaultName || defaultEmail || "?").trim().charAt(0)
+  if (profile.isLoading) {
+    return (
+      <AccountSection title="اطلاعات شخصی" className="max-w-2xl">
+        <div className="grid gap-5">
+          <div className="flex items-center gap-4">
+            <Skeleton className="size-16 rounded-full" />
+            <Skeleton className="h-9 w-28" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10 sm:col-span-2" />
+          </div>
+          <Skeleton className="h-10 w-36" />
+        </div>
+      </AccountSection>
+    )
+  }
 
   return (
     <AccountSection title="اطلاعات شخصی" className="max-w-2xl">
+      {profile.isError ? (
+        <p className="mb-4 text-sm text-muted-foreground">
+          اطلاعات پروفایل از سرور دریافت نشد؛ مقادیر زیر از نشست شما پر شده است.{" "}
+          <button
+            type="button"
+            onClick={() => profile.refetch()}
+            className="cursor-pointer font-medium text-primary hover:underline"
+          >
+            تلاش دوباره
+          </button>
+        </p>
+      ) : null}
+
       <form onSubmit={handleSubmit(onSubmit)} className="grid gap-5">
         <div className="flex items-center gap-4">
           <Avatar className="size-16">
@@ -132,37 +191,68 @@ function ProfileTab({ defaultName, defaultEmail }: { defaultName: string; defaul
             </AvatarFallback>
           </Avatar>
           <div>
-            <Button type="button" variant="outline" size="sm" disabled>
-              {/* TODO(api): wire avatar upload to uploadthing */}
-              تغییر تصویر
-            </Button>
-            <p className="mt-1.5 text-xs text-muted-foreground">به‌زودی در دسترس</p>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" disabled>
+                تغییر تصویر
+              </Button>
+              <ComingSoonBadge />
+            </div>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              آپلود تصویر پروفایل به‌زودی فعال می‌شود.
+            </p>
           </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="name">نام و نام خانوادگی</Label>
-            <Input id="name" {...register("name")} />
-            {errors.name ? <p className="text-xs text-destructive">{errors.name.message}</p> : null}
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="phone_number">شمارهٔ تماس</Label>
-            <Input id="phone_number" type="tel" dir="ltr" placeholder="09xxxxxxxxx" {...register("phone_number")} />
-            {errors.phone_number ? (
-              <p className="text-xs text-destructive">{errors.phone_number.message}</p>
+            <Label htmlFor="first_name">نام</Label>
+            <Input id="first_name" {...register("first_name")} />
+            {errors.first_name ? (
+              <p className="text-xs text-destructive">{errors.first_name.message}</p>
             ) : null}
           </div>
-          <div className="flex flex-col gap-2 sm:col-span-2">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="last_name">نام خانوادگی</Label>
+            <Input id="last_name" {...register("last_name")} />
+            {errors.last_name ? (
+              <p className="text-xs text-destructive">{errors.last_name.message}</p>
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="phone">شمارهٔ تماس</Label>
+            <Input
+              id="phone"
+              type="tel"
+              dir="ltr"
+              placeholder="09xxxxxxxxx"
+              className="text-start"
+              {...register("phone")}
+            />
+            {errors.phone ? (
+              <p className="text-xs text-destructive">{errors.phone.message}</p>
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-2">
             <Label htmlFor="email">ایمیل</Label>
-            <Input id="email" type="email" dir="ltr" {...register("email")} />
-            {errors.email ? <p className="text-xs text-destructive">{errors.email.message}</p> : null}
+            <Input
+              id="email"
+              type="email"
+              dir="ltr"
+              className="text-start"
+              value={email}
+              readOnly
+              disabled
+              aria-describedby="email-hint"
+            />
+            <p id="email-hint" className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Mail className="size-3" aria-hidden /> برای تغییر ایمیل با پشتیبانی تماس بگیرید.
+            </p>
           </div>
         </div>
 
         <div className="flex justify-start">
-          <Button type="submit" disabled={update.isPending}>
-            {update.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+          <Button type="submit" disabled={update.isPending || !isDirty} className="cursor-pointer">
+            {update.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
             ذخیرهٔ تغییرات
           </Button>
         </div>
@@ -171,113 +261,102 @@ function ProfileTab({ defaultName, defaultEmail }: { defaultName: string; defaul
   )
 }
 
-function SecurityTab() {
-  const [twoFa, setTwoFa] = React.useState(false)
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<PasswordValues>({
-    resolver: zodResolver(passwordSchema),
-    defaultValues: { current: "", next: "", confirm: "" },
-  })
-
-  function onSubmit() {
-    // TODO(api): wire to POST /api/v1/auth/password/change
-    toast.success("رمز عبور به‌روزرسانی شد")
-    reset()
-  }
-
+/**
+ * ComingSoonRow — an honest, disabled control row. No fake success: the toggle /
+ * button is visibly disabled and tagged "به‌زودی" so the customer is never told
+ * something happened when it didn't.
+ */
+function ComingSoonRow({
+  title,
+  description,
+  control,
+}: {
+  title: React.ReactNode
+  description: React.ReactNode
+  control?: React.ReactNode
+}) {
   return (
-    <div className="flex max-w-2xl flex-col gap-6">
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <p className="flex flex-wrap items-center gap-2 font-medium">
+          {title} <ComingSoonBadge />
+        </p>
+        <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+      </div>
+      {control ? <div className="shrink-0">{control}</div> : null}
+    </div>
+  )
+}
+
+function SecurityTab() {
+  return (
+    <div className="flex max-w-2xl flex-col gap-6" aria-busy={false}>
       <AccountSection title="تغییر رمز عبور">
-        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4">
+        <fieldset disabled className="grid gap-4">
+          <div className="mb-1 flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">
+              تغییر رمز از این بخش به‌زودی فعال می‌شود.
+            </p>
+            <ComingSoonBadge />
+          </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="current">رمز فعلی</Label>
-            <Input id="current" type="password" {...register("current")} />
-            {errors.current ? <p className="text-xs text-destructive">{errors.current.message}</p> : null}
+            <Input id="current" type="password" autoComplete="current-password" />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="next">رمز جدید</Label>
-              <Input id="next" type="password" {...register("next")} />
-              {errors.next ? <p className="text-xs text-destructive">{errors.next.message}</p> : null}
+              <Input id="next" type="password" autoComplete="new-password" />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="confirm">تکرار رمز جدید</Label>
-              <Input id="confirm" type="password" {...register("confirm")} />
-              {errors.confirm ? <p className="text-xs text-destructive">{errors.confirm.message}</p> : null}
+              <Input id="confirm" type="password" autoComplete="new-password" />
             </div>
           </div>
           <div className="flex justify-start">
-            <Button type="submit">
-              <KeyRound className="size-4" /> به‌روزرسانی رمز
+            <Button type="button" disabled>
+              به‌روزرسانی رمز
             </Button>
           </div>
-        </form>
+        </fieldset>
       </AccountSection>
 
       <AccountSection title="ورود دومرحله‌ای">
-        <label className="flex cursor-pointer items-center justify-between gap-4">
-          <div>
-            <p className="font-medium">تأیید پیامکی هنگام ورود</p>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              برای امنیت بیشتر، یک کد یک‌بارمصرف هنگام هر ورود دریافت کنید.
-            </p>
-          </div>
-          <Switch
-            checked={twoFa}
-            onCheckedChange={(v) => {
-              setTwoFa(v)
-              // TODO(api): wire to 2FA enable/disable endpoint
-              toast.success(v ? "ورود دومرحله‌ای فعال شد" : "ورود دومرحله‌ای غیرفعال شد")
-            }}
-            aria-label="ورود دومرحله‌ای"
-          />
-        </label>
+        <ComingSoonRow
+          title="تأیید پیامکی هنگام ورود"
+          description="برای امنیت بیشتر، یک کد یک‌بارمصرف هنگام هر ورود دریافت کنید."
+          control={<Switch checked={false} disabled aria-label="ورود دومرحله‌ای (به‌زودی)" />}
+        />
       </AccountSection>
     </div>
   )
 }
 
 const NOTIFY_OPTIONS = [
-  { key: "order_email", label: "ایمیل وضعیت سفارش", desc: "به‌روزرسانی پرداخت و ارسال", default: true },
-  { key: "order_sms", label: "پیامک وضعیت سفارش", desc: "اطلاع لحظه‌ای تحویل", default: true },
-  { key: "promo_email", label: "ایمیل پیشنهادها", desc: "تخفیف‌ها و محصولات تازه", default: false },
-  { key: "loyalty", label: "اعلان باشگاه مشتریان", desc: "امتیاز و پاداش‌های جدید", default: true },
+  { key: "order_email", label: "ایمیل وضعیت سفارش", desc: "به‌روزرسانی پرداخت و ارسال" },
+  { key: "order_sms", label: "پیامک وضعیت سفارش", desc: "اطلاع لحظه‌ای تحویل" },
+  { key: "promo_email", label: "ایمیل پیشنهادها", desc: "تخفیف‌ها و محصولات تازه" },
+  { key: "loyalty", label: "اعلان باشگاه مشتریان", desc: "امتیاز و پاداش‌های جدید" },
 ]
 
 function NotificationsTab() {
-  const [state, setState] = React.useState<Record<string, boolean>>(
-    () => Object.fromEntries(NOTIFY_OPTIONS.map((o) => [o.key, o.default]))
-  )
-
   return (
     <AccountSection
       title="اعلان‌ها"
-      description="انتخاب کنید چه اطلاع‌رسانی‌هایی دریافت کنید."
+      description="مدیریت اعلان‌ها به‌زودی در دسترس قرار می‌گیرد."
       className="max-w-2xl"
       bodyClassName="divide-y divide-border/60 p-0"
     >
       {NOTIFY_OPTIONS.map((o) => (
-        <label
-          key={o.key}
-          className="flex cursor-pointer items-center justify-between gap-4 px-5 py-4 sm:px-6"
-        >
-          <div>
-            <p className="font-medium">{o.label}</p>
+        <div key={o.key} className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
+          <div className="min-w-0">
+            <p className="flex flex-wrap items-center gap-2 font-medium">
+              {o.label} <ComingSoonBadge />
+            </p>
             <p className="mt-0.5 text-sm text-muted-foreground">{o.desc}</p>
           </div>
-          <Switch
-            checked={state[o.key]}
-            onCheckedChange={(v) => {
-              setState((s) => ({ ...s, [o.key]: v }))
-              // TODO(api): persist notification preferences
-            }}
-            aria-label={o.label}
-          />
-        </label>
+          <Switch checked={false} disabled aria-label={`${o.label} (به‌زودی)`} />
+        </div>
       ))}
     </AccountSection>
   )
@@ -287,55 +366,30 @@ function PrivacyTab() {
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <AccountSection title="داده‌های شما">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-medium">دریافت یک نسخه از اطلاعات</p>
-            <p className="mt-0.5 text-sm text-muted-foreground">سفارش‌ها، آدرس‌ها و فعالیت حساب شما.</p>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => toast.info("لینک دانلود به ایمیل شما ارسال می‌شود")}
-          >
-            {/* TODO(api): wire to data-export endpoint */}
-            <Download className="size-4" /> درخواست خروجی
-          </Button>
-        </div>
+        <ComingSoonRow
+          title="دریافت یک نسخه از اطلاعات"
+          description="خروجی سفارش‌ها، آدرس‌ها و فعالیت حساب شما به‌زودی فعال می‌شود."
+          control={
+            <Button variant="outline" disabled>
+              درخواست خروجی
+            </Button>
+          }
+        />
       </AccountSection>
 
       <AccountSection title="حذف حساب">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-medium text-destructive">حذف دائمی حساب کاربری</p>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="flex flex-wrap items-center gap-2 font-medium text-destructive">
+              حذف دائمی حساب کاربری <ComingSoonBadge />
+            </p>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              تمام اطلاعات شما حذف می‌شود و این عمل قابل بازگشت نیست.
+              حذف خودکار حساب هنوز فعال نیست. برای حذف حساب، فعلاً با پشتیبانی تماس بگیرید.
             </p>
           </div>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" className="text-destructive hover:text-destructive">
-                <Trash2 className="size-4" /> حذف حساب
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>حذف حساب کاربری</AlertDialogTitle>
-                <AlertDialogDescription>
-                  آیا کاملاً مطمئن هستید؟ با حذف حساب، تمام سفارش‌ها، امتیازها و موجودی کیف پول شما
-                  از بین می‌رود و قابل بازیابی نیست.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>انصراف</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-white hover:bg-destructive/90"
-                  onClick={() => toast.info("برای تکمیل حذف حساب با پشتیبانی تماس بگیرید")}
-                >
-                  {/* TODO(api): wire to account-deletion endpoint */}
-                  حذف حساب
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <Button variant="outline" className="text-destructive hover:text-destructive" disabled>
+            حذف حساب
+          </Button>
         </div>
       </AccountSection>
     </div>

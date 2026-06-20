@@ -4,7 +4,7 @@ import { absoluteUrl } from "@/lib/site"
 import { listProducts } from "@/lib/catalog/products"
 import { listCategories } from "@/lib/catalog/categories"
 import { allRecipeSlugs } from "@/lib/recipes"
-import { listBlogs } from "@/lib/journal"
+import { listBlogPosts } from "@/lib/journal"
 
 /**
  * Programmatic sitemap served at /sitemap.xml. Covers every public, indexable
@@ -20,7 +20,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     listProducts({ limit: 100 }),
     listCategories(),
     allRecipeSlugs(),
-    listBlogs(),
+    listBlogPosts(100),
   ])
 
   const staticRoutes: MetadataRoute.Sitemap = [

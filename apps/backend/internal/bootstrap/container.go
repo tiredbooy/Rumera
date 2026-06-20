@@ -83,6 +83,8 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 
 		heroSlideRepo = repositories.NewHeroSlideRepository(db)
 
+		siteSettingsRepo = repositories.NewSiteSettingsRepository(db)
+
 		recipeRepo         = repositories.NewRecipeRepository(db)
 		recommendationRepo = repositories.NewRecommendationRepository(db)
 	)
@@ -196,6 +198,8 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		BlogCategory: services.NewBlogCategoryService(blogCategoryRepo),
 
 		HeroSlide: services.NewHeroSlideService(heroSlideRepo),
+
+		SiteSettings: services.NewSiteSettingsService(siteSettingsRepo),
 
 		Recipe:         services.NewRecipeService(recipeRepo, db),
 		Recommendation: recommendationService,

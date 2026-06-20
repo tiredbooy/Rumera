@@ -47,9 +47,10 @@ func KeyBlacklist(jti string) string     { return "blacklist:" + jti }
 func KeyLoginAttempts(scope string) string { return "rl:login:" + scope }
 
 // OTP login keys, all scoped by canonical phone number:
-//   KeyOTP        — the active code (short TTL).
-//   KeyOTPSend    — fixed-window counter capping codes requested per phone.
-//   KeyOTPVerify  — fixed-window counter capping verify attempts per code.
+//
+//	KeyOTP        — the active code (short TTL).
+//	KeyOTPSend    — fixed-window counter capping codes requested per phone.
+//	KeyOTPVerify  — fixed-window counter capping verify attempts per code.
 func KeyOTP(phone string) string       { return "otp:code:" + phone }
 func KeyOTPSend(phone string) string   { return "otp:send:" + phone }
 func KeyOTPVerify(phone string) string { return "otp:try:" + phone }
@@ -62,3 +63,7 @@ func KeyCategoryTree() string    { return "category:v1:tree" }
 // KeyRecipe caches a hydrated public recipe detail by slug. Bump the version
 // prefix to invalidate the whole recipe namespace at once.
 func KeyRecipe(slug string) string { return "recipe:v1:" + slug }
+
+// KeySiteSettings caches the public storefront settings document. There is one
+// settings row, so the key is a constant; admin writes invalidate it.
+func KeySiteSettings() string { return "site_settings:v1:public" }

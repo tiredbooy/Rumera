@@ -337,6 +337,40 @@
   .prose-rumera hr {
     @apply my-12 border-border/60;
   }
+
+  /* In-editor preview typography for the admin recipe rich-text editor. Mirrors
+     `.prose-rumera` at a denser back-office scale, and renders an empty-state
+     placeholder via the `data-placeholder` attribute on the editable surface. */
+  .prose-recipe :where(p, ul, ol, blockquote, h2, h3):not(:first-child) {
+    margin-top: 0.85em;
+  }
+  .prose-recipe h2 {
+    @apply font-serif text-lg leading-snug text-foreground;
+  }
+  .prose-recipe h3 {
+    @apply font-serif text-base leading-snug text-foreground;
+  }
+  .prose-recipe a {
+    @apply text-primary underline underline-offset-4;
+  }
+  .prose-recipe strong {
+    @apply font-semibold text-foreground;
+  }
+  .prose-recipe ul {
+    @apply list-disc ps-5 marker:text-primary/60;
+  }
+  .prose-recipe ol {
+    @apply list-decimal ps-5 marker:text-primary/60;
+  }
+  .prose-recipe blockquote {
+    @apply border-s-2 border-primary/40 ps-4 text-foreground/80 italic;
+  }
+  /* Placeholder: when the only block is an empty first paragraph, show the
+     editable surface's `data-placeholder` text (no Tiptap Placeholder ext). */
+  .prose-recipe > p:first-child:last-child:empty::before {
+    content: attr(data-placeholder);
+    @apply pointer-events-none float-start h-0 text-muted-foreground;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

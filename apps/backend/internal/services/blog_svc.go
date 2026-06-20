@@ -3,11 +3,16 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
+	"github.com/tiredbooy/pkg/apperr"
 )
 
 // ── Blog Category Service ─────────────────────────────────────────────────────
@@ -73,7 +78,9 @@ type BlogService interface {
 	Create(ctx context.Context, req *models.BlogReq) (*models.BlogDetailResponse, error)
 	GetByID(ctx context.Context, id int64) (*models.BlogDetailResponse, error)
 	GetBySlug(ctx context.Context, slug string) (*models.BlogDetailResponse, error)
+	GetPublishedBySlug(ctx context.Context, slug string) (*models.BlogDetailResponse, error)
 	GetAll(ctx context.Context) ([]*models.Blog, error)
+	List(ctx context.Context, filter models.BlogFilter) ([]*models.Blog, int64, error)
 	Update(ctx context.Context, id int64, req *models.BlogUpdateReq) (*models.BlogDetailResponse, error)
 	Delete(ctx context.Context, id int64) error
 	RecordRead(ctx context.Context, id int64) error
@@ -102,15 +109,36 @@ func (s *blogService) GetAll(ctx context.Context) ([]*models.Blog, error) {
 	return blogs, nil
 }
 
+// List returns a paginated, filtered slice of blogs plus the total count. The
+// public handler forces status='published'; admin callers may pass any status.
+func (s *blogService) List(ctx context.Context, filter models.BlogFilter) ([]*models.Blog, int64, error) {
+	blogs, total, err := s.repo.List(ctx, filter)
+	if err != nil {
+		return nil, 0, fmt.Errorf("blogService.List: %w", err)
+	}
+	return blogs, total, nil
+}
+
 func (s *blogService) GetByID(ctx context.Context, id int64) (*models.BlogDetailResponse, error) {
 	return s.hydrate(ctx, func() (*models.Blog, error) {
 		return s.repo.GetByID(ctx, id)
 	})
 }
 
+// GetBySlug is the admin read: it returns drafts/archived posts too.
 func (s *blogService) GetBySlug(ctx context.Context, slug string) (*models.BlogDetailResponse, error) {
 	return s.hydrate(ctx, func() (*models.Blog, error) {
 		return s.repo.GetBySlug(ctx, slug)
+	})
+}
+
+// GetPublishedBySlug is the public storefront read: unpublished posts 404.
+func (s *blogService) GetPublishedBySlug(ctx context.Context, slug string) (*models.BlogDetailResponse, error) {
+	if slug == "" {
+		return nil, apperr.ErrInvalidRequest
+	}
+	return s.hydrate(ctx, func() (*models.Blog, error) {
+		return s.repo.GetPublishedBySlug(ctx, slug)
 	})
 }
 
@@ -124,6 +152,12 @@ func (s *blogService) RecordRead(ctx context.Context, id int64) error {
 // ── Writes ────────────────────────────────────────────────────────────────────
 
 func (s *blogService) Create(ctx context.Context, req *models.BlogReq) (*models.BlogDetailResponse, error) {
+	s.applyCreateDefaults(ctx, req)
+
+	if err := s.assertSlugFree(ctx, req.Slug); err != nil {
+		return nil, err
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("blogService.Create: begin tx: %w", err)
@@ -147,6 +181,33 @@ func (s *blogService) Create(ctx context.Context, req *models.BlogReq) (*models.
 }
 
 func (s *blogService) Update(ctx context.Context, id int64, req *models.BlogUpdateReq) (*models.BlogDetailResponse, error) {
+	// Normalise / guard the slug if it is being changed.
+	if req.Slug != nil {
+		normalized := slugify(*req.Slug)
+		if normalized == "" {
+			return nil, apperr.ErrInvalidRequest
+		}
+		req.Slug = &normalized
+		exists, err := s.repo.SlugExists(ctx, normalized)
+		if err != nil {
+			return nil, fmt.Errorf("blogService.Update: %w", err)
+		}
+		// Allow keeping the same slug on the same post.
+		if exists {
+			if current, gErr := s.repo.GetByID(ctx, id); gErr == nil && current.Slug != normalized {
+				return nil, apperr.ErrConflict
+			}
+		}
+	}
+
+	// Auto-stamp published_at the first time a post goes live.
+	if req.Status != nil && *req.Status == models.BlogStatusPublished && req.PublishedAt == nil {
+		if current, err := s.repo.GetByID(ctx, id); err == nil && current.PublishedAt == nil {
+			now := time.Now().UTC()
+			req.PublishedAt = &now
+		}
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("blogService.Update: begin tx: %w", err)
@@ -155,6 +216,9 @@ func (s *blogService) Update(ctx context.Context, id int64, req *models.BlogUpda
 
 	blog, err := s.repo.Update(ctx, id, req)
 	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
 		return nil, fmt.Errorf("blogService.Update: %w", err)
 	}
 
@@ -194,6 +258,9 @@ func (s *blogService) Update(ctx context.Context, id int64, req *models.BlogUpda
 
 func (s *blogService) Delete(ctx context.Context, id int64) error {
 	if err := s.repo.SoftDelete(ctx, id); err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
 		return fmt.Errorf("blogService.Delete: %w", err)
 	}
 	return nil
@@ -204,7 +271,10 @@ func (s *blogService) Delete(ctx context.Context, id int64) error {
 func (s *blogService) hydrate(ctx context.Context, load func() (*models.Blog, error)) (*models.BlogDetailResponse, error) {
 	blog, err := load()
 	if err != nil {
-		return nil, err
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, fmt.Errorf("blogService.hydrate: %w", err)
 	}
 
 	categories, err := s.repo.GetCategoriesByBlogID(ctx, blog.ID)
@@ -244,8 +314,11 @@ func (s *blogService) hydrate(ctx context.Context, load func() (*models.Blog, er
 			Slug:            blog.Slug,
 			Content:         blog.Content,
 			Excerpt:         blog.Excerpt,
+			ImageURL:        blog.ImageURL,
 			TimeToRead:      blog.TimeToRead,
 			TotalReads:      blog.TotalReads,
+			Status:          blog.Status,
+			IsFeatured:      blog.IsFeatured,
 			MetaTitle:       blog.MetaTitle,
 			MetaDescription: blog.MetaDescription,
 			PublishedAt:     blog.PublishedAt,
@@ -256,6 +329,56 @@ func (s *blogService) hydrate(ctx context.Context, load func() (*models.Blog, er
 		ProductIDs: productIDs,
 		TagIDs:     tagIDs,
 	}, nil
+}
+
+// applyCreateDefaults normalises the request before insert: it defaults the
+// status to draft, derives a unique slug from the title when none is supplied
+// (so creation never fails on a missing/colliding slug), and stamps published_at
+// the moment a post is created already published.
+func (s *blogService) applyCreateDefaults(ctx context.Context, req *models.BlogReq) {
+	if req.Status == "" {
+		req.Status = models.BlogStatusDraft
+	}
+	if req.TimeToRead <= 0 {
+		req.TimeToRead = 1
+	}
+	if req.Status == models.BlogStatusPublished && req.PublishedAt == nil {
+		now := time.Now().UTC()
+		req.PublishedAt = &now
+	}
+	if strings.TrimSpace(req.Slug) == "" {
+		req.Slug = s.uniqueSlug(ctx, req.Title)
+	} else {
+		req.Slug = slugify(req.Slug)
+	}
+}
+
+func (s *blogService) assertSlugFree(ctx context.Context, slug string) error {
+	exists, err := s.repo.SlugExists(ctx, slug)
+	if err != nil {
+		return fmt.Errorf("blogService.assertSlugFree: %w", err)
+	}
+	if exists {
+		return apperr.ErrConflict
+	}
+	return nil
+}
+
+// uniqueSlug derives a URL-safe slug from the title and appends a numeric suffix
+// until it is free, so creation never fails on a slug collision.
+func (s *blogService) uniqueSlug(ctx context.Context, title string) string {
+	base := slugify(title)
+	if base == "" {
+		base = "post"
+	}
+	slug := base
+	for i := 2; ; i++ {
+		exists, err := s.repo.SlugExists(ctx, slug)
+		if err != nil || !exists {
+			return slug
+		}
+		slug = base + "-" + strconv.Itoa(i)
+	}
 }
 
 func (s *blogService) syncRelations(ctx context.Context, blogID int64, categoryIDs, productIDs, tagIDs []int64) error {

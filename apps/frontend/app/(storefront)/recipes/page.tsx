@@ -164,17 +164,21 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
         </section>
       ) : null}
 
-      <section className="container-px mx-auto max-w-7xl py-12 sm:py-16">
+      <section
+        className="container-px mx-auto max-w-7xl py-12 sm:py-16"
+        aria-label="فهرست دستورها"
+        data-recipes-results
+      >
         {/* Sticky filter bar, tucked under the header */}
         <div className="sticky top-[4.25rem] z-30">
           <RecipeFilters />
         </div>
 
         {/* Result count */}
-        <p className="mt-6 text-sm text-muted-foreground" aria-live="polite">
+        <p className="mt-6 text-sm text-muted-foreground" aria-live="polite" role="status">
           {pagination.total_items > 0
             ? `${faNum(pagination.total_items)} دستور یافت شد`
-            : null}
+            : "دستوری مطابق فیلترها نیست"}
         </p>
 
         {recipes.length === 0 ? (
@@ -189,13 +193,15 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
             </Button>
           </div>
         ) : (
-          <div className="mt-6 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
+          <ul className="mt-6 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3" data-recipes-grid>
             {recipes.map((recipe, i) => (
-              <Reveal key={recipe.id} delay={Math.min(i, 5) * 0.04} y={16}>
-                <RecipeCard recipe={recipe} />
-              </Reveal>
+              <li key={recipe.id} className="contents">
+                <Reveal delay={Math.min(i, 5) * 0.04} y={16}>
+                  <RecipeCard recipe={recipe} />
+                </Reveal>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
 
         {/* Pagination */}

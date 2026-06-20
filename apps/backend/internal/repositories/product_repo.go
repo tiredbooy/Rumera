@@ -53,11 +53,18 @@ func NewProductRepository(db *pgxpool.Pool) ProductRepository {
 
 // ─────────────────────────────────────────────────────────────
 // Create
-// Only inserts the product row — variants are created by the
-// variant repo inside the same service transaction.
+// Inserts the product row and any variants sent alongside it in a
+// single transaction, so a product is never persisted without the
+// variants the client asked for (and vice-versa).
 // ─────────────────────────────────────────────────────────────
 
 func (r *productRepository) Create(ctx context.Context, req models.CreateProductReq) (*models.Product, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("productRepository.Create begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	const q = `
 		INSERT INTO products (
 			title, code, slug, category_id, description,
@@ -85,7 +92,7 @@ func (r *productRepository) Create(ctx context.Context, req models.CreateProduct
 		"meta_tags":         req.MetaTags,
 	}
 
-	rows, err := r.db.Query(ctx, q, args)
+	rows, err := tx.Query(ctx, q, args)
 	if err != nil {
 		return nil, fmt.Errorf("productRepository.Create: %w", err)
 	}
@@ -94,7 +101,60 @@ func (r *productRepository) Create(ctx context.Context, req models.CreateProduct
 	if err != nil {
 		return nil, fmt.Errorf("productRepository.Create scan: %w", err)
 	}
+
+	// Persist variants sent on create in the same transaction. Each variant
+	// row plus its option links is inserted; a failure rolls back the product.
+	for i := range req.Variants {
+		if err := insertVariantTx(ctx, tx, product.ID, req.Variants[i]); err != nil {
+			return nil, fmt.Errorf("productRepository.Create variant %d: %w", i, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("productRepository.Create commit: %w", err)
+	}
 	return &product, nil
+}
+
+// insertVariantTx inserts a single variant (and its option-value links) for the
+// given product using the supplied transaction. It mirrors variantRepository.Create
+// but joins the caller's transaction so product+variants commit atomically.
+func insertVariantTx(ctx context.Context, tx pgx.Tx, productID int64, req models.CreateVariantReq) error {
+	const q = `
+		INSERT INTO product_variants (product_id, sku, price, compare_at_price)
+		VALUES (@product_id, @sku, @price, @compare_at_price)
+		RETURNING id`
+
+	args := pgx.NamedArgs{
+		"product_id":       productID,
+		"sku":              req.SKU,
+		"price":            req.Price,
+		"compare_at_price": req.CompareAtPrice,
+	}
+
+	var variantID int64
+	if err := tx.QueryRow(ctx, q, args).Scan(&variantID); err != nil {
+		return fmt.Errorf("insert variant: %w", err)
+	}
+
+	if len(req.OptionValueIDs) > 0 {
+		optRows := make([]string, len(req.OptionValueIDs))
+		optArgs := pgx.NamedArgs{"variant_id": variantID}
+		for i, oid := range req.OptionValueIDs {
+			key := fmt.Sprintf("opt_%d", i)
+			optRows[i] = fmt.Sprintf("(@variant_id, @%s)", key)
+			optArgs[key] = oid
+		}
+		optQ := fmt.Sprintf(`
+			INSERT INTO product_variants_options (product_variant_id, variant_option_id)
+			VALUES %s`, strings.Join(optRows, ", "),
+		)
+		if _, err := tx.Exec(ctx, optQ, optArgs); err != nil {
+			return fmt.Errorf("attach options: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // ─────────────────────────────────────────────────────────────

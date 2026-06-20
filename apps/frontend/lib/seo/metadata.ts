@@ -16,6 +16,8 @@ type BuildMetadataInput = {
   index?: boolean
   images?: string[]
   type?: "website" | "article"
+  /** Optional keyword hints (e.g. product tags) for the meta keywords tag. */
+  keywords?: string[]
 }
 
 export function buildMetadata({
@@ -25,6 +27,7 @@ export function buildMetadata({
   index = true,
   images,
   type = "website",
+  keywords,
 }: BuildMetadataInput = {}): Metadata {
   const url = absoluteUrl(path)
   const desc = description ?? siteConfig.description
@@ -32,6 +35,7 @@ export function buildMetadata({
   return {
     title,
     description: desc,
+    ...(keywords && keywords.length ? { keywords } : {}),
     alternates: { canonical: url },
     robots: index
       ? undefined

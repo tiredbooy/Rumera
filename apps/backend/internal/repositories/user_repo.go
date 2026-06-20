@@ -23,6 +23,10 @@ type UserRepository interface {
 	GetByPhone(ctx context.Context, phone string) (*models.User, error)
 	GetAll(ctx context.Context, filter models.UserFilter) ([]*models.User, int64, error)
 	Update(ctx context.Context, userID uuid.UUID, req models.UpdateUserReq) (*models.User, error)
+	// AdminUpdate patches profile fields plus the privileged role / is_active
+	// columns. Unlike Update it is NOT gated on is_active = true, so an admin can
+	// reactivate a deactivated account.
+	AdminUpdate(ctx context.Context, userID uuid.UUID, req models.AdminUpdateUserReq) (*models.User, error)
 	Delete(ctx context.Context, userID uuid.UUID) error
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 	ExistsByID(ctx context.Context, userID uuid.UUID) (bool, error)
@@ -297,6 +301,76 @@ func (r *userRepository) Update(ctx context.Context, userID uuid.UUID, req model
 			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("userRepository.Update scan: %w", err)
+	}
+	return &user, nil
+}
+
+// AdminUpdate patches the same profile columns as Update plus the privileged
+// role / is_active columns. It deliberately matches on user_id ALONE (no
+// is_active = true predicate) so an admin can reactivate a deactivated account.
+func (r *userRepository) AdminUpdate(ctx context.Context, userID uuid.UUID, req models.AdminUpdateUserReq) (*models.User, error) {
+	sets := []string{}
+	args := pgx.NamedArgs{"user_id": userID}
+
+	if req.FirstName != nil {
+		sets = append(sets, "first_name = @first_name")
+		args["first_name"] = *req.FirstName
+	}
+	if req.LastName != nil {
+		sets = append(sets, "last_name = @last_name")
+		args["last_name"] = *req.LastName
+	}
+	if req.Phone != nil {
+		sets = append(sets, "phone = @phone")
+		args["phone"] = *req.Phone
+	}
+	if req.NationalCode != nil {
+		sets = append(sets, "national_code = @national_code")
+		args["national_code"] = *req.NationalCode
+	}
+	if req.BirthDate != nil {
+		sets = append(sets, "birth_date = @birth_date")
+		args["birth_date"] = *req.BirthDate
+	}
+	if req.Gender != nil {
+		sets = append(sets, "gender = @gender")
+		args["gender"] = *req.Gender
+	}
+	if req.Role != nil {
+		sets = append(sets, "role = @role")
+		args["role"] = *req.Role
+	}
+	if req.IsActive != nil {
+		sets = append(sets, "is_active = @is_active")
+		args["is_active"] = *req.IsActive
+	}
+
+	if len(sets) == 0 {
+		return r.GetByID(ctx, userID)
+	}
+
+	sets = append(sets, "updated_at = @updated_at")
+	args["updated_at"] = time.Now()
+
+	q := fmt.Sprintf(`
+		UPDATE users
+		SET %s
+		WHERE user_id = @user_id
+		RETURNING *`,
+		strings.Join(sets, ", "),
+	)
+
+	rows, err := r.db.Query(ctx, q, args)
+	if err != nil {
+		return nil, fmt.Errorf("userRepository.AdminUpdate: %w", err)
+	}
+
+	user, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("userRepository.AdminUpdate scan: %w", err)
 	}
 	return &user, nil
 }

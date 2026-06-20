@@ -1,8 +1,10 @@
+import Link from "next/link"
+import { Plus } from "lucide-react"
+
 import { requirePermission } from "@/lib/auth/session"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 import { can } from "@/lib/rbac/can"
-import { faNum } from "@/lib/products"
-import { adminRecipes } from "@/lib/admin/data"
+import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { RecipesBoard } from "@/components/admin/recipes-board"
 
@@ -14,7 +16,16 @@ export default async function AdminRecipesPage() {
     <>
       <PageHeader
         title="دستورها"
-        description={`${faNum(adminRecipes.length)} دستور کوکتل و محتوای آموزشی`}
+        description="دستورهای کوکتل و محتوای آموزشی فروشگاه"
+        actions={
+          canWrite ? (
+            <Button size="sm" asChild>
+              <Link href="/admin/recipes/new">
+                <Plus className="size-4" /> دستور جدید
+              </Link>
+            </Button>
+          ) : null
+        }
       />
       <RecipesBoard canWrite={canWrite} />
     </>

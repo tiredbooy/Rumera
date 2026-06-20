@@ -13,7 +13,10 @@ import { permissionsForRole, type Role } from "@/lib/rbac/roles"
 import "./types"
 
 export const authConfig = {
-  pages: { signIn: "/auth/login" },
+  // The login page lives at app/(auth)/login — the (auth) route group adds NO
+  // URL segment, so the canonical path is "/login" (this matches middleware.ts,
+  // robots.ts, and every in-app link). Keep these in lock-step.
+  pages: { signIn: "/login" },
   session: { strategy: "jwt" },
   callbacks: {
     /**

@@ -8,9 +8,43 @@
  * used as an open proxy.
  */
 import { NextResponse, type NextRequest } from "next/server"
+import { getToken } from "next-auth/jwt"
 
 import { auth } from "@/lib/auth/auth"
 import { API_BASE } from "@/lib/api/client"
+
+/**
+ * Read the *raw* next-auth JWT (which carries the server-only `refreshToken`)
+ * from the encrypted session cookie. Keeps the refresh token server-side; the
+ * cookie name / salt are derived from the request protocol so it works in dev,
+ * Docker, and prod.
+ */
+async function readRefreshToken(req: NextRequest): Promise<string | undefined> {
+  const secureCookie = req.nextUrl.protocol === "https:"
+  const token = await getToken({
+    req,
+    secret: process.env.AUTH_SECRET,
+    secureCookie,
+  })
+  return (token?.refreshToken as string | undefined) ?? undefined
+}
+
+/** Exchange the refresh token for a fresh access token via the backend. */
+async function refreshAccessToken(refreshToken: string): Promise<string | undefined> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      cache: "no-store",
+    })
+    if (!res.ok) return undefined
+    const { data } = await res.json()
+    return (data?.access_token as string | undefined) ?? undefined
+  } catch {
+    return undefined
+  }
+}
 
 const ALLOW = new Set([
   "cart",
@@ -22,7 +56,10 @@ const ALLOW = new Set([
   "wishlist",
   "reviews",
   "alerts",
-  "me",
+  // `auth` is allowlisted only so the self-service profile routes
+  // (GET/PATCH /auth/me) can be proxied; every /auth/* backend route enforces
+  // its own guard (e.g. /auth/me sits behind the Auth middleware).
+  "auth",
   "loyalty",
   "referrals",
   "gift-cards",
@@ -44,17 +81,31 @@ async function handle(req: NextRequest, segments: string[]) {
   const hasBody = method !== "GET" && method !== "HEAD" && method !== "DELETE"
   const body = hasBody ? await req.text() : undefined
 
-  let res: Response
-  try {
-    res = await fetch(target, {
+  const sendUpstream = (accessToken?: string) =>
+    fetch(target, {
       method,
       headers: {
-        ...(session?.accessToken ? { Authorization: `Bearer ${session.accessToken}` } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...(body ? { "Content-Type": "application/json" } : {}),
       },
       body,
       cache: "no-store",
     })
+
+  let res: Response
+  try {
+    res = await sendUpstream(session?.accessToken)
+
+    // Access token expired mid-request → try ONE silent refresh + retry. If the
+    // refresh fails we return the original 401 and the client-side SessionGuard
+    // signs the user out.
+    if (res.status === 401 && session?.accessToken) {
+      const refreshToken = await readRefreshToken(req)
+      if (refreshToken) {
+        const fresh = await refreshAccessToken(refreshToken)
+        if (fresh) res = await sendUpstream(fresh)
+      }
+    }
   } catch {
     return NextResponse.json(
       { error: { code: "UPSTREAM_UNAVAILABLE", message: "could not reach API" } },
