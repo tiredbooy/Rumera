@@ -18,7 +18,7 @@ func (h *Handler) CreateAddress(c *gin.Context) {
 	}
 	addr, err := h.Address.Create(c.Request.Context(), userID, req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.Created(c, toAddressResponse(addr))
@@ -32,7 +32,7 @@ func (h *Handler) ListAddresses(c *gin.Context) {
 	}
 	addrs, err := h.Address.GetAllByUserID(c.Request.Context(), userID)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	out := make([]models.AddressResponse, len(addrs))
@@ -54,7 +54,7 @@ func (h *Handler) GetAddress(c *gin.Context) {
 	}
 	addr, err := h.Address.GetByID(c.Request.Context(), id, userID)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, toAddressResponse(addr))
@@ -76,7 +76,7 @@ func (h *Handler) UpdateAddress(c *gin.Context) {
 	}
 	addr, err := h.Address.Update(c.Request.Context(), id, userID, req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, toAddressResponse(addr))
@@ -93,7 +93,7 @@ func (h *Handler) DeleteAddress(c *gin.Context) {
 		return
 	}
 	if err := h.Address.Delete(c.Request.Context(), id, userID); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -110,7 +110,7 @@ func (h *Handler) SetDefaultAddress(c *gin.Context) {
 		return
 	}
 	if err := h.Address.SetDefault(c.Request.Context(), id, userID); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.NoContent(c)

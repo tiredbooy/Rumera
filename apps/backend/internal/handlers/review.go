@@ -25,7 +25,7 @@ func (h *Handler) CreateReview(c *gin.Context) {
 	// order-history check is wired in.
 	review, err := h.Review.Create(c.Request.Context(), userID, req, false)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.Created(c, mappers.ToReviewResponse(review, ""))
@@ -52,7 +52,7 @@ func (h *Handler) ProductReviews(c *gin.Context) {
 func (h *Handler) listReviews(c *gin.Context, filter models.ReviewFilter) {
 	reviews, total, err := h.Review.GetAll(c.Request.Context(), filter)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	out := make([]models.ReviewResponse, len(reviews))
@@ -70,7 +70,7 @@ func (h *Handler) GetReview(c *gin.Context) {
 	}
 	review, err := h.Review.GetByID(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, mappers.ToReviewResponse(review, ""))
@@ -84,7 +84,7 @@ func (h *Handler) ProductRatingSummary(c *gin.Context) {
 	}
 	summary, err := h.Review.GetRatingSummary(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, summary)
@@ -106,7 +106,7 @@ func (h *Handler) UpdateReview(c *gin.Context) {
 	}
 	review, err := h.Review.Update(c.Request.Context(), id, userID, req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, mappers.ToReviewResponse(review, ""))
@@ -123,7 +123,7 @@ func (h *Handler) DeleteReview(c *gin.Context) {
 		return
 	}
 	if err := h.Review.Delete(c.Request.Context(), id, userID); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -140,7 +140,7 @@ func (h *Handler) ReactToReview(c *gin.Context) {
 		return
 	}
 	if err := h.Review.React(c.Request.Context(), id, req.Like); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -154,7 +154,7 @@ func (h *Handler) ReviewImages(c *gin.Context) {
 	}
 	images, err := h.Review.GetImages(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, images)
@@ -162,6 +162,10 @@ func (h *Handler) ReviewImages(c *gin.Context) {
 
 // AddReviewImage — POST /reviews/:id/images
 func (h *Handler) AddReviewImage(c *gin.Context) {
+	userID, ok := h.uid(c)
+	if !ok {
+		return
+	}
 	id, ok := h.paramInt64(c, "id")
 	if !ok {
 		return
@@ -171,9 +175,9 @@ func (h *Handler) AddReviewImage(c *gin.Context) {
 		return
 	}
 	req.ReviewID = id
-	image, err := h.Review.AddImage(c.Request.Context(), id, &req)
+	image, err := h.Review.AddImage(c.Request.Context(), id, userID, &req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.Created(c, image)
@@ -191,7 +195,7 @@ func (h *Handler) ListReviewsAdmin(c *gin.Context) {
 
 	reviews, total, err := h.Review.GetAll(c.Request.Context(), filter)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	out := make([]models.ReviewAdminResponse, len(reviews))
@@ -213,7 +217,7 @@ func (h *Handler) UpdateReviewStatus(c *gin.Context) {
 	}
 	review, err := h.Review.UpdateStatus(c.Request.Context(), id, req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, mappers.ToReviewAdminResponse(review, ""))

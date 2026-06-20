@@ -33,6 +33,15 @@ Solid, verified progress. Grouped by area.
 
 **DevOps** — backend `.dockerignore` added, prod Dockerfile keeps `GOSUMDB` on, trusted-proxies wired, OTel + Prometheus + Grafana **infra authored**, deep `/health/ready` probe added.
 
+### ⏩ Fixed in the immediate follow-up "next slice" batch
+The recommended first slice (below) shipped right after this sweep:
+- **1.1** product price-filter SQL — rewritten to correlated `EXISTS` subqueries (was invalid aggregate-in-`WHERE` against an unjoined alias → 500).
+- **1.2** store BFF `me` allow-list — `/me/taste-profile` now proxies; personalization surface unblocked.
+- **3.1** `order_items` indexes — `idx_order_items_order_id` / `idx_order_items_product_id` added `CONCURRENTLY` (`20260620140000`).
+- **5.2** review-image IDOR — ownership check in `AddImage` + `validate:"required,max=2048"` on `ImageURL`.
+- **5.3** `h.handleError` migration — `address`/`inventory`/`referral`/`review` handlers no longer 500 on `models.Err*`.
+- **4.1** CI pipeline — `.github/workflows/ci.yml` runs build/vet/golangci-lint/`go test -race`/integration (Postgres service) + FE lint/tsc/build.
+
 ---
 
 ## 🔴 Highest priority

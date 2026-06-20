@@ -203,19 +203,26 @@ func (s *ReviewService) GetImages(ctx context.Context, reviewID int64) ([]*model
 	return images, nil
 }
 
-func (s *ReviewService) AddImage(ctx context.Context, reviewID int64, req *models.ReviewImageReq) (*models.ReviewImage, error) {
-	if reviewID <= 0 {
+func (s *ReviewService) AddImage(ctx context.Context, reviewID int64, userID int64, req *models.ReviewImageReq) (*models.ReviewImage, error) {
+	if reviewID <= 0 || userID <= 0 {
 		return nil, apperr.ErrInvalidRequest
 	}
 	if req.ImageURL == "" {
 		return nil, apperr.ErrInvalidRequest
 	}
 
-	if _, err := s.reviewRepo.GetByID(ctx, reviewID); err != nil {
+	// Ownership check: a user may only attach images to their OWN review.
+	// Without this, any authenticated caller could POST images onto any review
+	// by iterating numeric ids (IDOR), and the URL renders on the public PDP.
+	review, err := s.reviewRepo.GetByID(ctx, reviewID)
+	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return nil, apperr.ErrNotFound
 		}
 		return nil, apperr.ErrInternal
+	}
+	if review.UserID != userID {
+		return nil, apperr.ErrAccessDenied
 	}
 
 	req.ReviewID = reviewID
