@@ -3,7 +3,9 @@ package handlers
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/mappers"
+	"github.com/tiredbooy/internal/middlewares"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/response"
 )
 
@@ -64,20 +66,37 @@ func (h *Handler) GetUser(c *gin.Context) {
 }
 
 // UpdateUser — PATCH /admin/users/:userID
+//
+// Admin-only edit of another user. Beyond the profile fields editable on
+// /auth/me, this route accepts the privileged role and is_active fields. A guard
+// stops an admin from demoting or deactivating their OWN account, which would
+// otherwise let an admin lock themselves (and potentially every admin) out of
+// the console.
 func (h *Handler) UpdateUser(c *gin.Context) {
 	id, ok := h.paramUUID(c, "userID")
 	if !ok {
 		return
 	}
-	var req models.UpdateUserReq
+	var req models.AdminUpdateUserReq
 	if !h.bindJSON(c, &req) {
 		return
 	}
+	// Password changes go through the dedicated reset flow — never accept a raw
+	// hash from the client here.
 	req.PasswordHash = nil
 
-	user, err := h.User.Update(c.Request.Context(), id, req)
+	// Lock-out protection: an admin may not strip their own admin role or
+	// deactivate themselves.
+	if callerID, ok := middlewares.UserUUID(c); ok && callerID == id {
+		if (req.Role != nil && *req.Role != "admin") || (req.IsActive != nil && !*req.IsActive) {
+			h.handleError(c, apperr.ErrAccessDenied)
+			return
+		}
+	}
+
+	user, err := h.User.AdminUpdate(c.Request.Context(), id, req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, mappers.MapToUserAdminResponse(user))

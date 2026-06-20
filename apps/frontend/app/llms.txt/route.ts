@@ -7,7 +7,7 @@
 import { absoluteUrl, siteConfig } from "@/lib/site"
 import { categories, categoryFa } from "@/lib/products"
 import { listRecipes } from "@/lib/recipes"
-import { listBlogs } from "@/lib/journal"
+import { listBlogPosts } from "@/lib/journal"
 
 export const dynamic = "force-static"
 export const revalidate = 86400
@@ -22,7 +22,7 @@ export async function GET() {
     .map((r) => `- [${r.title}](${absoluteUrl(`/recipes/${r.slug}`)})${r.excerpt ? `: ${r.excerpt}` : ""}`)
     .join("\n")
 
-  const journalPosts = await listBlogs()
+  const journalPosts = await listBlogPosts(50)
   const journalLinks = journalPosts
     .map((p) => `- [${p.title}](${absoluteUrl(`/journal/${p.slug}`)})${p.excerpt ? `: ${p.excerpt}` : ""}`)
     .join("\n")

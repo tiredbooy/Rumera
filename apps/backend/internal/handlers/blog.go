@@ -11,26 +11,35 @@ import (
 
 // ── Blogs ──────────────────────────────────────────────────────────────────
 
-// ListBlogs — GET /blogs
+// ListBlogs — GET /blogs. Public listing is always published-only + paginated.
 func (h *Handler) ListBlogs(c *gin.Context) {
-	blogs, err := h.Blog.GetAll(c.Request.Context())
-	if err != nil {
-		response.HandleError(c, err)
+	var filter models.BlogFilter
+	if !h.bindQuery(c, &filter) {
 		return
 	}
-	response.OK(c, mappers.ToBlogResponses(blogs))
+	filter.Defaults()
+
+	published := models.BlogStatusPublished
+	filter.Status = &published // never expose drafts on the storefront
+
+	blogs, total, err := h.Blog.List(c.Request.Context(), filter)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.Paginated(c, mappers.ToBlogListItems(blogs), paginate(filter.Page, filter.Limit, total))
 }
 
-// GetBlogBySlug — GET /blogs/:slug. Records a read asynchronously.
+// GetBlogBySlug — GET /blogs/:slug. Public read: drafts 404. Records a read async.
 func (h *Handler) GetBlogBySlug(c *gin.Context) {
 	slug := c.Param("slug")
 	if slug == "" {
 		response.Error(c, response.ErrInvalidParams)
 		return
 	}
-	blog, err := h.Blog.GetBySlug(c.Request.Context(), slug)
+	blog, err := h.Blog.GetPublishedBySlug(c.Request.Context(), slug)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	// Count the read without blocking the response or tying it to the request
@@ -48,7 +57,7 @@ func (h *Handler) GetBlog(c *gin.Context) {
 	}
 	blog, err := h.Blog.GetByID(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, blog)
@@ -68,7 +77,7 @@ func (h *Handler) CreateBlog(c *gin.Context) {
 
 	blog, err := h.Blog.Create(c.Request.Context(), &req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.Created(c, blog)
@@ -86,7 +95,7 @@ func (h *Handler) UpdateBlog(c *gin.Context) {
 	}
 	blog, err := h.Blog.Update(c.Request.Context(), id, &req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, blog)
@@ -99,7 +108,7 @@ func (h *Handler) DeleteBlog(c *gin.Context) {
 		return
 	}
 	if err := h.Blog.Delete(c.Request.Context(), id); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.NoContent(c)

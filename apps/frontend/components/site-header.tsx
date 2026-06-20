@@ -252,9 +252,13 @@ function ProductsMenu({ categories }: { categories: HeaderCategory[] }) {
               {/* Categories */}
               <div className="p-4 sm:p-5">
                 <div className="mb-3 flex items-center justify-between">
-                  <p className="eyebrow">
+                  <Link
+                    href="/categories"
+                    onClick={() => setOpen(false)}
+                    className="eyebrow rounded-md outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
                     <Grid2x2 className="size-3.5" /> دسته‌بندی‌ها
-                  </p>
+                  </Link>
                   <Link
                     href="/products"
                     onClick={() => setOpen(false)}
@@ -343,6 +347,14 @@ function MobileMenu({ categories }: { categories: HeaderCategory[] }) {
               همهٔ محصولات <ArrowLeft className="size-4 text-primary" />
             </Link>
           </SheetClose>
+          <SheetClose asChild>
+            <Link
+              href="/categories"
+              className="flex items-center gap-2 border-b border-border/50 py-3 text-sm font-medium"
+            >
+              <Grid2x2 className="size-4 text-muted-foreground" /> دسته‌بندی‌ها
+            </Link>
+          </SheetClose>
           {nav.map((item) => (
             <SheetClose asChild key={item.href}>
               <Link
@@ -362,7 +374,14 @@ function MobileMenu({ categories }: { categories: HeaderCategory[] }) {
             </Link>
           </SheetClose>
 
-          <p className="eyebrow mt-6 mb-2">دسته‌بندی‌ها</p>
+          <SheetClose asChild>
+            <Link
+              href="/categories"
+              className="eyebrow mt-6 mb-2 w-fit rounded-md outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              <Grid2x2 className="size-3.5" /> دسته‌بندی‌ها
+            </Link>
+          </SheetClose>
           <div className="grid grid-cols-2 gap-1">
             {categories.map((c) => (
               <SheetClose asChild key={c.slug}>

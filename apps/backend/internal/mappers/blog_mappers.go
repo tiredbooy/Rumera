@@ -30,8 +30,11 @@ func ToBlogResponse(b *models.Blog) models.BlogResponse {
 		Slug:            b.Slug,
 		Content:         b.Content,
 		Excerpt:         b.Excerpt,
+		ImageURL:        b.ImageURL,
 		TimeToRead:      b.TimeToRead,
 		TotalReads:      b.TotalReads,
+		Status:          b.Status,
+		IsFeatured:      b.IsFeatured,
 		MetaTitle:       b.MetaTitle,
 		MetaDescription: b.MetaDescription,
 		PublishedAt:     b.PublishedAt,
@@ -44,6 +47,33 @@ func ToBlogResponses(bs []*models.Blog) []models.BlogResponse {
 	out := make([]models.BlogResponse, len(bs))
 	for i, b := range bs {
 		out[i] = ToBlogResponse(b)
+	}
+	return out
+}
+
+// ToBlogListItem builds a lightweight journal card (omits the full content body).
+func ToBlogListItem(b *models.Blog) models.BlogListItem {
+	return models.BlogListItem{
+		ID:          b.ID,
+		AuthorID:    b.AuthorID,
+		Title:       b.Title,
+		Slug:        b.Slug,
+		Excerpt:     b.Excerpt,
+		ImageURL:    b.ImageURL,
+		TimeToRead:  b.TimeToRead,
+		TotalReads:  b.TotalReads,
+		Status:      b.Status,
+		IsFeatured:  b.IsFeatured,
+		PublishedAt: b.PublishedAt,
+		CreatedAt:   b.CreatedAt,
+		UpdatedAt:   b.UpdatedAt,
+	}
+}
+
+func ToBlogListItems(bs []*models.Blog) []models.BlogListItem {
+	out := make([]models.BlogListItem, len(bs))
+	for i, b := range bs {
+		out[i] = ToBlogListItem(b)
 	}
 	return out
 }

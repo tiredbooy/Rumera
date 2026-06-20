@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { ShoppingBag, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { useAddCartItem } from "@/lib/api/hooks"
 import { ApiClientError } from "@/lib/api/store-client"
 
@@ -15,10 +16,14 @@ import { ApiClientError } from "@/lib/api/store-client"
  */
 export function AddToCartButton({
   productVariantId,
+  quantity = 1,
   disabled,
+  className,
 }: {
   productVariantId?: number
+  quantity?: number
   disabled?: boolean
+  className?: string
 }) {
   const { status } = useSession()
   const router = useRouter()
@@ -33,7 +38,7 @@ export function AddToCartButton({
     }
     if (!productVariantId) return
     add.mutate(
-      { product_variant_id: productVariantId, quantity: 1 },
+      { product_variant_id: productVariantId, quantity },
       {
         onSuccess: () =>
           toast.success("به سبد خرید افزوده شد", {
@@ -52,7 +57,7 @@ export function AddToCartButton({
   return (
     <Button
       size="lg"
-      className="h-12 px-7 text-sm"
+      className={cn("h-12 px-7 text-sm", className)}
       onClick={onClick}
       disabled={disabled || add.isPending}
     >

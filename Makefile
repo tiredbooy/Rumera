@@ -122,6 +122,10 @@ frontend-shell: ## Open a shell in the running dev frontend container
 db-shell: ## Open a psql prompt on the dev main database
 	$(DEV) exec postgres psql -U $${DB_USER:-postgres} -d $${DB_NAME:-rumera}
 
+.PHONY: seed
+seed: $(DEV_ENV) ## Seed realistic Persian storefront test data (idempotent — safe to re-run)
+	$(DEV) exec backend go run ./cmd/seed
+
 ## ── Housekeeping ──────────────────────────────────────────────────────────────
 
 .PHONY: clean

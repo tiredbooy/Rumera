@@ -137,6 +137,27 @@ func (s *UserService) Update(ctx context.Context, userID uuid.UUID, req models.U
 	return user, nil
 }
 
+// AdminUpdate applies an admin-initiated patch that may include the privileged
+// role and is_active fields. Existence is NOT pre-checked via ExistsByID (which
+// filters on is_active = true) because an admin must be able to reactivate a
+// deactivated account; the repository's RETURNING * surfaces ErrNotFound when no
+// row matches the user_id.
+func (s *UserService) AdminUpdate(ctx context.Context, userID uuid.UUID, req models.AdminUpdateUserReq) (*models.User, error) {
+	if userID == uuid.Nil {
+		return nil, apperr.ErrInvalidRequest
+	}
+
+	user, err := s.userRepo.AdminUpdate(ctx, userID, req)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrUserNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+
+	return user, nil
+}
+
 func (s *UserService) Delete(ctx context.Context, userID uuid.UUID) error {
 	if userID == uuid.Nil {
 		return apperr.ErrInvalidRequest

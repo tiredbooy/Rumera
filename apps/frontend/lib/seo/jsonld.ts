@@ -64,8 +64,19 @@ export function productLd(p: Product) {
 }
 
 /** Product JSON-LD from a live API `ProductDetail`. Pass `rating` (from the
- * reviews summary) to emit AggregateRating for review rich-results. */
-export function productDetailLd(p: ProductDetail, rating?: { value: number; count: number }) {
+ * reviews summary) to emit AggregateRating, and `reviews` to emit individual
+ * Review nodes — both power Google/AI review rich-results. */
+export function productDetailLd(
+  p: ProductDetail,
+  rating?: { value: number; count: number },
+  reviews?: {
+    rating: number
+    title?: string
+    content?: string
+    author?: string
+    created_at: string
+  }[]
+) {
   const prices = (p.variants ?? []).map((v) => v.price).filter((n) => n > 0)
   const low = prices.length ? Math.min(...prices) : undefined
   const high = prices.length ? Math.max(...prices) : undefined
@@ -75,8 +86,10 @@ export function productDetailLd(p: ProductDetail, rating?: { value: number; coun
     name: p.title,
     description: p.description ?? p.meta_description,
     sku: p.variants?.[0]?.sku,
+    mpn: p.code,
     url: absoluteUrl(`/products/${p.slug}`),
     image: (p.images ?? []).map((img) => img.image_url),
+    ...(p.country_of_origin ? { countryOfOrigin: p.country_of_origin } : {}),
     ...(rating && rating.count > 0
       ? {
           aggregateRating: {
@@ -84,6 +97,18 @@ export function productDetailLd(p: ProductDetail, rating?: { value: number; coun
             ratingValue: Number(rating.value.toFixed(1)),
             reviewCount: rating.count,
           },
+        }
+      : {}),
+    ...(reviews && reviews.length
+      ? {
+          review: reviews.slice(0, 8).map((r) => ({
+            "@type": "Review",
+            reviewRating: { "@type": "Rating", ratingValue: r.rating, bestRating: 5 },
+            ...(r.author ? { author: { "@type": "Person", name: r.author } } : {}),
+            ...(r.title ? { name: r.title } : {}),
+            ...(r.content ? { reviewBody: r.content } : {}),
+            datePublished: r.created_at,
+          })),
         }
       : {}),
     offers:

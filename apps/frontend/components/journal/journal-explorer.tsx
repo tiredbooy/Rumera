@@ -5,9 +5,9 @@ import { Search, X, BookOpen } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
-import { BlogCard } from "@/components/journal/blog-card"
+import { JournalCard } from "@/components/journal/journal-card"
 import { faNum } from "@/lib/products"
-import type { BlogPost } from "@/lib/journal"
+import type { BlogListItem } from "@/lib/journal"
 
 const sorts = [
   { value: "new", label: "جدیدترین" },
@@ -18,7 +18,7 @@ const sorts = [
  * JournalExplorer — instant client-side search + sort over the (already
  * server-rendered) post list. No round-trips; all posts stay in the DOM for SEO.
  */
-export function JournalExplorer({ posts }: { posts: BlogPost[] }) {
+export function JournalExplorer({ posts }: { posts: BlogListItem[] }) {
   const [query, setQuery] = React.useState("")
   const [sort, setSort] = React.useState<(typeof sorts)[number]["value"]>("new")
 
@@ -40,7 +40,7 @@ export function JournalExplorer({ posts }: { posts: BlogPost[] }) {
     <div>
       <div className="border-hairline flex flex-col gap-4 rounded-3xl bg-card/80 p-4 shadow-sm shadow-foreground/5 ring-1 ring-foreground/5 backdrop-blur-sm sm:flex-row sm:items-center sm:p-3">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
             type="search"
             value={query}
@@ -54,9 +54,9 @@ export function JournalExplorer({ posts }: { posts: BlogPost[] }) {
               type="button"
               onClick={() => setQuery("")}
               aria-label="پاک کردن جستجو"
-              className="absolute top-1/2 end-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute top-1/2 end-3 -translate-y-1/2 cursor-pointer rounded text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
-              <X className="size-4" />
+              <X className="size-4" aria-hidden />
             </button>
           ) : null}
         </div>
@@ -84,24 +84,26 @@ export function JournalExplorer({ posts }: { posts: BlogPost[] }) {
         </div>
       </div>
 
-      <p className="mt-6 text-sm text-muted-foreground">
-        {filtered.length > 0 ? `${faNum(filtered.length)} نوشته` : null}
+      <p className="mt-6 text-sm text-muted-foreground" aria-live="polite" role="status">
+        {filtered.length > 0 ? `${faNum(filtered.length)} نوشته` : "نوشته‌ای مطابق جستجو نیست"}
       </p>
 
       {filtered.length === 0 ? (
         <div className="border-hairline mt-2 flex flex-col items-center gap-3 rounded-3xl bg-card/50 px-6 py-20 text-center ring-1 ring-foreground/5">
-          <BookOpen className="size-10 text-muted-foreground/50" />
+          <BookOpen className="size-10 text-muted-foreground/50" aria-hidden />
           <p className="font-serif text-2xl">نوشته‌ای پیدا نشد</p>
           <p className="max-w-sm text-sm text-muted-foreground">
             عبارت دیگری برای جستجو امتحان کنید.
           </p>
         </div>
       ) : (
-        <div className="mt-2 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
+        <ul className="mt-2 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3" data-journal-grid>
           {filtered.map((post, i) => (
-            <BlogCard key={post.id} post={post} index={i} />
+            <li key={post.id} className="contents">
+              <JournalCard post={post} index={i} />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   )

@@ -101,6 +101,10 @@ func registerPublicRoutes(v1 *gin.RouterGroup, h *handlers.Handler) {
 	// Hero slides (storefront home carousel — active slides only)
 	v1.GET("/hero-slides", h.ListHeroSlides)
 
+	// Site settings (storefront-safe subset: store profile, contact, social,
+	// shipping note, SEO defaults, maintenance flag)
+	v1.GET("/settings", h.GetSiteSettings)
+
 	// Blog
 	v1.GET("/blogs", h.ListBlogs)
 	v1.GET("/blogs/:slug", h.GetBlogBySlug)
@@ -324,6 +328,10 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	a.GET("/recipes/:id", h.GetRecipeAdmin)
 	a.PATCH("/recipes/:id", h.UpdateRecipe)
 	a.DELETE("/recipes/:id", h.DeleteRecipe)
+
+	// Site settings (full document read; partial update)
+	a.GET("/settings", h.GetSiteSettingsAdmin)
+	a.PUT("/settings", h.UpdateSiteSettings)
 
 	// Analytics
 	an := a.Group("/analytics")

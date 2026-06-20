@@ -67,6 +67,17 @@ type UpdateUserReq struct {
 	Gender       *string    `json:"gender"    validate:"omitempty,oneof=male female other"`
 }
 
+// AdminUpdateUserReq is the body for PATCH /admin/users/:userID. It carries the
+// same editable profile fields as UpdateUserReq plus the two privileged,
+// admin-only fields — role and is_active — which must NEVER be bindable on the
+// self-service /auth/me route. Both privileged fields are optional pointers so
+// an admin can patch profile data without touching access control.
+type AdminUpdateUserReq struct {
+	UpdateUserReq
+	Role     *string `json:"role"      validate:"omitempty,oneof=customer admin vendor"`
+	IsActive *bool   `json:"is_active"`
+}
+
 type OAuthReq struct {
 	Email         string  `json:"email"          validate:"required,email"`
 	FirstName     *string `json:"first_name"`

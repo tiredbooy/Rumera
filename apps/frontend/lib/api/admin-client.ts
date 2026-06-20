@@ -6,7 +6,9 @@
  * `path` is the backend path after `/api/v1` (admin-namespaced calls include the
  * leading `admin/` segment — see `app/api/admin/[...path]/route.ts`).
  */
-import type { ProductDetail } from "@/lib/catalog/types"
+import type { Brand, Category, Paginated, ProductDetail } from "@/lib/catalog/types"
+import type { RecipeDetail, RecipeDifficulty, RecipeListItem } from "@/lib/recipes"
+import type { Role } from "@/lib/rbac/roles"
 
 export class AdminApiError extends Error {
   constructor(
@@ -226,4 +228,389 @@ export function deleteProductImage(productId: number, imageId: number) {
   return adminRequest<void>(`admin/products/${productId}/images/${imageId}`, {
     method: "DELETE",
   })
+}
+
+// ── Category input shapes (mirror CreateCategoryReq / UpdateCategoryReq) ───────
+
+export type CreateCategoryInput = {
+  name: string
+  parent_id?: number | null
+  slug?: string | null
+  description?: string | null
+}
+
+export type UpdateCategoryInput = Partial<CreateCategoryInput>
+
+/** Hierarchical category node as returned by GET /categories/tree. */
+export type CategoryTreeNode = {
+  id: number
+  name: string
+  description?: string | null
+  slug?: string | null
+  children?: CategoryTreeNode[]
+}
+
+// ── Category operations ───────────────────────────────────────────────────────
+
+/** Flat list for the parent picker / list view (public read; no admin scope). */
+export function listCategories() {
+  return adminRequest<Paginated<Category>>("categories?limit=100")
+}
+
+/** Nested tree for the parent picker. Served under `{ data }`. */
+export function getCategoryTree() {
+  return adminRequest<CategoryTreeNode[]>("categories/tree")
+}
+
+export function createCategory(input: CreateCategoryInput) {
+  return adminRequest<Category>("admin/categories", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateCategory(id: number, input: UpdateCategoryInput) {
+  return adminRequest<Category>(`admin/categories/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteCategory(id: number) {
+  return adminRequest<void>(`admin/categories/${id}`, { method: "DELETE" })
+}
+
+// ── Brand input shapes (mirror CreateBrandReq / UpdateBrandReq) ───────────────
+
+export type CreateBrandInput = {
+  title: string
+  country?: string | null
+  founded_year?: number | null
+  image_url?: string | null
+  description?: string | null
+}
+
+export type UpdateBrandInput = Partial<CreateBrandInput>
+
+// ── Brand operations ──────────────────────────────────────────────────────────
+
+/** Flat list for the brand picker / list view (public read; no admin scope). */
+export function listBrands() {
+  return adminRequest<Paginated<Brand>>("brands?limit=100")
+}
+
+export function createBrand(input: CreateBrandInput) {
+  return adminRequest<Brand>("admin/brands", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateBrand(id: number, input: UpdateBrandInput) {
+  return adminRequest<Brand>(`admin/brands/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteBrand(id: number) {
+  return adminRequest<void>(`admin/brands/${id}`, { method: "DELETE" })
+}
+
+// ── Recipe input shapes (mirror RecipeReq / RecipeUpdateReq) ──────────────────
+
+export type RecipeStatus = "draft" | "published" | "archived"
+
+/** One ingredient line; `product_variant_id` links it to the catalogue. */
+export type RecipeIngredientInput = {
+  product_variant_id?: number | null
+  ingredient_name: string
+  quantity?: string | null
+  unit?: string | null
+  optional?: boolean
+  notes?: string | null
+  sort_order?: number | null
+}
+
+/** A shoppable product line (must reference a concrete variant). */
+export type RecipeProductInput = {
+  product_variant_id: number
+  quantity?: string | null
+  unit?: string | null
+  sort_order?: number | null
+  is_primary?: boolean
+  role?: string | null
+}
+
+export type CreateRecipeInput = {
+  title: string
+  slug?: string | null
+  excerpt?: string | null
+  description?: string | null
+  content: string
+  difficulty?: RecipeDifficulty
+  prep_time_minutes?: number
+  cook_time_minutes?: number
+  servings?: number
+  calories?: number | null
+  cocktail_type?: string | null
+  glass_type?: string | null
+  serving_suggestion?: string | null
+  image_url?: string | null
+  status?: RecipeStatus
+  is_featured?: boolean
+  published_at?: string | null
+  meta_title?: string | null
+  meta_description?: string | null
+  meta_keywords?: string[]
+  canonical_url?: string | null
+  og_image_url?: string | null
+  ingredients?: RecipeIngredientInput[]
+  products?: RecipeProductInput[]
+  tag_ids?: number[]
+}
+
+export type UpdateRecipeInput = Partial<CreateRecipeInput>
+
+export type ListRecipesParams = {
+  page?: number
+  limit?: number
+  search?: string
+  status?: RecipeStatus
+  difficulty?: RecipeDifficulty
+  is_featured?: boolean
+  tag_id?: number
+  sortBy?: string
+  orderBy?: "asc" | "desc"
+}
+
+// ── Recipe operations ─────────────────────────────────────────────────────────
+
+/** Admin listing — all statuses (drafts included). */
+export function listAdminRecipes(params: ListRecipesParams = {}) {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") qs.set(key, String(value))
+  }
+  const query = qs.toString()
+  return adminRequest<Paginated<RecipeListItem>>(`admin/recipes${query ? `?${query}` : ""}`)
+}
+
+/** Single recipe (hydrated with ingredients/products/tags) for the editor. */
+export function getAdminRecipe(id: number) {
+  return adminRequest<RecipeDetail>(`admin/recipes/${id}`)
+}
+
+export function createRecipe(input: CreateRecipeInput) {
+  return adminRequest<RecipeDetail>("admin/recipes", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateRecipe(id: number, input: UpdateRecipeInput) {
+  return adminRequest<RecipeDetail>(`admin/recipes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteRecipe(id: number) {
+  return adminRequest<void>(`admin/recipes/${id}`, { method: "DELETE" })
+}
+
+// ── User / account shapes (mirror UserAdminResponse / UpdateUserReq) ──────────
+
+/** A user's gender as stored by the backend. */
+export type UserGender = "male" | "female" | "other"
+
+/**
+ * Full admin view of a user — returned by `GET /admin/users/:id` and the
+ * `PATCH` response. Optional profile fields may be absent (never-set) or null.
+ */
+export type UserAdminResponse = {
+  user_id: string
+  email: string
+  first_name?: string | null
+  last_name?: string | null
+  phone?: string | null
+  national_code?: string | null
+  birth_date?: string | null
+  gender?: UserGender | null
+  role: Role
+  is_active: boolean
+  created_at: string
+}
+
+/** Row shape for the admin user list (`GET /admin/users`). */
+export type UserListItem = {
+  user_id: string
+  first_name?: string | null
+  last_name?: string | null
+  email: string
+  role: Role
+  is_active: boolean
+  created_at: string
+}
+
+/**
+ * Partial patch for `PATCH /admin/users/:id`. Every field is optional; only the
+ * keys present are updated. `role` and `is_active` are admin-only and guarded
+ * server-side (an admin cannot demote/deactivate their own account → 403).
+ */
+export type UpdateUserInput = {
+  first_name?: string | null
+  last_name?: string | null
+  phone?: string | null
+  national_code?: string | null
+  /** RFC3339 timestamp, or null to clear. */
+  birth_date?: string | null
+  gender?: UserGender | null
+  role?: Role
+  is_active?: boolean
+}
+
+// ── User operations ───────────────────────────────────────────────────────────
+
+/** Single user (full admin view) for the edit screen. */
+export function getAdminUser(id: string) {
+  return adminRequest<UserAdminResponse>(`admin/users/${id}`)
+}
+
+export function adminUpdateUser(id: string, input: UpdateUserInput) {
+  return adminRequest<UserAdminResponse>(`admin/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+/** Query params for the admin user list (`GET /admin/users`, paginated). */
+export type ListUsersParams = {
+  page?: number
+  limit?: number
+  search?: string
+  role?: Role
+  is_active?: boolean
+}
+
+/** Paginated admin user list for the customers table. */
+export function listUsers(params: ListUsersParams = {}) {
+  const qs = new URLSearchParams()
+  if (params.page) qs.set("page", String(params.page))
+  if (params.limit) qs.set("limit", String(params.limit))
+  if (params.search) qs.set("search", params.search)
+  if (params.role) qs.set("role", params.role)
+  if (params.is_active !== undefined) qs.set("is_active", String(params.is_active))
+  const query = qs.toString()
+  return adminRequest<Paginated<UserListItem>>(`admin/users${query ? `?${query}` : ""}`)
+}
+
+// ── Site settings (mirror the site_settings JSONB document) ───────────────────
+
+export type SiteSettings = {
+  store: { name: string; tagline: string; logoUrl: string; description: string }
+  contact: { supportEmail: string; supportPhone: string; address: string; workingHours: string }
+  social: {
+    instagram: string
+    telegram: string
+    whatsapp: string
+    twitter: string
+    youtube: string
+    linkedin: string
+  }
+  shipping: { freeThreshold: number; note: string }
+  seo: { defaultTitle: string; defaultDescription: string; ogImage: string; keywords: string }
+  maintenance: { enabled: boolean; message: string }
+  /** RFC3339; present on the admin GET/PUT response, not sent on update. */
+  updatedAt?: string
+}
+
+/**
+ * Partial update for `PUT /admin/settings`. Omit a group to leave it unchanged;
+ * include a group to replace it WHOLESALE (send every field in that group).
+ */
+export type UpdateSiteSettingsInput = Partial<Omit<SiteSettings, "updatedAt">>
+
+/** Full settings document (admin view, includes updatedAt). */
+export function getSiteSettings() {
+  return adminRequest<SiteSettings>("admin/settings")
+}
+
+export function updateSiteSettings(input: UpdateSiteSettingsInput) {
+  return adminRequest<SiteSettings>("admin/settings", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  })
+}
+
+// ── Hero slide shapes (mirror HeroSlideReq / HeroSlideUpdateReq) ──────────────
+
+export type HeroSlideTheme = "light" | "dark"
+
+export type HeroSlide = {
+  id: number
+  eyebrow: string | null
+  title: string
+  subtitle: string | null
+  badge: string | null
+  image_url: string
+  mobile_image_url: string | null
+  image_alt: string | null
+  cta_label: string | null
+  cta_href: string | null
+  secondary_cta_label: string | null
+  secondary_cta_href: string | null
+  theme: HeroSlideTheme
+  sort_order: number
+  is_active: boolean
+  starts_at: string | null
+  ends_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type CreateHeroSlideInput = {
+  eyebrow?: string | null
+  title: string
+  subtitle?: string | null
+  badge?: string | null
+  image_url: string
+  mobile_image_url?: string | null
+  image_alt?: string | null
+  cta_label?: string | null
+  cta_href?: string | null
+  secondary_cta_label?: string | null
+  secondary_cta_href?: string | null
+  theme?: HeroSlideTheme
+  sort_order?: number
+  is_active?: boolean
+  starts_at?: string | null
+  ends_at?: string | null
+}
+
+export type UpdateHeroSlideInput = Partial<CreateHeroSlideInput>
+
+// ── Hero slide operations ─────────────────────────────────────────────────────
+
+/** Admin listing — all slides (inactive/scheduled included). */
+export function listHeroSlides() {
+  return adminRequest<HeroSlide[]>("admin/hero-slides")
+}
+
+export function createHeroSlide(input: CreateHeroSlideInput) {
+  return adminRequest<HeroSlide>("admin/hero-slides", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateHeroSlide(id: number, input: UpdateHeroSlideInput) {
+  return adminRequest<HeroSlide>(`admin/hero-slides/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteHeroSlide(id: number) {
+  return adminRequest<void>(`admin/hero-slides/${id}`, { method: "DELETE" })
 }

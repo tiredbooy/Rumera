@@ -187,11 +187,16 @@ export function useRedeemPoints() {
 
 // ── Subscriptions ────────────────────────────────────────────────────────────
 
+export type SubscriptionStatus = "active" | "paused" | "cancelled"
+export type SubscriptionAction = "pause" | "resume" | "cancel" | "skip"
+
 export type Subscription = {
   id: number
   plan: string
   cadence: "monthly" | "quarterly"
-  status: "active" | "paused" | "cancelled"
+  status: SubscriptionStatus
+  /** Optional ship-to address id; resolve against `useAddresses()`. */
+  address_id?: number | null
   next_renewal_at: string
   created_at: string
 }
@@ -219,7 +224,7 @@ export function useCreateSubscription() {
 export function useUpdateSubscription() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, action }: { id: number; action: "pause" | "resume" | "cancel" | "skip" }) =>
+    mutationFn: ({ id, action }: { id: number; action: SubscriptionAction }) =>
       storeRequest<{ data: Subscription }>(`subscriptions/${id}`, {
         method: "PATCH",
         body: JSON.stringify({ action }),
@@ -402,10 +407,35 @@ export function useAddWishlistItem() {
         method: "POST",
         body: JSON.stringify({ product_variant_id: productVariantId }),
       }),
-    onSuccess: (_res, variantId) => {
-      qc.invalidateQueries({ queryKey: queryKeys.wishlist })
+    // Optimistically flip the heart: seed a placeholder row keyed by variant so
+    // `inWishlist` is true instantly; reconcile/rollback after the round-trip.
+    onMutate: async (variantId) => {
+      await qc.cancelQueries({ queryKey: queryKeys.wishlist })
+      const prev = qc.getQueryData<Wishlist>(queryKeys.wishlist)
+      if (prev && !prev.items.some((i) => i.variant_id === variantId)) {
+        const optimistic: Wishlist["items"][number] = {
+          id: -variantId, // negative sentinel → replaced on invalidation
+          product_id: 0,
+          product_title: "",
+          variant_id: variantId,
+          price: 0,
+          is_in_stock: true,
+          added_at: new Date().toISOString(),
+        }
+        qc.setQueryData<Wishlist>(queryKeys.wishlist, {
+          ...prev,
+          items: [optimistic, ...prev.items],
+          total: prev.total + 1,
+        })
+      }
       qc.setQueryData(["wishlist", "has", variantId], true)
+      return { prev }
     },
+    onError: (_e, variantId, ctx) => {
+      if (ctx?.prev) qc.setQueryData(queryKeys.wishlist, ctx.prev)
+      qc.setQueryData(["wishlist", "has", variantId], false)
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.wishlist }),
   })
 }
 
@@ -415,7 +445,24 @@ export function useRemoveWishlistItem() {
   return useMutation({
     mutationFn: (itemId: number) =>
       storeRequest<void>(`wishlist/items/${itemId}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.wishlist }),
+    onMutate: async (itemId) => {
+      await qc.cancelQueries({ queryKey: queryKeys.wishlist })
+      const prev = qc.getQueryData<Wishlist>(queryKeys.wishlist)
+      if (prev) {
+        const removed = prev.items.find((i) => i.id === itemId)
+        qc.setQueryData<Wishlist>(queryKeys.wishlist, {
+          ...prev,
+          items: prev.items.filter((i) => i.id !== itemId),
+          total: Math.max(0, prev.total - 1),
+        })
+        if (removed) qc.setQueryData(["wishlist", "has", removed.variant_id], false)
+      }
+      return { prev }
+    },
+    onError: (_e, _itemId, ctx) => {
+      if (ctx?.prev) qc.setQueryData(queryKeys.wishlist, ctx.prev)
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.wishlist }),
   })
 }
 

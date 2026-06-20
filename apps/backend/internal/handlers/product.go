@@ -24,7 +24,7 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 	}
 	product, err := h.Product.Create(c.Request.Context(), req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.Created(c, product)
@@ -40,7 +40,7 @@ func (h *Handler) ListProducts(c *gin.Context) {
 
 	products, total, err := h.Product.GetAll(c.Request.Context(), filter)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 
@@ -77,7 +77,7 @@ func (h *Handler) GetProduct(c *gin.Context) {
 		return h.buildProductDetail(ctx, id)
 	})
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.CachedJSON(c, data, productCacheTTL)
@@ -130,7 +130,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 	}
 	product, err := h.Product.Update(c.Request.Context(), id, req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	h.invalidate(c.Request.Context(), cache.KeyProduct(id))
@@ -144,7 +144,7 @@ func (h *Handler) DeleteProduct(c *gin.Context) {
 		return
 	}
 	if err := h.Product.Delete(c.Request.Context(), id); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	h.invalidate(c.Request.Context(), cache.KeyProduct(id))
@@ -159,7 +159,7 @@ func (h *Handler) ProductTags(c *gin.Context) {
 	}
 	tags, err := h.Product.GetTags(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	out := make([]models.TagResponse, len(tags))
@@ -177,7 +177,7 @@ func (h *Handler) ProductImages(c *gin.Context) {
 	}
 	images, err := h.Product.GetImages(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	out := make([]models.ImageResponse, len(images))
@@ -195,7 +195,7 @@ func (h *Handler) ProductVariants(c *gin.Context) {
 	}
 	variants, err := h.Product.GetVariants(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	out := make([]models.VariantResponse, len(variants))
@@ -216,7 +216,7 @@ func (h *Handler) SyncProductTags(c *gin.Context) {
 		return
 	}
 	if err := h.Product.SyncTags(c.Request.Context(), id, req.TagIDs); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	h.invalidate(c.Request.Context(), cache.KeyProduct(id))
@@ -234,7 +234,7 @@ func (h *Handler) AttachProductTags(c *gin.Context) {
 		return
 	}
 	if err := h.Product.AttachTags(c.Request.Context(), id, req.TagIDs); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	h.invalidate(c.Request.Context(), cache.KeyProduct(id))
@@ -252,7 +252,7 @@ func (h *Handler) DetachProductTags(c *gin.Context) {
 		return
 	}
 	if err := h.Product.DetachTags(c.Request.Context(), id, req.TagIDs); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	h.invalidate(c.Request.Context(), cache.KeyProduct(id))

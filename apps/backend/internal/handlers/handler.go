@@ -72,6 +72,8 @@ type Deps struct {
 
 	HeroSlide services.HeroSlideService
 
+	SiteSettings services.SiteSettingsService
+
 	Recipe         services.RecipeService
 	Recommendation services.RecommendationService
 

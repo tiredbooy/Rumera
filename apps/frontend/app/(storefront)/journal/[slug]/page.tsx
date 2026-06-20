@@ -1,9 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
-import { Clock, Eye, ArrowLeft, ShoppingBag, Send } from "lucide-react"
+import { Clock, Eye, ArrowLeft, ShoppingBag } from "lucide-react"
 
 import { buildMetadata } from "@/lib/seo/metadata"
 import { JsonLd } from "@/components/json-ld"
@@ -12,7 +10,9 @@ import { absoluteUrl, siteConfig } from "@/lib/site"
 import { SmartImage } from "@/components/smart-image"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { BlogCard } from "@/components/journal/blog-card"
+import { JournalCard } from "@/components/journal/journal-card"
+import { ArticleBody } from "@/components/journal/article-body"
+import { ShareLinks } from "@/components/journal/share-links"
 import { AddToCartButton } from "@/components/catalog/add-to-cart-button"
 import { faNum, formatPrice } from "@/lib/products"
 import { getProductById } from "@/lib/catalog/products"
@@ -45,6 +45,7 @@ export async function generateMetadata({
     description: post.meta_description ?? post.excerpt ?? undefined,
     path: `/journal/${post.slug}`,
     type: "article",
+    images: post.image_url ? [post.image_url] : undefined,
   })
 }
 
@@ -72,6 +73,7 @@ export default async function JournalPostPage({
     "@type": "BlogPosting",
     headline: post.title,
     description: post.excerpt ?? undefined,
+    image: post.image_url ? [post.image_url] : undefined,
     inLanguage: "fa-IR",
     datePublished: post.published_at ?? post.created_at,
     dateModified: post.updated_at,
@@ -80,8 +82,6 @@ export default async function JournalPostPage({
     author: { "@type": "Organization", name: siteConfig.name },
     publisher: { "@type": "Organization", name: siteConfig.name },
   }
-
-  const shareText = encodeURIComponent(post.title)
 
   return (
     <>
@@ -98,17 +98,32 @@ export default async function JournalPostPage({
 
       {/* Hero */}
       <header className="cellar-glow border-b border-border/60">
-        <div className="container-px mx-auto max-w-3xl py-14 sm:py-16 text-center">
-          <nav className="mb-8 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
-            <Link href="/" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">خانه</Link>
+        <div className="container-px mx-auto max-w-3xl py-14 text-center sm:py-16">
+          <nav
+            className="mb-8 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground"
+            aria-label="مسیر صفحه"
+          >
+            <Link
+              href="/"
+              className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              خانه
+            </Link>
             <span aria-hidden>/</span>
-            <Link href="/journal" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">ژورنال</Link>
+            <Link
+              href="/journal"
+              className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              ژورنال
+            </Link>
           </nav>
 
           {post.categories.length > 0 ? (
             <div className="mb-5 flex flex-wrap justify-center gap-2">
               {post.categories.map((c) => (
-                <Badge key={c.id} variant="secondary">{c.name}</Badge>
+                <Badge key={c.id} variant="secondary">
+                  {c.name}
+                </Badge>
               ))}
             </div>
           ) : null}
@@ -116,17 +131,21 @@ export default async function JournalPostPage({
           <h1 className="text-balance font-serif text-4xl leading-[1.1] sm:text-5xl">{post.title}</h1>
 
           {post.excerpt ? (
-            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">{post.excerpt}</p>
+            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">
+              {post.excerpt}
+            </p>
           ) : null}
 
           <div className="mt-7 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            {post.published_at ? <span>{formatBlogDate(post.published_at)}</span> : null}
+            {post.published_at ? (
+              <time dateTime={post.published_at}>{formatBlogDate(post.published_at)}</time>
+            ) : null}
             <span className="inline-flex items-center gap-1.5">
-              <Clock className="size-4" /> {readingTime(post.time_to_read)}
+              <Clock className="size-4" aria-hidden /> {readingTime(post.time_to_read)}
             </span>
             {post.total_reads > 0 ? (
               <span className="inline-flex items-center gap-1.5">
-                <Eye className="size-4" /> {faNum(post.total_reads)} بازدید
+                <Eye className="size-4" aria-hidden /> {faNum(post.total_reads)} بازدید
               </span>
             ) : null}
           </div>
@@ -137,10 +156,11 @@ export default async function JournalPostPage({
       <div className="container-px mx-auto max-w-4xl pt-12">
         <div className="border-hairline relative aspect-[16/9] overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
           <SmartImage
-            src={null}
+            src={post.image_url}
             alt={post.title}
             monogram={post.title.charAt(0)}
             fallbackClassName="from-primary/20 via-card to-secondary"
+            sizes="(max-width: 1024px) 100vw, 56rem"
             priority
           />
         </div>
@@ -148,31 +168,12 @@ export default async function JournalPostPage({
 
       {/* Body */}
       <article className="container-px mx-auto max-w-3xl py-14 sm:py-16">
-        <div className="space-y-6 text-lg leading-9 text-foreground/85 [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-4 [&_blockquote]:my-8 [&_blockquote]:border-s-2 [&_blockquote]:border-primary/50 [&_blockquote]:ps-6 [&_blockquote]:font-serif [&_blockquote]:text-2xl [&_blockquote]:leading-relaxed [&_blockquote]:text-foreground [&_h2]:mt-12 [&_h2]:font-serif [&_h2]:text-2xl [&_h2]:text-foreground [&_h3]:mt-10 [&_h3]:font-serif [&_h3]:text-xl [&_h3]:text-foreground [&_img]:my-8 [&_img]:rounded-2xl [&_img]:ring-1 [&_img]:ring-foreground/10 [&_li]:mt-2 [&_li]:leading-relaxed [&_li]:marker:text-primary [&_ol]:list-decimal [&_ol]:ps-6 [&_strong]:text-foreground [&_ul]:list-disc [&_ul]:ps-6">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.content}</ReactMarkdown>
-        </div>
+        <ArticleBody content={post.content} />
 
         {/* Share */}
         <div className="mt-12 flex flex-wrap items-center gap-3 border-t border-border/60 pt-8">
           <span className="text-sm font-medium">هم‌رسانی:</span>
-          <Button variant="outline" size="sm" asChild>
-            <a
-              href={`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${shareText}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Send className="size-4" /> تلگرام
-            </a>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <a
-              href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${shareText}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              ایکس (توییتر)
-            </a>
-          </Button>
+          <ShareLinks url={url} title={post.title} />
         </div>
       </article>
 
@@ -181,7 +182,7 @@ export default async function JournalPostPage({
         <section className="border-t border-border/60 bg-card/30">
           <div className="container-px mx-auto max-w-5xl py-16 sm:py-20">
             <p className="eyebrow mb-2">
-              <ShoppingBag className="size-3.5" /> از این نوشته
+              <ShoppingBag className="size-3.5" aria-hidden /> از این نوشته
             </p>
             <h2 className="font-serif text-3xl sm:text-4xl">محصولات مرتبط</h2>
             <div className="mt-10 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
@@ -206,14 +207,16 @@ export default async function JournalPostPage({
               className="group/all inline-flex items-center gap-1.5 rounded text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               همهٔ نوشته‌ها
-              <ArrowLeft className="size-4 transition-transform duration-300 group-hover/all:-translate-x-1" />
+              <ArrowLeft className="size-4 transition-transform duration-300 group-hover/all:-translate-x-1" aria-hidden />
             </Link>
           </div>
-          <div className="mt-10 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
+          <ul className="mt-10 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
             {related.map((p, i) => (
-              <BlogCard key={p.id} post={p} index={i} />
+              <li key={p.id} className="contents">
+                <JournalCard post={p} index={i} />
+              </li>
             ))}
-          </div>
+          </ul>
         </section>
       ) : null}
     </>
@@ -222,12 +225,9 @@ export default async function JournalPostPage({
 
 function ArticleProductCard({ product }: { product: ProductDetail }) {
   const activeVariants = (product.variants ?? []).filter((v) => v.is_active)
-  const cheapest = activeVariants
-    .slice()
-    .sort((a, b) => a.price - b.price)[0]
+  const cheapest = activeVariants.slice().sort((a, b) => a.price - b.price)[0]
   const image = (product.images ?? []).find((i) => i.is_primary) ?? product.images?.[0]
-  const onSale =
-    cheapest?.compare_at_price != null && cheapest.compare_at_price > cheapest.price
+  const onSale = cheapest?.compare_at_price != null && cheapest.compare_at_price > cheapest.price
   const pdp = `/products/${product.slug}`
 
   return (

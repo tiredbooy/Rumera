@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,11 +22,14 @@ type BlogCategoryRepository interface {
 type BlogRepository interface {
 	GetByID(ctx context.Context, id int64) (*models.Blog, error)
 	GetBySlug(ctx context.Context, slug string) (*models.Blog, error)
+	GetPublishedBySlug(ctx context.Context, slug string) (*models.Blog, error)
 	GetAll(ctx context.Context) ([]*models.Blog, error)
+	List(ctx context.Context, filter models.BlogFilter) ([]*models.Blog, int64, error)
 	Create(ctx context.Context, req *models.BlogReq) (*models.Blog, error)
 	Update(ctx context.Context, id int64, req *models.BlogUpdateReq) (*models.Blog, error)
 	SoftDelete(ctx context.Context, id int64) error
 	IncrementReads(ctx context.Context, id int64) error
+	SlugExists(ctx context.Context, slug string) (bool, error)
 
 	// relations
 	AssignCategories(ctx context.Context, blogID int64, categoryIDs []int64) error
@@ -144,16 +148,23 @@ func NewBlogRepository(db *pgxpool.Pool) BlogRepository {
 	return &blogRepository{db: db}
 }
 
-const blogColumns = `id, author_id, title, slug, content, excerpt, time_to_read,
-					  total_reads, meta_title, meta_description, published_at, created_at, updated_at`
+const blogColumns = `id, author_id, title, slug, content, excerpt, image_url, time_to_read,
+					  total_reads, status, is_featured, meta_title, meta_description,
+					  published_at, created_at, updated_at`
+
+// blogScanDest returns the column→field pointer mapping in blogColumns order so
+// scanning is defined once and reused by every read path.
+func blogScanDest(b *models.Blog) []any {
+	return []any{
+		&b.ID, &b.AuthorID, &b.Title, &b.Slug, &b.Content,
+		&b.Excerpt, &b.ImageURL, &b.TimeToRead, &b.TotalReads,
+		&b.Status, &b.IsFeatured, &b.MetaTitle, &b.MetaDescription,
+		&b.PublishedAt, &b.CreatedAt, &b.UpdatedAt,
+	}
+}
 
 func scanBlog(row pgx.Row, b *models.Blog) error {
-	return row.Scan(
-		&b.ID, &b.AuthorID, &b.Title, &b.Slug, &b.Content,
-		&b.Excerpt, &b.TimeToRead, &b.TotalReads,
-		&b.MetaTitle, &b.MetaDescription,
-		&b.PublishedAt, &b.CreatedAt, &b.UpdatedAt,
-	)
+	return row.Scan(blogScanDest(b)...)
 }
 
 func (r *blogRepository) GetByID(ctx context.Context, id int64) (*models.Blog, error) {
@@ -162,7 +173,7 @@ func (r *blogRepository) GetByID(ctx context.Context, id int64) (*models.Blog, e
 	b := &models.Blog{}
 	if err := scanBlog(r.db.QueryRow(ctx, query, id), b); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("blog not found: %d", id)
+			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("getting blog: %w", err)
 	}
@@ -175,9 +186,24 @@ func (r *blogRepository) GetBySlug(ctx context.Context, slug string) (*models.Bl
 	b := &models.Blog{}
 	if err := scanBlog(r.db.QueryRow(ctx, query, slug), b); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("blog not found: %s", slug)
+			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("getting blog by slug: %w", err)
+	}
+	return b, nil
+}
+
+// GetPublishedBySlug restricts to published posts — the public storefront read.
+func (r *blogRepository) GetPublishedBySlug(ctx context.Context, slug string) (*models.Blog, error) {
+	query := `SELECT ` + blogColumns + ` FROM blogs
+			  WHERE slug = $1 AND status = 'published' AND deleted_at IS NULL`
+
+	b := &models.Blog{}
+	if err := scanBlog(r.db.QueryRow(ctx, query, slug), b); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("getting published blog by slug: %w", err)
 	}
 	return b, nil
 }
@@ -194,12 +220,7 @@ func (r *blogRepository) GetAll(ctx context.Context) ([]*models.Blog, error) {
 	var blogs []*models.Blog
 	for rows.Next() {
 		b := &models.Blog{}
-		if err := rows.Scan(
-			&b.ID, &b.AuthorID, &b.Title, &b.Slug, &b.Content,
-			&b.Excerpt, &b.TimeToRead, &b.TotalReads,
-			&b.MetaTitle, &b.MetaDescription,
-			&b.PublishedAt, &b.CreatedAt, &b.UpdatedAt,
-		); err != nil {
+		if err := rows.Scan(blogScanDest(b)...); err != nil {
 			return nil, fmt.Errorf("scanning blog: %w", err)
 		}
 		blogs = append(blogs, b)
@@ -207,15 +228,96 @@ func (r *blogRepository) GetAll(ctx context.Context) ([]*models.Blog, error) {
 	return blogs, rows.Err()
 }
 
+// List returns a paginated, filtered slice of blogs plus the total count
+// (COUNT(*) OVER()). The public listing forces status='published'; admins may
+// pass any status (or none). Mirrors the recipe list.
+func (r *blogRepository) List(ctx context.Context, f models.BlogFilter) ([]*models.Blog, int64, error) {
+	where := []string{"b.deleted_at IS NULL"}
+	args := pgx.NamedArgs{}
+
+	if f.Search != "" {
+		where = append(where, "(b.title ILIKE @search OR b.excerpt ILIKE @search)")
+		args["search"] = "%" + f.Search + "%"
+	}
+	if f.Status != nil {
+		where = append(where, "b.status = @status")
+		args["status"] = string(*f.Status)
+	}
+	if f.IsFeatured != nil {
+		where = append(where, "b.is_featured = @is_featured")
+		args["is_featured"] = *f.IsFeatured
+	}
+	if f.CategoryID != nil {
+		where = append(where, `EXISTS (
+			SELECT 1 FROM blog_categories_assignments bca
+			WHERE bca.blog_id = b.id AND bca.blog_category_id = @category_id
+		)`)
+		args["category_id"] = *f.CategoryID
+	}
+
+	allowed := map[string]string{
+		"published_at": "b.published_at",
+		"created_at":   "b.created_at",
+		"updated_at":   "b.updated_at",
+		"title":        "b.title",
+		"total_reads":  "b.total_reads",
+	}
+	sortBy := "b.published_at"
+	if col, ok := allowed[f.SortBy]; ok {
+		sortBy = col
+	}
+	order := "DESC"
+	if strings.ToUpper(f.OrderBy) == "ASC" {
+		order = "ASC"
+	}
+
+	args["limit"] = f.Limit
+	args["offset"] = f.Offset()
+
+	// NULLS LAST keeps draft posts (no published_at) from floating to the top when
+	// sorting by published_at.
+	q := fmt.Sprintf(`
+		SELECT `+blogColumns+`, COUNT(*) OVER() AS total_count
+		FROM blogs b
+		WHERE %s
+		ORDER BY %s %s NULLS LAST, b.id DESC
+		LIMIT @limit OFFSET @offset`,
+		strings.Join(where, " AND "), sortBy, order,
+	)
+
+	rows, err := r.db.Query(ctx, q, args)
+	if err != nil {
+		return nil, 0, fmt.Errorf("listing blogs: %w", err)
+	}
+	defer rows.Close()
+
+	var (
+		blogs []*models.Blog
+		total int64
+	)
+	for rows.Next() {
+		b := &models.Blog{}
+		dest := append(blogScanDest(b), &total)
+		if err := rows.Scan(dest...); err != nil {
+			return nil, 0, fmt.Errorf("scanning blog: %w", err)
+		}
+		blogs = append(blogs, b)
+	}
+	return blogs, total, rows.Err()
+}
+
 func (r *blogRepository) Create(ctx context.Context, req *models.BlogReq) (*models.Blog, error) {
-	query := `INSERT INTO blogs (author_id, title, slug, content, excerpt, time_to_read, meta_title, meta_description, published_at)
-			  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+	query := `INSERT INTO blogs
+			  (author_id, title, slug, content, excerpt, image_url, time_to_read,
+			   status, is_featured, meta_title, meta_description, published_at)
+			  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 			  RETURNING ` + blogColumns
 
 	b := &models.Blog{}
 	if err := scanBlog(r.db.QueryRow(ctx, query,
 		req.AuthorID, req.Title, req.Slug, req.Content,
-		req.Excerpt, req.TimeToRead, req.MetaTitle,
+		req.Excerpt, req.ImageURL, req.TimeToRead,
+		req.Status, req.IsFeatured, req.MetaTitle,
 		req.MetaDescription, req.PublishedAt,
 	), b); err != nil {
 		return nil, fmt.Errorf("creating blog: %w", err)
@@ -224,15 +326,24 @@ func (r *blogRepository) Create(ctx context.Context, req *models.BlogReq) (*mode
 }
 
 func (r *blogRepository) Update(ctx context.Context, id int64, req *models.BlogUpdateReq) (*models.Blog, error) {
+	var status *string
+	if req.Status != nil {
+		s := string(*req.Status)
+		status = &s
+	}
+
 	query := `UPDATE blogs
 			  SET title            = COALESCE($2, title),
 			      slug             = COALESCE($3, slug),
 			      content          = COALESCE($4, content),
 			      excerpt          = COALESCE($5, excerpt),
-			      time_to_read     = COALESCE($6, time_to_read),
-			      meta_title       = COALESCE($7, meta_title),
-			      meta_description = COALESCE($8, meta_description),
-			      published_at     = COALESCE($9, published_at),
+			      image_url        = COALESCE($6, image_url),
+			      time_to_read     = COALESCE($7, time_to_read),
+			      status           = COALESCE($8, status),
+			      is_featured      = COALESCE($9, is_featured),
+			      meta_title       = COALESCE($10, meta_title),
+			      meta_description = COALESCE($11, meta_description),
+			      published_at     = COALESCE($12, published_at),
 			      updated_at       = NOW()
 			  WHERE id = $1 AND deleted_at IS NULL
 			  RETURNING ` + blogColumns
@@ -240,11 +351,12 @@ func (r *blogRepository) Update(ctx context.Context, id int64, req *models.BlogU
 	b := &models.Blog{}
 	if err := scanBlog(r.db.QueryRow(ctx, query,
 		id, req.Title, req.Slug, req.Content,
-		req.Excerpt, req.TimeToRead, req.MetaTitle,
+		req.Excerpt, req.ImageURL, req.TimeToRead,
+		status, req.IsFeatured, req.MetaTitle,
 		req.MetaDescription, req.PublishedAt,
 	), b); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("blog not found: %d", id)
+			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("updating blog: %w", err)
 	}
@@ -259,7 +371,7 @@ func (r *blogRepository) SoftDelete(ctx context.Context, id int64) error {
 		return fmt.Errorf("soft deleting blog: %w", err)
 	}
 	if ct.RowsAffected() == 0 {
-		return fmt.Errorf("blog not found: %d", id)
+		return models.ErrNotFound
 	}
 	return nil
 }
@@ -272,6 +384,18 @@ func (r *blogRepository) IncrementReads(ctx context.Context, id int64) error {
 		return fmt.Errorf("incrementing blog reads: %w", err)
 	}
 	return nil
+}
+
+// SlugExists reports whether a non-deleted blog already owns the given slug.
+// Used by the service to auto-generate unique slugs and surface clean conflicts.
+func (r *blogRepository) SlugExists(ctx context.Context, slug string) (bool, error) {
+	var exists bool
+	if err := r.db.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM blogs WHERE slug = $1 AND deleted_at IS NULL)`, slug,
+	).Scan(&exists); err != nil {
+		return false, fmt.Errorf("checking blog slug: %w", err)
+	}
+	return exists, nil
 }
 
 // ── Relations ─────────────────────────────────────────────────────────────────

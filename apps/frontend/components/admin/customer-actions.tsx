@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { Ban, ShieldCheck, Pencil } from "lucide-react"
 import { toast } from "sonner"
 
@@ -23,19 +24,24 @@ export function CustomerActions({
   status,
   canWrite,
   canBan,
+  editHref,
 }: {
   name: string
   status: CustomerStatus
   canWrite: boolean
   canBan: boolean
+  /** Link to the edit-user screen; rendered only when the admin can write. */
+  editHref: string
 }) {
   const [banned, setBanned] = React.useState(status === "banned")
 
   return (
     <div className="flex items-center gap-2">
       {canWrite ? (
-        <Button variant="outline" size="sm" onClick={() => toast.info("فرم ویرایش به‌زودی متصل می‌شود")}>
-          <Pencil className="size-4" /> ویرایش
+        <Button variant="outline" size="sm" asChild>
+          <Link href={editHref}>
+            <Pencil className="size-4" /> ویرایش
+          </Link>
         </Button>
       ) : null}
 

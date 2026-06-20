@@ -37,6 +37,12 @@ export async function generateMetadata({
     path: `/products/${product.slug}`,
     type: "article",
     images: product.images?.map((i) => i.image_url),
+    keywords: [
+      product.title,
+      ...(product.country_of_origin ? [product.country_of_origin] : []),
+      ...(product.tags?.map((t) => t.title) ?? []),
+      ...(product.meta_tags ?? []),
+    ],
   })
 }
 
@@ -74,6 +80,14 @@ export default async function ProductDetailPage({
   const variantPrices = (product.variants ?? []).map((v) => v.price).filter((n) => n > 0)
   const minPrice = variantPrices.length ? Math.min(...variantPrices) : undefined
 
+  // Best whole-percent saving across active variants → gallery ribbon.
+  const galleryDiscount = (product.variants ?? [])
+    .filter((v) => v.is_active && v.compare_at_price && v.compare_at_price > v.price)
+    .reduce((best, v) => {
+      const pct = Math.round(((v.compare_at_price! - v.price) / v.compare_at_price!) * 100)
+      return Math.max(best, pct)
+    }, 0)
+
   // Specs table — only render rows we actually have.
   const specs: { label: string; value: string }[] = [
     product.abv != null ? { label: "درصد الکل", value: `${faNum(product.abv)}٪` } : null,
@@ -92,7 +106,14 @@ export default async function ProductDetailPage({
             product,
             reviewSummary
               ? { value: reviewSummary.average_rating, count: reviewSummary.total_reviews }
-              : undefined
+              : undefined,
+            reviewsPage.results.map((r) => ({
+              rating: r.rating,
+              title: r.title,
+              content: r.content,
+              author: r.user_full_name || undefined,
+              created_at: r.created_at,
+            }))
           ),
           breadcrumbLd([
             { name: "خانه", path: "/" },
@@ -120,6 +141,7 @@ export default async function ProductDetailPage({
           <ProductGallery
             images={images}
             title={product.title}
+            discount={galleryDiscount}
             fallback={
               <Bottle product={{ id: product.id, maker: product.title }} className="relative h-[28rem]" />
             }
@@ -206,6 +228,7 @@ export default async function ProductDetailPage({
           productId={product.id}
           summary={reviewSummary}
           initialReviews={reviewsPage.results}
+          initialHasNext={reviewsPage.pagination.has_next}
         />
       </div>
 
@@ -244,6 +267,9 @@ export default async function ProductDetailPage({
         currentProductId={product.id}
         className="container-px mx-auto max-w-7xl py-12"
       />
+
+      {/* Spacer so the sticky mobile buy-bar never covers page-end content. */}
+      <div aria-hidden className="h-24 lg:hidden" />
     </>
   )
 }

@@ -9,11 +9,14 @@
 import {
   LayoutDashboard,
   Package,
+  FolderTree,
+  Tag,
   Boxes,
   ClipboardList,
   Users,
   Star,
   BookOpen,
+  GalleryHorizontalEnd,
   BarChart3,
   ShieldCheck,
   Settings,
@@ -55,6 +58,8 @@ export const ADMIN_NAV: NavGroup[] = [
     title: "فروشگاه",
     items: [
       { label: "محصولات", href: "/admin/products", icon: Package, permission: PERMISSIONS.PRODUCTS_READ },
+      { label: "دسته‌بندی‌ها", href: "/admin/categories", icon: FolderTree, permission: PERMISSIONS.PRODUCTS_READ },
+      { label: "برندها", href: "/admin/brands", icon: Tag, permission: PERMISSIONS.PRODUCTS_READ },
       { label: "موجودی", href: "/admin/inventory", icon: Boxes, permission: PERMISSIONS.INVENTORY_READ },
       { label: "سفارش‌ها", href: "/admin/orders", icon: ClipboardList, permission: PERMISSIONS.ORDERS_READ },
       { label: "مشتریان", href: "/admin/customers", icon: Users, permission: PERMISSIONS.CUSTOMERS_READ },
@@ -65,6 +70,7 @@ export const ADMIN_NAV: NavGroup[] = [
     items: [
       { label: "دیدگاه‌ها", href: "/admin/reviews", icon: Star, permission: PERMISSIONS.REVIEWS_READ },
       { label: "دستورها", href: "/admin/recipes", icon: BookOpen, permission: PERMISSIONS.RECIPES_READ },
+      { label: "بنر هیرو", href: "/admin/hero-slides", icon: GalleryHorizontalEnd, permission: PERMISSIONS.HERO_MANAGE },
     ],
   },
   {

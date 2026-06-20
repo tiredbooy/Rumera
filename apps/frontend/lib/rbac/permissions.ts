@@ -30,6 +30,8 @@ export const PERMISSIONS = {
   // Recipes (editorial)
   RECIPES_READ: "recipes:read",
   RECIPES_WRITE: "recipes:write",
+  // Hero / home carousel (editorial)
+  HERO_MANAGE: "hero:manage",
   // Analytics
   ANALYTICS_READ: "analytics:read",
   // Platform administration
@@ -56,6 +58,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "reviews:moderate": "بازبینی دیدگاه‌ها",
   "recipes:read": "مشاهدهٔ دستورها",
   "recipes:write": "ویرایش دستورها",
+  "hero:manage": "مدیریت بنر هیرو",
   "analytics:read": "مشاهدهٔ تحلیل‌ها",
   "roles:manage": "مدیریت نقش‌ها و دسترسی‌ها",
   "settings:manage": "مدیریت تنظیمات",
