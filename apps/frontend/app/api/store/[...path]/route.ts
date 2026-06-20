@@ -65,6 +65,11 @@ const ALLOW = new Set([
   "gift-cards",
   "subscriptions",
   "recommendations",
+  // `me` covers the per-user personalization routes (GET/PUT /me/taste-profile).
+  // Every /me/* backend route sits behind the Auth middleware, so the storefront
+  // can safely proxy it. Without this the entire taste/personalization surface
+  // 403s before reaching the backend.
+  "me",
 ])
 
 async function handle(req: NextRequest, segments: string[]) {

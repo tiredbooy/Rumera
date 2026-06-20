@@ -14,7 +14,7 @@ func (h *Handler) GetMyReferral(c *gin.Context) {
 	}
 	ref, err := h.Referral.Get(c.Request.Context(), userID)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, ref)
@@ -33,7 +33,7 @@ func (h *Handler) ClaimReferral(c *gin.Context) {
 		return
 	}
 	if err := h.Referral.Claim(c.Request.Context(), userID, req.Code); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.NoContent(c)

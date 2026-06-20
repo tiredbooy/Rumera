@@ -98,7 +98,7 @@ type ReviewImage struct {
 
 type ReviewImageReq struct {
 	ReviewID  int64   `json:"review_id"`
-	ImageURL  string  `json:"image_url"`
-	AltTxt    *string `json:"alt_text"`
+	ImageURL  string  `json:"image_url" validate:"required,max=2048"`
+	AltTxt    *string `json:"alt_text" validate:"omitempty,max=300"`
 	SortOrder *int    `json:"sort_order"`
 }

@@ -181,8 +181,10 @@ func (r *productRepository) GetByID(ctx context.Context, id int64) (*models.Prod
 
 // ─────────────────────────────────────────────────────────────
 // GetAll  (paginated + filtered)
-// Joins variants for min/max price in the same query so the
-// list response has pricing without extra round trips.
+// Price filters are applied via correlated EXISTS subqueries against
+// product_variants, keeping the products query free of aggregates and joins.
+// (A prior version put MIN/MAX(pv.price) in the WHERE clause against an
+// unjoined `pv` alias — invalid SQL that 500'd every price-faceted request.)
 // ─────────────────────────────────────────────────────────────
 
 func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) ([]*models.Product, int64, error) {
@@ -213,11 +215,17 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		args["tag_id"] = *f.TagID
 	}
 	if f.MinPrice != nil {
-		where = append(where, "MIN(pv.price) >= @min_price")
+		where = append(where, `EXISTS (
+			SELECT 1 FROM product_variants pv
+			WHERE pv.product_id = p.id AND pv.price >= @min_price
+		)`)
 		args["min_price"] = *f.MinPrice
 	}
 	if f.MaxPrice != nil {
-		where = append(where, "MAX(pv.price) <= @max_price")
+		where = append(where, `EXISTS (
+			SELECT 1 FROM product_variants pv
+			WHERE pv.product_id = p.id AND pv.price <= @max_price
+		)`)
 		args["max_price"] = *f.MaxPrice
 	}
 

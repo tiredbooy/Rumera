@@ -17,7 +17,7 @@ func (h *Handler) ListInventory(c *gin.Context) {
 
 	items, total, err := h.Inventory.GetAll(c.Request.Context(), filter)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	out := make([]models.InventoryResponse, len(items))
@@ -31,7 +31,7 @@ func (h *Handler) ListInventory(c *gin.Context) {
 func (h *Handler) LowStockInventory(c *gin.Context) {
 	items, err := h.Inventory.GetLowStock(c.Request.Context())
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	out := make([]models.InventoryResponse, len(items))
@@ -49,7 +49,7 @@ func (h *Handler) GetVariantInventory(c *gin.Context) {
 	}
 	inv, err := h.Inventory.GetByVariantID(c.Request.Context(), variantID)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, mappers.ToInventoryResponse(inv))
@@ -66,7 +66,7 @@ func (h *Handler) AdjustVariantStock(c *gin.Context) {
 		return
 	}
 	if err := h.Inventory.AdjustStock(c.Request.Context(), variantID, req, nil); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -84,7 +84,7 @@ func (h *Handler) UpdateVariantReorder(c *gin.Context) {
 	}
 	inv, err := h.Inventory.UpdateReorder(c.Request.Context(), variantID, req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, mappers.ToInventoryResponse(inv))
@@ -100,7 +100,7 @@ func (h *Handler) ListInventoryMovements(c *gin.Context) {
 
 	movements, total, err := h.Inventory.GetMovements(c.Request.Context(), filter)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	out := make([]models.InventoryMovementResponse, len(movements))
@@ -118,7 +118,7 @@ func (h *Handler) VariantMovements(c *gin.Context) {
 	}
 	movements, err := h.Inventory.GetMovementsByVariant(c.Request.Context(), variantID)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	out := make([]models.InventoryMovementResponse, len(movements))
