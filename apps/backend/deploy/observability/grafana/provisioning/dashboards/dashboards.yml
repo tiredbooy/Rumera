@@ -1,0 +1,16 @@
+# Auto-loads any dashboard JSON dropped in /var/lib/grafana/dashboards.
+#
+# The compose file mounts the existing grafana-dashboard.json there, so the
+# "Rumera Backend — RED + Pools + Queue" dashboard (uid rumera-backend-red) shows
+# up without a manual import.
+apiVersion: 1
+providers:
+  - name: rumera
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

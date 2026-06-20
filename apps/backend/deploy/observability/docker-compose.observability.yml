@@ -1,0 +1,79 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Rumera — Prometheus + Grafana observability stack
+# ──────────────────────────────────────────────────────────────────────────────
+# Adds Prometheus and Grafana on the SAME network as the running backend so
+# Prometheus can scrape it at backend:8080/metrics by service name.
+#
+# This stack joins the backend's EXISTING project network as an EXTERNAL network.
+# Compose namespaces networks by project, so the real network name is the
+# declared name prefixed with the project name:
+#   dev  -> rumera-dev_rumera_network   (docker-compose.dev.yml,  name: rumera-dev)
+#   prod -> rumera_rumera_network        (docker-compose.prod.yml, name: rumera)
+# A fresh "rumera_network" would be a different, isolated bridge and Prometheus
+# could not resolve "backend". Override the target with OBS_NETWORK at launch.
+#
+# Paths below are relative to this file's directory (apps/backend/deploy/observability).
+# Run from here:
+#   docker compose -f docker-compose.observability.yml up -d                              # dev (default)
+#   OBS_NETWORK=rumera_rumera_network docker compose -f docker-compose.observability.yml up -d  # prod
+#
+# Ports: Prometheus -> 9090, Grafana -> 3001 (3000 is taken by the frontend).
+name: rumera-observability
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: rumera_prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-rules.yml:/etc/prometheus/rules/prometheus-rules.yml:ro
+      - prometheus_data:/prometheus
+    networks: [obs]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: rumera_grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SERVER_HTTP_PORT: "3001"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      # The dashboard provider loads any JSON from /var/lib/grafana/dashboards —
+      # mount the existing authored dashboard there.
+      - ./grafana-dashboard.json:/var/lib/grafana/dashboards/rumera-backend.json:ro
+      - grafana_data:/var/lib/grafana
+    networks: [obs]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  obs:
+    name: ${OBS_NETWORK:-rumera-dev_rumera_network}
+    external: true

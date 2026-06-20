@@ -1,0 +1,30 @@
+# Prometheus configuration for the Rumera backend.
+#
+# Scrapes the backend over the internal compose network at backend:8080/metrics.
+#
+# IMPORTANT: job_name MUST be "rumera-backend". The authored alert rules in
+# prometheus-rules.yml select on {job="rumera-backend"} — rename the job and all
+# six alerts silently evaluate over zero series and never fire.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: rumera
+
+# Load the authored alerting rules (mounted read-only by the compose file).
+rule_files:
+  - /etc/prometheus/rules/prometheus-rules.yml
+
+scrape_configs:
+  - job_name: rumera-backend
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ["backend:8080"] # compose service name + in-container app port
+        labels:
+          service: rumera-backend
+
+  # Prometheus self-scrape — handy when debugging the stack itself.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

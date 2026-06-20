@@ -14,6 +14,7 @@ This is the documentation home. Start here, then follow the links below.
 | [Conventions](./conventions.md) | Response envelope, error model, pagination, filtering, validation |
 | [Authentication & Authorization](./authentication.md) | JWT flow, token contents, roles, trust tiers |
 | [Operations, Performance & Reliability](./operations.md) | Caching & stampede protection, cron jobs, health probes, graceful shutdown, server hardening |
+| [Observability](./observability.md) | Prometheus metrics, OpenTelemetry tracing, health/readiness probes, and the Prometheus + Grafana stack |
 | [API Reference](./api/README.md) | Every endpoint, grouped by resource |
 
 ## Quick links
