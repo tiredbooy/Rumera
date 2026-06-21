@@ -2,6 +2,8 @@ import { CheckCircle2, Ban } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROLE_LABELS, type Role } from "@/lib/rbac/roles"
+import { ORDER_STATUS_FA } from "@/lib/catalog/labels"
+import type { OrderStatus } from "@/lib/catalog/types"
 import type {
   PaymentStatus,
   FulfilmentStatus,
@@ -104,6 +106,28 @@ export function RecipeBadge({ status }: { status: RecipeStatus }) {
 }
 export function CustomerBadge({ status }: { status: CustomerStatus }) {
   return <Pill {...CUSTOMER[status]} />
+}
+
+// Tones for the backend's 13-value order lifecycle (labels from ORDER_STATUS_FA).
+const ORDER_TONE: Record<OrderStatus, Tone> = {
+  pending: "amber",
+  payment_failed: "destructive",
+  paid: "emerald",
+  processing: "blue",
+  ready_to_ship: "blue",
+  shipped: "blue",
+  out_for_delivery: "blue",
+  delivered: "emerald",
+  refund_requested: "amber",
+  refund_approved: "emerald",
+  refunded: "muted",
+  partially_refunded: "muted",
+  cancelled: "destructive",
+}
+
+/** Single status pill for a live backend order (`status` from GET /admin/orders). */
+export function OrderStatusBadge({ status }: { status: OrderStatus }) {
+  return <Pill tone={ORDER_TONE[status] ?? "muted"} label={ORDER_STATUS_FA[status] ?? status} />
 }
 
 /**

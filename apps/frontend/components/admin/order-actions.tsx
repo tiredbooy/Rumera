@@ -1,9 +1,13 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { RotateCcw, Printer } from "lucide-react"
 import { toast } from "sonner"
 
+import { ORDER_STATUS_FA } from "@/lib/catalog/labels"
+import type { OrderStatus } from "@/lib/catalog/types"
+import { updateOrderStatus, AdminApiError } from "@/lib/api/admin-client"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -23,42 +27,52 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import type { FulfilmentStatus } from "@/lib/admin/data"
 
-const STATUS_OPTIONS: { value: FulfilmentStatus; label: string }[] = [
-  { value: "processing", label: "در حال پردازش" },
-  { value: "packed", label: "بسته‌بندی" },
-  { value: "shipped", label: "ارسال‌شده" },
-  { value: "delivered", label: "تحویل‌شده" },
-  { value: "cancelled", label: "لغوشده" },
-]
+const STATUS_OPTIONS = (Object.keys(ORDER_STATUS_FA) as OrderStatus[]).map((value) => ({
+  value,
+  label: ORDER_STATUS_FA[value],
+}))
 
 export function OrderActions({
+  orderId,
   status,
   canWrite,
   canRefund,
 }: {
-  status: FulfilmentStatus
+  orderId: number
+  status: OrderStatus
   canWrite: boolean
   canRefund: boolean
 }) {
-  const [current, setCurrent] = React.useState<FulfilmentStatus>(status)
+  const router = useRouter()
+  const [current, setCurrent] = React.useState<OrderStatus>(status)
+  const [pending, setPending] = React.useState(false)
+
+  async function changeStatus(next: OrderStatus) {
+    const previous = current
+    setCurrent(next) // optimistic
+    setPending(true)
+    try {
+      await updateOrderStatus(orderId, next)
+      toast.success(`وضعیت سفارش به «${ORDER_STATUS_FA[next]}» تغییر کرد`)
+      router.refresh()
+    } catch (e) {
+      setCurrent(previous) // roll back
+      toast.error(e instanceof AdminApiError ? e.message : "تغییر وضعیت ناموفق بود")
+    } finally {
+      setPending(false)
+    }
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="outline" size="sm" onClick={() => toast.success("فاکتور آماده چاپ شد (نمونه)")}>
+      <Button variant="outline" size="sm" onClick={() => window.print()}>
         <Printer className="size-4" /> چاپ فاکتور
       </Button>
 
       {canWrite ? (
-        <Select
-          value={current}
-          onValueChange={(v) => {
-            setCurrent(v as FulfilmentStatus)
-            toast.success(`وضعیت سفارش به «${STATUS_OPTIONS.find((o) => o.value === v)?.label}» تغییر کرد (نمونه)`)
-          }}
-        >
-          <SelectTrigger size="sm" className="min-w-40">
+        <Select value={current} disabled={pending} onValueChange={(v) => changeStatus(v as OrderStatus)}>
+          <SelectTrigger size="sm" className="min-w-44">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -74,7 +88,12 @@ export function OrderActions({
       {canRefund ? (
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending || current === "refunded"}
+              className="text-destructive hover:text-destructive"
+            >
               <RotateCcw className="size-4" /> بازپرداخت
             </Button>
           </AlertDialogTrigger>
@@ -82,12 +101,12 @@ export function OrderActions({
             <AlertDialogHeader>
               <AlertDialogTitle>بازپرداخت سفارش</AlertDialogTitle>
               <AlertDialogDescription>
-                مبلغ کامل سفارش به کیف پول مشتری بازگردانده می‌شود. این عمل قابل بازگشت نیست.
+                وضعیت سفارش به «بازپرداخت‌شده» تغییر می‌کند. این عمل قابل بازگشت نیست.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>انصراف</AlertDialogCancel>
-              <AlertDialogAction onClick={() => toast.success("بازپرداخت ثبت شد (نمونه)")}>
+              <AlertDialogAction onClick={() => changeStatus("refunded")}>
                 تأیید بازپرداخت
               </AlertDialogAction>
             </AlertDialogFooter>
