@@ -1,13 +1,14 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowRight, MapPin, User, Check } from "lucide-react"
+import { ArrowRight, Receipt } from "lucide-react"
 
 import { requirePermission } from "@/lib/auth/session"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 import { can } from "@/lib/rbac/can"
 import { formatPrice, faNum } from "@/lib/products"
-import { getOrder } from "@/lib/admin/data"
-import { cn } from "@/lib/utils"
+import { PAYMENT_FA, faDate } from "@/lib/catalog/labels"
+import type { Order } from "@/lib/catalog/types"
+import { serverApi, ApiError } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -18,7 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { PaymentBadge, FulfilmentBadge } from "@/components/admin/status-badge"
+import { OrderStatusBadge } from "@/components/admin/status-badge"
 import { OrderActions } from "@/components/admin/order-actions"
 
 export default async function AdminOrderDetailPage({
@@ -28,8 +29,16 @@ export default async function AdminOrderDetailPage({
 }) {
   const session = await requirePermission(PERMISSIONS.ORDERS_READ)
   const { id } = await params
-  const order = getOrder(id)
-  if (!order) notFound()
+  const orderId = Number(id)
+  if (!Number.isInteger(orderId) || orderId <= 0) notFound()
+
+  let order: Order
+  try {
+    order = await serverApi<Order>(`/admin/orders/${orderId}`)
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) notFound()
+    throw e
+  }
 
   const canWrite = can(session, PERMISSIONS.ORDERS_WRITE)
   const canRefund = can(session, PERMISSIONS.ORDERS_REFUND)
@@ -43,11 +52,13 @@ export default async function AdminOrderDetailPage({
               سفارش‌ها
             </Link>
             <span aria-hidden>/</span>
-            <span className="text-foreground tabular-nums">#{faNum(order.number)}</span>
+            <span className="text-foreground tabular-nums" dir="ltr">
+              #{faNum(order.id)}
+            </span>
           </nav>
         }
-        title={`سفارش #${faNum(order.number)}`}
-        description={`ثبت‌شده در ${order.date}`}
+        title={`سفارش #${faNum(order.id)}`}
+        description={`ثبت‌شده در ${faDate(order.created_at)}`}
         actions={
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin/orders">
@@ -59,10 +70,15 @@ export default async function AdminOrderDetailPage({
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <PaymentBadge status={order.payment} />
-          <FulfilmentBadge status={order.fulfilment} />
+          <OrderStatusBadge status={order.status} />
+          <span className="text-sm text-muted-foreground">{PAYMENT_FA[order.payment_method]}</span>
         </div>
-        <OrderActions status={order.fulfilment} canWrite={canWrite} canRefund={canRefund} />
+        <OrderActions
+          orderId={order.id}
+          status={order.status}
+          canWrite={canWrite}
+          canRefund={canRefund}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -78,12 +94,12 @@ export default async function AdminOrderDetailPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {order.lines.map((l) => (
-                  <TableRow key={l.productId} className="border-border/40">
-                    <TableCell className="font-medium">{l.name}</TableCell>
-                    <TableCell className="text-center tabular-nums">{faNum(l.qty)}</TableCell>
-                    <TableCell className="text-muted-foreground">{formatPrice(l.price)}</TableCell>
-                    <TableCell className="text-end font-medium">{formatPrice(l.price * l.qty)}</TableCell>
+                {order.items.map((l) => (
+                  <TableRow key={l.id} className="border-border/40">
+                    <TableCell className="font-medium">{l.product_title}</TableCell>
+                    <TableCell className="text-center tabular-nums">{faNum(l.quantity)}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatPrice(l.unit_price)}</TableCell>
+                    <TableCell className="text-end font-medium">{formatPrice(l.total_price)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -95,17 +111,23 @@ export default async function AdminOrderDetailPage({
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">هزینهٔ ارسال</dt>
-                <dd>{order.shipping ? formatPrice(order.shipping) : "رایگان"}</dd>
+                <dd>{order.shipping_cost ? formatPrice(order.shipping_cost) : "رایگان"}</dd>
               </div>
-              {order.discount ? (
+              {order.tax_amount ? (
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">مالیات</dt>
+                  <dd>{formatPrice(order.tax_amount)}</dd>
+                </div>
+              ) : null}
+              {order.discount_amount ? (
                 <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                   <dt>تخفیف</dt>
-                  <dd>−{formatPrice(order.discount)}</dd>
+                  <dd>−{formatPrice(order.discount_amount)}</dd>
                 </div>
               ) : null}
               <div className="flex justify-between border-t border-border/60 pt-2 font-serif text-lg">
                 <dt>مبلغ نهایی</dt>
-                <dd className="text-foil">{formatPrice(order.total)}</dd>
+                <dd className="text-foil">{formatPrice(order.total_amount)}</dd>
               </div>
             </dl>
           </div>
@@ -114,45 +136,28 @@ export default async function AdminOrderDetailPage({
         <div className="flex flex-col gap-6">
           <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-              <User className="size-4 text-muted-foreground" /> مشتری
+              <Receipt className="size-4 text-muted-foreground" /> خلاصهٔ سفارش
             </div>
-            <p className="font-medium">{order.customerName}</p>
-            <p className="text-xs text-muted-foreground" dir="ltr">{order.customerEmail}</p>
-            <Button variant="outline" size="sm" className="mt-3 w-full" asChild>
-              <Link href={`/admin/customers/${order.customerId}`}>مشاهدهٔ پرونده</Link>
-            </Button>
-          </div>
-
-          <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-              <MapPin className="size-4 text-muted-foreground" /> نشانی ارسال
-            </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">{order.address}</p>
-          </div>
-
-          <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
-            <p className="mb-4 text-sm font-medium">روند سفارش</p>
-            <ol className="relative space-y-5 ps-6">
-              <span className="absolute inset-y-1 start-[7px] w-px bg-border" />
-              {order.timeline.map((e, i) => (
-                <li key={i} className="relative">
-                  <span
-                    className={cn(
-                      "absolute -start-6 top-0.5 flex size-3.5 items-center justify-center rounded-full ring-2 ring-card",
-                      e.done ? "bg-primary text-primary-foreground" : "bg-muted"
-                    )}
-                  >
-                    {e.done ? <Check className="size-2.5" /> : null}
-                  </span>
-                  <p className={cn("text-sm", e.done ? "font-medium" : "text-muted-foreground")}>
-                    {e.label}
-                  </p>
-                  {e.done ? (
-                    <p className="text-xs text-muted-foreground" dir="ltr">{e.at}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
+            <dl className="space-y-2.5 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">وضعیت</dt>
+                <dd>
+                  <OrderStatusBadge status={order.status} />
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">روش پرداخت</dt>
+                <dd>{PAYMENT_FA[order.payment_method]}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">تاریخ ثبت</dt>
+                <dd dir="ltr">{faDate(order.created_at)}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">تعداد اقلام</dt>
+                <dd className="tabular-nums">{faNum(order.items.length)}</dd>
+              </div>
+            </dl>
           </div>
         </div>
       </div>

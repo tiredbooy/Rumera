@@ -6,7 +6,14 @@
  * `path` is the backend path after `/api/v1` (admin-namespaced calls include the
  * leading `admin/` segment — see `app/api/admin/[...path]/route.ts`).
  */
-import type { Brand, Category, Paginated, ProductDetail } from "@/lib/catalog/types"
+import type {
+  Brand,
+  Category,
+  OrderListItem,
+  OrderStatus,
+  Paginated,
+  ProductDetail,
+} from "@/lib/catalog/types"
 import type { RecipeDetail, RecipeDifficulty, RecipeListItem } from "@/lib/recipes"
 import type { Role } from "@/lib/rbac/roles"
 import { buildQuery } from "@/lib/api/qs"
@@ -710,6 +717,7 @@ export type DailyRevenueStat = {
   orders_refunded: number
   net_revenue: string
   gross_revenue: string
+  avg_order_value: string
   orders_new_customers: number
   orders_returning: number
   unique_customers: number
@@ -722,4 +730,58 @@ export function getRevenueSummary(range: AnalyticsRange = {}): Promise<RevenueSu
 
 export function getRevenueTimeSeries(range: AnalyticsRange = {}): Promise<DailyRevenueStat[]> {
   return adminRequest<DailyRevenueStat[]>(`admin/analytics/revenue/timeseries${buildQuery(range)}`)
+}
+
+/** GET /admin/analytics/revenue/today — a single daily stats row for today. */
+export function getRevenueToday(): Promise<DailyRevenueStat> {
+  return adminRequest<DailyRevenueStat>("admin/analytics/revenue/today")
+}
+
+// ── Orders ───────────────────────────────────────────────────────────────────
+// Reuses the storefront Order/OrderListItem/OrderStatus types — the admin
+// endpoints return the same shapes. NOTE: the list/detail responses do NOT carry
+// customer identity or shipping address (no join server-side), and item_count is
+// not yet computed — the admin UI degrades around those gaps.
+
+export type ListOrdersParams = {
+  page?: number
+  limit?: number
+  status?: OrderStatus
+  user_id?: number
+  search?: string
+  sortBy?: string
+  orderBy?: "asc" | "desc"
+}
+
+/** GET /admin/orders — paginated order list. */
+export function listOrders(params: ListOrdersParams = {}): Promise<Paginated<OrderListItem>> {
+  return adminRequest<Paginated<OrderListItem>>(`admin/orders${buildQuery(params)}`)
+}
+
+/** PATCH /admin/orders/:id/status — move an order to a new status. */
+export function updateOrderStatus(id: number, status: OrderStatus): Promise<OrderListItem> {
+  return adminRequest<OrderListItem>(`admin/orders/${id}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  })
+}
+
+// ── Inventory ────────────────────────────────────────────────────────────────
+
+/** A low-stock row from GET /admin/inventory/low-stock (keyed by variant id). */
+export type AdminInventoryRow = {
+  id: number
+  product_variant_id: number
+  stock_on_hand: number
+  committed_stock: number
+  available_stock: number
+  reorder_point: number
+  reorder_quantity: number
+  last_restock_at?: string | null
+  updated_at: string
+}
+
+/** GET /admin/inventory/low-stock — variants at/below their reorder point. */
+export function getLowStockInventory(): Promise<AdminInventoryRow[]> {
+  return adminRequest<AdminInventoryRow[]>("admin/inventory/low-stock")
 }
