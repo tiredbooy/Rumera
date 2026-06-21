@@ -18,7 +18,7 @@ import (
 type ProductRepository interface {
 	Create(ctx context.Context, req models.CreateProductReq) (*models.Product, error)
 	GetByID(ctx context.Context, id int64) (*models.Product, error)
-	GetAll(ctx context.Context, filter models.ProductFilter) ([]*models.Product, int64, error)
+	GetAll(ctx context.Context, filter models.ProductFilter) ([]*models.ProductListItem, int64, error)
 	Update(ctx context.Context, id int64, req models.UpdateProductReq) (*models.Product, error)
 	Delete(ctx context.Context, id int64) error
 
@@ -187,8 +187,11 @@ func (r *productRepository) GetByID(ctx context.Context, id int64) (*models.Prod
 // unjoined `pv` alias — invalid SQL that 500'd every price-faceted request.)
 // ─────────────────────────────────────────────────────────────
 
-func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) ([]*models.Product, int64, error) {
-	where := []string{"p.is_active = true"}
+func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) ([]*models.ProductListItem, int64, error) {
+	// No hardcoded is_active filter — callers decide (the public list forces
+	// active, the admin list shows all) via f.IsActive. Seed with 1=1 so the
+	// optional clauses AND on cleanly.
+	where := []string{"1=1"}
 	args := pgx.NamedArgs{}
 
 	if f.Search != "" {
@@ -246,11 +249,21 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
 
+	// Project the lightweight list row: joined brand title + cheapest/priciest
+	// active variant price band (mirrors the recommendation card projection).
 	q := fmt.Sprintf(`
 		SELECT
-			p.*,
+			p.id, p.title, p.code, p.slug, p.is_active,
+			b.title AS brand,
+			COALESCE(pr.min_price, 0) AS min_price,
+			COALESCE(pr.max_price, 0) AS max_price,
 			COUNT(*) OVER() AS total_count
 		FROM products p
+		LEFT JOIN brands b ON b.id = p.brand_id
+		LEFT JOIN LATERAL (
+			SELECT MIN(price) AS min_price, MAX(price) AS max_price
+			FROM product_variants pv WHERE pv.product_id = p.id AND pv.is_active
+		) pr ON TRUE
 		WHERE %s
 		ORDER BY %s %s
 		LIMIT @limit OFFSET @offset`,
@@ -264,29 +277,26 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 	defer rows.Close()
 
 	var (
-		products []*models.Product
-		total    int64
+		items []*models.ProductListItem
+		total int64
 	)
 
 	for rows.Next() {
-		var p models.Product
+		var it models.ProductListItem
 		if err := rows.Scan(
-			&p.ID, &p.Title, &p.Code, &p.Slug,
-			&p.CategoryID, &p.Description, &p.BrandID,
-			&p.CountryOfOrigin, &p.ABV, &p.Weight,
-			&p.IsActive, &p.MetaTitle, &p.MetaDescription,
-			&p.MetaTags, &p.CreatedAt, &p.UpdatedAt,
+			&it.ID, &it.Title, &it.Code, &it.Slug, &it.IsActive,
+			&it.Brand, &it.MinPrice, &it.MaxPrice,
 			&total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("productRepository.GetAll scan: %w", err)
 		}
-		products = append(products, &p)
+		items = append(items, &it)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("productRepository.GetAll rows: %w", err)
 	}
 
-	return products, total, nil
+	return items, total, nil
 }
 
 // ─────────────────────────────────────────────────────────────

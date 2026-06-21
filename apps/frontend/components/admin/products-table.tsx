@@ -5,10 +5,9 @@ import Link from "next/link"
 import { MoreHorizontal, Pencil, Copy, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
-import { products as allProducts, categories, categoryFa, badgeFa, formatPrice, faNum, type Product } from "@/lib/products"
-import { inventory } from "@/lib/admin/data"
+import { formatPrice } from "@/lib/products"
+import type { ProductListItem } from "@/lib/catalog/types"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,79 +25,55 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Bottle } from "@/components/bottle"
-import { StockBadge } from "@/components/admin/status-badge"
+import { UserStatusBadge } from "@/components/admin/status-badge"
 import { DataTable, type Column, type Filter } from "@/components/admin/data-table"
 
-const stockByProduct = new Map(inventory.map((r) => [r.product.id, r]))
+/**
+ * Admin product catalogue, backed by live data from GET /admin/products (which,
+ * unlike the public list, includes inactive/draft products). The list endpoint
+ * carries the lightweight projection — title, brand, price band, active flag —
+ * so the table shows exactly those; richer per-product data (category, stock,
+ * ratings) lives on the product detail/inventory screens.
+ */
+export function ProductsTable({
+  products,
+  canWrite,
+}: {
+  products: ProductListItem[]
+  canWrite: boolean
+}) {
+  const [pendingDelete, setPendingDelete] = React.useState<ProductListItem | null>(null)
 
-export function ProductsTable({ canWrite }: { canWrite: boolean }) {
-  const [pendingDelete, setPendingDelete] = React.useState<Product | null>(null)
-
-  const columns: Column<Product>[] = [
+  const columns: Column<ProductListItem>[] = [
     {
       id: "name",
       header: "محصول",
-      sortValue: (p) => p.name,
+      sortValue: (p) => p.title,
       cell: (p) => (
-        <div className="flex items-center gap-3">
-          <span className="flex h-12 w-8 items-end justify-center">
-            <Bottle product={p} className="h-12" />
-          </span>
-          <div className="leading-tight">
-            <p className="font-medium">{p.name}</p>
-            <p className="text-xs text-muted-foreground">{p.maker}</p>
-          </div>
+        <div className="leading-tight">
+          <p className="font-medium">{p.title}</p>
+          {p.brand ? <p className="text-xs text-muted-foreground">{p.brand}</p> : null}
         </div>
       ),
     },
     {
-      id: "category",
-      header: "دسته",
-      sortValue: (p) => p.category,
-      cell: (p) => <span className="text-muted-foreground">{categoryFa[p.category]}</span>,
-    },
-    {
       id: "price",
       header: "قیمت",
-      sortValue: (p) => p.price,
+      sortValue: (p) => p.min_price,
       cell: (p) => (
         <div className="leading-tight">
-          <p className="font-medium">{formatPrice(p.price)}</p>
-          {p.compareAt ? (
-            <p className="text-xs text-muted-foreground line-through">{formatPrice(p.compareAt)}</p>
+          <p className="font-medium">{formatPrice(p.min_price)}</p>
+          {p.max_price > p.min_price ? (
+            <p className="text-xs text-muted-foreground">تا {formatPrice(p.max_price)}</p>
           ) : null}
         </div>
       ),
     },
     {
-      id: "rating",
-      header: "امتیاز",
-      sortValue: (p) => p.rating,
-      cell: (p) => (
-        <span className="text-muted-foreground">
-          <span className="text-gold">★</span> {faNum(p.rating)}
-        </span>
-      ),
-    },
-    {
-      id: "stock",
-      header: "موجودی",
-      sortValue: (p) => stockByProduct.get(p.id)?.available ?? 0,
-      cell: (p) => {
-        const row = stockByProduct.get(p.id)
-        return row ? <StockBadge status={row.status} /> : <span className="text-muted-foreground">—</span>
-      },
-    },
-    {
-      id: "badge",
-      header: "برچسب",
-      cell: (p) =>
-        p.badge ? (
-          <Badge className="bg-gold text-gold-foreground">{badgeFa[p.badge]}</Badge>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      id: "status",
+      header: "وضعیت",
+      sortValue: (p) => (p.is_active ? "active" : "inactive"),
+      cell: (p) => <UserStatusBadge active={p.is_active} />,
     },
     {
       id: "actions",
@@ -114,23 +89,20 @@ export function ProductsTable({ canWrite }: { canWrite: boolean }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <Link href={`/admin/products/${p.slug}`}>
+                <Link href={`/admin/products/${p.id}`}>
                   <Pencil className="size-4" /> ویرایش
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!canWrite}
-                onSelect={() => toast.success(`«${p.name}» کپی شد (نمونه)`)}
+                onSelect={() => toast.success(`«${p.title}» کپی شد (نمونه)`)}
               >
                 <Copy className="size-4" /> تکثیر
               </DropdownMenuItem>
               {canWrite ? (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onSelect={() => setPendingDelete(p)}
-                  >
+                  <DropdownMenuItem variant="destructive" onSelect={() => setPendingDelete(p)}>
                     <Trash2 className="size-4" /> حذف
                   </DropdownMenuItem>
                 </>
@@ -142,21 +114,14 @@ export function ProductsTable({ canWrite }: { canWrite: boolean }) {
     },
   ]
 
-  const filters: Filter<Product>[] = [
+  const filters: Filter<ProductListItem>[] = [
     {
-      id: "category",
-      label: "دسته",
-      getValue: (p) => p.category,
-      options: categories.map((c) => ({ value: c.name, label: categoryFa[c.name] })),
-    },
-    {
-      id: "stock",
-      label: "موجودی",
-      getValue: (p) => stockByProduct.get(p.id)?.status ?? "in_stock",
+      id: "status",
+      label: "وضعیت",
+      getValue: (p) => (p.is_active ? "active" : "inactive"),
       options: [
-        { value: "in_stock", label: "موجود" },
-        { value: "low", label: "رو به اتمام" },
-        { value: "out", label: "ناموجود" },
+        { value: "active", label: "فعال" },
+        { value: "inactive", label: "غیرفعال" },
       ],
     },
   ]
@@ -164,13 +129,13 @@ export function ProductsTable({ canWrite }: { canWrite: boolean }) {
   return (
     <>
       <DataTable
-        rows={allProducts}
+        rows={products}
         columns={columns}
-        getRowKey={(p) => p.id}
-        searchText={(p) => `${p.name} ${p.maker}`}
-        searchPlaceholder="جستجوی محصول یا سازنده…"
+        getRowKey={(p) => String(p.id)}
+        searchText={(p) => `${p.title} ${p.brand ?? ""}`}
+        searchPlaceholder="جستجوی محصول یا برند…"
         filters={filters}
-        rowHref={(p) => `/admin/products/${p.slug}`}
+        rowHref={(p) => `/admin/products/${p.id}`}
       />
 
       <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
@@ -178,14 +143,14 @@ export function ProductsTable({ canWrite }: { canWrite: boolean }) {
           <AlertDialogHeader>
             <AlertDialogTitle>حذف محصول</AlertDialogTitle>
             <AlertDialogDescription>
-              آیا از حذف «{pendingDelete?.name}» مطمئن هستید؟ این عمل قابل بازگشت نیست.
+              آیا از حذف «{pendingDelete?.title}» مطمئن هستید؟ این عمل قابل بازگشت نیست.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>انصراف</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                toast.success(`«${pendingDelete?.name}» حذف شد (نمونه)`)
+                toast.success(`«${pendingDelete?.title}» حذف شد (نمونه)`)
                 setPendingDelete(null)
               }}
             >

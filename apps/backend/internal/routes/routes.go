@@ -229,6 +229,7 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	a.DELETE("/users/:userID", h.DeleteUser)
 
 	// Products
+	a.GET("/products", h.ListAdminProducts)
 	a.POST("/products", h.CreateProduct)
 	a.PATCH("/products/:id", h.UpdateProduct)
 	a.DELETE("/products/:id", h.DeleteProduct)

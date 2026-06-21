@@ -55,17 +55,17 @@ func (s *ProductService) GetByID(ctx context.Context, id int64) (*models.Product
 	return product, nil
 }
 
-func (s *ProductService) GetAll(ctx context.Context, filter models.ProductFilter) ([]*models.Product, int64, error) {
+func (s *ProductService) GetAll(ctx context.Context, filter models.ProductFilter) ([]*models.ProductListItem, int64, error) {
 	if filter.Limit <= 0 {
 		return nil, 0, apperr.ErrInvalidRequest
 	}
 
-	products, total, err := s.productRepo.GetAll(ctx, filter)
+	items, total, err := s.productRepo.GetAll(ctx, filter)
 	if err != nil {
 		return nil, 0, apperr.ErrInternal
 	}
 
-	return products, total, nil
+	return items, total, nil
 }
 
 func (s *ProductService) Update(ctx context.Context, id int64, req models.UpdateProductReq) (*models.Product, error) {

@@ -41,29 +41,41 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 	response.Created(c, detail)
 }
 
-// ListProducts — GET /products
+// ListProducts — GET /products (public; active products only)
 func (h *Handler) ListProducts(c *gin.Context) {
 	var filter models.ProductFilter
 	if !h.bindQuery(c, &filter) {
 		return
 	}
 	filter.Defaults()
+	// The storefront must never surface inactive/draft products — force the
+	// filter regardless of any client-supplied is_active value.
+	active := true
+	filter.IsActive = &active
 
-	products, total, err := h.Product.GetAll(c.Request.Context(), filter)
+	items, total, err := h.Product.GetAll(c.Request.Context(), filter)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
+	response.Paginated(c, items, paginate(filter.Page, filter.Limit, total))
+}
 
-	items := make([]models.ProductListItem, len(products))
-	for i, p := range products {
-		items[i] = models.ProductListItem{
-			ID:       p.ID,
-			Title:    p.Title,
-			Code:     p.Code,
-			Slug:     p.Slug,
-			IsActive: p.IsActive,
-		}
+// ListAdminProducts — GET /admin/products (staff; includes inactive products).
+// Same projection as the public list (brand + price band) but unfiltered by
+// status so the admin catalogue can manage drafts; honors an explicit
+// ?is_active= filter when provided.
+func (h *Handler) ListAdminProducts(c *gin.Context) {
+	var filter models.ProductFilter
+	if !h.bindQuery(c, &filter) {
+		return
+	}
+	filter.Defaults()
+
+	items, total, err := h.Product.GetAll(c.Request.Context(), filter)
+	if err != nil {
+		h.handleError(c, err)
+		return
 	}
 	response.Paginated(c, items, paginate(filter.Page, filter.Limit, total))
 }
