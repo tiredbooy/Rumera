@@ -9,6 +9,7 @@
 import type { Brand, Category, Paginated, ProductDetail } from "@/lib/catalog/types"
 import type { RecipeDetail, RecipeDifficulty, RecipeListItem } from "@/lib/recipes"
 import type { Role } from "@/lib/rbac/roles"
+import { buildQuery } from "@/lib/api/qs"
 
 export class AdminApiError extends Error {
   constructor(
@@ -679,4 +680,46 @@ export function updateHeroSlide(id: number, input: UpdateHeroSlideInput) {
 
 export function deleteHeroSlide(id: number) {
   return adminRequest<void>(`admin/hero-slides/${id}`, { method: "DELETE" })
+}
+
+// ── Analytics ────────────────────────────────────────────────────────────────
+// NOTE: money/rate fields use shopspring/decimal on the backend, which marshals
+// to JSON *strings* (e.g. "12345.67"). Parse with Number() before charting.
+
+/** RFC3339 `from`/`to` window accepted by every analytics endpoint. */
+export type AnalyticsRange = { from?: string; to?: string }
+
+/** GET /admin/analytics/revenue/summary — aggregate KPIs over a date range. */
+export type RevenueSummary = {
+  total_orders: number
+  total_gross_revenue: string
+  total_net_revenue: string
+  total_refunds: string
+  total_discounts: string
+  avg_order_value: string
+  avg_conversion_rate: string
+  unique_customers: number
+}
+
+/** One daily row of GET /admin/analytics/revenue/timeseries. */
+export type DailyRevenueStat = {
+  date: string
+  orders_total: number
+  orders_completed: number
+  orders_cancelled: number
+  orders_refunded: number
+  net_revenue: string
+  gross_revenue: string
+  orders_new_customers: number
+  orders_returning: number
+  unique_customers: number
+  conversion_rate: string
+}
+
+export function getRevenueSummary(range: AnalyticsRange = {}): Promise<RevenueSummary> {
+  return adminRequest<RevenueSummary>(`admin/analytics/revenue/summary${buildQuery(range)}`)
+}
+
+export function getRevenueTimeSeries(range: AnalyticsRange = {}): Promise<DailyRevenueStat[]> {
+  return adminRequest<DailyRevenueStat[]>(`admin/analytics/revenue/timeseries${buildQuery(range)}`)
 }
