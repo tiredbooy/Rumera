@@ -143,7 +143,10 @@
       "Bash(export TEST_DATABASE_URL='postgres://test:test@localhost:55432/rumera_fresh?sslmode=disable')",
       "Bash(echo \"=== tsc exit: $? ===\")",
       "Read(//home/tehranspeaker/.claude/skills/ui-ux-pro-max/**)",
-      "Bash(python3 scripts/search.py \"premium wine spirits ecommerce customer account dashboard elegant dark\" --design-system -p \"Rumera Account\")"
+      "Bash(python3 scripts/search.py \"premium wine spirits ecommerce customer account dashboard elegant dark\" --design-system -p \"Rumera Account\")",
+      "Bash(awk *)",
+      "Bash(ls -la lib/catalog/)",
+      "Bash(sed -n '1,60p' lib/catalog/recommendations.ts)"
     ]
   }
 }
