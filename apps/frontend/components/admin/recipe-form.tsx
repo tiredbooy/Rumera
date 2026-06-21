@@ -54,6 +54,7 @@ import {
 import { OptimizedImage } from "@/components/admin/optimized-image"
 import { RichTextEditor } from "@/components/admin/rich-text-editor"
 import { VariantPicker, type VariantOption } from "@/components/admin/variant-picker"
+import { FlexibleImageInput } from "@/components/admin/flexible-image-input"
 
 type AdminTag = { id: number; title: string }
 
@@ -814,12 +815,20 @@ export function RecipeForm({
             <Label htmlFor="image_url" className="sr-only">
               نشانی تصویر
             </Label>
-            <Input
-              id="image_url"
-              dir="ltr"
-              placeholder="https://…"
-              aria-invalid={!!errors.image_url}
-              {...register("image_url")}
+            <Controller
+              control={control}
+              name="image_url"
+              render={({ field }) => (
+                <FlexibleImageInput
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  folder="recipes"
+                  placeholder="https://… یا بارگذاری فایل"
+                  ariaInvalid={!!errors.image_url}
+                  hidePreview
+                />
+              )}
             />
             {errors.image_url ? (
               <p className="mt-1.5 text-xs text-destructive">{errors.image_url.message}</p>

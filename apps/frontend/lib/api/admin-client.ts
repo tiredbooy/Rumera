@@ -204,6 +204,71 @@ export function uploadProductImage(
   })
 }
 
+/** A standalone uploaded image (hero/recipe/journal cover) → just a public URL. */
+export type UploadedImage = {
+  url: string
+  key: string
+  width: number
+  height: number
+}
+
+/**
+ * Multipart upload for standalone images that are stored as a plain URL on their
+ * owning entity (hero slides, recipes, journals) — as opposed to the product
+ * image pipeline which keeps DB rows. XHR-based so callers can show progress.
+ * Hits `POST /admin/uploads`; `folder` selects the storage bucket.
+ */
+export function uploadImage(
+  file: File,
+  opts: { folder?: string; signal?: AbortSignal } = {},
+  onProgress?: (fraction: number) => void
+): Promise<UploadedImage> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData()
+    form.append("file", file)
+    if (opts.folder) form.append("folder", opts.folder)
+
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", `/api/admin/admin/uploads`)
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total)
+    }
+
+    xhr.onload = () => {
+      let body: { data?: UploadedImage; error?: { code?: string; message?: string } } | null = null
+      try {
+        body = JSON.parse(xhr.responseText)
+      } catch {
+        body = null
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && body?.data) {
+        resolve(body.data)
+      } else {
+        reject(
+          new AdminApiError(
+            xhr.status,
+            body?.error?.code ?? "UPLOAD_FAILED",
+            body?.error?.message ?? "بارگذاری تصویر ناموفق بود"
+          )
+        )
+      }
+    }
+    xhr.onerror = () => reject(new AdminApiError(0, "NETWORK", "ارتباط با سرور برقرار نشد"))
+    xhr.onabort = () => reject(new AdminApiError(0, "ABORTED", "بارگذاری لغو شد"))
+
+    if (opts.signal) {
+      if (opts.signal.aborted) {
+        xhr.abort()
+        return
+      }
+      opts.signal.addEventListener("abort", () => xhr.abort(), { once: true })
+    }
+
+    xhr.send(form)
+  })
+}
+
 export function reorderProductImages(productId: number, ids: number[]) {
   return adminRequest<void>(`admin/products/${productId}/images/order`, {
     method: "PUT",

@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { SmartImage } from "@/components/smart-image"
+import { FlexibleImageInput } from "@/components/admin/flexible-image-input"
 import { cn } from "@/lib/utils"
 import {
   AdminApiError,
@@ -251,29 +252,44 @@ export function HeroForm({
         >
           <Field
             id="image_url"
-            label="نشانی تصویر دسکتاپ"
+            label="تصویر دسکتاپ"
+            hint="یک نشانی وارد کنید یا فایل را بارگذاری کنید."
             error={errors.image_url?.message}
             full
           >
-            <Input
-              id="image_url"
-              dir="ltr"
-              placeholder="/images/hero/slide-1.jpg"
-              aria-invalid={!!errors.image_url}
-              {...register("image_url")}
+            <Controller
+              control={control}
+              name="image_url"
+              render={({ field }) => (
+                <FlexibleImageInput
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  folder="hero"
+                  placeholder="/images/hero/slide-1.jpg یا بارگذاری فایل"
+                  ariaInvalid={!!errors.image_url}
+                />
+              )}
             />
           </Field>
           <Field
             id="mobile_image_url"
-            label="نشانی تصویر موبایل (اختیاری)"
+            label="تصویر موبایل (اختیاری)"
             error={errors.mobile_image_url?.message}
             full
           >
-            <Input
-              id="mobile_image_url"
-              dir="ltr"
-              placeholder="/images/hero/slide-1-mobile.jpg"
-              {...register("mobile_image_url")}
+            <Controller
+              control={control}
+              name="mobile_image_url"
+              render={({ field }) => (
+                <FlexibleImageInput
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  folder="hero"
+                  placeholder="/images/hero/slide-1-mobile.jpg یا بارگذاری فایل"
+                />
+              )}
             />
           </Field>
           <Field

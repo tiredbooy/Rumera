@@ -245,6 +245,10 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	a.PUT("/products/:id/images/:imageId/primary", h.SetPrimaryProductImage)
 	a.DELETE("/products/:id/images/:imageId", h.DeleteProductImage)
 
+	// Standalone image uploads (hero/recipe/journal covers — returns a URL,
+	// no DB row). Namespaced under /admin so the BFF proxy allowlist covers it.
+	a.POST("/uploads", h.UploadImage)
+
 	// Variants
 	a.PATCH("/variants/:id", h.UpdateVariant)
 	a.DELETE("/variants/:id", h.DeleteVariant)

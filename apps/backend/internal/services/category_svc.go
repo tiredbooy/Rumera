@@ -148,8 +148,10 @@ func (s *categoryService) GetTree(ctx context.Context) ([]*models.CategoryTree, 
 
 // ── Tree builder ──────────────────────────────────────────────────────────────
 func buildTree(flat []*models.Category) []*models.CategoryTree {
+	// Always return a non-nil slice so the JSON envelope serialises as `[]`
+	// (not `null`); clients iterate over this directly and a null breaks them.
 	if len(flat) == 0 {
-		return nil
+		return []*models.CategoryTree{}
 	}
 
 	// Step 1 — allocate a tree node for every category
@@ -164,7 +166,7 @@ func buildTree(flat []*models.Category) []*models.CategoryTree {
 	}
 
 	// Step 2 — attach each node to its parent; collect roots
-	var roots []*models.CategoryTree
+	roots := make([]*models.CategoryTree, 0, len(flat))
 	for _, c := range flat {
 		node := nodes[c.ID]
 		if c.ParentID == nil {

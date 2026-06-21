@@ -17,17 +17,28 @@ type tagIDsReq struct {
 }
 
 // CreateProduct — POST /admin/products
+//
+// Returns the fully-hydrated ProductDetail (not the raw DB model) so the
+// response carries the REST `json` field names the storefront/admin clients
+// expect — most importantly a lowercase `id`, which the create form needs to
+// upload images and navigate to the new product.
 func (h *Handler) CreateProduct(c *gin.Context) {
 	var req models.CreateProductReq
 	if !h.bindJSON(c, &req) {
 		return
 	}
-	product, err := h.Product.Create(c.Request.Context(), req)
+	ctx := c.Request.Context()
+	product, err := h.Product.Create(ctx, req)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
-	response.Created(c, product)
+	detail, err := h.buildProductDetail(ctx, product.ID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.Created(c, detail)
 }
 
 // ListProducts — GET /products
@@ -128,13 +139,20 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 	if !h.bindJSON(c, &req) {
 		return
 	}
-	product, err := h.Product.Update(c.Request.Context(), id, req)
+	ctx := c.Request.Context()
+	if _, err := h.Product.Update(ctx, id, req); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	h.invalidate(ctx, cache.KeyProduct(id))
+	// Re-hydrate so the response matches GetProduct (REST json field names,
+	// fresh tags/images/variants) rather than the raw DB model.
+	detail, err := h.buildProductDetail(ctx, id)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
-	h.invalidate(c.Request.Context(), cache.KeyProduct(id))
-	response.OK(c, product)
+	response.OK(c, detail)
 }
 
 // DeleteProduct — DELETE /admin/products/:id
