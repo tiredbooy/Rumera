@@ -154,6 +154,47 @@ func (s *MediaService) Upload(ctx context.Context, productID int64, data []byte,
 	return created, nil
 }
 
+// UploadResult is the outcome of a standalone (non-product) image upload: a
+// stored original addressable by its public URL.
+type UploadResult struct {
+	URL    string `json:"url"`
+	Key    string `json:"key"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
+// UploadImage validates and stores a standalone image (hero slides, recipe and
+// journal covers, …) under the given folder prefix and returns its public URL.
+// Unlike Upload it records no database row — the URL is persisted on the owning
+// entity (e.g. hero_slides.image_url). The same size/format guards apply.
+func (s *MediaService) UploadImage(ctx context.Context, folder string, data []byte) (*UploadResult, error) {
+	if s.cfg.MaxUploadBytes > 0 && int64(len(data)) > s.cfg.MaxUploadBytes {
+		return nil, ErrImageTooLarge
+	}
+	if len(data) == 0 {
+		return nil, ErrUnsupportedImage
+	}
+
+	w, h, format, err := s.tr.Probe(data)
+	if err != nil {
+		return nil, ErrUnsupportedImage
+	}
+	ext, ok := inputExt[format]
+	if !ok {
+		return nil, ErrUnsupportedImage
+	}
+
+	if folder == "" {
+		folder = "uploads"
+	}
+	key := folder + "/" + uuid.NewString() + "." + ext
+	if err := s.store.Put(ctx, key, bytes.NewReader(data)); err != nil {
+		s.log.Error("media: store upload", zap.String("key", key), zap.Error(err))
+		return nil, apperr.ErrInternal
+	}
+	return &UploadResult{URL: s.PublicURL(key), Key: key, Width: w, Height: h}, nil
+}
+
 func (s *MediaService) List(ctx context.Context, productID int64) ([]*models.ProductImage, error) {
 	if productID <= 0 {
 		return nil, apperr.ErrInvalidRequest

@@ -85,6 +85,10 @@ function flattenForPicker(
   depth = 0,
   out: ParentOption[] = []
 ): ParentOption[] {
+  // The tree comes from the network; guard against a null/undefined or
+  // non-array payload (e.g. an empty `{ data: null }` envelope) so the picker
+  // degrades to "no parents" instead of throwing "nodes is not iterable".
+  if (!Array.isArray(nodes)) return out
   for (const node of nodes) {
     if (node.id === excludeId) continue // skips the node AND (by not recursing) its subtree
     out.push({ id: node.id, label: node.name, depth })

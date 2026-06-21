@@ -9,16 +9,11 @@ import {
   Sparkles,
   Check,
   TrendingUp,
-  Wine,
-  Martini,
-  GlassWater,
-  Grape,
-  type LucideIcon,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ProductCard } from "@/components/product-card"
+import { ProductCard } from "@/components/catalog/product-card"
 import { SmartImage } from "@/components/smart-image"
 import { Reveal } from "@/components/motion/reveal"
 import { BrandMarquee } from "@/components/brand-marquee"
@@ -27,20 +22,11 @@ import { ForYouRail } from "@/components/home/for-you-rail"
 import { RecommendationRail } from "@/components/catalog/recommendation-rail"
 import { HomeStructuredData } from "@/components/structured-data"
 import { getHeroSlides } from "@/lib/home/hero"
+import { getHomeCategories } from "@/lib/home/categories"
+import { categoryIconFor } from "@/lib/home/category-icons"
+import { getHomeFeatured } from "@/lib/home/featured"
 import { getTrending } from "@/lib/catalog/recommendations"
-import { featuredBrands } from "@/lib/home/brands"
-import { categories, categoryFa, getFeatured, type Category } from "@/lib/products"
-
-// A small glyph per category for the category cards' corner chip.
-const categoryIcon: Record<Category, LucideIcon> = {
-  Whisky: GlassWater,
-  Wine: Wine,
-  Champagne: Sparkles,
-  Gin: Martini,
-  Rum: GlassWater,
-  Tequila: Martini,
-  Vodka: Grape,
-}
+import { getFeaturedBrands } from "@/lib/home/brands"
 
 // Home is ISR — the hero slides are admin-managed and refetched periodically.
 export const revalidate = 300
@@ -68,12 +54,23 @@ const perks = [
   },
 ]
 
-// Catalogue filter chips (Persian) — first is the active "all".
-const filters = ["همه", "ویسکی", "شراب", "شامپاین", "اسپیریت"]
-
 export default async function Home() {
-  const [heroSlides, trending] = await Promise.all([getHeroSlides(), getTrending({ limit: 8 })])
-  const featured = getFeatured()
+  const [heroSlides, trending, homeCategories, featured, brands] = await Promise.all([
+    getHeroSlides(),
+    getTrending({ limit: 8 }),
+    getHomeCategories(),
+    getHomeFeatured(8),
+    getFeaturedBrands(),
+  ])
+
+  // Catalogue filter chips derived from the live categories — "همه" links to the
+  // full shop, each category to its listing. First chip is the active default.
+  const filterChips = [
+    { key: "all", label: "همه", href: "/products" },
+    ...homeCategories
+      .slice(0, 4)
+      .map((c) => ({ key: String(c.id), label: c.name, href: `/categories/${c.slug}` })),
+  ]
 
   return (
     <>
@@ -111,7 +108,7 @@ export default async function Home() {
           <p className="eyebrow mb-5 justify-center text-center">
             برندهای محبوب، گرد هم
           </p>
-          <BrandMarquee items={featuredBrands} />
+          <BrandMarquee items={brands} />
         </div>
       </section>
 
@@ -130,17 +127,17 @@ export default async function Home() {
         </Reveal>
 
         <div className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {categories.map((cat, i) => {
+          {homeCategories.map((cat, i) => {
             const isHero = i === 0
-            const Icon = categoryIcon[cat.name]
+            const Icon = categoryIconFor(cat.slug)
             return (
               <Reveal
-                key={cat.name}
+                key={cat.id}
                 delay={Math.min(i, 4) * 0.05}
                 className={isHero ? "col-span-2 row-span-2" : undefined}
               >
                 <Link
-                  href={`/categories/${cat.name.toLowerCase()}`}
+                  href={`/categories/${cat.slug}`}
                   className={`group/cat border-hairline relative flex h-full flex-col justify-end overflow-hidden rounded-2xl ring-1 ring-foreground/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-foreground/10 hover:ring-primary/40 sm:rounded-3xl ${
                     isHero ? "min-h-64 sm:min-h-80" : "min-h-44 sm:min-h-48"
                   }`}
@@ -148,10 +145,10 @@ export default async function Home() {
                   {/* Category image (place 1200×1500 portrait assets at the documented path) */}
                   <div className="absolute inset-0 transition-transform duration-700 ease-out group-hover/cat:scale-105">
                     <SmartImage
-                      src={`/images/categories/${cat.name.toLowerCase()}.jpg`}
-                      alt={categoryFa[cat.name]}
+                      src={`/images/categories/${cat.slug}.jpg`}
+                      alt={cat.name}
                       sizes={isHero ? "(max-width: 1024px) 100vw, 50vw" : "(max-width: 1024px) 50vw, 25vw"}
-                      monogram={categoryFa[cat.name].charAt(0)}
+                      monogram={cat.name.charAt(0)}
                     />
                   </div>
                   {/* Legibility scrim — deepens slightly on hover */}
@@ -164,7 +161,7 @@ export default async function Home() {
 
                   <div className="relative p-4 text-white sm:p-5">
                     <h3 className={`font-serif ${isHero ? "text-2xl sm:text-4xl" : "text-xl sm:text-2xl"}`}>
-                      {categoryFa[cat.name]}
+                      {cat.name}
                     </h3>
                     <p className="mt-1 line-clamp-1 text-xs text-white/75 sm:text-sm">
                       {cat.tagline}
@@ -189,14 +186,15 @@ export default async function Home() {
             <h2 className="font-serif text-4xl sm:text-5xl">منتخب فروشگاه</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            {filters.map((f, i) => (
+            {filterChips.map((f, i) => (
               <Button
-                key={f}
+                key={f.key}
                 size="sm"
                 variant={i === 0 ? "default" : "outline"}
                 className="rounded-full"
+                asChild
               >
-                {f}
+                <Link href={f.href}>{f.label}</Link>
               </Button>
             ))}
           </div>

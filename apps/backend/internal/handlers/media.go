@@ -161,6 +161,56 @@ func (h *Handler) DeleteProductImage(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// uploadFolders is the allow-list of storage folders a standalone upload may
+// target, keeping arbitrary path segments out of storage keys.
+var uploadFolders = map[string]bool{
+	"hero":     true,
+	"recipes":  true,
+	"journals": true,
+	"uploads":  true,
+}
+
+// UploadImage — POST /admin/uploads (multipart: file, folder?)
+//
+// Stores a standalone image (hero slide, recipe/journal cover, …) and returns
+// its public URL for the caller to persist on the owning entity. Unlike the
+// product image pipeline it records no database row.
+func (h *Handler) UploadImage(c *gin.Context) {
+	maxBytes := h.Media.MaxUploadBytes()
+	if maxBytes > 0 {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes+1)
+	}
+
+	file, _, err := c.Request.FormFile("file")
+	if err != nil {
+		response.Error(c, response.ErrInvalidRequest)
+		return
+	}
+	defer file.Close()
+
+	var reader io.Reader = file
+	if maxBytes > 0 {
+		reader = io.LimitReader(file, maxBytes+1)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		response.Error(c, response.ErrFileTooLarge)
+		return
+	}
+
+	folder := strings.TrimSpace(c.PostForm("folder"))
+	if folder == "" || !uploadFolders[folder] {
+		folder = "uploads"
+	}
+
+	res, err := h.Media.UploadImage(c.Request.Context(), folder, data)
+	if err != nil {
+		h.handleMediaError(c, err)
+		return
+	}
+	response.Created(c, res)
+}
+
 // ── Public: on-the-fly transform ────────────────────────────────────────────
 
 // ServeMedia — GET /media/*key
