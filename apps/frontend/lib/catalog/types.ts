@@ -71,7 +71,7 @@ export type ProductDetail = {
 
 export type Category = {
   id: number
-  name: string
+  title: string
   description?: string
   parent_id?: number
   slug: string

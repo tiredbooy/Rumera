@@ -28,6 +28,10 @@ type CategoryRepository interface {
 	// GetChildren fetches only direct children of a given parent.
 	GetChildren(ctx context.Context, parentID int64) ([]*models.Category, error)
 
+	// GetFeatured fetches categories flagged for homepage display,
+	// ordered for direct rendering into the big-card/small-card layout.
+	GetFeatured(ctx context.Context) ([]*models.Category, error)
+
 	Update(ctx context.Context, id int64, req models.UpdateCategoryReq) (*models.Category, error)
 	Delete(ctx context.Context, id int64) error
 	ExistsByName(ctx context.Context, name string) (bool, error)
@@ -52,15 +56,34 @@ func NewCategoryRepository(db *pgxpool.Pool) CategoryRepository {
 
 func (r *categoryRepository) Create(ctx context.Context, req models.CreateCategoryReq) (*models.Category, error) {
 	const q = `
-		INSERT INTO categories (name, description, parent_id, slug)
-		VALUES (@name, @description, @parent_id, @slug)
+		INSERT INTO categories (title, description, parent_id, slug, image_url, is_featured, card_size, display_order)
+		VALUES (@title, @description, @parent_id, @slug, @image_url, @is_featured, @card_size, @display_order)
 		RETURNING *`
 
+	// Defaults mirror the table's own DEFAULTs so a request that omits these
+	// fields still inserts a valid row instead of NULL-ing a NOT NULL column.
+	isFeatured := false
+	if req.IsFeatured != nil {
+		isFeatured = *req.IsFeatured
+	}
+	cardSize := "small"
+	if req.CardSize != nil {
+		cardSize = *req.CardSize
+	}
+	var displayOrder int16
+	if req.DisplayOrder != nil {
+		displayOrder = *req.DisplayOrder
+	}
+
 	args := pgx.NamedArgs{
-		"name":        req.Name,
-		"description": req.Description,
-		"parent_id":   req.ParentID,
-		"slug":        req.Slug,
+		"title":         req.Title,
+		"description":   req.Description,
+		"parent_id":     req.ParentID,
+		"slug":          req.Slug,
+		"image_url":     req.ImageURL,
+		"is_featured":   isFeatured,
+		"card_size":     cardSize,
+		"display_order": displayOrder,
 	}
 
 	rows, err := r.db.Query(ctx, q, args)
@@ -106,17 +129,22 @@ func (r *categoryRepository) GetAll(ctx context.Context, f models.CategoryFilter
 	args := pgx.NamedArgs{}
 
 	if f.Search != "" {
-		where = append(where, "name ILIKE @search")
+		where = append(where, "title ILIKE @search")
 		args["search"] = "%" + f.Search + "%"
 	}
 	if f.ParentID != nil {
 		where = append(where, "parent_id = @parent_id")
 		args["parent_id"] = *f.ParentID
 	}
+	if f.IsFeatured != nil {
+		where = append(where, "is_featured = @is_featured")
+		args["is_featured"] = *f.IsFeatured
+	}
 
 	allowed := map[string]bool{
-		"created_at": true,
-		"name":       true,
+		"created_at":    true,
+		"title":         true,
+		"display_order": true,
 	}
 	sortBy := "created_at"
 	if allowed[f.SortBy] {
@@ -153,8 +181,9 @@ func (r *categoryRepository) GetAll(ctx context.Context, f models.CategoryFilter
 	for rows.Next() {
 		var c models.Category
 		if err := rows.Scan(
-			&c.ID, &c.Name, &c.Description,
+			&c.ID, &c.Title, &c.Description,
 			&c.ParentID, &c.Slug,
+			&c.ImageURL, &c.IsFeatured, &c.CardSize, &c.DisplayOrder,
 			&c.CreatedAt, &c.UpdatedAt,
 			&total,
 		); err != nil {
@@ -216,7 +245,7 @@ func (r *categoryRepository) GetChildren(ctx context.Context, parentID int64) ([
 	const q = `
 		SELECT * FROM categories
 		WHERE parent_id = $1
-		ORDER BY name ASC`
+		ORDER BY title ASC`
 
 	rows, err := r.db.Query(ctx, q, parentID)
 	if err != nil {
@@ -237,6 +266,37 @@ func (r *categoryRepository) GetChildren(ctx context.Context, parentID int64) ([
 }
 
 // ─────────────────────────────────────────────────────────────
+// GetFeatured
+// Categories flagged for the homepage, ordered so the caller can
+// render directly into the big-card/small-card grid without any
+// extra sorting in the service layer.
+// ─────────────────────────────────────────────────────────────
+
+func (r *categoryRepository) GetFeatured(ctx context.Context) ([]*models.Category, error) {
+	const q = `
+		SELECT * FROM categories
+		WHERE is_featured = TRUE
+		ORDER BY display_order ASC, id ASC`
+
+	rows, err := r.db.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("categoryRepository.GetFeatured: %w", err)
+	}
+	defer rows.Close()
+
+	categories, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.Category])
+	if err != nil {
+		return nil, fmt.Errorf("categoryRepository.GetFeatured scan: %w", err)
+	}
+
+	result := make([]*models.Category, len(categories))
+	for i := range categories {
+		result[i] = &categories[i]
+	}
+	return result, nil
+}
+
+// ─────────────────────────────────────────────────────────────
 // Update  (PATCH — only non-nil fields applied)
 // ─────────────────────────────────────────────────────────────
 
@@ -244,9 +304,9 @@ func (r *categoryRepository) Update(ctx context.Context, id int64, req models.Up
 	sets := []string{}
 	args := pgx.NamedArgs{"id": id}
 
-	if req.Name != nil {
-		sets = append(sets, "name = @name")
-		args["name"] = *req.Name
+	if req.Title != nil {
+		sets = append(sets, "title = @title")
+		args["title"] = *req.Title
 	}
 	if req.Description != nil {
 		sets = append(sets, "description = @description")
@@ -259,6 +319,22 @@ func (r *categoryRepository) Update(ctx context.Context, id int64, req models.Up
 	if req.Slug != nil {
 		sets = append(sets, "slug = @slug")
 		args["slug"] = *req.Slug
+	}
+	if req.ImageURL != nil {
+		sets = append(sets, "image_url = @image_url")
+		args["image_url"] = *req.ImageURL
+	}
+	if req.IsFeatured != nil {
+		sets = append(sets, "is_featured = @is_featured")
+		args["is_featured"] = *req.IsFeatured
+	}
+	if req.CardSize != nil {
+		sets = append(sets, "card_size = @card_size")
+		args["card_size"] = *req.CardSize
+	}
+	if req.DisplayOrder != nil {
+		sets = append(sets, "display_order = @display_order")
+		args["display_order"] = *req.DisplayOrder
 	}
 
 	if len(sets) == 0 {
@@ -312,7 +388,7 @@ func (r *categoryRepository) Delete(ctx context.Context, id int64) error {
 // ─────────────────────────────────────────────────────────────
 
 func (r *categoryRepository) ExistsByName(ctx context.Context, name string) (bool, error) {
-	const q = `SELECT EXISTS(SELECT 1 FROM categories WHERE name = $1)`
+	const q = `SELECT EXISTS(SELECT 1 FROM categories WHERE title = $1)`
 
 	var exists bool
 	if err := r.db.QueryRow(ctx, q, name).Scan(&exists); err != nil {

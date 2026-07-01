@@ -252,21 +252,31 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 	// Project the lightweight list row: joined brand title + cheapest/priciest
 	// active variant price band (mirrors the recommendation card projection).
 	q := fmt.Sprintf(`
-		SELECT
-			p.id, p.title, p.code, p.slug, p.is_active,
-			b.title AS brand,
-			COALESCE(pr.min_price, 0) AS min_price,
-			COALESCE(pr.max_price, 0) AS max_price,
-			COUNT(*) OVER() AS total_count
-		FROM products p
-		LEFT JOIN brands b ON b.id = p.brand_id
-		LEFT JOIN LATERAL (
-			SELECT MIN(price) AS min_price, MAX(price) AS max_price
-			FROM product_variants pv WHERE pv.product_id = p.id AND pv.is_active
-		) pr ON TRUE
-		WHERE %s
-		ORDER BY %s %s
-		LIMIT @limit OFFSET @offset`,
+    SELECT
+        p.id, p.title, p.code, p.slug, p.is_active,
+        b.title AS brand,
+        c.title AS category,
+        COALESCE(pr.min_price, 0) AS min_price,
+        COALESCE(pr.max_price, 0) AS max_price,
+        img.id AS image_id, img.image_url, img.storage_key, img.alt_text, img.width, img.height,
+        COUNT(*) OVER() AS total_count
+    FROM products p
+    LEFT JOIN brands b ON b.id = p.brand_id
+    LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN LATERAL (
+        SELECT MIN(price) AS min_price, MAX(price) AS max_price
+        FROM product_variants pv WHERE pv.product_id = p.id AND pv.is_active
+    ) pr ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT id, image_url, storage_key, alt_text, width, height
+        FROM product_images pi
+        WHERE pi.product_id = p.id
+        ORDER BY pi.is_primary DESC, pi.sort_order ASC
+        LIMIT 1	
+    ) img ON TRUE
+    WHERE %s
+    ORDER BY %s %s
+    LIMIT @limit OFFSET @offset`,
 		strings.Join(where, " AND "), sortBy, order,
 	)
 
@@ -283,13 +293,36 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 
 	for rows.Next() {
 		var it models.ProductListItem
+
+		var (
+			imgID         *int64
+			imgURL        *string
+			imgStorageKey *string
+			imgAltText    *string
+			imgWidth      *int
+			imgHeight     *int
+		)
+
 		if err := rows.Scan(
 			&it.ID, &it.Title, &it.Code, &it.Slug, &it.IsActive,
-			&it.Brand, &it.MinPrice, &it.MaxPrice,
+			&it.Brand, &it.Category, &it.MinPrice, &it.MaxPrice,
+			&imgID, &imgURL, &imgStorageKey, &imgAltText, &imgWidth, &imgHeight,
 			&total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("productRepository.GetAll scan: %w", err)
 		}
+
+		if imgID != nil && imgURL != nil {
+			it.Image = &models.ImageResponse{
+				ID:         *imgID,
+				ImageURL:   *imgURL,
+				StorageKey: imgStorageKey,
+				AltText:    imgAltText,
+				Width:      imgWidth,
+				Height:     imgHeight,
+			}
+		}
+
 		items = append(items, &it)
 	}
 	if err := rows.Err(); err != nil {

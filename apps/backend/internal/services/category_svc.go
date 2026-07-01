@@ -14,6 +14,7 @@ type CategoryService interface {
 	GetAll(ctx context.Context, filter models.CategoryFilter) ([]*models.Category, int64, error)
 	GetTree(ctx context.Context) ([]*models.CategoryTree, error)
 	GetChildren(ctx context.Context, parentID int64) ([]*models.Category, error)
+	GetFeatured(ctx context.Context) ([]*models.Category, error)
 	Update(ctx context.Context, id int64, req models.UpdateCategoryReq) (*models.Category, error)
 	Delete(ctx context.Context, id int64) error
 }
@@ -29,10 +30,10 @@ func NewCategoryService(repo repositories.CategoryRepository) CategoryService {
 // ── Writes ────────────────────────────────────────────────────────────────────
 
 func (s *categoryService) Create(ctx context.Context, req models.CreateCategoryReq) (*models.Category, error) {
-	// Duplicate name guard
-	exists, err := s.repo.ExistsByName(ctx, req.Name)
+	// Duplicate title guard
+	exists, err := s.repo.ExistsByName(ctx, req.Title)
 	if err != nil {
-		return nil, fmt.Errorf("categoryService.Create: check name: %w", err)
+		return nil, fmt.Errorf("categoryService.Create: check title: %w", err)
 	}
 	if exists {
 		return nil, models.ErrAlreadyExists
@@ -49,6 +50,14 @@ func (s *categoryService) Create(ctx context.Context, req models.CreateCategoryR
 		}
 	}
 
+	// Only one "large" homepage card at a time — this is a layout rule, not
+	// a DB constraint, so it's enforced here rather than with a CHECK.
+	if req.CardSize != nil && *req.CardSize == "large" {
+		if err := s.assertNoOtherLargeCard(ctx, nil); err != nil {
+			return nil, err
+		}
+	}
+
 	category, err := s.repo.Create(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("categoryService.Create: %w", err)
@@ -62,11 +71,11 @@ func (s *categoryService) Update(ctx context.Context, id int64, req models.Updat
 		return nil, fmt.Errorf("categoryService.Update: %w", err)
 	}
 
-	// Duplicate name guard (only when name is being changed)
-	if req.Name != nil {
-		exists, err := s.repo.ExistsByName(ctx, *req.Name)
+	// Duplicate title guard (only when title is being changed)
+	if req.Title != nil {
+		exists, err := s.repo.ExistsByName(ctx, *req.Title)
 		if err != nil {
-			return nil, fmt.Errorf("categoryService.Update: check name: %w", err)
+			return nil, fmt.Errorf("categoryService.Update: check title: %w", err)
 		}
 		if exists {
 			return nil, models.ErrAlreadyExists
@@ -85,6 +94,13 @@ func (s *categoryService) Update(ctx context.Context, id int64, req models.Updat
 		}
 		if !parentExists {
 			return nil, models.ErrNotFound
+		}
+	}
+
+	// Only one "large" homepage card at a time.
+	if req.CardSize != nil && *req.CardSize == "large" {
+		if err := s.assertNoOtherLargeCard(ctx, &id); err != nil {
+			return nil, err
 		}
 	}
 
@@ -138,12 +154,42 @@ func (s *categoryService) GetChildren(ctx context.Context, parentID int64) ([]*m
 	return children, nil
 }
 
+func (s *categoryService) GetFeatured(ctx context.Context) ([]*models.Category, error) {
+	categories, err := s.repo.GetFeatured(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("categoryService.GetFeatured: %w", err)
+	}
+	return categories, nil
+}
+
 func (s *categoryService) GetTree(ctx context.Context) ([]*models.CategoryTree, error) {
 	flat, err := s.repo.GetTree(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("categoryService.GetTree: %w", err)
 	}
 	return buildTree(flat), nil
+}
+
+// ── Business rules ────────────────────────────────────────────────────────────
+
+// assertNoOtherLargeCard enforces "at most one large homepage card" at a
+// time. excludeID is nil on create, or the id being updated on update, so a
+// category doesn't conflict with its own existing "large" row.
+func (s *categoryService) assertNoOtherLargeCard(ctx context.Context, excludeID *int64) error {
+	featured, err := s.repo.GetFeatured(ctx)
+	if err != nil {
+		return fmt.Errorf("categoryService: check large card: %w", err)
+	}
+	for _, c := range featured {
+		if c.CardSize != "large" {
+			continue
+		}
+		if excludeID != nil && c.ID == *excludeID {
+			continue
+		}
+		return models.ErrInvalidState
+	}
+	return nil
 }
 
 // ── Tree builder ──────────────────────────────────────────────────────────────
@@ -159,9 +205,10 @@ func buildTree(flat []*models.Category) []*models.CategoryTree {
 	for _, c := range flat {
 		nodes[c.ID] = &models.CategoryTree{
 			ID:          c.ID,
-			Name:        c.Name,
+			Title:       c.Title,
 			Description: c.Description,
 			Slug:        c.Slug,
+			ImageURL:    c.ImageURL,
 		}
 	}
 

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 import type { Category } from "@/lib/catalog/types"
 import {
   AdminApiError,
@@ -29,21 +31,36 @@ import {
   type CreateCategoryInput,
 } from "@/lib/api/admin-client"
 import { CATEGORIES_QUERY_KEY } from "@/lib/admin/category-keys"
+import { ImageUrlInput } from "@/components/admin/ImageUrlInput"
 
-// The shoppable image is part of this screen's spec but not yet on the shared
-// category contract; widen the input/category locally so the form typechecks
-// without touching the shared api-client/types modules.
-type CategoryInput = CreateCategoryInput & { image_url?: string | null }
-type CategoryWithImage = Category & { image_url?: string | null }
+// The shoppable image and homepage-display fields are part of this screen's
+// spec but not yet on the shared category contract; widen the input/category
+// locally so the form typechecks without touching the shared api-client/types
+// modules.
+type CategoryInput = CreateCategoryInput & {
+  image_url?: string | null
+  is_featured?: boolean
+  card_size?: "small" | "large"
+  display_order?: number
+}
+type CategoryWithImage = Category & {
+  image_url?: string | null
+  is_featured?: boolean
+  card_size?: "small" | "large"
+  display_order?: number
+}
 
 // ── Validation (all fields are strings; coerced to the API shape on submit) ────
 
 const schema = z.object({
-  name: z.string().trim().min(1, "نام دسته‌بندی الزامی است").max(255, "حداکثر ۲۵۵ نویسه"),
+  title: z.string().trim().min(1, "نام دسته‌بندی الزامی است").max(255, "حداکثر ۲۵۵ نویسه"),
   slug: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
   parent_id: z.string(),
   description: z.string(),
   image_url: z.string().trim(),
+  is_featured: z.boolean(),
+  card_size: z.enum(["small", "large"]),
+  display_order: z.string().trim(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -64,11 +81,14 @@ function toSlug(value: string): string {
 
 function defaults(category?: CategoryWithImage): FormValues {
   return {
-    name: category?.name ?? "",
+    title: category?.title ?? "",
     slug: category?.slug ?? "",
     parent_id: category?.parent_id ? String(category.parent_id) : "",
     description: category?.description ?? "",
     image_url: category?.image_url ?? "",
+    is_featured: category?.is_featured ?? false,
+    card_size: category?.card_size ?? "small",
+    display_order: category?.display_order != null ? String(category.display_order) : "0",
   }
 }
 
@@ -150,13 +170,16 @@ export function CategoryForm({
     defaultValues: defaults(category),
   })
 
-  const name = watch("name")
+  const title = watch("title")
   const slug = watch("slug")
+  const imageUrl = watch("image_url")
+  const isFeatured = watch("is_featured")
+  const cardSize = watch("card_size")
 
-  // Auto-suggest the slug from the name until the user edits the slug directly.
+  // Auto-suggest the slug from the title until the user edits the slug directly.
   React.useEffect(() => {
     if (!slugTouched) {
-      const suggestion = toSlug(name)
+      const suggestion = toSlug(title)
       if (suggestion) setValue("slug", suggestion, { shouldValidate: false })
     }
   }, [name, slugTouched, setValue])
@@ -181,13 +204,16 @@ export function CategoryForm({
 
   function toPayload(v: FormValues): CategoryInput {
     return {
-      name: v.name.trim(),
+      title: v.title.trim(),
       slug: strOrNull(v.slug),
       parent_id: numOrNull(v.parent_id),
       description: strOrNull(v.description),
       // image_url is part of the UI spec; the backend ignores unknown JSON keys,
       // so it is safe to send and forward-compatible once persistence lands.
       image_url: strOrNull(v.image_url),
+      is_featured: v.is_featured,
+      card_size: v.card_size,
+      display_order: numOrNull(v.display_order) ?? 0,
     }
   }
 
@@ -218,12 +244,12 @@ export function CategoryForm({
           </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Field id="name" label="نام دسته‌بندی" error={errors.name?.message}>
+              <Field id="title" label="نام دسته‌بندی" error={errors.title?.message}>
                 <Input
-                  id="name"
-                  data-testid="category-name"
-                  aria-invalid={!!errors.name}
-                  {...register("name")}
+                  id="title"
+                  data-testid="category-title"
+                  aria-invalid={!!errors.title}
+                  {...register("title")}
                 />
               </Field>
             </div>
@@ -280,21 +306,89 @@ export function CategoryForm({
             </div>
 
             <div className="sm:col-span-2">
-              <Field
-                id="image_url"
-                label="نشانی تصویر"
-                error={errors.image_url?.message}
-                hint="اختیاری — نشانی کامل تصویر شاخص دسته‌بندی."
-              >
-                <Input
-                  id="image_url"
-                  dir="ltr"
-                  placeholder="https://…"
-                  inputMode="url"
-                  {...register("image_url")}
+              <Field id="image_url" label="تصویر دسته‌بندی" error={errors.image_url?.message}>
+                <Controller
+                  control={control}
+                  name="image_url"
+                  render={({ field }) => (
+                    <ImageUrlInput
+                      id="image_url"
+                      value={field.value}
+                      onChange={field.onChange}
+                      error={errors.image_url?.message}
+                    />
+                  )}
                 />
               </Field>
             </div>
+          </div>
+        </fieldset>
+
+        <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
+          <legend className="px-1 font-serif text-base">نمایش در صفحهٔ اصلی</legend>
+          <p className="-mt-0.5 text-xs text-muted-foreground">
+            دسته‌بندی‌های ویژه در صفحهٔ اصلی، در قالب یک کارت بزرگ و چند کارت کوچک نمایش داده می‌شوند.
+          </p>
+
+          <div className="mt-4 flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="is_featured" className="flex flex-col gap-0.5">
+                <span>نمایش در صفحهٔ اصلی</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  این دسته‌بندی به‌عنوان یکی از دسته‌های ویژه نمایش داده شود.
+                </span>
+              </Label>
+              <Controller
+                control={control}
+                name="is_featured"
+                render={({ field }) => (
+                  <Switch
+                    id="is_featured"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    data-testid="category-is-featured"
+                  />
+                )}
+              />
+            </div>
+
+            {isFeatured ? (
+              <div className="grid gap-4 border-t border-dashed pt-4 sm:grid-cols-2">
+                <Field id="card_size" label="اندازهٔ کارت">
+                  <Controller
+                    control={control}
+                    name="card_size"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger id="card_size" className="w-full" data-testid="category-card-size">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="large">بزرگ</SelectItem>
+                          <SelectItem value="small">کوچک</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </Field>
+
+                <Field
+                  id="display_order"
+                  label="ترتیب نمایش"
+                  error={errors.display_order?.message}
+                  hint="عدد کوچک‌تر زودتر نمایش داده می‌شود."
+                >
+                  <Input
+                    id="display_order"
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    aria-invalid={!!errors.display_order}
+                    {...register("display_order")}
+                  />
+                </Field>
+              </div>
+            ) : null}
           </div>
         </fieldset>
       </div>
@@ -303,10 +397,26 @@ export function CategoryForm({
         <div className="lg:sticky lg:top-20 lg:flex lg:flex-col lg:gap-6">
           <div className="border-hairline rounded-2xl bg-card p-6 ring-1 ring-foreground/[0.04]">
             <p className="mb-4 text-xs font-medium text-muted-foreground">پیش‌نمایش</p>
-            <p className="font-serif text-lg">{name || "نام دسته‌بندی"}</p>
+            <div
+              className={cn(
+                "overflow-hidden rounded-xl bg-muted/40 ring-1 ring-foreground/[0.04]",
+                cardSize === "large" ? "aspect-[4/3]" : "aspect-[16/10]"
+              )}
+            >
+              {imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={imageUrl} alt="" className="size-full object-cover" />
+              ) : null}
+            </div>
+            <p className="mt-3 font-serif text-lg">{title || "نام دسته‌بندی"}</p>
             {slug ? (
               <p dir="ltr" className="mt-1 text-start text-xs text-muted-foreground">
                 /{slug}
+              </p>
+            ) : null}
+            {isFeatured ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                کارت {cardSize === "large" ? "بزرگ" : "کوچک"} · صفحهٔ اصلی
               </p>
             ) : null}
           </div>

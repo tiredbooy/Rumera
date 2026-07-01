@@ -57,6 +57,19 @@ func (h *Handler) CategoryTree(c *gin.Context) {
 	response.CachedJSON(c, data, categoryTreeCacheTTL)
 }
 
+// FeaturedCategories — GET /categories/featured
+// Powers the homepage big-card/small-card layout. Not cached yet — add a
+// cache.KeyFeaturedCategories() + h.cachedJSON wrapper later, same pattern
+// as CategoryTree above, once that cache key exists.
+func (h *Handler) FeaturedCategories(c *gin.Context) {
+	cats, err := h.Category.GetFeatured(c.Request.Context())
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.OK(c, toCategoryResponses(cats))
+}
+
 // GetCategory — GET /categories/:id
 func (h *Handler) GetCategory(c *gin.Context) {
 	id, ok := h.paramInt64(c, "id")
@@ -120,11 +133,15 @@ func (h *Handler) DeleteCategory(c *gin.Context) {
 
 func toCategoryResponse(c *models.Category) models.CategoryResponse {
 	return models.CategoryResponse{
-		ID:          c.ID,
-		Name:        c.Name,
-		Description: c.Description,
-		ParentID:    c.ParentID,
-		Slug:        c.Slug,
+		ID:           c.ID,
+		Title:        c.Title,
+		Description:  c.Description,
+		ParentID:     c.ParentID,
+		Slug:         c.Slug,
+		ImageURL:     c.ImageURL,
+		IsFeatured:   c.IsFeatured,
+		CardSize:     c.CardSize,
+		DisplayOrder: c.DisplayOrder,
 	}
 }
 

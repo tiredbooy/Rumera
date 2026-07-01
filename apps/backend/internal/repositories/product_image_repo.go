@@ -17,6 +17,7 @@ import (
 type ProductImageRepository interface {
 	Create(ctx context.Context, img *models.ProductImage) (*models.ProductImage, error)
 	GetByID(ctx context.Context, id int64) (*models.ProductImage, error)
+	// GetProductMainImage(ctx context.Context, productID int64) (*models.ProductImage, error)
 	ListByProduct(ctx context.Context, productID int64) ([]*models.ProductImage, error)
 	NextSortOrder(ctx context.Context, productID int64) (int, error)
 	UpdateAlt(ctx context.Context, id int64, alt *string) (*models.ProductImage, error)
@@ -85,6 +86,20 @@ func (r *productImageRepository) GetByID(ctx context.Context, id int64) (*models
 	}
 	return img, nil
 }
+
+// func (r *productImageRepository) GetProductMainImage(ctx context.Context, productID int64) (*models.ProductImage, error) {
+// 	const q = `
+// 		SELECT id, image_url, storage_key, alt_text FROM product_images 
+// 		WHERE product_id = $1 AND is_primary = $2
+// 	`
+// 	var image *models.ProductImage
+// 	err := r.db.QueryRow(ctx, q, productID, true).Scan(
+// 		&image.ID,
+// 		&image.ImageURL,
+// 		&image.StorageKey,
+// 		&image.AltText,
+// 	)
+// }
 
 func (r *productImageRepository) ListByProduct(ctx context.Context, productID int64) ([]*models.ProductImage, error) {
 	const q = `SELECT ` + productImageCols + `

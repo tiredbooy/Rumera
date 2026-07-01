@@ -306,10 +306,14 @@ export function deleteProductImage(productId: number, imageId: number) {
 // ── Category input shapes (mirror CreateCategoryReq / UpdateCategoryReq) ───────
 
 export type CreateCategoryInput = {
-  name: string
+  title: string
   parent_id?: number | null
   slug?: string | null
   description?: string | null
+  image_url?: string | null
+  is_featured?: boolean
+  card_size?: "small" | "large"
+  display_order?: number
 }
 
 export type UpdateCategoryInput = Partial<CreateCategoryInput>
