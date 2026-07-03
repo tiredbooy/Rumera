@@ -114,10 +114,13 @@ type UserAdminResponse struct {
 
 type UserListItem struct {
 	UserID    uuid.UUID `json:"user_id"`
-	FirstName *string   `json:"first_name,omitempty"`
-	LastName  *string   `json:"last_name,omitempty"`
+	// FirstName *string   `json:"first_name,omitempty"`
+	// LastName  *string   `json:"last_name,omitempty"`
+	FullName  string    `json:"full_name"`
 	Email     string    `json:"email"`
+	Phone     *string   `json:"phone,omitempty"`
 	Role      string    `json:"role"`
+	TotalOrders int       `json:"total_orders"`
 	IsActive  bool      `json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 }

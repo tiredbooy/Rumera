@@ -85,6 +85,7 @@ func registerPublicRoutes(v1 *gin.RouterGroup, h *handlers.Handler) {
 
 	// Categories
 	v1.GET("/categories", h.ListCategories)
+	v1.GET("/featured-categories", h.FeaturedCategories)
 	v1.GET("/categories/tree", h.CategoryTree)
 	v1.GET("/categories/:id", h.GetCategory)
 	v1.GET("/categories/:id/children", h.CategoryChildren)

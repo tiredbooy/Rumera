@@ -188,46 +188,6 @@ export function getOrder(id: string) {
 /*  Customers                                                                  */
 /* -------------------------------------------------------------------------- */
 
-export type AdminCustomer = {
-  id: string
-  name: string
-  email: string
-  phone: string
-  ordersCount: number
-  ltv: number
-  joined: string
-  lastSeen: string
-  status: CustomerStatus
-  tier: LoyaltyTier
-  walletBalance: number
-  city: string
-}
-
-export const adminCustomers: AdminCustomer[] = [
-  { id: "u1", name: "نیلوفر مرادی", email: "niloofar@example.com", phone: "۰۹۱۲۱۲۳۴۵۶۷", ordersCount: 12, ltv: 142_000_000, joined: "۱۴۰۱/۰۸/۱۲", lastSeen: "امروز", status: "active", tier: "platinum", walletBalance: 4_200_000, city: "تهران" },
-  { id: "u2", name: "آرش کریمی", email: "arash@example.com", phone: "۰۹۱۲۲۲۲۳۳۴۴", ordersCount: 5, ltv: 38_400_000, joined: "۱۴۰۲/۰۲/۰۳", lastSeen: "۲ روز پیش", status: "active", tier: "gold", walletBalance: 0, city: "اصفهان" },
-  { id: "u5", name: "سارا احمدی", email: "sara@example.com", phone: "۰۹۳۳۴۴۴۵۵۶۶", ordersCount: 8, ltv: 96_300_000, joined: "۱۴۰۱/۱۱/۲۵", lastSeen: "دیروز", status: "active", tier: "gold", walletBalance: 1_250_000, city: "شیراز" },
-  { id: "u6", name: "بهنام رضایی", email: "behnam@example.com", phone: "۰۹۰۲۱۱۱۲۲۳۳", ordersCount: 2, ltv: 9_600_000, joined: "۱۴۰۳/۰۱/۱۰", lastSeen: "۱ هفته پیش", status: "banned", tier: "bronze", walletBalance: 0, city: "تبریز" },
-  { id: "u7", name: "مریم حسینی", email: "maryam@example.com", phone: "۰۹۱۹۸۷۶۵۴۳۲", ordersCount: 19, ltv: 211_500_000, joined: "۱۴۰۰/۰۵/۱۸", lastSeen: "امروز", status: "active", tier: "platinum", walletBalance: 7_800_000, city: "تهران" },
-  { id: "u8", name: "کیان عباسی", email: "kian@example.com", phone: "۰۹۳۵۵۵۵۶۶۷۷", ordersCount: 3, ltv: 22_100_000, joined: "۱۴۰۲/۰۹/۰۲", lastSeen: "۳ روز پیش", status: "active", tier: "silver", walletBalance: 500_000, city: "مشهد" },
-  { id: "u9", name: "رضا نوری", email: "reza@example.com", phone: "۰۹۱۲۳۳۳۴۴۵۵", ordersCount: 6, ltv: 51_700_000, joined: "۱۴۰۲/۰۴/۲۲", lastSeen: "دیروز", status: "active", tier: "gold", walletBalance: 0, city: "کرج" },
-  { id: "u10", name: "الهام صادقی", email: "elham@example.com", phone: "۰۹۱۰۱۲۳۴۵۶۷", ordersCount: 1, ltv: 4_800_000, joined: "۱۴۰۳/۰۳/۰۱", lastSeen: "۵ روز پیش", status: "active", tier: "bronze", walletBalance: 0, city: "تهران" },
-]
-
-export const TIER_LABELS: Record<LoyaltyTier, string> = {
-  bronze: "برنزی",
-  silver: "نقره‌ای",
-  gold: "طلایی",
-  platinum: "پلاتینی",
-}
-
-export function getCustomer(id: string) {
-  return adminCustomers.find((c) => c.id === id)
-}
-
-export function ordersForCustomer(customerId: string) {
-  return adminOrders.filter((o) => o.customerId === customerId)
-}
 
 /* -------------------------------------------------------------------------- */
 /*  Inventory                                                                  */

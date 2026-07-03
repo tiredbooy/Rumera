@@ -6,7 +6,7 @@
  * Builders return plain objects; render them with <JsonLd /> (components/json-ld).
  */
 import { siteConfig, absoluteUrl } from "@/lib/site"
-import { categoryFa, type Product } from "@/lib/products"
+import {  type Product } from "@/lib/products"
 import type { ProductDetail, ProductListItem } from "@/lib/catalog/types"
 
 export function organizationLd() {
@@ -46,7 +46,6 @@ export function productLd(p: Product) {
     name: p.name,
     description: p.note,
     brand: { "@type": "Brand", name: p.maker },
-    category: categoryFa[p.category],
     url: absoluteUrl(`/products/${p.slug}`),
     aggregateRating: {
       "@type": "AggregateRating",

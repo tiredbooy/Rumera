@@ -20,11 +20,10 @@ import { BrandMarquee } from "@/components/brand-marquee"
 import { HeroCarousel } from "@/components/home/hero-carousel"
 import { ForYouRail } from "@/components/home/for-you-rail"
 import { RecommendationRail } from "@/components/catalog/recommendation-rail"
-import { HomeStructuredData } from "@/components/structured-data"
+// import { HomeStructuredData } from "@/components/structured-data"
 import { getHeroSlides } from "@/lib/home/hero"
 import { getHomeCategories } from "@/lib/home/categories"
 import { categoryIconFor } from "@/lib/home/category-icons"
-import { getHomeFeatured } from "@/lib/home/featured"
 import { getTrending } from "@/lib/catalog/recommendations"
 import { getFeaturedBrands } from "@/lib/home/brands"
 
@@ -55,11 +54,10 @@ const perks = [
 ]
 
 export default async function Home() {
-  const [heroSlides, trending, homeCategories, featured, brands] = await Promise.all([
+  const [heroSlides, trending, homeCategories, brands] = await Promise.all([
     getHeroSlides(),
     getTrending({ limit: 8 }),
     getHomeCategories(),
-    getHomeFeatured(8),
     getFeaturedBrands(),
   ])
 
@@ -69,13 +67,13 @@ export default async function Home() {
     { key: "all", label: "همه", href: "/products" },
     ...homeCategories
       .slice(0, 4)
-      .map((c) => ({ key: String(c.id), label: c.name, href: `/categories/${c.slug}` })),
+      .map((c) => ({ key: String(c.id), label: c.title, href: `/categories/${c.slug}` })),
   ]
 
   return (
     <>
       {/* SEO: Organization + WebSite + ItemList rich results (zero client JS) */}
-      <HomeStructuredData />
+      {/* <HomeStructuredData /> */}
 
       {/* ───────────────────────── Hero (dynamic slider) ───────────────────────── */}
       <HeroCarousel slides={heroSlides} />
@@ -146,9 +144,9 @@ export default async function Home() {
                   <div className="absolute inset-0 transition-transform duration-700 ease-out group-hover/cat:scale-105">
                     <SmartImage
                       src={`/images/categories/${cat.slug}.jpg`}
-                      alt={cat.name}
+                      alt={cat.title}
                       sizes={isHero ? "(max-width: 1024px) 100vw, 50vw" : "(max-width: 1024px) 50vw, 25vw"}
-                      monogram={cat.name.charAt(0)}
+                      monogram={cat.title.charAt(0)}
                     />
                   </div>
                   {/* Legibility scrim — deepens slightly on hover */}
@@ -161,10 +159,10 @@ export default async function Home() {
 
                   <div className="relative p-4 text-white sm:p-5">
                     <h3 className={`font-serif ${isHero ? "text-2xl sm:text-4xl" : "text-xl sm:text-2xl"}`}>
-                      {cat.name}
+                      {cat.title}
                     </h3>
                     <p className="mt-1 line-clamp-1 text-xs text-white/75 sm:text-sm">
-                      {cat.tagline}
+                      {cat.description}
                     </p>
                     <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white ring-1 ring-white/20 backdrop-blur-md transition-colors group-hover/cat:bg-primary group-hover/cat:text-primary-foreground group-hover/cat:ring-primary sm:text-sm">
                       خرید
@@ -200,13 +198,13 @@ export default async function Home() {
           </div>
         </Reveal>
 
-        <div className="mt-10 grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4">
+        {/* <div className="mt-10 grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4">
           {featured.map((product, i) => (
             <Reveal key={product.id} delay={Math.min(i, 4) * 0.05} y={20}>
               <ProductCard product={product} />
             </Reveal>
           ))}
-        </div>
+        </div> */}
 
         <div className="mt-10 flex justify-center sm:hidden">
           <Button variant="outline" asChild>

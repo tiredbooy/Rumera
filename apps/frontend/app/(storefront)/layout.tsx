@@ -8,7 +8,8 @@ import { SiteFooter } from "@/components/site-footer"
 import { AgeGate } from "@/components/age-gate"
 import { ReferralTracker } from "@/components/referral/referral-tracker"
 import { listCategories } from "@/lib/catalog/categories"
-import { categories as sampleCategories, categoryFa } from "@/lib/products"
+import { getCategoryTree } from "@/components/categories"
+import { getHomeCategories } from "@/lib/home/categories"
 
 export default async function StorefrontLayout({
   children,
@@ -20,10 +21,7 @@ export default async function StorefrontLayout({
   // never empty (error-safe, mirrors the rest of the storefront).
   const live = await listCategories()
   const topLevel = live.filter((c) => c.parent_id == null)
-  const categories: HeaderCategory[] =
-    topLevel.length > 0
-      ? topLevel.slice(0, 8).map((c) => ({ name: c.name, slug: c.slug }))
-      : sampleCategories.map((c) => ({ name: categoryFa[c.name], slug: c.name.toLowerCase() }))
+  const categories = await getHomeCategories()
 
   return (
     <>
