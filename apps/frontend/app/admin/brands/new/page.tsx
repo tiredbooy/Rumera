@@ -1,14 +1,14 @@
-import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth/session"
-import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { BrandForm } from "@/components/admin/brand-form"
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { BrandForm } from "@/features/admin/brands/components/BrandForm";
 
 export default async function AdminNewBrandPage() {
-  await requirePermission(PERMISSIONS.PRODUCTS_WRITE)
+  await requirePermission(PERMISSIONS.PRODUCTS_WRITE);
 
   return (
     <>
@@ -25,5 +25,5 @@ export default async function AdminNewBrandPage() {
       />
       <BrandForm mode="create" submitLabel="افزودن برند" />
     </>
-  )
+  );
 }

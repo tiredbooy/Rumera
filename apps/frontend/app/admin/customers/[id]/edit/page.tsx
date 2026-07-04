@@ -1,33 +1,33 @@
-import Link from "next/link"
-import { ArrowRight, UserX } from "lucide-react"
+import Link from "next/link";
+import { ArrowRight, UserX } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth/session"
-import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { serverApi, ApiError } from "@/lib/api/client"
-import type { UserAdminResponse } from "@/lib/api/admin-client"
-import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { UserEditForm } from "@/components/admin/user-edit-form"
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { serverApi, ApiError } from "@/lib/api/client";
+import type { UserAdminResponse } from "@/lib/api/admin-client";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { UserEditForm } from "@/features/admin/customers/components/UserEditForm";
 
 export default async function AdminEditUserPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }) {
-  const session = await requirePermission(PERMISSIONS.CUSTOMERS_WRITE)
-  const { id } = await params
+  const session = await requirePermission(PERMISSIONS.CUSTOMERS_WRITE);
+  const { id } = await params;
 
-  let user: UserAdminResponse | null = null
-  let notFoundUser = false
+  let user: UserAdminResponse | null = null;
+  let notFoundUser = false;
   try {
-    user = await serverApi<UserAdminResponse>(`/admin/users/${id}`)
+    user = await serverApi<UserAdminResponse>(`/admin/users/${id}`);
   } catch (e) {
     // GET /admin/users/:id filters to active users, so a deactivated account
     // resolves as 404 here. Surface a friendly state instead of a hard 404 page.
     if (e instanceof ApiError && e.status === 404) {
-      notFoundUser = true
+      notFoundUser = true;
     } else {
-      throw e
+      throw e;
     }
   }
 
@@ -37,7 +37,7 @@ export default async function AdminEditUserPage({
         <ArrowRight className="size-4" /> بازگشت
       </Link>
     </Button>
-  )
+  );
 
   if (notFoundUser || !user) {
     return (
@@ -56,19 +56,22 @@ export default async function AdminEditUserPage({
           </span>
           <p className="font-serif text-lg">این کاربر یافت نشد</p>
           <p className="max-w-sm text-sm text-muted-foreground">
-            ممکن است حساب حذف شده یا غیرفعال شده باشد. حساب‌های غیرفعال در این صفحه
-            قابل مشاهده نیستند.
+            ممکن است حساب حذف شده یا غیرفعال شده باشد. حساب‌های غیرفعال در این
+            صفحه قابل مشاهده نیستند.
           </p>
           <Button asChild className="mt-2">
             <Link href="/admin/customers">بازگشت به فهرست مشتریان</Link>
           </Button>
         </div>
       </>
-    )
+    );
   }
 
-  const isSelf = !!session.user?.id && session.user.id === user.user_id
-  const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ").trim()
+  const isSelf = !!session.user?.id && session.user.id === user.user_id;
+  const fullName = [user.first_name, user.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
 
   return (
     <>
@@ -78,7 +81,10 @@ export default async function AdminEditUserPage({
             className="flex items-center gap-1.5 text-xs text-muted-foreground"
             aria-label="مسیر"
           >
-            <Link href="/admin/customers" className="transition-colors hover:text-foreground">
+            <Link
+              href="/admin/customers"
+              className="transition-colors hover:text-foreground"
+            >
               مشتریان
             </Link>
             <span aria-hidden>/</span>
@@ -91,5 +97,5 @@ export default async function AdminEditUserPage({
       />
       <UserEditForm user={user} isSelf={isSelf} />
     </>
-  )
+  );
 }

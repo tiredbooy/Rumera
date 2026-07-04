@@ -7,7 +7,7 @@ import { formatPrice, faNum } from "@/lib/products"
 import { inventorySummary } from "@/lib/admin/data"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { StatCard } from "@/components/dashboard/stat-card"
-import { InventoryTable } from "@/components/admin/inventory-table"
+import { InventoryTable } from "@/features/admin/inventory/components/InventoryTable"
 
 export default async function AdminInventoryPage() {
   const session = await requirePermission(PERMISSIONS.INVENTORY_READ)

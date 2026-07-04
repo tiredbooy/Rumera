@@ -1,44 +1,46 @@
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import { ArrowRight } from "lucide-react"
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowRight } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth/session"
-import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { serverApi, ApiError } from "@/lib/api/client"
-import type { Paginated } from "@/lib/catalog/types"
-import type { RecipeDetail } from "@/lib/recipes"
-import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { RecipeForm } from "@/components/admin/recipe-form"
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { serverApi, ApiError } from "@/lib/api/client";
+import type { Paginated } from "@/lib/catalog/types";
+import type { RecipeDetail } from "@/lib/recipes";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { RecipeForm } from "@/features/admin/recipes/components/RecipeForm";
 
-type AdminTag = { id: number; title: string }
+type AdminTag = { id: number; title: string };
 
 async function loadTags(): Promise<AdminTag[]> {
   try {
-    return (await serverApi<Paginated<AdminTag>>("/tags?limit=200")).results ?? []
+    return (
+      (await serverApi<Paginated<AdminTag>>("/tags?limit=200")).results ?? []
+    );
   } catch {
-    return []
+    return [];
   }
 }
 
 export default async function AdminEditRecipePage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }) {
-  await requirePermission(PERMISSIONS.RECIPES_READ)
-  const { id } = await params
+  await requirePermission(PERMISSIONS.RECIPES_READ);
+  const { id } = await params;
 
-  let recipe: RecipeDetail
+  let recipe: RecipeDetail;
   try {
     // Admin detail is hydrated with ingredients/products/tags and includes drafts.
-    recipe = await serverApi<RecipeDetail>(`/admin/recipes/${id}`)
+    recipe = await serverApi<RecipeDetail>(`/admin/recipes/${id}`);
   } catch (e) {
-    if (e instanceof ApiError && e.status === 404) notFound()
-    throw e
+    if (e instanceof ApiError && e.status === 404) notFound();
+    throw e;
   }
 
-  const tags = await loadTags()
+  const tags = await loadTags();
 
   return (
     <>
@@ -53,7 +55,12 @@ export default async function AdminEditRecipePage({
           </Button>
         }
       />
-      <RecipeForm mode="edit" recipe={recipe} tags={tags} submitLabel="ذخیرهٔ تغییرات" />
+      <RecipeForm
+        mode="edit"
+        recipe={recipe}
+        tags={tags}
+        submitLabel="ذخیرهٔ تغییرات"
+      />
     </>
-  )
+  );
 }

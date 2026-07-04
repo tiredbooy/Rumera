@@ -1,28 +1,30 @@
-import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth/session"
-import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { serverApi } from "@/lib/api/client"
-import type { Paginated } from "@/lib/catalog/types"
-import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { RecipeForm } from "@/components/admin/recipe-form"
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { serverApi } from "@/lib/api/client";
+import type { Paginated } from "@/lib/catalog/types";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { RecipeForm } from "@/features/admin/recipes/components/RecipeForm";
 
-type AdminTag = { id: number; title: string }
+type AdminTag = { id: number; title: string };
 
 /** Tag lookups for the form. Empty on failure so the form still renders. */
 async function loadTags(): Promise<AdminTag[]> {
   try {
-    return (await serverApi<Paginated<AdminTag>>("/tags?limit=200")).results ?? []
+    return (
+      (await serverApi<Paginated<AdminTag>>("/tags?limit=200")).results ?? []
+    );
   } catch {
-    return []
+    return [];
   }
 }
 
 export default async function AdminNewRecipePage() {
-  await requirePermission(PERMISSIONS.RECIPES_WRITE)
-  const tags = await loadTags()
+  await requirePermission(PERMISSIONS.RECIPES_WRITE);
+  const tags = await loadTags();
 
   return (
     <>
@@ -39,5 +41,5 @@ export default async function AdminNewRecipePage() {
       />
       <RecipeForm mode="create" tags={tags} submitLabel="افزودن دستور" />
     </>
-  )
+  );
 }

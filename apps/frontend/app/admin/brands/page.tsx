@@ -1,18 +1,18 @@
-import Link from "next/link"
-import { Plus } from "lucide-react"
+import Link from "next/link";
+import { Plus } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth/session"
-import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { can } from "@/lib/rbac/can"
-import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { BrandsTable } from "@/components/admin/brands-table"
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { can } from "@/lib/rbac/can";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { BrandsTable } from "@/features/admin/brands/components/BrandsTable";
 
 export default async function AdminBrandsPage() {
   // Brands sit under the catalogue; gated by the same key as their nav entry.
-  const session = await requirePermission(PERMISSIONS.PRODUCTS_READ)
-  const canWrite = can(session, PERMISSIONS.PRODUCTS_WRITE)
-  const canDelete = can(session, PERMISSIONS.PRODUCTS_DELETE)
+  const session = await requirePermission(PERMISSIONS.PRODUCTS_READ);
+  const canWrite = can(session, PERMISSIONS.PRODUCTS_WRITE);
+  const canDelete = can(session, PERMISSIONS.PRODUCTS_DELETE);
 
   return (
     <>
@@ -32,5 +32,5 @@ export default async function AdminBrandsPage() {
 
       <BrandsTable canWrite={canWrite} canDelete={canDelete} />
     </>
-  )
+  );
 }

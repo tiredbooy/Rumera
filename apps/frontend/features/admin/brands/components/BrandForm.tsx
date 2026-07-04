@@ -1,19 +1,19 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useRouter } from "next/navigation"
-import Image from "next/image"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { toast } from "sonner"
-import { useQueryClient } from "@tanstack/react-query"
-import { Loader2, Trash2, ImageOff, Tag } from "lucide-react"
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2, Trash2, ImageOff, Tag } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,33 +24,39 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { cn } from "@/lib/utils"
-import { faNum } from "@/lib/products"
-import type { Brand } from "@/lib/catalog/types"
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
+import { faNum } from "@/lib/products";
+import type { Brand } from "@/lib/catalog/types";
 import {
   AdminApiError,
   createBrand,
   updateBrand,
   deleteBrand,
   type CreateBrandInput,
-} from "@/lib/api/admin-client"
-import { BRANDS_QUERY_KEY } from "@/components/admin/brands-table"
+} from "@/lib/api/admin-client";
+import { BRANDS_QUERY_KEY } from "@/features/admin/brands/components/BrandsTable";
 
 // ── Validation (string fields coerced to the API shape on submit) ─────────────
 
-const currentYear = new Date().getFullYear()
+const currentYear = new Date().getFullYear();
 
 const schema = z.object({
-  title: z.string().trim().min(1, "نام برند الزامی است").max(255, "حداکثر ۲۵۵ نویسه"),
+  title: z
+    .string()
+    .trim()
+    .min(1, "نام برند الزامی است")
+    .max(255, "حداکثر ۲۵۵ نویسه"),
   country: z.string().trim().max(80, "حداکثر ۸۰ نویسه"),
   founded_year: z
     .string()
     .refine(
       (v) =>
         v.trim() === "" ||
-        (/^\d+$/.test(v.trim()) && Number(v) >= 1000 && Number(v) <= currentYear),
-      { message: `سالی بین ۱۰۰۰ تا ${faNum(currentYear)} وارد کنید` }
+        (/^\d+$/.test(v.trim()) &&
+          Number(v) >= 1000 &&
+          Number(v) <= currentYear),
+      { message: `سالی بین ۱۰۰۰ تا ${faNum(currentYear)} وارد کنید` },
     ),
   image_url: z
     .string()
@@ -59,12 +65,12 @@ const schema = z.object({
       message: "نشانی تصویر باید یک URL معتبر باشد (با http یا https)",
     }),
   description: z.string(),
-})
+});
 
-type FormValues = z.infer<typeof schema>
+type FormValues = z.infer<typeof schema>;
 
-const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null)
-const numOrNull = (v?: string) => (v && v.trim() !== "" ? Number(v) : null)
+const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null);
+const numOrNull = (v?: string) => (v && v.trim() !== "" ? Number(v) : null);
 
 function defaults(brand?: Brand): FormValues {
   return {
@@ -73,7 +79,7 @@ function defaults(brand?: Brand): FormValues {
     founded_year: brand?.founded_year != null ? String(brand.founded_year) : "",
     image_url: brand?.image_url ?? "",
     description: brand?.description ?? "",
-  }
+  };
 }
 
 // ── Layout helpers (mirror product-form) ──────────────────────────────────────
@@ -83,9 +89,9 @@ function Section({
   description,
   children,
 }: {
-  title: string
-  description?: string
-  children: React.ReactNode
+  title: string;
+  description?: string;
+  children: React.ReactNode;
 }) {
   return (
     <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
@@ -95,7 +101,7 @@ function Section({
       ) : null}
       <div className="mt-4 grid gap-4 sm:grid-cols-2">{children}</div>
     </fieldset>
-  )
+  );
 }
 
 function Field({
@@ -106,12 +112,12 @@ function Field({
   children,
   full,
 }: {
-  id: string
-  label: string
-  error?: string
-  hint?: string
-  children: React.ReactNode
-  full?: boolean
+  id: string;
+  label: string;
+  error?: string;
+  hint?: string;
+  children: React.ReactNode;
+  full?: boolean;
 }) {
   return (
     <div className={cn("flex flex-col gap-2", full && "sm:col-span-2")}>
@@ -123,21 +129,21 @@ function Field({
         <p className="text-xs text-muted-foreground">{hint}</p>
       ) : null}
     </div>
-  )
+  );
 }
 
 // ── Live logo preview ─────────────────────────────────────────────────────────
 
 function LogoPreview({ url, title }: { url: string; title: string }) {
-  const [failed, setFailed] = React.useState(false)
-  const [lastUrl, setLastUrl] = React.useState(url)
-  const trimmed = url.trim()
-  const valid = /^https?:\/\/.+/i.test(trimmed)
+  const [failed, setFailed] = React.useState(false);
+  const [lastUrl, setLastUrl] = React.useState(url);
+  const trimmed = url.trim();
+  const valid = /^https?:\/\/.+/i.test(trimmed);
 
   // Reset the error state when the URL changes (adjust-state-during-render).
   if (url !== lastUrl) {
-    setLastUrl(url)
-    setFailed(false)
+    setLastUrl(url);
+    setFailed(false);
   }
 
   return (
@@ -163,11 +169,13 @@ function LogoPreview({ url, title }: { url: string; title: string }) {
           ) : (
             <Tag className="size-6 opacity-70" aria-hidden />
           )}
-          <span className="text-[0.65rem]">{failed ? "بارگذاری نشد" : "بدون لوگو"}</span>
+          <span className="text-[0.65rem]">
+            {failed ? "بارگذاری نشد" : "بدون لوگو"}
+          </span>
         </span>
       )}
     </span>
-  )
+  );
 }
 
 export function BrandForm({
@@ -175,13 +183,13 @@ export function BrandForm({
   brand,
   submitLabel = "ذخیره",
 }: {
-  mode: "create" | "edit"
-  brand?: Brand
-  submitLabel?: string
+  mode: "create" | "edit";
+  brand?: Brand;
+  submitLabel?: string;
 }) {
-  const router = useRouter()
-  const queryClient = useQueryClient()
-  const [isDeleting, setIsDeleting] = React.useState(false)
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const {
     register,
@@ -192,10 +200,10 @@ export function BrandForm({
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: defaults(brand),
-  })
+  });
 
-  const title = watch("title")
-  const imageUrl = watch("image_url")
+  const title = watch("title");
+  const imageUrl = watch("image_url");
 
   function toPayload(v: FormValues): CreateBrandInput {
     return {
@@ -204,62 +212,62 @@ export function BrandForm({
       founded_year: numOrNull(v.founded_year),
       image_url: strOrNull(v.image_url),
       description: strOrNull(v.description),
-    }
+    };
   }
 
   function applyServerErrors(e: unknown) {
     if (e instanceof AdminApiError) {
       if (e.fields) {
         for (const [key, msgs] of Object.entries(e.fields)) {
-          setError(key as keyof FormValues, { message: msgs[0] })
+          setError(key as keyof FormValues, { message: msgs[0] });
         }
       }
-      toast.error(e.message)
+      toast.error(e.message);
     } else {
-      toast.error("خطای غیرمنتظره رخ داد")
+      toast.error("خطای غیرمنتظره رخ داد");
     }
   }
 
   async function onSubmit(v: FormValues) {
     try {
       if (mode === "create") {
-        await createBrand(toPayload(v))
-        await queryClient.invalidateQueries({ queryKey: BRANDS_QUERY_KEY })
-        toast.success("برند ایجاد شد")
-        router.push("/admin/brands")
-        router.refresh()
+        await createBrand(toPayload(v));
+        await queryClient.invalidateQueries({ queryKey: BRANDS_QUERY_KEY });
+        toast.success("برند ایجاد شد");
+        router.push("/admin/brands");
+        router.refresh();
       } else if (brand) {
-        await updateBrand(brand.id, toPayload(v))
-        await queryClient.invalidateQueries({ queryKey: BRANDS_QUERY_KEY })
-        toast.success("تغییرات ذخیره شد")
-        router.push("/admin/brands")
-        router.refresh()
+        await updateBrand(brand.id, toPayload(v));
+        await queryClient.invalidateQueries({ queryKey: BRANDS_QUERY_KEY });
+        toast.success("تغییرات ذخیره شد");
+        router.push("/admin/brands");
+        router.refresh();
       }
     } catch (e) {
-      applyServerErrors(e)
+      applyServerErrors(e);
     }
   }
 
   async function onDelete() {
-    if (!brand) return
-    setIsDeleting(true)
+    if (!brand) return;
+    setIsDeleting(true);
     try {
-      await deleteBrand(brand.id)
-      await queryClient.invalidateQueries({ queryKey: BRANDS_QUERY_KEY })
-      toast.success("برند حذف شد")
-      router.push("/admin/brands")
-      router.refresh()
+      await deleteBrand(brand.id);
+      await queryClient.invalidateQueries({ queryKey: BRANDS_QUERY_KEY });
+      toast.success("برند حذف شد");
+      router.push("/admin/brands");
+      router.refresh();
     } catch (e) {
-      setIsDeleting(false)
+      setIsDeleting(false);
       if (e instanceof AdminApiError) {
-        toast.error(e.message)
+        toast.error(e.message);
       } else {
-        toast.error("حذف برند ناموفق بود")
+        toast.error("حذف برند ناموفق بود");
       }
     }
   }
 
-  const busy = isSubmitting || isDeleting
+  const busy = isSubmitting || isDeleting;
 
   return (
     <form
@@ -342,8 +350,8 @@ export function BrandForm({
               حذف برند
             </legend>
             <p className="mt-2 text-xs text-muted-foreground">
-              با حذف برند، ارتباط آن از محصولات برداشته می‌شود. این عمل قابل بازگشت
-              نیست.
+              با حذف برند، ارتباط آن از محصولات برداشته می‌شود. این عمل قابل
+              بازگشت نیست.
             </p>
             <div className="mt-4">
               <AlertDialog>
@@ -361,8 +369,8 @@ export function BrandForm({
                   <AlertDialogHeader>
                     <AlertDialogTitle>حذف برند</AlertDialogTitle>
                     <AlertDialogDescription>
-                      آیا از حذف «{brand.title}» مطمئن هستید؟ این عمل قابل بازگشت
-                      نیست.
+                      آیا از حذف «{brand.title}» مطمئن هستید؟ این عمل قابل
+                      بازگشت نیست.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -371,8 +379,8 @@ export function BrandForm({
                     </AlertDialogCancel>
                     <AlertDialogAction
                       onClick={(e) => {
-                        e.preventDefault()
-                        void onDelete()
+                        e.preventDefault();
+                        void onDelete();
                       }}
                       disabled={isDeleting}
                       className="bg-destructive text-white hover:bg-destructive/90"
@@ -405,7 +413,9 @@ export function BrandForm({
 
           <div className="flex flex-col gap-2">
             <Button type="submit" size="lg" disabled={busy}>
-              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+              {isSubmitting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
               {submitLabel}
             </Button>
             <Button
@@ -421,5 +431,5 @@ export function BrandForm({
         </div>
       </aside>
     </form>
-  )
+  );
 }

@@ -1,26 +1,26 @@
-import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth/session"
-import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { serverApi } from "@/lib/api/client"
-import type { CategoryTreeNode } from "@/lib/api/admin-client"
-import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { CategoryForm } from "@/components/admin/category-form"
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { serverApi } from "@/lib/api/client";
+import type { CategoryTreeNode } from "@/lib/api/admin-client";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { CategoryForm } from "@/features/admin/categories/components/CategoryForm";
 
 /** Category tree for the parent picker. Empty on failure so the form still renders. */
 async function loadTree(): Promise<CategoryTreeNode[]> {
   try {
-    return (await serverApi<CategoryTreeNode[]>("/categories/tree")) ?? []
+    return (await serverApi<CategoryTreeNode[]>("/categories/tree")) ?? [];
   } catch {
-    return []
+    return [];
   }
 }
 
 export default async function AdminNewCategoryPage() {
-  await requirePermission(PERMISSIONS.PRODUCTS_WRITE)
-  const tree = await loadTree()
+  await requirePermission(PERMISSIONS.PRODUCTS_WRITE);
+  const tree = await loadTree();
 
   return (
     <>
@@ -37,5 +37,5 @@ export default async function AdminNewCategoryPage() {
       />
       <CategoryForm mode="create" tree={tree} submitLabel="افزودن دسته‌بندی" />
     </>
-  )
+  );
 }

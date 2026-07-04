@@ -1,14 +1,14 @@
-import { Suspense } from "react"
-import Link from "next/link"
-import { Users, AlertCircle } from "lucide-react"
+import { Suspense } from "react";
+import Link from "next/link";
+import { Users, AlertCircle } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth/session"
-import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { serverApi, ApiError } from "@/lib/api/client"
-import type { UserListItem } from "@/lib/api/admin-client"
-import type { Paginated } from "@/lib/catalog/types"
-import { faNum } from "@/lib/products"
-import { faDate } from "@/lib/catalog/labels"
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { serverApi, ApiError } from "@/lib/api/client";
+import type { UserListItem } from "@/lib/api/admin-client";
+import type { Paginated } from "@/lib/catalog/types";
+import { faNum } from "@/lib/products";
+import { faDate } from "@/lib/catalog/labels";
 import {
   Table,
   TableBody,
@@ -16,38 +16,44 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { UserStatusBadge, UserRoleBadge } from "@/components/admin/status-badge"
-import { UsersSearch, UsersListSkeleton } from "@/components/admin/users-list"
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/page-header";
+import {
+  UserStatusBadge,
+  UserRoleBadge,
+} from "@/components/admin/status-badge";
+import {
+  UsersSearch,
+  UsersListSkeleton,
+} from "@/features/admin/customers/components/UsersList";
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 20;
 
-type SearchParams = { q?: string | string[]; page?: string | string[] }
+type SearchParams = { q?: string | string[]; page?: string | string[] };
 
 function first(value: string | string[] | undefined): string {
-  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "")
+  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
 
 /** Builds an href to this page preserving the search query, swapping the page. */
 function pageHref(query: string, page: number): string {
-  const params = new URLSearchParams()
-  if (query) params.set("q", query)
-  if (page > 1) params.set("page", String(page))
-  const qs = params.toString()
-  return qs ? `/admin/customers?${qs}` : "/admin/customers"
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (page > 1) params.set("page", String(page));
+  const qs = params.toString();
+  return qs ? `/admin/customers?${qs}` : "/admin/customers";
 }
 
 export default async function AdminCustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<SearchParams>
+  searchParams: Promise<SearchParams>;
 }) {
-  await requirePermission(PERMISSIONS.CUSTOMERS_READ)
-  const sp = await searchParams
-  const query = first(sp.q).trim()
-  const page = Math.max(1, Number.parseInt(first(sp.page), 10) || 1)
+  await requirePermission(PERMISSIONS.CUSTOMERS_READ);
+  const sp = await searchParams;
+  const query = first(sp.q).trim();
+  const page = Math.max(1, Number.parseInt(first(sp.page), 10) || 1);
 
   return (
     <>
@@ -60,19 +66,24 @@ export default async function AdminCustomersPage({
         <UsersTable query={query} page={page} />
       </Suspense>
     </>
-  )
+  );
 }
 
 async function UsersTable({ query, page }: { query: string; page: number }) {
-  let data: Paginated<UserListItem> | null = null
-  let failed = false
+  let data: Paginated<UserListItem> | null = null;
+  let failed = false;
   try {
-    const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
-    if (query) qs.set("search", query)
-    data = await serverApi<Paginated<UserListItem>>(`/admin/users?${qs.toString()}`)
+    const qs = new URLSearchParams({
+      page: String(page),
+      limit: String(PAGE_SIZE),
+    });
+    if (query) qs.set("search", query);
+    data = await serverApi<Paginated<UserListItem>>(
+      `/admin/users?${qs.toString()}`,
+    );
   } catch (e) {
-    if (e instanceof ApiError) failed = true
-    else throw e
+    if (e instanceof ApiError) failed = true;
+    else throw e;
   }
 
   if (failed || !data) {
@@ -89,10 +100,10 @@ async function UsersTable({ query, page }: { query: string; page: number }) {
           در ارتباط با سرور خطایی رخ داد. لطفاً چند لحظه بعد دوباره تلاش کنید.
         </p>
       </div>
-    )
+    );
   }
 
-  const { results, pagination } = data
+  const { results, pagination } = data;
 
   if (results.length === 0) {
     return (
@@ -112,7 +123,7 @@ async function UsersTable({ query, page }: { query: string; page: number }) {
             : "به‌محض ثبت‌نام کاربران، فهرست آن‌ها اینجا نمایش داده می‌شود."}
         </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -121,16 +132,30 @@ async function UsersTable({ query, page }: { query: string; page: number }) {
         <Table>
           <TableHeader>
             <TableRow className="border-border/60 bg-muted/30 hover:bg-muted/30">
-              <TableHead className="h-10 text-xs font-medium text-muted-foreground">نام</TableHead>
-              <TableHead className="h-10 text-xs font-medium text-muted-foreground">نقش</TableHead>
-              <TableHead className="h-10 text-xs font-medium text-muted-foreground">وضعیت</TableHead>
-              <TableHead className="h-10 text-end text-xs font-medium text-muted-foreground">تاریخ عضویت</TableHead>
+              <TableHead className="h-10 text-xs font-medium text-muted-foreground">
+                نام
+              </TableHead>
+              <TableHead className="h-10 text-xs font-medium text-muted-foreground">
+                نقش
+              </TableHead>
+              <TableHead className="h-10 text-xs font-medium text-muted-foreground">
+                وضعیت
+              </TableHead>
+              <TableHead className="h-10 text-end text-xs font-medium text-muted-foreground">
+                تاریخ عضویت
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {results.map((u) => {
-              const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ").trim()
-              const initial = (fullName || u.email).trim().charAt(0).toUpperCase()
+              const fullName = [u.first_name, u.last_name]
+                .filter(Boolean)
+                .join(" ")
+                .trim();
+              const initial = (fullName || u.email)
+                .trim()
+                .charAt(0)
+                .toUpperCase();
               return (
                 <TableRow key={u.user_id} className="border-border/40">
                   <TableCell>
@@ -142,20 +167,29 @@ async function UsersTable({ query, page }: { query: string; page: number }) {
                         {initial}
                       </span>
                       <span className="min-w-0 leading-tight">
-                        <span className="block font-medium">{fullName || "—"}</span>
-                        <span className="block truncate text-xs text-muted-foreground" dir="ltr">
+                        <span className="block font-medium">
+                          {fullName || "—"}
+                        </span>
+                        <span
+                          className="block truncate text-xs text-muted-foreground"
+                          dir="ltr"
+                        >
                           {u.email}
                         </span>
                       </span>
                     </Link>
                   </TableCell>
-                  <TableCell><UserRoleBadge role={u.role} /></TableCell>
-                  <TableCell><UserStatusBadge active={u.is_active} /></TableCell>
+                  <TableCell>
+                    <UserRoleBadge role={u.role} />
+                  </TableCell>
+                  <TableCell>
+                    <UserStatusBadge active={u.is_active} />
+                  </TableCell>
                   <TableCell className="text-end text-muted-foreground tabular-nums">
                     {faDate(u.created_at)}
                   </TableCell>
                 </TableRow>
-              )
+              );
             })}
           </TableBody>
         </Table>
@@ -163,12 +197,17 @@ async function UsersTable({ query, page }: { query: string; page: number }) {
 
       <div className="mt-4 flex items-center justify-between gap-4">
         <p className="text-xs text-muted-foreground">
-          {faNum(pagination.total_items)} کاربر · صفحهٔ {faNum(pagination.page)} از{" "}
-          {faNum(pagination.total_pages)}
+          {faNum(pagination.total_items)} کاربر · صفحهٔ {faNum(pagination.page)}{" "}
+          از {faNum(pagination.total_pages)}
         </p>
         <div className="flex items-center gap-2">
           {pagination.has_prev ? (
-            <Button variant="outline" size="sm" asChild className="cursor-pointer">
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="cursor-pointer"
+            >
               <Link href={pageHref(query, pagination.page - 1)} rel="prev">
                 قبلی
               </Link>
@@ -179,7 +218,12 @@ async function UsersTable({ query, page }: { query: string; page: number }) {
             </Button>
           )}
           {pagination.has_next ? (
-            <Button variant="outline" size="sm" asChild className="cursor-pointer">
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="cursor-pointer"
+            >
               <Link href={pageHref(query, pagination.page + 1)} rel="next">
                 بعدی
               </Link>
@@ -192,5 +236,5 @@ async function UsersTable({ query, page }: { query: string; page: number }) {
         </div>
       </div>
     </>
-  )
+  );
 }

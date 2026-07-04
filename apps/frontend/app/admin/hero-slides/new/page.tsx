@@ -1,14 +1,14 @@
-import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth/session"
-import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { HeroForm } from "@/components/admin/hero-form"
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { HeroForm } from "@/features/admin/hero-slides/components/hero-form";
 
 export default async function AdminNewHeroSlidePage() {
-  await requirePermission(PERMISSIONS.HERO_MANAGE)
+  await requirePermission(PERMISSIONS.HERO_MANAGE);
 
   return (
     <>
@@ -25,5 +25,5 @@ export default async function AdminNewHeroSlidePage() {
       />
       <HeroForm mode="create" submitLabel="افزودن اسلاید" />
     </>
-  )
+  );
 }

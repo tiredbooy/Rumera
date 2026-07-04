@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { useQuery } from "@tanstack/react-query"
-import { AlertCircle, RotateCw, SearchX } from "lucide-react"
+import * as React from "react";
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { AlertCircle, RotateCw, SearchX } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
-import { HeroForm } from "@/components/admin/hero-form"
-import { listHeroSlides } from "@/lib/api/admin-client"
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { HeroForm } from "@/features/admin/hero-slides/components/hero-form";
+import { listHeroSlides } from "@/lib/api/admin-client";
 
 /**
  * Client-side loader for the hero-slide editor. Fetches the admin slide list
@@ -21,7 +21,7 @@ export function HeroEditLoader({ id }: { id: number }) {
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["admin", "hero-slides"],
     queryFn: listHeroSlides,
-  })
+  });
 
   if (isPending) {
     return (
@@ -33,7 +33,7 @@ export function HeroEditLoader({ id }: { id: number }) {
         </div>
         <Skeleton className="h-80 w-full" />
       </div>
-    )
+    );
   }
 
   if (isError) {
@@ -51,10 +51,10 @@ export function HeroEditLoader({ id }: { id: number }) {
           <RotateCw className="size-4" /> تلاش دوباره
         </Button>
       </div>
-    )
+    );
   }
 
-  const slide = data?.find((s) => s.id === id)
+  const slide = data?.find((s) => s.id === id);
 
   if (!slide) {
     return (
@@ -70,8 +70,8 @@ export function HeroEditLoader({ id }: { id: number }) {
           <Link href="/admin/hero-slides">بازگشت به فهرست</Link>
         </Button>
       </div>
-    )
+    );
   }
 
-  return <HeroForm mode="edit" slide={slide} submitLabel="ذخیرهٔ تغییرات" />
+  return <HeroForm mode="edit" slide={slide} submitLabel="ذخیرهٔ تغییرات" />;
 }

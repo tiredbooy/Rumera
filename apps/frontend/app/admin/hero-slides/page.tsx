@@ -6,7 +6,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 import { can } from "@/lib/rbac/can"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { HeroSlidesBoard } from "@/components/admin/hero-slides-board"
+import { HeroSlidesBoard } from "@/features/admin/hero-slides/components/hero-slides-board"
 
 export default async function AdminHeroSlidesPage() {
   const session = await requirePermission(PERMISSIONS.HERO_MANAGE)
