@@ -3,13 +3,12 @@
  * age gate. Living in a route group means the dashboards (`/admin`, `/account`)
  * and auth pages render with their OWN chrome instead of inheriting this one.
  */
-import { SiteHeader, type HeaderCategory } from "@/components/site-header";
+import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AgeGate } from "@/components/age-gate";
 import { ReferralTracker } from "@/features/referral/components/referral-tracker";
 import { listCategories } from "@/lib/catalog/categories";
-import { getCategoryTree } from "@/components/categories";
-import { getHomeCategories } from "@/lib/home/categories";
+import { fetchCategoryTree } from "@/features/categories/api";
 
 export default async function StorefrontLayout({
   children,
@@ -21,11 +20,11 @@ export default async function StorefrontLayout({
   // never empty (error-safe, mirrors the rest of the storefront).
   const live = await listCategories();
   const topLevel = live.filter((c) => c.parent_id == null);
-  const categories = await getHomeCategories();
+  const categories = await fetchCategoryTree();
 
   return (
     <>
-      <SiteHeader categories={categories} />
+      <SiteHeader categoryTree={categories} />
       <main className="flex flex-1 flex-col">{children}</main>
       <SiteFooter />
       <AgeGate />

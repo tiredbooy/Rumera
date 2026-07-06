@@ -10,11 +10,11 @@ import { ProductsMegaMenu } from "./ProductMegaMenu"
 import { HeaderSearch } from "./HeaderSearch"
 import { HeaderActions } from "./HeaderActions"
 import { MobileNavDrawer } from "./MobileNavDrawer"
-import type { CategoryTreeNode } from "./category"
+import { CategoryTree } from "@/features/categories/types"
 
 interface SiteHeaderProps {
   /** Fetch this server-side (e.g. in app/layout.tsx via getCategoryTree()) and pass it down. */
-  categoryTree: CategoryTreeNode[]
+  categoryTree: CategoryTree[]
 }
 
 export function SiteHeader({ categoryTree }: SiteHeaderProps) {

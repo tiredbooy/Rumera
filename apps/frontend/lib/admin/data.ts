@@ -1,17 +1,4 @@
-/**
- * Admin mock-data layer.
- *
- * A single, richly-typed sample dataset that powers every admin screen so the
- * panel is fully demoable before the backend is wired. Every export here is a
- * stand-in for a `GET /api/v1/admin/*` call — replace the bodies with React
- * Query hooks (see `lib/api/admin-hooks.ts`) once the endpoints exist; the page
- * components consume the types, not the literals, so the swap stays local.
- *
- * Persian dates are stored as display strings (Jalali) to keep the mock
- * deterministic and free of date math. Money is Toman, formatted with
- * `formatPrice` from `@/lib/products`.
- */
-import { products, type Product, type Category } from "@/lib/products"
+
 
 /* -------------------------------------------------------------------------- */
 /*  Status vocabularies (shared with status-badge.tsx)                         */

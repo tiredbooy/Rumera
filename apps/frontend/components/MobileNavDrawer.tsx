@@ -15,21 +15,21 @@ import {
 import { Button } from "@/components/ui/button"
 import { HeaderSearch } from "./HeaderSearch"
 import { staticNavItems } from "./NavLinks"
-import type { CategoryTreeNode } from "./category"
+import { CategoryTree } from "@/features/categories/types"
 
 interface MobileNavDrawerProps {
-  categoryTree: CategoryTreeNode[]
+  categoryTree: CategoryTree[]
 }
 
 export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
   // `stack` holds the path of categories drilled into so far. Showing one
   // level at a time with a back action reads much better on touch than
   // stacking three levels of nested accordions.
-  const [stack, setStack] = React.useState<CategoryTreeNode[]>([])
+  const [stack, setStack] = React.useState<CategoryTree[]>([])
   const [sheetOpen, setSheetOpen] = React.useState(false)
 
   const currentLevel = stack.length ? stack[stack.length - 1].children ?? [] : categoryTree
-  const currentTitle = stack.length ? stack[stack.length - 1].name : "دسته‌بندی‌ها"
+  const currentTitle = stack.length ? stack[stack.length - 1].title : "دسته‌بندی‌ها"
 
   function reset() {
     setStack([])
@@ -114,7 +114,7 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
                 href={`/categories/${stack[stack.length - 1].slug}`}
                 className="mb-1 flex items-center justify-between rounded-xl px-2.5 py-2 text-sm font-medium text-primary hover:bg-accent"
               >
-                مشاهدهٔ همهٔ «{stack[stack.length - 1].name}»
+                مشاهدهٔ همهٔ «{stack[stack.length - 1].title}»
                 <ArrowLeft className="size-3.5" />
               </Link>
             </SheetClose>
@@ -122,7 +122,7 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
 
           <div className="grid grid-cols-2 gap-1">
             {currentLevel?.map((cat) =>
-              cat.children?.length ? (
+              cat?.children?.length ? (
                 <button
                   key={cat.id}
                   type="button"
@@ -130,7 +130,7 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
                   className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-start text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <CategoryChip category={cat} />
-                  <span className="flex-1 truncate">{cat.name}</span>
+                  <span className="flex-1 truncate">{cat.title}</span>
                   <ArrowLeft className="size-3.5 shrink-0 text-primary" />
                 </button>
               ) : (
@@ -140,7 +140,7 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
                     className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <CategoryChip category={cat} />
-                    <span className="truncate">{cat.name}</span>
+                    <span className="truncate">{cat.title}</span>
                   </Link>
                 </SheetClose>
               )
@@ -152,12 +152,12 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
   )
 }
 
-function CategoryChip({ category }: { category: CategoryTreeNode }) {
-  if (category.image_url) {
+function CategoryChip({ category }: { category: CategoryTree }) {
+  if (category?.image_url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={category.image_url}
+        src={category?.image_url}
         alt=""
         className="size-7 shrink-0 rounded-lg object-cover"
       />
@@ -165,7 +165,7 @@ function CategoryChip({ category }: { category: CategoryTreeNode }) {
   }
   return (
     <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-serif text-xs text-primary">
-      {category.name.charAt(0)}
+      {category?.title.charAt(0)}
     </span>
   )
 }

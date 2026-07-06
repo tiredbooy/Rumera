@@ -31,8 +31,9 @@ func MapToUserAdminResponse(u *models.User) *models.UserAdminResponse {
 func MapToUserListItem(u *models.User) *models.UserListItem {
 	return &models.UserListItem{
 		UserID:    u.UserID,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
+		// FirstName: u.FirstName,
+		// LastName:  u.LastName,
+		FullName : *u.FirstName + " " + *u.LastName,
 		Email:     u.Email,
 		Role:      u.Role,
 		IsActive:  u.IsActive,
