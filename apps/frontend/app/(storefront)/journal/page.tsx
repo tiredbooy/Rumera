@@ -1,46 +1,52 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { BookOpen, ArrowLeft, ArrowRight } from "lucide-react"
+import type { Metadata } from "next";
+import Link from "next/link";
+import { BookOpen, ArrowLeft, ArrowRight } from "lucide-react";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { JsonLd } from "@/components/json-ld"
-import { breadcrumbLd } from "@/lib/seo/jsonld"
-import { Reveal } from "@/components/motion/reveal"
-import { Button } from "@/components/ui/button"
-import { JournalExplorer } from "@/components/journal/journal-explorer"
-import { JournalCard } from "@/components/journal/journal-card"
-import { listBlogs } from "@/lib/journal"
-import { faNum } from "@/lib/products"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/components/json-ld";
+import { breadcrumbLd } from "@/lib/seo/jsonld";
+import { Reveal } from "@/features/motion/components/reveal";
+import { Button } from "@/components/ui/button";
+import { JournalExplorer } from "@/features/loyality/components/journal-explorer";
+import { JournalCard } from "@/features/journal/components/journal-card";
+import { listBlogs } from "@/lib/journal";
+import { faNum } from "@/lib/products";
 
-export const revalidate = 3600
+export const revalidate = 3600;
 
 export const metadata: Metadata = buildMetadata({
   title: "ژورنال",
   description:
     "یادداشت‌ها، راهنماها و داستان‌هایی از دنیای نوشیدنی و سبک زندگی — قابل جستجو و خواندنی.",
   path: "/journal",
-})
+});
 
-const PAGE_SIZE = 24
+const PAGE_SIZE = 24;
 
-type SearchParams = Promise<{ page?: string }>
+type SearchParams = Promise<{ page?: string }>;
 
 function pageHref(page: number): string {
-  return page > 1 ? `/journal?page=${page}` : "/journal"
+  return page > 1 ? `/journal?page=${page}` : "/journal";
 }
 
-export default async function JournalPage({ searchParams }: { searchParams: SearchParams }) {
-  const sp = await searchParams
-  const pageParam = Number(sp.page)
-  const page = Number.isFinite(pageParam) && pageParam > 1 ? pageParam : 1
+export default async function JournalPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const sp = await searchParams;
+  const pageParam = Number(sp.page);
+  const page = Number.isFinite(pageParam) && pageParam > 1 ? pageParam : 1;
   // The featured lead story only headlines the untouched first page.
-  const isFirstPage = page === 1
+  const isFirstPage = page === 1;
 
-  const { posts, pagination } = await listBlogs({ page, limit: PAGE_SIZE })
+  const { posts, pagination } = await listBlogs({ page, limit: PAGE_SIZE });
 
   // Headline the post the editors marked `is_featured`; fall back to the newest.
-  const featured = isFirstPage ? (posts.find((p) => p.is_featured) ?? posts[0]) : undefined
-  const rest = featured ? posts.filter((p) => p.id !== featured.id) : posts
+  const featured = isFirstPage
+    ? (posts.find((p) => p.is_featured) ?? posts[0])
+    : undefined;
+  const rest = featured ? posts.filter((p) => p.id !== featured.id) : posts;
 
   return (
     <>
@@ -76,7 +82,10 @@ export default async function JournalPage({ searchParams }: { searchParams: Sear
       >
         {posts.length === 0 ? (
           <div className="border-hairline flex flex-col items-center gap-3 rounded-3xl bg-card/50 px-6 py-24 text-center ring-1 ring-foreground/5">
-            <BookOpen className="size-10 text-muted-foreground/50" aria-hidden />
+            <BookOpen
+              className="size-10 text-muted-foreground/50"
+              aria-hidden
+            />
             <p className="font-serif text-2xl">به‌زودی</p>
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
               هنوز نوشته‌ای منتشر نشده است. به‌زودی سر بزنید.
@@ -94,7 +103,9 @@ export default async function JournalPage({ searchParams }: { searchParams: Sear
             {rest.length > 0 ? (
               <JournalExplorer posts={rest} />
             ) : (
-              <p className="text-sm text-muted-foreground">{faNum(posts.length)} نوشته</p>
+              <p className="text-sm text-muted-foreground">
+                {faNum(posts.length)} نوشته
+              </p>
             )}
 
             {/* Pagination — only the rest grid paginates; the explorer searches within the page. */}
@@ -120,7 +131,8 @@ export default async function JournalPage({ searchParams }: { searchParams: Sear
                   )}
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  صفحهٔ {faNum(pagination.page)} از {faNum(pagination.total_pages)}
+                  صفحهٔ {faNum(pagination.page)} از{" "}
+                  {faNum(pagination.total_pages)}
                 </span>
                 <Button
                   variant="outline"
@@ -144,5 +156,5 @@ export default async function JournalPage({ searchParams }: { searchParams: Sear
         )}
       </section>
     </>
-  )
+  );
 }

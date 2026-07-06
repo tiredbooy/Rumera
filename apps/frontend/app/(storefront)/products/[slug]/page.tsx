@@ -1,36 +1,46 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import { ChevronLeft, ShieldCheck, Truck, Wallet, Sparkles, Layers } from "lucide-react"
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import {
+  ChevronLeft,
+  ShieldCheck,
+  Truck,
+  Wallet,
+  Sparkles,
+  Layers,
+} from "lucide-react";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { JsonLd } from "@/components/json-ld"
-import { productDetailLd, breadcrumbLd } from "@/lib/seo/jsonld"
-import { getProductBySlug, allProductSlugs } from "@/lib/catalog/products"
-import { getSimilar, getFrequentlyBoughtTogether } from "@/lib/catalog/recommendations"
-import { getReviewSummary, listReviews } from "@/lib/catalog/reviews"
-import { faNum } from "@/lib/products"
-import { Bottle } from "@/components/bottle"
-import { ProductGallery } from "@/components/catalog/product-gallery"
-import { ProductPurchasePanel } from "@/components/catalog/product-purchase-panel"
-import { RecommendationRail } from "@/components/catalog/recommendation-rail"
-import { RecentlyViewedRail } from "@/components/catalog/recently-viewed-rail"
-import { ReviewsSection } from "@/components/catalog/reviews-section"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/components/json-ld";
+import { productDetailLd, breadcrumbLd } from "@/lib/seo/jsonld";
+import { getProductBySlug, allProductSlugs } from "@/lib/catalog/products";
+import {
+  getSimilar,
+  getFrequentlyBoughtTogether,
+} from "@/lib/catalog/recommendations";
+import { getReviewSummary, listReviews } from "@/lib/catalog/reviews";
+import { faNum } from "@/lib/products";
+import { Bottle } from "@/components/bottle";
+import { ProductGallery } from "@/features/catalog/components/product-gallery";
+import { ProductPurchasePanel } from "@/features/catalog/components/product-purchase-panel";
+import { RecommendationRail } from "@/features/catalog/components/recommendation-rail";
+import { RecentlyViewedRail } from "@/features/catalog/components/recently-viewed-rail";
+import { ReviewsSection } from "@/features/catalog/components/reviews-section";
 
-export const revalidate = 3600
+export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  return (await allProductSlugs()).map((slug) => ({ slug }))
+  return (await allProductSlugs()).map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const { slug } = await params
-  const product = await getProductBySlug(slug)
-  if (!product) return buildMetadata({ title: "محصول یافت نشد", index: false })
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+  if (!product) return buildMetadata({ title: "محصول یافت نشد", index: false });
   return buildMetadata({
     title: product.meta_title ?? product.title,
     description: product.meta_description ?? product.description,
@@ -43,28 +53,38 @@ export async function generateMetadata({
       ...(product.tags?.map((t) => t.title) ?? []),
       ...(product.meta_tags ?? []),
     ],
-  })
+  });
 }
 
 // Trust signals shown beneath the buy box — the spirits-retail reassurance trio.
 const TRUST = [
-  { icon: ShieldCheck, title: "اصالت تضمین‌شده", desc: "مستقیم از سازندهٔ رسمی" },
-  { icon: Truck, title: "ارسال خنک و سریع", desc: "بسته‌بندی ایمن، سراسر کشور" },
+  {
+    icon: ShieldCheck,
+    title: "اصالت تضمین‌شده",
+    desc: "مستقیم از سازندهٔ رسمی",
+  },
+  {
+    icon: Truck,
+    title: "ارسال خنک و سریع",
+    desc: "بسته‌بندی ایمن، سراسر کشور",
+  },
   { icon: Wallet, title: "پرداخت امن", desc: "درگاه بانکی و کیف پول" },
-]
+];
 
 export default async function ProductDetailPage({
   params,
 }: {
-  params: Promise<{ slug: string }>
+  params: Promise<{ slug: string }>;
 }) {
-  const { slug } = await params
-  const product = await getProductBySlug(slug)
-  if (!product) notFound()
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+  if (!product) notFound();
 
   const images = [...(product.images ?? [])].sort(
-    (a, b) => Number(b.is_primary) - Number(a.is_primary) || a.sort_order - b.sort_order
-  )
+    (a, b) =>
+      Number(b.is_primary) - Number(a.is_primary) ||
+      a.sort_order - b.sort_order,
+  );
 
   // Surface the recommendation engine + reviews (all error-safe → empty on failure).
   const [similar, fbtRaw, reviewSummary, reviewsPage] = await Promise.all([
@@ -72,31 +92,45 @@ export default async function ProductDetailPage({
     getFrequentlyBoughtTogether(product.id, { limit: 4 }),
     getReviewSummary(product.id),
     listReviews(product.id, { limit: 8 }),
-  ])
+  ]);
   // FBT falls back to "similar" server-side — drop overlaps so the rails differ.
-  const fbt = fbtRaw.filter((f) => !similar.some((s) => s.product_id === f.product_id))
+  const fbt = fbtRaw.filter(
+    (f) => !similar.some((s) => s.product_id === f.product_id),
+  );
 
   // For the recently-viewed memory.
-  const variantPrices = (product.variants ?? []).map((v) => v.price).filter((n) => n > 0)
-  const minPrice = variantPrices.length ? Math.min(...variantPrices) : undefined
+  const variantPrices = (product.variants ?? [])
+    .map((v) => v.price)
+    .filter((n) => n > 0);
+  const minPrice = variantPrices.length
+    ? Math.min(...variantPrices)
+    : undefined;
 
   // Best whole-percent saving across active variants → gallery ribbon.
   const galleryDiscount = (product.variants ?? [])
-    .filter((v) => v.is_active && v.compare_at_price && v.compare_at_price > v.price)
+    .filter(
+      (v) => v.is_active && v.compare_at_price && v.compare_at_price > v.price,
+    )
     .reduce((best, v) => {
-      const pct = Math.round(((v.compare_at_price! - v.price) / v.compare_at_price!) * 100)
-      return Math.max(best, pct)
-    }, 0)
+      const pct = Math.round(
+        ((v.compare_at_price! - v.price) / v.compare_at_price!) * 100,
+      );
+      return Math.max(best, pct);
+    }, 0);
 
   // Specs table — only render rows we actually have.
   const specs: { label: string; value: string }[] = [
-    product.abv != null ? { label: "درصد الکل", value: `${faNum(product.abv)}٪` } : null,
+    product.abv != null
+      ? { label: "درصد الکل", value: `${faNum(product.abv)}٪` }
+      : null,
     product.country_of_origin
       ? { label: "کشور مبدأ", value: product.country_of_origin }
       : null,
-    product.weight != null ? { label: "وزن", value: `${faNum(product.weight)} گرم` } : null,
+    product.weight != null
+      ? { label: "وزن", value: `${faNum(product.weight)} گرم` }
+      : null,
     product.code ? { label: "کد محصول", value: product.code } : null,
-  ].filter(Boolean) as { label: string; value: string }[]
+  ].filter(Boolean) as { label: string; value: string }[];
 
   return (
     <>
@@ -105,7 +139,10 @@ export default async function ProductDetailPage({
           productDetailLd(
             product,
             reviewSummary
-              ? { value: reviewSummary.average_rating, count: reviewSummary.total_reviews }
+              ? {
+                  value: reviewSummary.average_rating,
+                  count: reviewSummary.total_reviews,
+                }
               : undefined,
             reviewsPage.results.map((r) => ({
               rating: r.rating,
@@ -113,7 +150,7 @@ export default async function ProductDetailPage({
               content: r.content,
               author: r.user_full_name || undefined,
               created_at: r.created_at,
-            }))
+            })),
           ),
           breadcrumbLd([
             { name: "خانه", path: "/" },
@@ -129,11 +166,20 @@ export default async function ProductDetailPage({
           aria-label="مسیر"
           className="mb-8 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
         >
-          <Link href="/" className="transition-colors hover:text-foreground">خانه</Link>
+          <Link href="/" className="transition-colors hover:text-foreground">
+            خانه
+          </Link>
           <ChevronLeft className="size-3.5 opacity-50" />
-          <Link href="/products" className="transition-colors hover:text-foreground">فروشگاه</Link>
+          <Link
+            href="/products"
+            className="transition-colors hover:text-foreground"
+          >
+            فروشگاه
+          </Link>
           <ChevronLeft className="size-3.5 opacity-50" />
-          <span className="truncate font-medium text-foreground">{product.title}</span>
+          <span className="truncate font-medium text-foreground">
+            {product.title}
+          </span>
         </nav>
 
         <div className="grid gap-10 lg:grid-cols-2 lg:gap-12">
@@ -143,7 +189,10 @@ export default async function ProductDetailPage({
             title={product.title}
             discount={galleryDiscount}
             fallback={
-              <Bottle product={{ id: product.id, maker: product.title }} className="relative h-[28rem]" />
+              <Bottle
+                product={{ id: product.id, maker: product.title }}
+                className="relative h-[28rem]"
+              />
             }
           />
 
@@ -152,7 +201,9 @@ export default async function ProductDetailPage({
             {product.country_of_origin ? (
               <p className="eyebrow mb-3">{product.country_of_origin}</p>
             ) : null}
-            <h1 className="font-serif text-4xl leading-tight sm:text-5xl">{product.title}</h1>
+            <h1 className="font-serif text-4xl leading-tight sm:text-5xl">
+              {product.title}
+            </h1>
 
             {reviewSummary && reviewSummary.total_reviews > 0 ? (
               <Link
@@ -180,7 +231,9 @@ export default async function ProductDetailPage({
             ) : null}
 
             {product.description ? (
-              <p className="mt-6 leading-relaxed text-muted-foreground">{product.description}</p>
+              <p className="mt-6 leading-relaxed text-muted-foreground">
+                {product.description}
+              </p>
             ) : null}
 
             {/* Purchase panel (owns variant selection + wishlist) */}
@@ -193,7 +246,10 @@ export default async function ProductDetailPage({
             {specs.length ? (
               <dl className="mt-7 grid grid-cols-1 gap-x-8 gap-y-3 border-t border-border/60 pt-6 text-sm sm:grid-cols-2">
                 {specs.map((s) => (
-                  <div key={s.label} className="flex items-center justify-between gap-3">
+                  <div
+                    key={s.label}
+                    className="flex items-center justify-between gap-3"
+                  >
                     <dt className="text-muted-foreground">{s.label}</dt>
                     <dd className="font-medium">{s.value}</dd>
                   </div>
@@ -213,7 +269,9 @@ export default async function ProductDetailPage({
                   </span>
                   <div className="leading-tight">
                     <p className="text-xs font-semibold">{t.title}</p>
-                    <p className="text-[11px] text-muted-foreground">{t.desc}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {t.desc}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -223,7 +281,10 @@ export default async function ProductDetailPage({
       </section>
 
       {/* Reviews */}
-      <div id="reviews" className="border-t border-border/60 bg-card/30 scroll-mt-24">
+      <div
+        id="reviews"
+        className="border-t border-border/60 bg-card/30 scroll-mt-24"
+      >
         <ReviewsSection
           productId={product.id}
           summary={reviewSummary}
@@ -271,5 +332,5 @@ export default async function ProductDetailPage({
       {/* Spacer so the sticky mobile buy-bar never covers page-end content. */}
       <div aria-hidden className="h-24 lg:hidden" />
     </>
-  )
+  );
 }

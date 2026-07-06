@@ -1,6 +1,6 @@
-import { AccountPageHeader } from "@/components/account/account-page-header"
-import { RewardsView } from "@/components/loyalty/rewards-view"
-import { ReferralCard } from "@/components/referral/referral-card"
+import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
+import { RewardsView } from "@/components/loyalty/rewards-view";
+import { ReferralCard } from "@/features/referral/components/referral-card";
 
 export default function AccountRewardsPage() {
   return (
@@ -15,5 +15,5 @@ export default function AccountRewardsPage() {
         <ReferralCard />
       </div>
     </>
-  )
+  );
 }

@@ -1,45 +1,56 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { ArrowRight, ArrowLeft, PackageOpen } from "lucide-react"
+import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowRight, ArrowLeft, PackageOpen } from "lucide-react";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { JsonLd } from "@/components/json-ld"
-import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld"
-import { buildQuery } from "@/lib/api/qs"
-import { listProducts } from "@/lib/catalog/products"
-import { listCategories } from "@/lib/catalog/categories"
-import { faNum } from "@/lib/products"
-import { Button } from "@/components/ui/button"
-import { ProductCard } from "@/components/catalog/product-card"
-import { ProductSort } from "@/components/catalog/product-sort"
-import { Placeholder } from "@/components/dashboard/placeholder"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/components/json-ld";
+import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld";
+import { buildQuery } from "@/lib/api/qs";
+import { listProducts } from "@/lib/catalog/products";
+import { listCategories } from "@/lib/catalog/categories";
+import { faNum } from "@/lib/products";
+import { Button } from "@/components/ui/button";
+import { ProductCard } from "@/features/catalog/components/product-card";
+import { ProductSort } from "@/features/catalog/components/product-sort";
+import { Placeholder } from "@/features/dashboard/components/placeholder";
 
 export const metadata: Metadata = buildMetadata({
   title: "فروشگاه بطری‌ها",
   description:
     "کاوش در مجموعهٔ کامل رومرا — ویسکی، شراب، شامپاین و اسپیریت‌های نایاب، مستقیم از سازندگان.",
   path: "/products",
-})
+});
 
-type SP = { page?: string; search?: string; sortBy?: string; orderBy?: "asc" | "desc" }
+type SP = {
+  page?: string;
+  search?: string;
+  sortBy?: string;
+  orderBy?: "asc" | "desc";
+};
 
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<SP>
+  searchParams: Promise<SP>;
 }) {
-  const sp = await searchParams
-  const page = Math.max(1, Number(sp.page) || 1)
-  const search = sp.search?.trim() || undefined
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const search = sp.search?.trim() || undefined;
 
   const [data, categories] = await Promise.all([
-    listProducts({ page, limit: 12, search, sortBy: sp.sortBy, orderBy: sp.orderBy }),
+    listProducts({
+      page,
+      limit: 12,
+      search,
+      sortBy: sp.sortBy,
+      orderBy: sp.orderBy,
+    }),
     listCategories(),
-  ])
-  const { results, pagination } = data
+  ]);
+  const { results, pagination } = data;
 
   const pageHref = (p: number) =>
-    `/products${buildQuery({ page: p, search, sortBy: sp.sortBy, orderBy: sp.orderBy })}`
+    `/products${buildQuery({ page: p, search, sortBy: sp.sortBy, orderBy: sp.orderBy })}`;
 
   return (
     <>
@@ -95,7 +106,12 @@ export default async function ProductsPage({
 
             {pagination.total_pages > 1 ? (
               <div className="mt-12 flex items-center justify-center gap-3">
-                <Button variant="outline" size="sm" disabled={!pagination.has_prev} asChild={pagination.has_prev}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!pagination.has_prev}
+                  asChild={pagination.has_prev}
+                >
                   {pagination.has_prev ? (
                     <Link href={pageHref(page - 1)}>
                       <ArrowRight className="size-4" /> قبلی
@@ -107,9 +123,15 @@ export default async function ProductsPage({
                   )}
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  صفحهٔ {faNum(pagination.page)} از {faNum(pagination.total_pages)}
+                  صفحهٔ {faNum(pagination.page)} از{" "}
+                  {faNum(pagination.total_pages)}
                 </span>
-                <Button variant="outline" size="sm" disabled={!pagination.has_next} asChild={pagination.has_next}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!pagination.has_next}
+                  asChild={pagination.has_next}
+                >
                   {pagination.has_next ? (
                     <Link href={pageHref(page + 1)}>
                       بعدی <ArrowLeft className="size-4" />
@@ -134,5 +156,5 @@ export default async function ProductsPage({
         )}
       </section>
     </>
-  )
+  );
 }

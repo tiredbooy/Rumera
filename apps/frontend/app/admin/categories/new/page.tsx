@@ -6,7 +6,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { serverApi } from "@/lib/api/client";
 import type { CategoryTreeNode } from "@/lib/api/admin-client";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/features/dashboard/components/page-header";
 import { CategoryForm } from "@/features/admin/categories/components/CategoryForm";
 
 /** Category tree for the parent picker. Empty on failure so the form still renders. */

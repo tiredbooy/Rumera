@@ -8,7 +8,7 @@ import { serverApi, ApiError } from "@/lib/api/client";
 import type { Category } from "@/lib/catalog/types";
 import type { CategoryTreeNode } from "@/lib/api/admin-client";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/features/dashboard/components/page-header";
 import { CategoryForm } from "@/features/admin/categories/components/CategoryForm";
 
 async function loadTree(): Promise<CategoryTreeNode[]> {

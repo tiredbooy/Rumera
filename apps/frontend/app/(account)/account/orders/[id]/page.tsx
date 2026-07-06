@@ -1,17 +1,17 @@
-import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
-import { faNum } from "@/lib/products"
-import { Button } from "@/components/ui/button"
-import { AccountPageHeader } from "@/components/account/account-page-header"
-import { OrderDetail } from "@/components/account/order-detail"
+import { faNum } from "@/lib/products";
+import { Button } from "@/components/ui/button";
+import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
+import { OrderDetail } from "@/components/account/order-detail";
 
 export default async function AccountOrderDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }) {
-  const { id } = await params
+  const { id } = await params;
   return (
     <>
       <AccountPageHeader
@@ -28,5 +28,5 @@ export default async function AccountOrderDetailPage({
       />
       <OrderDetail id={id} />
     </>
-  )
+  );
 }

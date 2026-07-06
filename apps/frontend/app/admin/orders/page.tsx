@@ -1,6 +1,6 @@
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/features/dashboard/components/page-header";
 import { OrdersTable } from "@/features/admin/orders/components/OrdersTable";
 
 export default async function AdminOrdersPage() {

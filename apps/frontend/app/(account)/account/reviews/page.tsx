@@ -1,5 +1,5 @@
-import { AccountPageHeader } from "@/components/account/account-page-header"
-import { ReviewsView } from "@/components/account/reviews-view"
+import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
+import { ReviewsView } from "@/features/account/reviews/components/reviews-view";
 
 export default function AccountReviewsPage() {
   return (
@@ -11,5 +11,5 @@ export default function AccountReviewsPage() {
       />
       <ReviewsView />
     </>
-  )
+  );
 }

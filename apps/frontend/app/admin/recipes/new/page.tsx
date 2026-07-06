@@ -6,7 +6,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { serverApi } from "@/lib/api/client";
 import type { Paginated } from "@/lib/catalog/types";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/features/dashboard/components/page-header";
 import { RecipeForm } from "@/features/admin/recipes/components/RecipeForm";
 
 type AdminTag = { id: number; title: string };

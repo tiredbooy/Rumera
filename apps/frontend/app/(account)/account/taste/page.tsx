@@ -1,5 +1,5 @@
-import { AccountPageHeader } from "@/components/account/account-page-header"
-import { TasteQuiz } from "@/components/taste/taste-quiz"
+import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
+import { TasteQuiz } from "@/features/taste/components/taste-quiz";
 
 export default function AccountTastePage() {
   return (
@@ -13,5 +13,5 @@ export default function AccountTastePage() {
         <TasteQuiz />
       </div>
     </>
-  )
+  );
 }

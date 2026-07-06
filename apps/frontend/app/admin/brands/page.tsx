@@ -5,7 +5,7 @@ import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { can } from "@/lib/rbac/can";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/features/dashboard/components/page-header";
 import { BrandsTable } from "@/features/admin/brands/components/BrandsTable";
 
 export default async function AdminBrandsPage() {

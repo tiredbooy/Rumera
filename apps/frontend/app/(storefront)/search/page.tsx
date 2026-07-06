@@ -1,28 +1,34 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { Search, SearchX, Sparkles, ArrowLeft } from "lucide-react"
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Search, SearchX, Sparkles, ArrowLeft } from "lucide-react";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { listProducts } from "@/lib/catalog/products"
-import { listCategories } from "@/lib/catalog/categories"
-import { faNum } from "@/lib/products"
-import { Button } from "@/components/ui/button"
-import { ProductCard } from "@/components/catalog/product-card"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { listProducts } from "@/lib/catalog/products";
+import { listCategories } from "@/lib/catalog/categories";
+import { faNum } from "@/lib/products";
+import { Button } from "@/components/ui/button";
+import { ProductCard } from "@/features/catalog/components/product-card";
 
-export const metadata: Metadata = buildMetadata({ title: "جستجو", path: "/search", index: false })
+export const metadata: Metadata = buildMetadata({
+  title: "جستجو",
+  path: "/search",
+  index: false,
+});
 
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string }>;
 }) {
-  const { q = "" } = await searchParams
-  const query = q.trim()
+  const { q = "" } = await searchParams;
+  const query = q.trim();
 
   const [{ results }, categories] = await Promise.all([
-    query ? listProducts({ search: query, limit: 24 }) : Promise.resolve({ results: [] as never[] }),
+    query
+      ? listProducts({ search: query, limit: 24 })
+      : Promise.resolve({ results: [] as never[] }),
     listCategories(),
-  ])
+  ]);
 
   return (
     <>
@@ -33,7 +39,11 @@ export default async function SearchPage({
             <Sparkles className="size-3.5" /> جستجو در رومرا
           </p>
           <h1 className="section-title">دنبال چه می‌گردید؟</h1>
-          <form action="/search" role="search" className="relative mx-auto mt-8 max-w-xl">
+          <form
+            action="/search"
+            role="search"
+            className="relative mx-auto mt-8 max-w-xl"
+          >
             <Search className="pointer-events-none absolute top-1/2 start-4 size-5 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
@@ -78,7 +88,8 @@ export default async function SearchPage({
               نتیجه‌ای برای «{query}» پیدا نشد
             </h2>
             <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-              املای عبارت را بررسی کنید یا با کلمهٔ کلی‌تری دوباره جستجو کنید. می‌توانید از دسته‌بندی‌ها هم شروع کنید.
+              املای عبارت را بررسی کنید یا با کلمهٔ کلی‌تری دوباره جستجو کنید.
+              می‌توانید از دسته‌بندی‌ها هم شروع کنید.
             </p>
             <Button asChild className="mt-6">
               <Link href="/products">
@@ -88,13 +99,17 @@ export default async function SearchPage({
           </div>
         ) : (
           /* Idle — no query yet */
-          <p className="text-center text-muted-foreground">عبارتی برای جستجو وارد کنید یا از دسته‌بندی‌ها شروع کنید.</p>
+          <p className="text-center text-muted-foreground">
+            عبارتی برای جستجو وارد کنید یا از دسته‌بندی‌ها شروع کنید.
+          </p>
         )}
 
         {/* Category shortcuts — always offered as a starting point */}
         {categories.length ? (
           <div className="mt-14">
-            <p className="eyebrow mb-4 justify-center text-center">جستجو بر اساس دسته</p>
+            <p className="eyebrow mb-4 justify-center text-center">
+              جستجو بر اساس دسته
+            </p>
             <div className="flex flex-wrap justify-center gap-2.5">
               {categories.map((c) => (
                 <Link
@@ -110,5 +125,5 @@ export default async function SearchPage({
         ) : null}
       </section>
     </>
-  )
+  );
 }

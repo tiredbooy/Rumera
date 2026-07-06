@@ -1,5 +1,5 @@
-import { AccountPageHeader } from "@/components/account/account-page-header"
-import { SubscriptionsView } from "@/components/subscriptions/subscriptions-view"
+import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
+import { SubscriptionsView } from "@/features/subscriptions/components/subscriptions-view";
 
 export default function AccountSubscriptionsPage() {
   return (
@@ -11,5 +11,5 @@ export default function AccountSubscriptionsPage() {
       />
       <SubscriptionsView />
     </>
-  )
+  );
 }

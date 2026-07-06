@@ -5,7 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/features/dashboard/components/page-header";
 import { HeroEditLoader } from "@/features/admin/hero-slides/components/hero-edit-loader";
 
 export default async function AdminEditHeroSlidePage({

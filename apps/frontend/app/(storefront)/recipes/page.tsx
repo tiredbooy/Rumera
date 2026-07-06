@@ -1,16 +1,23 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { ArrowLeft, ArrowRight, UtensilsCrossed, Clock, Users, Star } from "lucide-react"
+import type { Metadata } from "next";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  ArrowRight,
+  UtensilsCrossed,
+  Clock,
+  Users,
+  Star,
+} from "lucide-react";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { JsonLd } from "@/components/json-ld"
-import { breadcrumbLd } from "@/lib/seo/jsonld"
-import { Reveal } from "@/components/motion/reveal"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { SmartImage } from "@/components/smart-image"
-import { RecipeCard } from "@/components/recipes/recipe-card"
-import { RecipeFilters } from "@/components/recipes/recipe-filters"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/components/json-ld";
+import { breadcrumbLd } from "@/lib/seo/jsonld";
+import { Reveal } from "@/features/motion/components/reveal";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { SmartImage } from "@/components/smart-image";
+import { RecipeCard } from "@/features/recipes/components/recipe-card";
+import { RecipeFilters } from "@/features/recipes/components/recipe-filters";
 import {
   listRecipes,
   getFeaturedRecipes,
@@ -18,72 +25,81 @@ import {
   formatDuration,
   type RecipeDifficulty,
   type RecipeListParams,
-} from "@/lib/recipes"
-import { faNum } from "@/lib/products"
+} from "@/lib/recipes";
+import { faNum } from "@/lib/products";
 
-export const revalidate = 3600
+export const revalidate = 3600;
 
 export const metadata: Metadata = buildMetadata({
   title: "دستورها و ایده‌ها",
   description:
     "دستورهای کوکتل و ایده‌های میزبانی — قابل جستجو و فیلتر، با محصولات پیشنهادی برای تهیهٔ هر دستور.",
   path: "/recipes",
-})
+});
 
-const PAGE_SIZE = 12
+const PAGE_SIZE = 12;
 
 type SearchParams = Promise<{
-  q?: string
-  difficulty?: string
-  sort?: string
-  page?: string
-}>
+  q?: string;
+  difficulty?: string;
+  sort?: string;
+  page?: string;
+}>;
 
 function toParams(sp: Awaited<SearchParams>): RecipeListParams {
-  const params: RecipeListParams = { limit: PAGE_SIZE }
-  if (sp.q) params.search = sp.q
-  if (sp.difficulty === "easy" || sp.difficulty === "medium" || sp.difficulty === "hard") {
-    params.difficulty = sp.difficulty as RecipeDifficulty
+  const params: RecipeListParams = { limit: PAGE_SIZE };
+  if (sp.q) params.search = sp.q;
+  if (
+    sp.difficulty === "easy" ||
+    sp.difficulty === "medium" ||
+    sp.difficulty === "hard"
+  ) {
+    params.difficulty = sp.difficulty as RecipeDifficulty;
   }
   switch (sp.sort) {
     case "popular":
-      params.sortBy = "view_count"
-      params.orderBy = "desc"
-      break
+      params.sortBy = "view_count";
+      params.orderBy = "desc";
+      break;
     case "quick":
-      params.sortBy = "total_time_minutes"
-      params.orderBy = "asc"
-      break
+      params.sortBy = "total_time_minutes";
+      params.orderBy = "asc";
+      break;
     default:
-      params.sortBy = "published_at"
-      params.orderBy = "desc"
+      params.sortBy = "published_at";
+      params.orderBy = "desc";
   }
-  const page = Number(sp.page)
-  if (Number.isFinite(page) && page > 1) params.page = page
-  return params
+  const page = Number(sp.page);
+  if (Number.isFinite(page) && page > 1) params.page = page;
+  return params;
 }
 
 /** Build a /recipes?… href preserving current filters with an overridden page. */
 function pageHref(sp: Awaited<SearchParams>, page: number): string {
-  const params = new URLSearchParams()
-  if (sp.q) params.set("q", sp.q)
-  if (sp.difficulty) params.set("difficulty", sp.difficulty)
-  if (sp.sort) params.set("sort", sp.sort)
-  if (page > 1) params.set("page", String(page))
-  const qs = params.toString()
-  return qs ? `/recipes?${qs}` : "/recipes"
+  const params = new URLSearchParams();
+  if (sp.q) params.set("q", sp.q);
+  if (sp.difficulty) params.set("difficulty", sp.difficulty);
+  if (sp.sort) params.set("sort", sp.sort);
+  if (page > 1) params.set("page", String(page));
+  const qs = params.toString();
+  return qs ? `/recipes?${qs}` : "/recipes";
 }
 
-export default async function RecipesPage({ searchParams }: { searchParams: SearchParams }) {
-  const sp = await searchParams
+export default async function RecipesPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const sp = await searchParams;
   // The spotlight only shows on the untouched landing view (no filters / page 1).
-  const isDefaultView = !sp.q && !sp.difficulty && !sp.sort && (!sp.page || sp.page === "1")
+  const isDefaultView =
+    !sp.q && !sp.difficulty && !sp.sort && (!sp.page || sp.page === "1");
 
   const [{ results: recipes, pagination }, featuredList] = await Promise.all([
     listRecipes(toParams(sp)),
     isDefaultView ? getFeaturedRecipes() : Promise.resolve([]),
-  ])
-  const spotlight = featuredList[0]
+  ]);
+  const spotlight = featuredList[0];
 
   return (
     <>
@@ -105,8 +121,8 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
               چه چیزی میل دارید بسازید؟
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground">
-              از کلاسیک‌های بی‌زمان تا ترکیب‌های تازه — جستجو کنید، فیلتر بزنید و
-              محصولات لازم را مستقیم از همان صفحه تهیه کنید.
+              از کلاسیک‌های بی‌زمان تا ترکیب‌های تازه — جستجو کنید، فیلتر بزنید
+              و محصولات لازم را مستقیم از همان صفحه تهیه کنید.
             </p>
           </Reveal>
         </div>
@@ -141,15 +157,19 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
                   {spotlight.title}
                 </h2>
                 {spotlight.excerpt ? (
-                  <p className="line-clamp-3 leading-relaxed text-muted-foreground">{spotlight.excerpt}</p>
+                  <p className="line-clamp-3 leading-relaxed text-muted-foreground">
+                    {spotlight.excerpt}
+                  </p>
                 ) : null}
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5">
-                    <Clock className="size-4" /> {formatDuration(spotlight.total_time_minutes)}
+                    <Clock className="size-4" />{" "}
+                    {formatDuration(spotlight.total_time_minutes)}
                   </span>
                   {spotlight.servings > 0 ? (
                     <span className="inline-flex items-center gap-1.5">
-                      <Users className="size-4" /> {faNum(spotlight.servings)} نفر
+                      <Users className="size-4" /> {faNum(spotlight.servings)}{" "}
+                      نفر
                     </span>
                   ) : null}
                   <span>{difficultyFa[spotlight.difficulty]}</span>
@@ -175,7 +195,11 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
         </div>
 
         {/* Result count */}
-        <p className="mt-6 text-sm text-muted-foreground" aria-live="polite" role="status">
+        <p
+          className="mt-6 text-sm text-muted-foreground"
+          aria-live="polite"
+          role="status"
+        >
           {pagination.total_items > 0
             ? `${faNum(pagination.total_items)} دستور یافت شد`
             : "دستوری مطابق فیلترها نیست"}
@@ -193,7 +217,10 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
             </Button>
           </div>
         ) : (
-          <ul className="mt-6 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3" data-recipes-grid>
+          <ul
+            className="mt-6 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3"
+            data-recipes-grid
+          >
             {recipes.map((recipe, i) => (
               <li key={recipe.id} className="contents">
                 <Reveal delay={Math.min(i, 5) * 0.04} y={16}>
@@ -246,5 +273,5 @@ export default async function RecipesPage({ searchParams }: { searchParams: Sear
         ) : null}
       </section>
     </>
-  )
+  );
 }

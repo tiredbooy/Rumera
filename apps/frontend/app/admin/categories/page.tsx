@@ -1,16 +1,16 @@
-import Link from "next/link"
-import { Plus } from "lucide-react"
+import Link from "next/link";
+import { Plus } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth/session"
-import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { can } from "@/lib/rbac/can"
-import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { CategoriesTable } from "@/features/admin/categories/components/categories-table"
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { can } from "@/lib/rbac/can";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/features/dashboard/components/page-header";
+import { CategoriesTable } from "@/features/admin/categories/components/categories-table";
 
 export default async function AdminCategoriesPage() {
-  const session = await requirePermission(PERMISSIONS.PRODUCTS_READ)
-  const canWrite = can(session, PERMISSIONS.PRODUCTS_WRITE)
+  const session = await requirePermission(PERMISSIONS.PRODUCTS_READ);
+  const canWrite = can(session, PERMISSIONS.PRODUCTS_WRITE);
 
   return (
     <>
@@ -30,5 +30,5 @@ export default async function AdminCategoriesPage() {
 
       <CategoriesTable canWrite={canWrite} />
     </>
-  )
+  );
 }

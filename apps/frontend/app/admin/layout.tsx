@@ -6,22 +6,22 @@
  *
  * `force-dynamic` because everything here is authenticated, per-user, live data.
  */
-import type { Metadata } from "next"
+import type { Metadata } from "next";
 
-import { requireStaff } from "@/lib/auth/session"
-import { ROLE_LABELS } from "@/lib/rbac/roles"
-import { DashboardShell } from "@/components/dashboard/dashboard-shell"
-import { noindexMetadata } from "@/lib/seo/metadata"
+import { requireStaff } from "@/lib/auth/session";
+import { ROLE_LABELS } from "@/lib/rbac/roles";
+import { DashboardShell } from "@/features/dashboard/components/dashboard-shell";
+import { noindexMetadata } from "@/lib/seo/metadata";
 
-export const dynamic = "force-dynamic"
-export const metadata: Metadata = noindexMetadata("پنل مدیریت")
+export const dynamic = "force-dynamic";
+export const metadata: Metadata = noindexMetadata("پنل مدیریت");
 
 export default async function AdminLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  const session = await requireStaff()
+  const session = await requireStaff();
 
   return (
     <DashboardShell
@@ -35,5 +35,5 @@ export default async function AdminLayout({
     >
       {children}
     </DashboardShell>
-  )
+  );
 }

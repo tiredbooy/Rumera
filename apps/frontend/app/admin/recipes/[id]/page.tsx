@@ -8,7 +8,7 @@ import { serverApi, ApiError } from "@/lib/api/client";
 import type { Paginated } from "@/lib/catalog/types";
 import type { RecipeDetail } from "@/lib/recipes";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/features/dashboard/components/page-header";
 import { RecipeForm } from "@/features/admin/recipes/components/RecipeForm";
 
 type AdminTag = { id: number; title: string };

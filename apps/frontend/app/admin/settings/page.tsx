@@ -1,26 +1,29 @@
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth/session"
-import { PERMISSIONS } from "@/lib/rbac/permissions"
-import { serverApi } from "@/lib/api/client"
-import type { SiteSettings } from "@/lib/api/admin-client"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { SettingsForm } from "@/components/admin/settings-form"
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { serverApi } from "@/lib/api/client";
+import type { SiteSettings } from "@/lib/api/admin-client";
+import { PageHeader } from "@/features/dashboard/components/page-header";
+import { SettingsForm } from "@/features/admin/settings/components/SettingsForm";
 
 export default async function AdminSettingsPage() {
-  await requirePermission(PERMISSIONS.SETTINGS_MANAGE)
+  await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
 
-  let settings: SiteSettings | null = null
-  let loadError = false
+  let settings: SiteSettings | null = null;
+  let loadError = false;
   try {
-    settings = await serverApi<SiteSettings>("/admin/settings")
+    settings = await serverApi<SiteSettings>("/admin/settings");
   } catch {
-    loadError = true
+    loadError = true;
   }
 
   return (
     <>
-      <PageHeader title="تنظیمات" description="پیکربندی فروشگاه، تماس، شبکه‌های اجتماعی، ارسال، سئو و حالت تعمیر." />
+      <PageHeader
+        title="تنظیمات"
+        description="پیکربندی فروشگاه، تماس، شبکه‌های اجتماعی، ارسال، سئو و حالت تعمیر."
+      />
       {loadError || !settings ? (
         <div
           className="border-hairline flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-16 text-center ring-1 ring-foreground/[0.04]"
@@ -41,5 +44,5 @@ export default async function AdminSettingsPage() {
         <SettingsForm settings={settings} />
       )}
     </>
-  )
+  );
 }

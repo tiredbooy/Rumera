@@ -1,16 +1,16 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { ImagePlus, Loader2, X } from "lucide-react"
+import * as React from "react";
+import { ImagePlus, Loader2, X } from "lucide-react";
 
-import { cn } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { SmartImage } from "@/components/smart-image"
-import { uploadImage } from "@/lib/api/admin-client"
+import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { SmartImage } from "@/components/smart-image";
+import { uploadImage } from "@/lib/api/admin-client";
 
-const MAX_MB = 15
-const ACCEPT = ["image/jpeg", "image/png", "image/webp", "image/avif"]
+const MAX_MB = 15;
+const ACCEPT = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
 /**
  * A flexible image field: paste a URL **or** upload a file and get a URL back.
@@ -20,9 +20,28 @@ const ACCEPT = ["image/jpeg", "image/png", "image/webp", "image/avif"]
  * `POST /admin/uploads` endpoint and the resulting public URL is written back
  * through `onChange`. Reused by the hero, recipe (and future journal) forms.
  */
+
+interface FlexibleImageInputProps {
+  value: string;
+  maxSizeMB?: number;
+  accept?: string[];
+  onChange: (url: string) => void;
+  onBlur?: () => void;
+  /** Storage bucket on the backend (e.g. "hero", "recipes", "journals"). */
+  folder?: string;
+  placeholder?: string;
+  ariaInvalid?: boolean;
+  disabled?: boolean;
+  previewClassName?: string;
+  /** Skip the built-in preview when the parent already renders one. */
+  hidePreview?: boolean;
+}
+
 export function FlexibleImageInput({
   value,
   onChange,
+  maxSizeMB,
+  accept,
   onBlur,
   folder,
   placeholder = "https://… یا بارگذاری فایل",
@@ -30,43 +49,32 @@ export function FlexibleImageInput({
   disabled,
   previewClassName,
   hidePreview,
-}: {
-  value: string
-  onChange: (url: string) => void
-  onBlur?: () => void
-  /** Storage bucket on the backend (e.g. "hero", "recipes", "journals"). */
-  folder?: string
-  placeholder?: string
-  ariaInvalid?: boolean
-  disabled?: boolean
-  previewClassName?: string
-  /** Skip the built-in preview when the parent already renders one. */
-  hidePreview?: boolean
-}) {
-  const inputRef = React.useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = React.useState(false)
-  const [progress, setProgress] = React.useState(0)
-  const [error, setError] = React.useState<string | null>(null)
+}: FlexibleImageInputProps) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [progress, setProgress] = React.useState(0);
+  const [error, setError] = React.useState<string | null>(null);
 
   async function handleFile(file: File) {
-    setError(null)
-    if (!ACCEPT.includes(file.type)) {
-      setError("فرمت پشتیبانی نمی‌شود (JPG/PNG/WebP/AVIF)")
-      return
+    setError(null);
+    if (!accept?.includes(file.type)) {
+      const accepted = accept?.join(", ") || ACCEPT.join(", ");
+      setError(`فرمت پشتیبانی نمی‌شود (${accepted})`);
+      return;
     }
-    if (file.size > MAX_MB * 1024 * 1024) {
-      setError(`حجم باید کمتر از ${MAX_MB} مگابایت باشد`)
-      return
+    if (file.size > (maxSizeMB || MAX_MB) * 1024 * 1024) {
+      setError(`حجم باید کمتر از ${maxSizeMB || MAX_MB} مگابایت باشد`);
+      return;
     }
-    setUploading(true)
-    setProgress(0)
+    setUploading(true);
+    setProgress(0);
     try {
-      const res = await uploadImage(file, { folder }, (f) => setProgress(f))
-      onChange(res.url)
+      const res = await uploadImage(file, { folder }, (f) => setProgress(f));
+      onChange(res.url);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "بارگذاری ناموفق بود")
+      setError(e instanceof Error ? e.message : "بارگذاری ناموفق بود");
     } finally {
-      setUploading(false)
+      setUploading(false);
     }
   }
 
@@ -103,9 +111,9 @@ export function FlexibleImageInput({
           accept={ACCEPT.join(",")}
           className="sr-only"
           onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) handleFile(f)
-            e.target.value = ""
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+            e.target.value = "";
           }}
         />
       </div>
@@ -125,7 +133,7 @@ export function FlexibleImageInput({
         <div
           className={cn(
             "relative aspect-video w-full overflow-hidden rounded-xl border border-border/60 bg-muted",
-            previewClassName
+            previewClassName,
           )}
         >
           <SmartImage src={value} alt="پیش‌نمایش تصویر" sizes="400px" />
@@ -140,5 +148,5 @@ export function FlexibleImageInput({
         </div>
       ) : null}
     </div>
-  )
+  );
 }

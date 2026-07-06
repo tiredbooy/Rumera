@@ -1,73 +1,73 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import { Clock, Eye, ArrowLeft, ShoppingBag } from "lucide-react"
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { Clock, Eye, ArrowLeft, ShoppingBag } from "lucide-react";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { JsonLd } from "@/components/json-ld"
-import { breadcrumbLd } from "@/lib/seo/jsonld"
-import { absoluteUrl, siteConfig } from "@/lib/site"
-import { SmartImage } from "@/components/smart-image"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { JournalCard } from "@/components/journal/journal-card"
-import { ArticleBody } from "@/components/journal/article-body"
-import { ShareLinks } from "@/components/journal/share-links"
-import { AddToCartButton } from "@/components/catalog/add-to-cart-button"
-import { faNum, formatPrice } from "@/lib/products"
-import { getProductById } from "@/lib/catalog/products"
-import type { ProductDetail } from "@/lib/catalog/types"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/components/json-ld";
+import { breadcrumbLd } from "@/lib/seo/jsonld";
+import { absoluteUrl, siteConfig } from "@/lib/site";
+import { SmartImage } from "@/components/smart-image";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { JournalCard } from "@/features/journal/components/journal-card";
+import { ArticleBody } from "@/features/journal/components/article-body";
+import { ShareLinks } from "@/features/journal/components/share-links";
+import { AddToCartButton } from "@/features/catalog/components/add-to-cart-button";
+import { faNum, formatPrice } from "@/lib/products";
+import { getProductById } from "@/lib/catalog/products";
+import type { ProductDetail } from "@/lib/catalog/types";
 import {
   getBlogBySlug,
   getRelatedBlogs,
   allBlogSlugs,
   formatBlogDate,
   readingTime,
-} from "@/lib/journal"
+} from "@/lib/journal";
 
-export const revalidate = 3600
+export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  const slugs = await allBlogSlugs()
-  return slugs.map((slug) => ({ slug }))
+  const slugs = await allBlogSlugs();
+  return slugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const { slug } = await params
-  const post = await getBlogBySlug(slug)
-  if (!post) return buildMetadata({ title: "نوشته یافت نشد", index: false })
+  const { slug } = await params;
+  const post = await getBlogBySlug(slug);
+  if (!post) return buildMetadata({ title: "نوشته یافت نشد", index: false });
   return buildMetadata({
     title: post.meta_title ?? post.title,
     description: post.meta_description ?? post.excerpt ?? undefined,
     path: `/journal/${post.slug}`,
     type: "article",
     images: post.image_url ? [post.image_url] : undefined,
-  })
+  });
 }
 
 export default async function JournalPostPage({
   params,
 }: {
-  params: Promise<{ slug: string }>
+  params: Promise<{ slug: string }>;
 }) {
-  const { slug } = await params
-  const post = await getBlogBySlug(slug)
-  if (!post) notFound()
+  const { slug } = await params;
+  const post = await getBlogBySlug(slug);
+  if (!post) notFound();
 
   // Hydrate linked products (cap a few) for the "shop this article" upsell, plus
   // pull a few more posts for the read-next rail — concurrently.
   const [products, related] = await Promise.all([
-    Promise.all((post.product_ids ?? []).slice(0, 4).map((id) => getProductById(id))).then((list) =>
-      list.filter((p): p is ProductDetail => Boolean(p))
-    ),
+    Promise.all(
+      (post.product_ids ?? []).slice(0, 4).map((id) => getProductById(id)),
+    ).then((list) => list.filter((p): p is ProductDetail => Boolean(p))),
     getRelatedBlogs(slug, 3),
-  ])
+  ]);
 
-  const url = absoluteUrl(`/journal/${post.slug}`)
+  const url = absoluteUrl(`/journal/${post.slug}`);
   const articleLd = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
@@ -81,7 +81,7 @@ export default async function JournalPostPage({
     mainEntityOfPage: url,
     author: { "@type": "Organization", name: siteConfig.name },
     publisher: { "@type": "Organization", name: siteConfig.name },
-  }
+  };
 
   return (
     <>
@@ -128,7 +128,9 @@ export default async function JournalPostPage({
             </div>
           ) : null}
 
-          <h1 className="text-balance font-serif text-4xl leading-[1.1] sm:text-5xl">{post.title}</h1>
+          <h1 className="text-balance font-serif text-4xl leading-[1.1] sm:text-5xl">
+            {post.title}
+          </h1>
 
           {post.excerpt ? (
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">
@@ -138,14 +140,18 @@ export default async function JournalPostPage({
 
           <div className="mt-7 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {post.published_at ? (
-              <time dateTime={post.published_at}>{formatBlogDate(post.published_at)}</time>
+              <time dateTime={post.published_at}>
+                {formatBlogDate(post.published_at)}
+              </time>
             ) : null}
             <span className="inline-flex items-center gap-1.5">
-              <Clock className="size-4" aria-hidden /> {readingTime(post.time_to_read)}
+              <Clock className="size-4" aria-hidden />{" "}
+              {readingTime(post.time_to_read)}
             </span>
             {post.total_reads > 0 ? (
               <span className="inline-flex items-center gap-1.5">
-                <Eye className="size-4" aria-hidden /> {faNum(post.total_reads)} بازدید
+                <Eye className="size-4" aria-hidden /> {faNum(post.total_reads)}{" "}
+                بازدید
               </span>
             ) : null}
           </div>
@@ -207,7 +213,10 @@ export default async function JournalPostPage({
               className="group/all inline-flex items-center gap-1.5 rounded text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               همهٔ نوشته‌ها
-              <ArrowLeft className="size-4 transition-transform duration-300 group-hover/all:-translate-x-1" aria-hidden />
+              <ArrowLeft
+                className="size-4 transition-transform duration-300 group-hover/all:-translate-x-1"
+                aria-hidden
+              />
             </Link>
           </div>
           <ul className="mt-10 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
@@ -220,19 +229,25 @@ export default async function JournalPostPage({
         </section>
       ) : null}
     </>
-  )
+  );
 }
 
 function ArticleProductCard({ product }: { product: ProductDetail }) {
-  const activeVariants = (product.variants ?? []).filter((v) => v.is_active)
-  const cheapest = activeVariants.slice().sort((a, b) => a.price - b.price)[0]
-  const image = (product.images ?? []).find((i) => i.is_primary) ?? product.images?.[0]
-  const onSale = cheapest?.compare_at_price != null && cheapest.compare_at_price > cheapest.price
-  const pdp = `/products/${product.slug}`
+  const activeVariants = (product.variants ?? []).filter((v) => v.is_active);
+  const cheapest = activeVariants.slice().sort((a, b) => a.price - b.price)[0];
+  const image =
+    (product.images ?? []).find((i) => i.is_primary) ?? product.images?.[0];
+  const onSale =
+    cheapest?.compare_at_price != null &&
+    cheapest.compare_at_price > cheapest.price;
+  const pdp = `/products/${product.slug}`;
 
   return (
     <article className="border-hairline flex flex-col gap-4 rounded-3xl bg-card p-5 ring-1 ring-foreground/5">
-      <Link href={pdp} className="relative block aspect-square overflow-hidden rounded-2xl">
+      <Link
+        href={pdp}
+        className="relative block aspect-square overflow-hidden rounded-2xl"
+      >
         <SmartImage
           src={image?.image_url}
           alt={image?.alt_text ?? product.title}
@@ -246,7 +261,9 @@ function ArticleProductCard({ product }: { product: ProductDetail }) {
         </h3>
         {cheapest ? (
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-serif text-xl">{formatPrice(cheapest.price)}</span>
+            <span className="font-serif text-xl">
+              {formatPrice(cheapest.price)}
+            </span>
             {onSale ? (
               <span className="text-xs text-muted-foreground line-through">
                 {formatPrice(cheapest.compare_at_price!)}
@@ -265,5 +282,5 @@ function ArticleProductCard({ product }: { product: ProductDetail }) {
         </div>
       </div>
     </article>
-  )
+  );
 }

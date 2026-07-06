@@ -1,5 +1,5 @@
-import { AccountPageHeader } from "@/components/account/account-page-header"
-import { WalletView } from "@/components/account/wallet-view"
+import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
+import { WalletView } from "@/features/account/wallet/components/wallet-view";
 
 export default function AccountWalletPage() {
   return (
@@ -11,5 +11,5 @@ export default function AccountWalletPage() {
       />
       <WalletView />
     </>
-  )
+  );
 }

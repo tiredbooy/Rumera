@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/features/dashboard/components/page-header";
 import { OrderStatusBadge } from "@/components/admin/status-badge";
 import { OrderActions } from "@/features/admin/orders/components/OrderActions";
 

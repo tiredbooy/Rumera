@@ -1,4 +1,4 @@
-import Link from "next/link"
+import Link from "next/link";
 import {
   ArrowLeft,
   Truck,
@@ -9,26 +9,26 @@ import {
   Sparkles,
   Check,
   TrendingUp,
-} from "lucide-react"
+} from "lucide-react";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { ProductCard } from "@/components/catalog/product-card"
-import { SmartImage } from "@/components/smart-image"
-import { Reveal } from "@/components/motion/reveal"
-import { BrandMarquee } from "@/components/brand-marquee"
-import { HeroCarousel } from "@/components/home/hero-carousel"
-import { ForYouRail } from "@/components/home/for-you-rail"
-import { RecommendationRail } from "@/components/catalog/recommendation-rail"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ProductCard } from "@/features/catalog/components/product-card";
+import { SmartImage } from "@/components/smart-image";
+import { Reveal } from "@/features/motion/components/reveal";
+import { BrandMarquee } from "@/components/brand-marquee";
+import { HeroCarousel } from "@/features/home/components/hero-carousel";
+import { ForYouRail } from "@/features/home/components/for-you-rail";
+import { RecommendationRail } from "@/features/catalog/components/recommendation-rail";
 // import { HomeStructuredData } from "@/components/structured-data"
-import { getHeroSlides } from "@/lib/home/hero"
-import { getHomeCategories } from "@/lib/home/categories"
-import { categoryIconFor } from "@/lib/home/category-icons"
-import { getTrending } from "@/lib/catalog/recommendations"
-import { getFeaturedBrands } from "@/lib/home/brands"
+import { getHeroSlides } from "@/lib/home/hero";
+import { getHomeCategories } from "@/lib/home/categories";
+import { categoryIconFor } from "@/lib/home/category-icons";
+import { getTrending } from "@/lib/catalog/recommendations";
+import { getFeaturedBrands } from "@/lib/home/brands";
 
 // Home is ISR — the hero slides are admin-managed and refetched periodically.
-export const revalidate = 300
+export const revalidate = 300;
 
 const perks = [
   {
@@ -51,7 +51,7 @@ const perks = [
     title: "پشتیبانی واقعی",
     desc: "همراه شما، پیش و پس از خرید",
   },
-]
+];
 
 export default async function Home() {
   const [heroSlides, trending, homeCategories, brands] = await Promise.all([
@@ -59,16 +59,18 @@ export default async function Home() {
     getTrending({ limit: 8 }),
     getHomeCategories(),
     getFeaturedBrands(),
-  ])
+  ]);
 
   // Catalogue filter chips derived from the live categories — "همه" links to the
   // full shop, each category to its listing. First chip is the active default.
   const filterChips = [
     { key: "all", label: "همه", href: "/products" },
-    ...homeCategories
-      .slice(0, 4)
-      .map((c) => ({ key: String(c.id), label: c.title, href: `/categories/${c.slug}` })),
-  ]
+    ...homeCategories.slice(0, 4).map((c) => ({
+      key: String(c.id),
+      label: c.title,
+      href: `/categories/${c.slug}`,
+    })),
+  ];
 
   return (
     <>
@@ -115,9 +117,16 @@ export default async function Home() {
         <Reveal className="flex items-end justify-between gap-4">
           <div>
             <p className="eyebrow mb-3">خرید بر اساس دسته‌بندی</p>
-            <h2 className="font-serif text-4xl sm:text-5xl">هر چه می‌خواهید، یک‌جا</h2>
+            <h2 className="font-serif text-4xl sm:text-5xl">
+              هر چه می‌خواهید، یک‌جا
+            </h2>
           </div>
-          <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="hidden sm:inline-flex"
+          >
             <Link href="/products">
               مشاهدهٔ همه <ArrowLeft />
             </Link>
@@ -126,8 +135,8 @@ export default async function Home() {
 
         <div className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
           {homeCategories.map((cat, i) => {
-            const isHero = i === 0
-            const Icon = categoryIconFor(cat.slug)
+            const isHero = i === 0;
+            const Icon = categoryIconFor(cat.slug);
             return (
               <Reveal
                 key={cat.id}
@@ -145,7 +154,11 @@ export default async function Home() {
                     <SmartImage
                       src={`/images/categories/${cat.slug}.jpg`}
                       alt={cat.title}
-                      sizes={isHero ? "(max-width: 1024px) 100vw, 50vw" : "(max-width: 1024px) 50vw, 25vw"}
+                      sizes={
+                        isHero
+                          ? "(max-width: 1024px) 100vw, 50vw"
+                          : "(max-width: 1024px) 50vw, 25vw"
+                      }
                       monogram={cat.title.charAt(0)}
                     />
                   </div>
@@ -158,7 +171,9 @@ export default async function Home() {
                   </span>
 
                   <div className="relative p-4 text-white sm:p-5">
-                    <h3 className={`font-serif ${isHero ? "text-2xl sm:text-4xl" : "text-xl sm:text-2xl"}`}>
+                    <h3
+                      className={`font-serif ${isHero ? "text-2xl sm:text-4xl" : "text-xl sm:text-2xl"}`}
+                    >
                       {cat.title}
                     </h3>
                     <p className="mt-1 line-clamp-1 text-xs text-white/75 sm:text-sm">
@@ -171,7 +186,7 @@ export default async function Home() {
                   </div>
                 </Link>
               </Reveal>
-            )
+            );
           })}
         </div>
       </section>
@@ -315,7 +330,10 @@ export default async function Home() {
 
               {/* Visual signup form — wire to the newsletter endpoint when available. */}
               <form className="flex w-full flex-col gap-3 rounded-3xl bg-background/70 p-5 backdrop-blur-md sm:p-6">
-                <label htmlFor="newsletter-email" className="text-sm font-medium">
+                <label
+                  htmlFor="newsletter-email"
+                  className="text-sm font-medium"
+                >
                   ایمیل خود را وارد کنید
                 </label>
                 <Input
@@ -339,5 +357,5 @@ export default async function Home() {
         </Reveal>
       </section>
     </>
-  )
+  );
 }

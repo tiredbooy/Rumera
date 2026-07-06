@@ -1,5 +1,5 @@
-import { AccountPageHeader } from "@/components/account/account-page-header"
-import { WishlistView } from "@/components/account/wishlist-view"
+import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
+import { WishlistView } from "@/features/account/wishlist/components/wishlist-view";
 
 export default function AccountWishlistPage() {
   return (
@@ -11,5 +11,5 @@ export default function AccountWishlistPage() {
       />
       <WishlistView />
     </>
-  )
+  );
 }

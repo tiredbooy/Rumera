@@ -1,9 +1,9 @@
-import { getSession } from "@/lib/auth/session"
-import { AccountPageHeader } from "@/components/account/account-page-header"
-import { SettingsView } from "@/components/account/settings-view"
+import { getSession } from "@/lib/auth/session";
+import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
+import { SettingsView } from "@/features/account/settings/components/settings-view";
 
 export default async function AccountSettingsPage() {
-  const session = await getSession()
+  const session = await getSession();
 
   return (
     <>
@@ -17,5 +17,5 @@ export default async function AccountSettingsPage() {
         defaultEmail={session?.user?.email ?? ""}
       />
     </>
-  )
+  );
 }

@@ -1,5 +1,5 @@
-import type { Metadata } from "next"
-import Link from "next/link"
+import type { Metadata } from "next";
+import Link from "next/link";
 import {
   HelpCircle,
   ShoppingBag,
@@ -9,36 +9,37 @@ import {
   UserRound,
   Headphones,
   MessageCircle,
-} from "lucide-react"
+} from "lucide-react";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { JsonLd } from "@/components/json-ld"
-import { faqLd, breadcrumbLd } from "@/lib/seo/jsonld"
-import { Button } from "@/components/ui/button"
-import { Reveal } from "@/components/motion/reveal"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/components/json-ld";
+import { faqLd, breadcrumbLd } from "@/lib/seo/jsonld";
+import { Button } from "@/components/ui/button";
+import { Reveal } from "@/features/motion/components/reveal";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion"
+} from "@/components/ui/accordion";
 
-export const revalidate = 86400
+export const revalidate = 86400;
 
 export const metadata: Metadata = buildMetadata({
   title: "پرسش‌های پرتکرار",
-  description: "پاسخ پرسش‌های رایج دربارهٔ خرید، ارسال، اصالت و بازگشت کالا در رومرا.",
+  description:
+    "پاسخ پرسش‌های رایج دربارهٔ خرید، ارسال، اصالت و بازگشت کالا در رومرا.",
   path: "/faq",
-})
+});
 
-type Faq = { question: string; answer: string }
+type Faq = { question: string; answer: string };
 type FaqGroup = {
-  id: string
-  title: string
-  desc: string
-  icon: typeof HelpCircle
-  items: Faq[]
-}
+  id: string;
+  title: string;
+  desc: string;
+  icon: typeof HelpCircle;
+  items: Faq[];
+};
 
 const groups: FaqGroup[] = [
   {
@@ -111,17 +112,19 @@ const groups: FaqGroup[] = [
       },
     ],
   },
-]
+];
 
 // Flatten for structured-data (preserves original FAQ schema payload).
-const allFaqs: Faq[] = groups.flatMap((g) => g.items)
+const allFaqs: Faq[] = groups.flatMap((g) => g.items);
 
 export default function FaqPage() {
   return (
     <>
       <JsonLd
         data={[
-          faqLd(allFaqs.map((f) => ({ question: f.question, answer: f.answer }))),
+          faqLd(
+            allFaqs.map((f) => ({ question: f.question, answer: f.answer })),
+          ),
           breadcrumbLd([
             { name: "خانه", path: "/" },
             { name: "پرسش‌های پرتکرار", path: "/faq" },
@@ -221,5 +224,5 @@ export default function FaqPage() {
         </Reveal>
       </section>
     </>
-  )
+  );
 }

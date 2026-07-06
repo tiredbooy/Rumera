@@ -6,7 +6,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { serverApi, ApiError } from "@/lib/api/client";
 import type { UserAdminResponse } from "@/lib/api/admin-client";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/features/dashboard/components/page-header";
 import { UserEditForm } from "@/features/admin/customers/components/UserEditForm";
 
 export default async function AdminEditUserPage({

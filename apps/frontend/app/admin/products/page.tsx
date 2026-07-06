@@ -8,7 +8,7 @@ import { faNum } from "@/lib/products";
 import { serverApi } from "@/lib/api/client";
 import type { Paginated, ProductListItem } from "@/lib/catalog/types";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/features/dashboard/components/page-header";
 import { ProductsTable } from "@/features/admin/products/components/products-table";
 
 const EMPTY: Paginated<ProductListItem> = {

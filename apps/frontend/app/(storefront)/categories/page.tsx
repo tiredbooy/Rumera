@@ -1,26 +1,32 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { ArrowLeft, ChevronLeft, Grid2x2, Layers, PackageOpen } from "lucide-react"
+import type { Metadata } from "next";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  Grid2x2,
+  Layers,
+  PackageOpen,
+} from "lucide-react";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { JsonLd } from "@/components/json-ld"
-import { breadcrumbLd } from "@/lib/seo/jsonld"
-import { absoluteUrl } from "@/lib/site"
-import { categoryTree } from "@/lib/catalog/categories"
-import type { Category } from "@/lib/catalog/types"
-import { faNum } from "@/lib/products"
-import { Reveal } from "@/components/motion/reveal"
-import { SmartImage } from "@/components/smart-image"
-import { Placeholder } from "@/components/dashboard/placeholder"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/components/json-ld";
+import { breadcrumbLd } from "@/lib/seo/jsonld";
+import { absoluteUrl } from "@/lib/site";
+import { categoryTree } from "@/lib/catalog/categories";
+import type { Category } from "@/lib/catalog/types";
+import { faNum } from "@/lib/products";
+import { Reveal } from "@/features/motion/components/reveal";
+import { SmartImage } from "@/components/smart-image";
+import { Placeholder } from "@/features/dashboard/components/placeholder";
 
-export const revalidate = 3600
+export const revalidate = 3600;
 
 export const metadata: Metadata = buildMetadata({
   title: "دسته‌بندی‌ها",
   description:
     "فهرست کامل دسته‌بندی‌های رومرا — از ویسکی و شراب تا شامپاین و اسپیریت‌های نایاب. دسته‌ای را برگزینید و مجموعهٔ منتخب آن را مرور کنید.",
   path: "/categories",
-})
+});
 
 /**
  * Storefront category directory. Presents the full category tree as a browsable
@@ -29,9 +35,12 @@ export const metadata: Metadata = buildMetadata({
  * fallback and surface child categories as quick-jump chips instead.
  */
 export default async function CategoriesPage() {
-  const tree = await categoryTree()
-  const roots = tree.filter((c) => Boolean(c.slug))
-  const totalChildren = roots.reduce((sum, c) => sum + (c.children?.length ?? 0), 0)
+  const tree = await categoryTree();
+  const roots = tree.filter((c) => Boolean(c.slug));
+  const totalChildren = roots.reduce(
+    (sum, c) => sum + (c.children?.length ?? 0),
+    0,
+  );
 
   return (
     <>
@@ -67,14 +76,16 @@ export default async function CategoriesPage() {
               از کجا شروع کنیم؟
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground">
-              مجموعهٔ رومرا را بر اساس دسته‌بندی مرور کنید — هر دسته دروازه‌ای است
-              به برچسب‌های منتخب، از کلاسیک‌های بی‌زمان تا یافته‌های نادر.
+              مجموعهٔ رومرا را بر اساس دسته‌بندی مرور کنید — هر دسته دروازه‌ای
+              است به برچسب‌های منتخب، از کلاسیک‌های بی‌زمان تا یافته‌های نادر.
             </p>
             {roots.length ? (
               <p className="mt-6 inline-flex items-center gap-2 text-sm text-muted-foreground">
                 <Layers className="size-4 text-primary" aria-hidden />
                 {`${faNum(roots.length)} دستهٔ اصلی`}
-                {totalChildren > 0 ? ` · ${faNum(totalChildren)} زیرشاخه` : null}
+                {totalChildren > 0
+                  ? ` · ${faNum(totalChildren)} زیرشاخه`
+                  : null}
               </p>
             ) : null}
           </Reveal>
@@ -110,7 +121,7 @@ export default async function CategoriesPage() {
         )}
       </section>
     </>
-  )
+  );
 }
 
 /**
@@ -120,10 +131,10 @@ export default async function CategoriesPage() {
  * landing without leaving the parent's card link in the way.
  */
 function CategoryCard({ category }: { category: Category }) {
-  const href = `/categories/${category.slug}`
-  const children = (category.children ?? []).filter((c) => Boolean(c.slug))
-  const visibleChildren = children.slice(0, 4)
-  const extraChildren = children.length - visibleChildren.length
+  const href = `/categories/${category.slug}`;
+  const children = (category.children ?? []).filter((c) => Boolean(c.slug));
+  const visibleChildren = children.slice(0, 4);
+  const extraChildren = children.length - visibleChildren.length;
 
   return (
     <article className="group/cat border-hairline press shadow-e1 hover:shadow-e3 relative flex h-full flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:ring-primary/30">
@@ -199,7 +210,7 @@ function CategoryCard({ category }: { category: Category }) {
         </span>
       </div>
     </article>
-  )
+  );
 }
 
 /** Inline `ItemList` schema for the category directory (the tree carries no
@@ -215,5 +226,5 @@ function categoryListLd(roots: Category[]) {
       name: c.name,
       url: absoluteUrl(`/categories/${c.slug}`),
     })),
-  }
+  };
 }

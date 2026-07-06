@@ -1,5 +1,5 @@
-import { AccountPageHeader } from "@/components/account/account-page-header"
-import { AddressesView } from "@/components/account/addresses-view"
+import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
+import { AddressesView } from "@/features/account/addresses/components/addresses-view";
 
 export default function AccountAddressesPage() {
   return (
@@ -11,5 +11,5 @@ export default function AccountAddressesPage() {
       />
       <AddressesView />
     </>
-  )
+  );
 }

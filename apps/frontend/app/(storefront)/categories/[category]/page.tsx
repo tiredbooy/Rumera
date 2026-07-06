@@ -1,48 +1,51 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import { PackageOpen, ChevronLeft } from "lucide-react"
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { PackageOpen, ChevronLeft } from "lucide-react";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { JsonLd } from "@/components/json-ld"
-import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld"
-import { listCategories, getCategoryBySlug } from "@/lib/catalog/categories"
-import { listProducts } from "@/lib/catalog/products"
-import { faNum } from "@/lib/products"
-import { ProductCard } from "@/components/catalog/product-card"
-import { Placeholder } from "@/components/dashboard/placeholder"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/components/json-ld";
+import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld";
+import { listCategories, getCategoryBySlug } from "@/lib/catalog/categories";
+import { listProducts } from "@/lib/catalog/products";
+import { faNum } from "@/lib/products";
+import { ProductCard } from "@/features/catalog/components/product-card";
+import { Placeholder } from "@/features/dashboard/components/placeholder";
 
-export const revalidate = 3600
+export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  return (await listCategories()).map((c) => ({ category: c.slug }))
+  return (await listCategories()).map((c) => ({ category: c.slug }));
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ category: string }>
+  params: Promise<{ category: string }>;
 }): Promise<Metadata> {
-  const { category } = await params
-  const cat = await getCategoryBySlug(category)
-  if (!cat) return buildMetadata({ title: "دسته یافت نشد", index: false })
+  const { category } = await params;
+  const cat = await getCategoryBySlug(category);
+  if (!cat) return buildMetadata({ title: "دسته یافت نشد", index: false });
   return buildMetadata({
     title: cat.name,
     description: cat.description ?? `خرید ${cat.name} از مجموعهٔ منتخب رومرا.`,
     path: `/categories/${cat.slug}`,
-  })
+  });
 }
 
 export default async function CategoryPage({
   params,
 }: {
-  params: Promise<{ category: string }>
+  params: Promise<{ category: string }>;
 }) {
-  const { category } = await params
-  const cat = await getCategoryBySlug(category)
-  if (!cat) notFound()
+  const { category } = await params;
+  const cat = await getCategoryBySlug(category);
+  if (!cat) notFound();
 
-  const { results, pagination } = await listProducts({ category_id: cat.id, limit: 24 })
+  const { results, pagination } = await listProducts({
+    category_id: cat.id,
+    limit: 24,
+  });
 
   return (
     <>
@@ -64,16 +67,25 @@ export default async function CategoryPage({
             aria-label="مسیر"
             className="mb-6 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
           >
-            <Link href="/" className="transition-colors hover:text-foreground">خانه</Link>
+            <Link href="/" className="transition-colors hover:text-foreground">
+              خانه
+            </Link>
             <ChevronLeft className="size-3.5 opacity-50" />
-            <Link href="/products" className="transition-colors hover:text-foreground">فروشگاه</Link>
+            <Link
+              href="/products"
+              className="transition-colors hover:text-foreground"
+            >
+              فروشگاه
+            </Link>
             <ChevronLeft className="size-3.5 opacity-50" />
             <span className="font-medium text-foreground">{cat.name}</span>
           </nav>
           <p className="eyebrow mb-3">دسته‌بندی</p>
           <h1 className="section-title">{cat.name}</h1>
           {cat.description ? (
-            <p className="mt-4 max-w-2xl text-muted-foreground">{cat.description}</p>
+            <p className="mt-4 max-w-2xl text-muted-foreground">
+              {cat.description}
+            </p>
           ) : null}
           <p className="mt-4 text-sm text-muted-foreground">
             {`${faNum(pagination.total_items)} محصول در این دسته`}
@@ -97,5 +109,5 @@ export default async function CategoryPage({
         )}
       </section>
     </>
-  )
+  );
 }

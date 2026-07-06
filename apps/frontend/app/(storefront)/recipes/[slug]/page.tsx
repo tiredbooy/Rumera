@@ -1,8 +1,8 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Clock,
   Users,
@@ -11,18 +11,18 @@ import {
   Wine,
   ShoppingBag,
   ArrowLeft,
-} from "lucide-react"
+} from "lucide-react";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { JsonLd } from "@/components/json-ld"
-import { breadcrumbLd } from "@/lib/seo/jsonld"
-import { SmartImage } from "@/components/smart-image"
-import { Badge } from "@/components/ui/badge"
-import { Reveal } from "@/components/motion/reveal"
-import { RecipeCard } from "@/components/recipes/recipe-card"
-import { AddToCartButton } from "@/components/catalog/add-to-cart-button"
-import { AddAllIngredientsButton } from "@/components/recipes/add-all-button"
-import { faNum, formatPrice } from "@/lib/products"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/components/json-ld";
+import { breadcrumbLd } from "@/lib/seo/jsonld";
+import { SmartImage } from "@/components/smart-image";
+import { Badge } from "@/components/ui/badge";
+import { Reveal } from "@/features/motion/components/reveal";
+import { RecipeCard } from "@/features/recipes/components/recipe-card";
+import { AddToCartButton } from "@/features/catalog/components/add-to-cart-button";
+import { AddAllIngredientsButton } from "@/features/recipes/components/add-all-button";
+import { faNum, formatPrice } from "@/lib/products";
 import {
   getRecipeBySlug,
   getRelatedRecipes,
@@ -30,52 +30,62 @@ import {
   difficultyFa,
   formatDuration,
   type ShoppableProduct,
-} from "@/lib/recipes"
+} from "@/lib/recipes";
 
-export const revalidate = 3600
+export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  const slugs = await allRecipeSlugs()
-  return slugs.map((slug) => ({ slug }))
+  const slugs = await allRecipeSlugs();
+  return slugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const { slug } = await params
-  const recipe = await getRecipeBySlug(slug)
-  if (!recipe) return buildMetadata({ title: "دستور یافت نشد", index: false })
+  const { slug } = await params;
+  const recipe = await getRecipeBySlug(slug);
+  if (!recipe) return buildMetadata({ title: "دستور یافت نشد", index: false });
   return buildMetadata({
     title: recipe.meta_title ?? recipe.title,
-    description: recipe.meta_description ?? recipe.excerpt ?? recipe.description ?? undefined,
+    description:
+      recipe.meta_description ??
+      recipe.excerpt ??
+      recipe.description ??
+      undefined,
     path: `/recipes/${recipe.slug}`,
     type: "article",
-    images: [recipe.og_image_url ?? recipe.image_url].filter(Boolean) as string[],
-  })
+    images: [recipe.og_image_url ?? recipe.image_url].filter(
+      Boolean,
+    ) as string[],
+  });
 }
 
 export default async function RecipeDetailPage({
   params,
 }: {
-  params: Promise<{ slug: string }>
+  params: Promise<{ slug: string }>;
 }) {
-  const { slug } = await params
-  const recipe = await getRecipeBySlug(slug)
-  if (!recipe) notFound()
+  const { slug } = await params;
+  const recipe = await getRecipeBySlug(slug);
+  if (!recipe) notFound();
 
-  const related = await getRelatedRecipes(slug)
+  const related = await getRelatedRecipes(slug);
 
   const meta = [
     { icon: Clock, label: formatDuration(recipe.total_time_minutes) },
-    recipe.servings > 0 ? { icon: Users, label: `${faNum(recipe.servings)} نفر` } : null,
+    recipe.servings > 0
+      ? { icon: Users, label: `${faNum(recipe.servings)} نفر` }
+      : null,
     { icon: Flame, label: difficultyFa[recipe.difficulty] },
     recipe.glass_type ? { icon: Wine, label: recipe.glass_type } : null,
-    recipe.calories ? { icon: Zap, label: `${faNum(recipe.calories)} کالری` } : null,
-  ].filter(Boolean) as { icon: typeof Clock; label: string }[]
+    recipe.calories
+      ? { icon: Zap, label: `${faNum(recipe.calories)} کالری` }
+      : null,
+  ].filter(Boolean) as { icon: typeof Clock; label: string }[];
 
-  const availableCount = recipe.products.filter((p) => p.is_available).length
+  const availableCount = recipe.products.filter((p) => p.is_available).length;
 
   return (
     <>
@@ -94,9 +104,19 @@ export default async function RecipeDetailPage({
       <section className="cellar-glow border-b border-border/60">
         <div className="container-px mx-auto max-w-6xl py-12 sm:py-16">
           <nav className="mb-8 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Link href="/" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">خانه</Link>
+            <Link
+              href="/"
+              className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              خانه
+            </Link>
             <span aria-hidden>/</span>
-            <Link href="/recipes" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">دستورها</Link>
+            <Link
+              href="/recipes"
+              className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              دستورها
+            </Link>
             <span aria-hidden>/</span>
             <span className="text-foreground">{recipe.title}</span>
           </nav>
@@ -156,7 +176,11 @@ export default async function RecipeDetailPage({
       <section className="container-px mx-auto max-w-6xl py-16 sm:py-20">
         <div className="grid gap-10 lg:grid-cols-[0.9fr_1.4fr] lg:gap-14">
           {/* Ingredients */}
-          <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="مواد لازم" data-recipe-ingredients>
+          <aside
+            className="lg:sticky lg:top-24 lg:self-start"
+            aria-label="مواد لازم"
+            data-recipe-ingredients
+          >
             <div className="border-hairline rounded-3xl bg-card p-6 ring-1 ring-foreground/5 sm:p-7">
               <p className="eyebrow mb-3">مواد لازم</p>
               <h2 className="font-serif text-2xl">آنچه نیاز دارید</h2>
@@ -173,7 +197,9 @@ export default async function RecipeDetailPage({
                   >
                     <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
                     <span className="leading-relaxed">
-                      <span className="font-medium text-foreground">{ing.ingredient_name}</span>
+                      <span className="font-medium text-foreground">
+                        {ing.ingredient_name}
+                      </span>
                       {ing.quantity ? (
                         <span className="text-muted-foreground">
                           {" — "}
@@ -187,7 +213,9 @@ export default async function RecipeDetailPage({
                         </span>
                       ) : null}
                       {ing.notes ? (
-                        <span className="block text-xs text-muted-foreground/80">{ing.notes}</span>
+                        <span className="block text-xs text-muted-foreground/80">
+                          {ing.notes}
+                        </span>
                       ) : null}
                     </span>
                   </li>
@@ -209,7 +237,9 @@ export default async function RecipeDetailPage({
             {recipe.serving_suggestion ? (
               <div className="border-hairline mt-10 rounded-2xl border-s-2 border-s-primary/50 bg-accent/40 p-6">
                 <p className="eyebrow mb-2">پیشنهاد سِرو</p>
-                <p className="leading-relaxed text-foreground/90">{recipe.serving_suggestion}</p>
+                <p className="leading-relaxed text-foreground/90">
+                  {recipe.serving_suggestion}
+                </p>
               </div>
             ) : null}
           </div>
@@ -217,13 +247,18 @@ export default async function RecipeDetailPage({
 
         {/* Shop this recipe */}
         {recipe.products.length > 0 ? (
-          <div className="mt-20 border-t border-border/60 pt-14" data-recipe-shop>
+          <div
+            className="mt-20 border-t border-border/60 pt-14"
+            data-recipe-shop
+          >
             <div className="flex flex-wrap items-end justify-between gap-5">
               <div>
                 <p className="eyebrow mb-2">
                   <ShoppingBag className="size-3.5" /> همین دستور را بسازید
                 </p>
-                <h2 className="font-serif text-3xl sm:text-4xl">محصولات این دستور</h2>
+                <h2 className="font-serif text-3xl sm:text-4xl">
+                  محصولات این دستور
+                </h2>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {availableCount > 0
                     ? `${faNum(availableCount)} محصول موجود برای تهیهٔ این دستور`
@@ -248,7 +283,9 @@ export default async function RecipeDetailPage({
             <div className="flex items-end justify-between gap-4">
               <div>
                 <p className="eyebrow mb-2">برای کاوش بیشتر</p>
-                <h2 className="font-serif text-3xl sm:text-4xl">دستورهای مرتبط</h2>
+                <h2 className="font-serif text-3xl sm:text-4xl">
+                  دستورهای مرتبط
+                </h2>
               </div>
               <Link
                 href="/recipes"
@@ -267,13 +304,14 @@ export default async function RecipeDetailPage({
         </section>
       ) : null}
     </>
-  )
+  );
 }
 
 function ShoppableCard({ product }: { product: ShoppableProduct }) {
-  const pdp = product.product_slug ? `/products/${product.product_slug}` : null
+  const pdp = product.product_slug ? `/products/${product.product_slug}` : null;
   const onSale =
-    product.compare_at_price != null && product.compare_at_price > product.price
+    product.compare_at_price != null &&
+    product.compare_at_price > product.price;
 
   const Image = (
     <div className="relative aspect-square overflow-hidden rounded-2xl">
@@ -284,10 +322,13 @@ function ShoppableCard({ product }: { product: ShoppableProduct }) {
         monogram={product.product_title.charAt(0)}
       />
     </div>
-  )
+  );
 
   // How much of this product the recipe calls for, e.g. «۶۰ میلی‌لیتر».
-  const measure = [product.quantity, product.unit].filter(Boolean).join(" ").trim()
+  const measure = [product.quantity, product.unit]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
 
   return (
     <article
@@ -295,7 +336,11 @@ function ShoppableCard({ product }: { product: ShoppableProduct }) {
       data-shoppable-product={product.product_variant_id}
     >
       {pdp ? (
-        <Link href={pdp} aria-label={product.product_title} className="rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+        <Link
+          href={pdp}
+          aria-label={product.product_title}
+          className="rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
           {Image}
         </Link>
       ) : (
@@ -304,7 +349,9 @@ function ShoppableCard({ product }: { product: ShoppableProduct }) {
 
       <div className="flex flex-1 flex-col">
         {product.role ? (
-          <span className="text-xs font-medium text-primary">{product.role}</span>
+          <span className="text-xs font-medium text-primary">
+            {product.role}
+          </span>
         ) : product.is_primary ? (
           <span className="text-xs font-medium text-primary">پایهٔ اصلی</span>
         ) : null}
@@ -327,12 +374,15 @@ function ShoppableCard({ product }: { product: ShoppableProduct }) {
 
         {measure ? (
           <p className="mt-1.5 text-xs text-muted-foreground">
-            برای این دستور: <span className="font-medium text-foreground/80">{measure}</span>
+            برای این دستور:{" "}
+            <span className="font-medium text-foreground/80">{measure}</span>
           </p>
         ) : null}
 
         <div className="mt-3 flex items-baseline gap-2">
-          <span className="font-serif text-xl">{formatPrice(product.price)}</span>
+          <span className="font-serif text-xl">
+            {formatPrice(product.price)}
+          </span>
           {onSale ? (
             <span className="text-xs text-muted-foreground line-through">
               {formatPrice(product.compare_at_price!)}
@@ -354,5 +404,5 @@ function ShoppableCard({ product }: { product: ShoppableProduct }) {
         </div>
       </div>
     </article>
-  )
+  );
 }

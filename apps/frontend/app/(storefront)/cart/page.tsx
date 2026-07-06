@@ -1,10 +1,14 @@
-import type { Metadata } from "next"
+import type { Metadata } from "next";
 
-import { buildMetadata } from "@/lib/seo/metadata"
-import { CartView } from "@/components/cart/cart-view"
+import { buildMetadata } from "@/lib/seo/metadata";
+import { CartView } from "@/features/cart/components/cart-view";
 
 // Carts are personal & volatile — keep them out of the index.
-export const metadata: Metadata = buildMetadata({ title: "سبد خرید", path: "/cart", index: false })
+export const metadata: Metadata = buildMetadata({
+  title: "سبد خرید",
+  path: "/cart",
+  index: false,
+});
 
 export default function CartPage() {
   return (
@@ -18,5 +22,5 @@ export default function CartPage() {
       </header>
       <CartView />
     </section>
-  )
+  );
 }
