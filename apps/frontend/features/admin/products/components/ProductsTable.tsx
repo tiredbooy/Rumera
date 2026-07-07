@@ -30,7 +30,7 @@ import {
   DataTable,
   type Column,
   type Filter,
-} from "@/features/admin/stats/components/data-table";
+} from "@/features/admin/analytics/components/DataTable";
 
 /**
  * Admin product catalogue, backed by live data from GET /admin/products (which,

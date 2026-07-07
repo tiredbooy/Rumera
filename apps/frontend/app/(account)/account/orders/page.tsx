@@ -1,5 +1,5 @@
 import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
-import { OrdersList } from "@/components/account/orders-list";
+import { OrdersList } from "@/features/account/orders/components/OrdersList";
 
 export default function AccountOrdersPage() {
   return (

@@ -13,13 +13,15 @@ export const BASE_API_URL = `${API_URL.replace(/\/$/, "")}/api/v1`;
  *
  * @returns a `?key=val...` string, or `""` when there are no params
  */
-export function buildQueryString(params: Record<string, unknown>): string {
+export function buildQueryString<T extends object>(params: T): string {
   const usp = new URLSearchParams();
 
   for (const [key, raw] of Object.entries(params)) {
     if (raw === undefined || raw === null) continue;
+
     const value = String(raw);
     if (value === "") continue;
+
     usp.set(key, value);
   }
 

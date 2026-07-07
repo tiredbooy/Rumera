@@ -19,7 +19,7 @@ import {
   DataTable,
   type Column,
   type Filter,
-} from "@/features/admin/stats/components/data-table";
+} from "@/features/admin/analytics/components/DataTable";
 
 function AdjustPopover({ row }: { row: InventoryRow }) {
   const [qty, setQty] = React.useState(row.onHand);

@@ -12,7 +12,7 @@ import {
   DataTable,
   type Column,
   type Filter,
-} from "@/features/admin/stats/components/data-table";
+} from "@/features/admin/analytics/components/DataTable";
 
 // Curated fallback (mapped from the sample set into the live shape) so the table
 // is never empty when the backend is unreachable. The list endpoint exposes no

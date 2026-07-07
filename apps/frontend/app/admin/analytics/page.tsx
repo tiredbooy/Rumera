@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { PageHeader } from "@/features/dashboard/components/page-header";
-import { AnalyticsView } from "@/features/admin/stats/components/analytics-view";
+import { AnalyticsView } from "@/features/admin/analytics/components/AnalyticsView";
 
 export default async function AdminAnalyticsPage() {
   await requirePermission(PERMISSIONS.ANALYTICS_READ);

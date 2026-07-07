@@ -28,7 +28,7 @@ import {
   DonutChart,
   DonutLegend,
   HorizontalBars,
-} from "@/features/admin/stats/components/charts";
+} from "@/features/admin/analytics/components/Charts";
 
 const RANGES = [
   { id: "7d", label: "۷ روز", days: 7 },
