@@ -1,6 +1,7 @@
+// features/admin/analytics/api.ts
 import "server-only";
 import { cache } from "react";
-import { adminRequest } from "@/lib/api/api";
+import { apiFetch } from "@/lib/api/client";
 import { buildQueryString } from "@/lib/utils/api-helpers";
 import type {
   DailyRevenueStats,
@@ -17,57 +18,55 @@ import type {
 // network requests; with it, React dedupes to one.
 export const fetchRevenueToday = cache(
   (): Promise<DailyRevenueStats> =>
-    adminRequest<DailyRevenueStats>("admin/analytics/revenue/today"),
+    apiFetch<DailyRevenueStats>("/admin/analytics/revenue/today"),
 );
 
 export function fetchRevenueSummary(
   filter: RevenueStatsFilter = {},
 ): Promise<RevenueStatsSummary> {
-  return adminRequest<RevenueStatsSummary>(
-    `admin/analytics/revenue/summary${buildQueryString(filter)}`,
+  return apiFetch<RevenueStatsSummary>(
+    `/admin/analytics/revenue/summary${buildQueryString(filter)}`,
   );
 }
 
 export function fetchRevenueTimeSeries(
   filter: RevenueStatsFilter = {},
 ): Promise<RevenueTimeSeriesPoint[]> {
-  return adminRequest<RevenueTimeSeriesPoint[]>(
-    `admin/analytics/revenue/timeseries${buildQueryString(filter)}`,
+  return apiFetch<RevenueTimeSeriesPoint[]>(
+    `/admin/analytics/revenue/timeseries${buildQueryString(filter)}`,
   );
 }
 
 export function fetchTopProductsByRevenue(
   limit?: number,
 ): Promise<TopProductRevenueEntry[]> {
-  return adminRequest<TopProductRevenueEntry[]>(
-    `admin/analytics/products/top-revenue${buildQueryString(limit ? { limit } : {})}`,
+  return apiFetch<TopProductRevenueEntry[]>(
+    `/admin/analytics/products/top-revenue${buildQueryString(limit ? { limit } : {})}`,
   );
 }
 
 export function fetchTopProductsByViews(
   limit?: number,
 ): Promise<{ product_id: string; views: number }[]> {
-  return adminRequest<{ product_id: string; views: number }[]>(
-    `admin/analytics/products/top-views${buildQueryString(limit ? { limit } : {})}`,
+  return apiFetch<{ product_id: string; views: number }[]>(
+    `/admin/analytics/products/top-views${buildQueryString(limit ? { limit } : {})}`,
   );
 }
 
 export function fetchTopSearchTerms(limit?: number): Promise<SearchTermStat[]> {
-  return adminRequest<SearchTermStat[]>(
-    `admin/analytics/search/top-terms${buildQueryString(limit ? { limit } : {})}`,
+  return apiFetch<SearchTermStat[]>(
+    `/admin/analytics/search/top-terms${buildQueryString(limit ? { limit } : {})}`,
   );
 }
 
 export function fetchZeroResultSearchTerms(): Promise<SearchTermStat[]> {
-  return adminRequest<SearchTermStat[]>("admin/analytics/search/zero-result");
+  return apiFetch<SearchTermStat[]>("/admin/analytics/search/zero-result");
 }
 
 export function fetchTopConvertingSearchTerms(): Promise<SearchTermStat[]> {
-  return adminRequest<SearchTermStat[]>(
-    "admin/analytics/search/top-converting",
-  );
+  return apiFetch<SearchTermStat[]>("/admin/analytics/search/top-converting");
 }
 
 export function fetchEventBreakdown(): Promise<EventBreakdownItem[]> {
-  return adminRequest<EventBreakdownItem[]>("admin/analytics/events/breakdown");
+  return apiFetch<EventBreakdownItem[]>("/admin/analytics/events/breakdown");
 }

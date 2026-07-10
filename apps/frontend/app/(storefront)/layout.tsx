@@ -8,7 +8,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { AgeGate } from "@/components/age-gate";
 import { ReferralTracker } from "@/features/referral/components/referral-tracker";
 import { listCategories } from "@/lib/catalog/categories";
-import { fetchCategoryTree } from "@/features/categories/api";
+import { fetchCategoryTree } from "@/features/catalog/categories/api";
 
 export default async function StorefrontLayout({
   children,

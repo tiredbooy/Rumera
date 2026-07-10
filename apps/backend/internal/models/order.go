@@ -1,4 +1,3 @@
-// internal/models/order.go
 package models
 
 import "time"

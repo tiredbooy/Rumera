@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { Sparkles, ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { RecommendationRail } from "@/features/catalog/components/recommendation-rail";
+import { RecommendationRail } from "@/features/catalog/products/components/recommendation-rail";
 import { useTasteProfile, useForYou } from "@/lib/api/hooks";
 import type { Category } from "@/lib/products";
 

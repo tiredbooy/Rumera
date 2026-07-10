@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { ArrowLeft, ArrowRight, Grid2x2, Menu, User, Wine } from "lucide-react"
+import * as React from "react";
+import Link from "next/link";
+import { ArrowLeft, ArrowRight, Grid2x2, Menu, User, Wine } from "lucide-react";
 
 import {
   Sheet,
@@ -11,36 +11,40 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet"
-import { Button } from "@/components/ui/button"
-import { HeaderSearch } from "./HeaderSearch"
-import { staticNavItems } from "./NavLinks"
-import { CategoryTree } from "@/features/categories/types"
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { HeaderSearch } from "./HeaderSearch";
+import { staticNavItems } from "./NavLinks";
+import { CategoryTree } from "@/features/catalog/categories/types";
 
 interface MobileNavDrawerProps {
-  categoryTree: CategoryTree[]
+  categoryTree: CategoryTree[];
 }
 
 export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
   // `stack` holds the path of categories drilled into so far. Showing one
   // level at a time with a back action reads much better on touch than
   // stacking three levels of nested accordions.
-  const [stack, setStack] = React.useState<CategoryTree[]>([])
-  const [sheetOpen, setSheetOpen] = React.useState(false)
+  const [stack, setStack] = React.useState<CategoryTree[]>([]);
+  const [sheetOpen, setSheetOpen] = React.useState(false);
 
-  const currentLevel = stack.length ? stack[stack.length - 1].children ?? [] : categoryTree
-  const currentTitle = stack.length ? stack[stack.length - 1].title : "دسته‌بندی‌ها"
+  const currentLevel = stack.length
+    ? (stack[stack.length - 1].children ?? [])
+    : categoryTree;
+  const currentTitle = stack.length
+    ? stack[stack.length - 1].title
+    : "دسته‌بندی‌ها";
 
   function reset() {
-    setStack([])
+    setStack([]);
   }
 
   return (
     <Sheet
       open={sheetOpen}
       onOpenChange={(next) => {
-        setSheetOpen(next)
-        if (!next) reset()
+        setSheetOpen(next);
+        if (!next) reset();
       }}
     >
       <SheetTrigger asChild>
@@ -48,7 +52,10 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
           <Menu />
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="flex w-80 flex-col overflow-y-auto p-0">
+      <SheetContent
+        side="right"
+        className="flex w-80 flex-col overflow-y-auto p-0"
+      >
         <SheetHeader className="p-4 pb-2">
           <SheetTitle className="flex items-center gap-2 font-serif text-2xl">
             <Wine className="size-5 text-primary" /> رومرا
@@ -56,7 +63,10 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
         </SheetHeader>
 
         <div className="px-4">
-          <HeaderSearch variant="drawer" onSubmitNavigate={() => setSheetOpen(false)} />
+          <HeaderSearch
+            variant="drawer"
+            onSubmitNavigate={() => setSheetOpen(false)}
+          />
         </div>
 
         {stack.length === 0 ? (
@@ -75,7 +85,8 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
                   href={item.href}
                   className="flex items-center gap-2 border-b border-border/50 py-3 text-sm font-medium"
                 >
-                  <item.icon className="size-4 text-muted-foreground" /> {item.label}
+                  <item.icon className="size-4 text-muted-foreground" />{" "}
+                  {item.label}
                 </Link>
               </SheetClose>
             ))}
@@ -143,13 +154,13 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
                     <span className="truncate">{cat.title}</span>
                   </Link>
                 </SheetClose>
-              )
+              ),
             )}
           </div>
         </div>
       </SheetContent>
     </Sheet>
-  )
+  );
 }
 
 function CategoryChip({ category }: { category: CategoryTree }) {
@@ -161,11 +172,11 @@ function CategoryChip({ category }: { category: CategoryTree }) {
         alt=""
         className="size-7 shrink-0 rounded-lg object-cover"
       />
-    )
+    );
   }
   return (
     <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-serif text-xs text-primary">
       {category?.title.charAt(0)}
     </span>
-  )
+  );
 }

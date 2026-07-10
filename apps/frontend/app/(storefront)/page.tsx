@@ -1,6 +1,6 @@
 import { HeroCarousel } from "@/features/home/components/hero-carousel";
 import { ForYouRail } from "@/features/home/components/for-you-rail";
-import { RecommendationRail } from "@/features/catalog/components/recommendation-rail";
+import { RecommendationRail } from "@/features/catalog/products/components/recommendation-rail";
 import { BrandMarquee } from "@/components/brand-marquee";
 import { PerksSection } from "@/features/home/components/PerksSection";
 import { CategoryGrid } from "@/features/home/components/CategoryGrid";
@@ -13,7 +13,7 @@ import { TrendingUp } from "lucide-react";
 import { getHeroSlides } from "@/lib/home/hero";
 import { getTrending } from "@/lib/catalog/recommendations";
 import { getFeaturedBrands } from "@/lib/home/brands";
-import { fetchFeaturedCategories } from "@/features/categories/api";
+import { fetchFeaturedCategories } from "@/features/catalog/categories/api";
 
 // Home is ISR — the hero slides are admin-managed and refetched periodically.
 export const revalidate = 300;

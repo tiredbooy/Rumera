@@ -7,7 +7,7 @@ import { listProducts } from "@/lib/catalog/products";
 import { listCategories } from "@/lib/catalog/categories";
 import { faNum } from "@/lib/products";
 import { Button } from "@/components/ui/button";
-import { ProductCard } from "@/features/catalog/components/product-card";
+import { ProductCard } from "@/features/catalog/products/components/product-card";
 
 export const metadata: Metadata = buildMetadata({
   title: "جستجو",

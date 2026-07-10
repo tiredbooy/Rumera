@@ -1,0 +1,558 @@
+.
+├── AGENTS.md
+├── app
+│   ├── (account)
+│   │   └── account
+│   │       ├── addresses
+│   │       ├── layout.tsx
+│   │       ├── orders
+│   │       ├── page.tsx
+│   │       ├── reviews
+│   │       ├── rewards
+│   │       ├── settings
+│   │       ├── subscriptions
+│   │       ├── taste
+│   │       ├── wallet
+│   │       └── wishlist
+│   ├── (auth)
+│   │   ├── forgot-password
+│   │   │   └── page.tsx
+│   │   ├── layout.tsx
+│   │   ├── login
+│   │   │   └── page.tsx
+│   │   ├── register
+│   │   │   └── page.tsx
+│   │   └── reset-password
+│   │       └── page.tsx
+│   ├── (storefront)
+│   │   ├── about
+│   │   │   └── page.tsx
+│   │   ├── cart
+│   │   │   └── page.tsx
+│   │   ├── categories
+│   │   │   ├── [category]
+│   │   │   └── page.tsx
+│   │   ├── checkout
+│   │   │   ├── confirmation
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   ├── faq
+│   │   │   └── page.tsx
+│   │   ├── journal
+│   │   │   ├── [slug]
+│   │   │   ├── loading.tsx
+│   │   │   └── page.tsx
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   ├── products
+│   │   │   ├── [slug]
+│   │   │   └── page.tsx
+│   │   ├── recipes
+│   │   │   ├── [slug]
+│   │   │   └── page.tsx
+│   │   └── search
+│   │       └── page.tsx
+│   ├── admin
+│   │   ├── analytics
+│   │   │   └── page.tsx
+│   │   ├── brands
+│   │   │   ├── [id]
+│   │   │   ├── new
+│   │   │   └── page.tsx
+│   │   ├── categories
+│   │   │   ├── [id]
+│   │   │   ├── new
+│   │   │   └── page.tsx
+│   │   ├── customers
+│   │   │   ├── [id]
+│   │   │   └── page.tsx
+│   │   ├── hero-slides
+│   │   │   ├── [id]
+│   │   │   ├── new
+│   │   │   └── page.tsx
+│   │   ├── inventory
+│   │   │   └── page.tsx
+│   │   ├── layout.tsx
+│   │   ├── loading.tsx
+│   │   ├── orders
+│   │   │   ├── [id]
+│   │   │   └── page.tsx
+│   │   ├── page.tsx
+│   │   ├── products
+│   │   │   ├── [id]
+│   │   │   ├── new
+│   │   │   └── page.tsx
+│   │   ├── recipes
+│   │   │   ├── [id]
+│   │   │   ├── new
+│   │   │   └── page.tsx
+│   │   ├── reviews
+│   │   │   └── page.tsx
+│   │   ├── roles
+│   │   │   └── page.tsx
+│   │   └── settings
+│   │       └── page.tsx
+│   ├── api
+│   │   ├── admin
+│   │   │   └── [...path]
+│   │   ├── auth
+│   │   │   └── [...nextauth]
+│   │   ├── public
+│   │   │   └── [...path]
+│   │   └── store
+│   │       └── [...path]
+│   ├── favicon.ico
+│   ├── forbidden
+│   │   └── page.tsx
+│   ├── globals.css
+│   ├── icon.tsx
+│   ├── layout.tsx
+│   ├── llms.txt
+│   │   └── route.ts
+│   ├── manifest.ts
+│   ├── opengraph-image.tsx
+│   ├── providers.tsx
+│   ├── robots.ts
+│   └── sitemap.ts
+├── components
+│   ├── add-to-cart-button.tsx
+│   ├── admin
+│   │   ├── flexible-image-input.tsx
+│   │   ├── image-uploader.tsx
+│   │   ├── ImageUrlInput.tsx
+│   │   ├── optimized-image.tsx
+│   │   ├── rich-text-editor.tsx
+│   │   ├── status-badge.tsx
+│   │   └── variant-picker.tsx
+│   ├── age-gate.tsx
+│   ├── auth
+│   │   ├── forgot-password-form.tsx
+│   │   ├── login-form.tsx
+│   │   ├── login-tabs.tsx
+│   │   ├── phone-login-form.tsx
+│   │   ├── register-form.tsx
+│   │   ├── reset-password-form.tsx
+│   │   └── session-guard.tsx
+│   ├── bottle.tsx
+│   ├── brand-marquee.tsx
+│   ├── categories.ts
+│   ├── category.ts
+│   ├── HeaderActions.tsx
+│   ├── HeaderLogo.tsx
+│   ├── HeaderSearch.tsx
+│   ├── json-ld.tsx
+│   ├── MobileNavDrawer.tsx
+│   ├── mode-toggle.tsx
+│   ├── NavLinks.tsx
+│   ├── product-card.tsx
+│   ├── ProductMegaMenu.tsx
+│   ├── PromoBar.tsx
+│   ├── site-footer.tsx
+│   ├── site-header.tsx
+│   ├── smart-image.tsx
+│   ├── structured-data.tsx
+│   ├── theme-provider.tsx
+│   ├── ui
+│   │   ├── accordion.tsx
+│   │   ├── alert-dialog.tsx
+│   │   ├── alert.tsx
+│   │   ├── aspect-ratio.tsx
+│   │   ├── avatar.tsx
+│   │   ├── badge.tsx
+│   │   ├── breadcrumb.tsx
+│   │   ├── button-group.tsx
+│   │   ├── button.tsx
+│   │   ├── calendar.tsx
+│   │   ├── card.tsx
+│   │   ├── carousel.tsx
+│   │   ├── chart.tsx
+│   │   ├── checkbox.tsx
+│   │   ├── collapsible.tsx
+│   │   ├── combobox.tsx
+│   │   ├── command.tsx
+│   │   ├── context-menu.tsx
+│   │   ├── dialog.tsx
+│   │   ├── direction.tsx
+│   │   ├── drawer.tsx
+│   │   ├── dropdown-menu.tsx
+│   │   ├── empty.tsx
+│   │   ├── field.tsx
+│   │   ├── hover-card.tsx
+│   │   ├── input-group.tsx
+│   │   ├── input-otp.tsx
+│   │   ├── input.tsx
+│   │   ├── item.tsx
+│   │   ├── kbd.tsx
+│   │   ├── label.tsx
+│   │   ├── menubar.tsx
+│   │   ├── native-select.tsx
+│   │   ├── navigation-menu.tsx
+│   │   ├── pagination.tsx
+│   │   ├── popover.tsx
+│   │   ├── progress.tsx
+│   │   ├── radio-group.tsx
+│   │   ├── resizable.tsx
+│   │   ├── scroll-area.tsx
+│   │   ├── select.tsx
+│   │   ├── separator.tsx
+│   │   ├── sheet.tsx
+│   │   ├── sidebar.tsx
+│   │   ├── skeleton.tsx
+│   │   ├── slider.tsx
+│   │   ├── sonner.tsx
+│   │   ├── spinner.tsx
+│   │   ├── switch.tsx
+│   │   ├── table.tsx
+│   │   ├── tabs.tsx
+│   │   ├── textarea.tsx
+│   │   ├── toggle-group.tsx
+│   │   ├── toggle.tsx
+│   │   └── tooltip.tsx
+│   └── useCategoryTree.ts
+├── components.json
+├── DASHBOARD-PLAN.md
+├── Dockerfile
+├── Dockerfile.dev
+├── docs
+│   ├── api-layer.md
+│   ├── architecture.md
+│   ├── bff-and-auth.md
+│   ├── data-fetching.md
+│   ├── design-system.md
+│   ├── rbac.md
+│   └── README.md
+├── eslint.config.mjs
+├── features
+│   ├── account
+│   │   ├── account
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── addresses
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── EmptyState.tsx
+│   │   ├── orders
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   └── types.ts
+│   │   ├── reviews
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── settings
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── wallet
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   └── wishlist
+│   │       ├── api.ts
+│   │       ├── components
+│   │       ├── types.ts
+│   │       └── validations.ts
+│   ├── admin
+│   │   ├── analytics
+│   │   │   ├── analytics-range.ts
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── hooks.ts
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── blogs
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── brands
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── categories
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── copuns
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── customers
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validation.ts
+│   │   ├── gift-card
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── hero-slides
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── inventory
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── loyality
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── orders
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── payments
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── products
+│   │   │   ├── actions.ts
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── recipes
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── reviews
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── settings
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   └── shipping
+│   │       ├── api.ts
+│   │       ├── components
+│   │       ├── types.ts
+│   │       └── validations.ts
+│   ├── auth
+│   │   ├── api.ts
+│   │   ├── components
+│   │   ├── hooks.ts
+│   │   ├── types.ts
+│   │   └── validation.ts
+│   ├── cart
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   ├── cart-button.tsx
+│   │   │   ├── cart-lines.tsx
+│   │   │   └── cart-view.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   ├── catalog
+│   │   ├── brands
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   ├── categories
+│   │   │   ├── api.ts
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   └── products
+│   │       ├── api.ts
+│   │       ├── components
+│   │       ├── types.ts
+│   │       └── validations.ts
+│   ├── checkout
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   ├── add-address-form.tsx
+│   │   │   └── checkout-flow.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   ├── coupons
+│   ├── dashboard
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   ├── dashboard-nav.tsx
+│   │   │   ├── dashboard-shell.tsx
+│   │   │   ├── page-header.tsx
+│   │   │   ├── placeholder.tsx
+│   │   │   └── stat-card.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   ├── home
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   ├── CatalogSection.tsx
+│   │   │   ├── CategoryCard.tsx
+│   │   │   ├── CategoryGrid.tsx
+│   │   │   ├── for-you-rail.tsx
+│   │   │   ├── hero-carousel.tsx
+│   │   │   ├── NewsletterSection.tsx
+│   │   │   ├── PerksSection.tsx
+│   │   │   ├── StorySection.tsx
+│   │   │   └── TestimonialSection.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   ├── inventory
+│   ├── journal
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   ├── article-body.tsx
+│   │   │   ├── journal-card.tsx
+│   │   │   ├── rewards-view.tsx
+│   │   │   └── share-links.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   ├── loyality
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   └── journal-explorer.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   ├── motion
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   └── reveal.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   ├── orders
+│   ├── profile
+│   │   ├── api.ts
+│   │   ├── hooks.ts
+│   │   └── types.ts
+│   ├── recipes
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   ├── add-all-button.tsx
+│   │   │   ├── recipe-card.tsx
+│   │   │   └── recipe-filters.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   ├── referral
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   ├── referral-card.tsx
+│   │   │   └── referral-tracker.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   ├── reviews
+│   ├── subscriptions
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   └── subscriptions-view.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   ├── taste
+│   │   ├── api.ts
+│   │   ├── components
+│   │   │   └── taste-quiz.tsx
+│   │   ├── types.ts
+│   │   └── validations.ts
+│   └── wallet
+│       ├── api.ts
+│       ├── gift-card-redeem.tsx
+│       ├── hooks.ts
+│       └── types.ts
+├── hooks
+│   └── use-mobile.ts
+├── lib
+│   ├── admin
+│   │   ├── category-keys.ts
+│   │   └── stats-format.ts
+│   ├── api
+│   │   ├── account-hooks.ts
+│   │   ├── admin-client.txt
+│   │   ├── admin-hooks.ts
+│   │   ├── client.ts
+│   │   ├── endpoints.ts
+│   │   ├── hooks.ts
+│   │   ├── public.ts
+│   │   ├── qs.ts
+│   │   ├── query-keys.ts
+│   │   └── store-client.ts
+│   ├── auth
+│   │   ├── auth.config.ts
+│   │   ├── auth.ts
+│   │   ├── session.ts
+│   │   └── types.ts
+│   ├── catalog
+│   │   ├── categories.ts
+│   │   ├── labels.ts
+│   │   ├── products.ts
+│   │   ├── recommendations.ts
+│   │   ├── reviews.ts
+│   │   └── types.ts
+│   ├── home
+│   │   ├── brands.ts
+│   │   ├── categories.ts
+│   │   ├── category-icons.ts
+│   │   ├── featured.ts
+│   │   └── hero.ts
+│   ├── journal
+│   │   └── sanitize-html.ts
+│   ├── journal.ts
+│   ├── products.ts
+│   ├── rbac
+│   │   ├── can.ts
+│   │   ├── nav.ts
+│   │   ├── permissions.ts
+│   │   └── roles.ts
+│   ├── recently-viewed.ts
+│   ├── recipes.ts
+│   ├── seo
+│   │   ├── jsonld.ts
+│   │   └── metadata.ts
+│   ├── site.ts
+│   ├── types
+│   │   ├── filters.ts
+│   │   └── orders
+│   │       └── types.ts
+│   ├── utils
+│   │   └── api-helpers.ts
+│   └── utils.ts
+├── middleware.ts
+├── next-env.d.ts
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── images
+│   │   ├── blue-label.jpg
+│   │   ├── champaign.jpg
+│   │   ├── gin.jpg
+│   │   ├── jack-daniel.jpg
+│   │   ├── README.md
+│   │   ├── Rum.jpg
+│   │   ├── tequila.jpg
+│   │   ├── vodka.jpg
+│   │   ├── vodka2.jpg
+│   │   ├── whiskey-2.jpg
+│   │   ├── whiskey.jpg
+│   │   └── wine.jpg
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── README.md
+├── REDESIGN-PLAN.md
+├── structure.txt
+├── tsconfig.json
+└── tsconfig.tsbuildinfo

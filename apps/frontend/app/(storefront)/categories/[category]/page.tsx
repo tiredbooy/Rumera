@@ -9,7 +9,7 @@ import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld";
 import { listCategories, getCategoryBySlug } from "@/lib/catalog/categories";
 import { listProducts } from "@/lib/catalog/products";
 import { faNum } from "@/lib/products";
-import { ProductCard } from "@/features/catalog/components/product-card";
+import { ProductCard } from "@/features/catalog/products/components/product-card";
 import { Placeholder } from "@/features/dashboard/components/placeholder";
 
 export const revalidate = 3600;

@@ -6,7 +6,7 @@ import { ArrowLeft, ChevronDown, Grid2x2, Tag } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { CategoryTree } from "@/features/categories/types";
+import { CategoryTree } from "@/features/catalog/categories/types";
 
 interface ProductsMegaMenuProps {
   categoryTree: CategoryTree[];

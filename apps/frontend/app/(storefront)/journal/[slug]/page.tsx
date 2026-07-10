@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { JournalCard } from "@/features/journal/components/journal-card";
 import { ArticleBody } from "@/features/journal/components/article-body";
 import { ShareLinks } from "@/features/journal/components/share-links";
-import { AddToCartButton } from "@/features/catalog/components/add-to-cart-button";
+import { AddToCartButton } from "@/features/catalog/products/components/add-to-cart-button";
 import { faNum, formatPrice } from "@/lib/products";
 import { getProductById } from "@/lib/catalog/products";
 import type { ProductDetail } from "@/lib/catalog/types";

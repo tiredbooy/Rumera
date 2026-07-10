@@ -10,8 +10,8 @@ import { listProducts } from "@/lib/catalog/products";
 import { listCategories } from "@/lib/catalog/categories";
 import { faNum } from "@/lib/products";
 import { Button } from "@/components/ui/button";
-import { ProductCard } from "@/features/catalog/components/product-card";
-import { ProductSort } from "@/features/catalog/components/product-sort";
+import { ProductCard } from "@/features/catalog/products/components/product-card";
+import { ProductSort } from "@/features/catalog/products/components/product-sort";
 import { Placeholder } from "@/features/dashboard/components/placeholder";
 
 export const metadata: Metadata = buildMetadata({

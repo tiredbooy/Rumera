@@ -1,60 +1,57 @@
-import Link from "next/link";
-import { Plus } from "lucide-react";
-
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { can } from "@/lib/rbac/can";
-import { faNum } from "@/lib/products";
-import { serverApi } from "@/lib/api/client";
-import type { Paginated, ProductListItem } from "@/lib/catalog/types";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/features/dashboard/components/page-header";
-import { ProductsTable } from "@/features/admin/products/components/products-table";
+import { ProductForm } from "@/features/admin/products/components/ProductForm";
 
-const EMPTY: Paginated<ProductListItem> = {
-  results: [],
-  pagination: {
-    page: 1,
-    limit: 0,
-    total_items: 0,
-    total_pages: 0,
-    has_next: false,
-    has_prev: false,
-  },
-};
+// ── TODO: confirm these imports ─────────────────────────────────────────
+// I don't have your fetch functions for categories/brands/admin-tags yet —
+// they weren't in the catalog or admin/products API files you shared, since
+// those only cover products/variants/images. Guessed paths below; swap in
+// the real ones (or tell me where they live and I'll fix this in one pass).
+import { fetchCategories } from "@/features/catalog/categories/api";
+import { fetchBrands } from "@/features/catalog/brands/api";
+import { fetchAdminTags } from "@/features/admin/tags/api";
 
-export default async function AdminProductsPage() {
-  const session = await requirePermission(PERMISSIONS.PRODUCTS_READ);
-  const canWrite = can(session, PERMISSIONS.PRODUCTS_WRITE);
+export default async function NewProductPage() {
+  await requirePermission(PERMISSIONS.PRODUCTS_WRITE);
 
-  // GET /admin/products returns ALL products (incl. inactive) with brand + price
-  // band. Error-safe: a failed fetch renders an empty table rather than crashing.
-  let page: Paginated<ProductListItem>;
-  try {
-    page = await serverApi<Paginated<ProductListItem>>(
-      "/admin/products?limit=100&sortBy=created_at&orderBy=desc",
-    );
-  } catch {
-    page = EMPTY;
-  }
+  // Error-safe like the list page: a failed lookup falls back to an empty
+  // list instead of crashing the whole page, but we surface it so an admin
+  // doesn't silently get a category-less dropdown.
+  const [categoriesResult, brandsResult, tagsResult] = await Promise.allSettled(
+    [fetchCategories(), fetchBrands(), fetchAdminTags()],
+  );
+
+  const categories =
+    categoriesResult.status === "fulfilled" ? categoriesResult.value : [];
+  const brands = brandsResult.status === "fulfilled" ? brandsResult.value : [];
+  const tags = tagsResult.status === "fulfilled" ? tagsResult.value : [];
+
+  const lookupFailed =
+    categoriesResult.status === "rejected" ||
+    brandsResult.status === "rejected" ||
+    tagsResult.status === "rejected";
 
   return (
     <>
       <PageHeader
-        title="محصولات"
-        description={`${faNum(page.pagination.total_items)} محصول در کاتالوگ`}
-        actions={
-          canWrite ? (
-            <Button size="sm" asChild>
-              <Link href="/admin/products/new">
-                <Plus className="size-4" /> محصول جدید
-              </Link>
-            </Button>
-          ) : null
-        }
+        title="محصول جدید"
+        description="اطلاعات محصول جدید را وارد کنید"
       />
 
-      <ProductsTable products={page.results} canWrite={canWrite} />
+      {lookupFailed ? (
+        <p className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-700">
+          بارگذاری برخی فهرست‌ها (دسته‌بندی، برند یا برچسب) با خطا مواجه شد.
+          می‌توانید بدون آن‌ها ادامه دهید یا صفحه را دوباره بارگذاری کنید.
+        </p>
+      ) : null}
+
+      <ProductForm
+        mode="create"
+        categories={categories}
+        brands={brands}
+        tags={tags}
+      />
     </>
   );
 }

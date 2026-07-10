@@ -12,12 +12,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OrderStatusBadge } from "@/components/admin/status-badge";
-import { listOrders } from "@/lib/api/admin-client";
+import { listOrders } from "@/features/admin/orders/api";
 
 export async function RecentOrdersTable() {
-  const result = await listOrders({ limit: 10, sortBy: "-created_at" }).catch(
-    () => null,
-  );
+  let result = null;
+  let error = false;
+
+  try {
+    result = await listOrders({ limit: 10, sort_by: "-created_at" });
+  } catch {
+    error = true;
+  }
+
   const recentOrders = result?.results ?? [];
 
   return (
@@ -54,7 +60,7 @@ export async function RecentOrdersTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {result === null ? (
+            {error ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell
                   colSpan={4}

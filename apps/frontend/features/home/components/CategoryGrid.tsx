@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/features/motion/components/reveal";
 import { CategoryCard } from "./CategoryCard";
-import type { CategoryResponse } from "@/features/categories/types";
+import type { CategoryResponse } from "@/features/catalog/categories/types";
 
 interface CategoryGridProps {
   categories: CategoryResponse[];

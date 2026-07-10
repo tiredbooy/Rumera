@@ -20,7 +20,7 @@ import { SmartImage } from "@/components/smart-image";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/features/motion/components/reveal";
 import { RecipeCard } from "@/features/recipes/components/recipe-card";
-import { AddToCartButton } from "@/features/catalog/components/add-to-cart-button";
+import { AddToCartButton } from "@/features/catalog/products/components/add-to-cart-button";
 import { AddAllIngredientsButton } from "@/features/recipes/components/add-all-button";
 import { faNum, formatPrice } from "@/lib/products";
 import {

@@ -21,11 +21,11 @@ import {
 import { getReviewSummary, listReviews } from "@/lib/catalog/reviews";
 import { faNum } from "@/lib/products";
 import { Bottle } from "@/components/bottle";
-import { ProductGallery } from "@/features/catalog/components/product-gallery";
-import { ProductPurchasePanel } from "@/features/catalog/components/product-purchase-panel";
-import { RecommendationRail } from "@/features/catalog/components/recommendation-rail";
-import { RecentlyViewedRail } from "@/features/catalog/components/recently-viewed-rail";
-import { ReviewsSection } from "@/features/catalog/components/reviews-section";
+import { ProductGallery } from "@/features/catalog/products/components/product-gallery";
+import { ProductPurchasePanel } from "@/features/catalog/products/components/product-purchase-panel";
+import { RecommendationRail } from "@/features/catalog/products/components/recommendation-rail";
+import { RecentlyViewedRail } from "@/features/catalog/products/components/recently-viewed-rail";
+import { ReviewsSection } from "@/features/catalog/products/components/reviews-section";
 
 export const revalidate = 3600;
 

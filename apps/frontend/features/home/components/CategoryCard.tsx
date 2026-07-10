@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { SmartImage } from "@/components/smart-image";
 import { Reveal } from "@/features/motion/components/reveal";
 import { categoryIconFor } from "@/lib/home/category-icons";
-import type { CategoryResponse } from "@/features/categories/types";
+import type { CategoryResponse } from "@/features/catalog/categories/types";
 
 interface CategoryCardProps {
   category: CategoryResponse;
@@ -15,7 +15,7 @@ export function CategoryCard({ category, delay = 0 }: CategoryCardProps) {
   const Icon = categoryIconFor(category.slug ?? "");
   const isLarge = category.card_size === "large";
 
-  console.log('categoryImage:', category.image_url);
+  console.log("categoryImage:", category.image_url);
   return (
     <Reveal
       delay={delay}
