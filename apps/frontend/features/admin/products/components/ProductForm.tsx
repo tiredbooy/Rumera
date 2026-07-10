@@ -9,7 +9,6 @@ import { useTransition } from "react";
 
 import type { ProductDetail } from "@/lib/catalog/types";
 import type { Brand } from "@/features/catalog/brands/types";
-import type { ImageUploaderHandle } from "@/components/admin/image-uploader";
 
 import {
   createProduct,
@@ -17,7 +16,7 @@ import {
   createVariant,
   updateVariant,
   deleteVariant,
-} from "@/features/admin/products/actions";
+} from "@/features/admin/products/actions/product";
 
 import type {
   CreateProductReq,
@@ -34,13 +33,19 @@ import {
 } from "../validations";
 import type { AdminTag } from "./product-form/TagSelector";
 
+// 👇 New imports for the refactored ImageUploader
+import {
+  ImageUploader,
+  type ImageUploaderHandle,
+} from "@/components/admin/image-uploader"; // adjust path if needed
+
 import { FormHeaderBar } from "./product-form/sidebar/FormHeaderBar";
 import { MobileActionBar } from "./product-form/sidebar/MobileActionBar";
 import { PreviewCard } from "./product-form/sidebar/PreviewCard";
 import { GeneralInfoSection } from "./product-form/GeneralInfoSection";
 import { SpecificationsSection } from "./product-form/SpecificationsSection";
 import { VariantsSection } from "./product-form/VariantsSection";
-import { ImagesSection } from "./product-form/ImagesSection";
+// Removed: import { ImagesSection } from "./product-form/ImagesSection";
 import { SeoSection } from "./product-form/SeoSection";
 import { CategoryResponse } from "@/features/catalog/categories/types";
 
@@ -216,11 +221,14 @@ export function ProductForm({
             append={append}
             remove={remove}
           />
-          <ImagesSection
-            uploaderRef={uploaderRef}
-            productId={product?.id}
-            mode={mode}
+
+          {/* 👇 Replace old ImagesSection with new ImageUploader */}
+          <ImageUploader
+            ref={uploaderRef}
+            productId={product?.id ?? null}
+            initialImages={product?.images ?? []}
           />
+
           <SeoSection
             register={register}
             control={control}

@@ -7,10 +7,10 @@ import { windowFor } from "../analytics-range";
 import { num, shortDay } from "@/lib/admin/stats-format";
 
 export async function RevenueChartSection() {
-  const series = await fetchRevenueTimeSeries(windowFor("30d")).catch(
+  const series = await fetchRevenueTimeSeries(windowFor("30d"))?.catch(
     () => null,
   );
-  const chartData = (series ?? []).map((p) => ({
+  const chartData = (series ?? [])?.map?.((p) => ({
     day: shortDay(p.date),
     revenue: num(p.net_revenue),
   }));
@@ -28,7 +28,7 @@ export async function RevenueChartSection() {
         </Button>
       }
     >
-      {chartData.length > 0 ? (
+      {chartData?.length > 0 ? (
         <RevenueAreaChart data={chartData} />
       ) : (
         <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">

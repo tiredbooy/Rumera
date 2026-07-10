@@ -16,7 +16,7 @@ import {
   createVariant as _createVariant,
   updateVariant as _updateVariant,
   deleteVariant as _deleteVariant,
-} from "@/features/admin/products/api";
+} from "@/features/admin/products/api/api";
 
 // Wrap each as an explicit async function
 export async function createProduct(

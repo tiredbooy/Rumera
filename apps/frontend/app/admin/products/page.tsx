@@ -3,28 +3,23 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { PageHeader } from "@/features/dashboard/components/page-header";
 import { ProductForm } from "@/features/admin/products/components/ProductForm";
 
-// ── TODO: confirm these imports ─────────────────────────────────────────
-// I don't have your fetch functions for categories/brands/admin-tags yet —
-// they weren't in the catalog or admin/products API files you shared, since
-// those only cover products/variants/images. Guessed paths below; swap in
-// the real ones (or tell me where they live and I'll fix this in one pass).
 import { fetchCategories } from "@/features/catalog/categories/api";
 import { fetchBrands } from "@/features/catalog/brands/api";
-import { fetchAdminTags } from "@/features/admin/tags/api";
+import { fetchTags } from "@/features/catalog/tags/api/public";
 
 export default async function NewProductPage() {
   await requirePermission(PERMISSIONS.PRODUCTS_WRITE);
 
-  // Error-safe like the list page: a failed lookup falls back to an empty
-  // list instead of crashing the whole page, but we surface it so an admin
-  // doesn't silently get a category-less dropdown.
   const [categoriesResult, brandsResult, tagsResult] = await Promise.allSettled(
-    [fetchCategories(), fetchBrands(), fetchAdminTags()],
+    [fetchCategories(), fetchBrands(), fetchTags()],
   );
 
   const categories =
-    categoriesResult.status === "fulfilled" ? categoriesResult.value : [];
-  const brands = brandsResult.status === "fulfilled" ? brandsResult.value : [];
+    categoriesResult.status === "fulfilled"
+      ? categoriesResult.value.results
+      : [];
+  const brands =
+    brandsResult.status === "fulfilled" ? brandsResult.value.items : [];
   const tags = tagsResult.status === "fulfilled" ? tagsResult.value : [];
 
   const lookupFailed =

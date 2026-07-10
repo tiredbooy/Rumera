@@ -11,7 +11,7 @@ import type {
   ImageResponse,
   VariantResponse,
   OptionValueResponse,
-} from "./types";
+} from "../types";
 
 // ─────────────────────────────────────────────
 // Product list (admin – includes inactive)
