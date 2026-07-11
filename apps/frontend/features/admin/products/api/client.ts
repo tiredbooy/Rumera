@@ -1,13 +1,13 @@
 "use client";
 
-import type { ProductImage } from "@/lib/catalog/types";
+import type { ImageResponse } from "../types";
 
 export function uploadProductImage(
   productId: number,
   file: File,
   opts: { altText?: string; isPrimary?: boolean },
   onProgress?: (fraction: number) => void,
-): Promise<ProductImage> {
+): Promise<ImageResponse> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.append("file", file);
@@ -25,7 +25,7 @@ export function uploadProductImage(
       try {
         const body = JSON.parse(xhr.responseText);
         if (xhr.status >= 200 && xhr.status < 300) {
-          resolve((body?.data ?? body) as ProductImage);
+          resolve((body?.data ?? body) as ImageResponse);
         } else {
           reject(new Error(body?.error?.message ?? "بارگذاری ناموفق بود"));
         }

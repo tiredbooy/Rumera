@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { uploadProductImage } from "../api/client";
 import { deleteProductImage, reorderProductImages, setPrimaryImage, updateImageAlt } from "../actions/images";
-import type { ProductImage } from "@/lib/catalog/types";
+import type { ImageResponse } from "../types";
 import { OptimizedImage } from "@/components/admin/optimized-image";
 
 const MAX_MB = 15;
@@ -38,7 +38,7 @@ type StagedSlot = {
 type UploadedSlot = {
   kind: "uploaded";
   localId: string;
-  image: ProductImage;
+  image: ImageResponse;
   alt: string;
 };
 
@@ -52,7 +52,7 @@ export type ImageUploaderHandle = {
 
 type ImageUploaderProps = {
   productId?: number | null;
-  initialImages?: ProductImage[];
+  initialImages?: ImageResponse[];
 };
 
 function validate(file: File): string | null {
@@ -113,7 +113,7 @@ export const ImageUploader = React.forwardRef<
   async function uploadStaged(
     slot: StagedSlot,
     pid: number,
-  ): Promise<ProductImage | null> {
+  ): Promise<ImageResponse | null> {
     patch(slot.localId, { status: "uploading", progress: 0, error: undefined });
     try {
       const image = await uploadProductImage(
@@ -279,7 +279,7 @@ export const ImageUploader = React.forwardRef<
   const previewOf = (slot: Slot) =>
     slot.kind === "uploaded" ? (
       <OptimizedImage
-        imageKey={slot.image.key}
+        imageKey={slot.image.image_url}
         alt={slot.alt || "تصویر محصول"}
         width={160}
         className="h-full w-full"

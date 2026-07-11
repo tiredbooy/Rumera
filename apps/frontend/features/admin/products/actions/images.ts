@@ -2,12 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api/client";
-import type { ProductImage } from "@/lib/catalog/types";
+import type { ImageResponse } from "../types";
 
 export async function listProductImages(
   productId: number,
-): Promise<ProductImage[]> {
-  return apiFetch<ProductImage[]>(`/admin/products/${productId}/images`);
+): Promise<ImageResponse[]> {
+  return apiFetch<ImageResponse[]>(`/admin/products/${productId}/images`);
 }
 
 export async function reorderProductImages(

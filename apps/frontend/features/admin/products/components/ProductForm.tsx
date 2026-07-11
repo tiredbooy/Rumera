@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { useTransition } from "react";
 
-import type { ProductDetail } from "@/lib/catalog/types";
+import type { ProductDetail } from "@/features/admin/products/types";
 import type { Brand } from "@/features/catalog/brands/types";
 
 import {
@@ -34,10 +34,10 @@ import {
 import type { AdminTag } from "./product-form/TagSelector";
 
 // 👇 New imports for the refactored ImageUploader
-import {
-  ImageUploader,
-  type ImageUploaderHandle,
-} from "@/components/admin/image-uploader"; // adjust path if needed
+// import {
+//   ImageUploader,
+//   type ImageUploaderHandle,
+// } from "@/components/admin/image-uploader"; // adjust path if needed
 
 import { FormHeaderBar } from "./product-form/sidebar/FormHeaderBar";
 import { MobileActionBar } from "./product-form/sidebar/MobileActionBar";
@@ -48,6 +48,8 @@ import { VariantsSection } from "./product-form/VariantsSection";
 // Removed: import { ImagesSection } from "./product-form/ImagesSection";
 import { SeoSection } from "./product-form/SeoSection";
 import { CategoryResponse } from "@/features/catalog/categories/types";
+import { ImageUploaderHandle } from "@/features/image-uploader/types";
+import { ImageUploader } from "@/features/image-uploader/ImageUploader";
 
 // ── Payload helpers ─────────────────────────────────────────────
 
