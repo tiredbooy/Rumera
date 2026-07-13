@@ -3,8 +3,8 @@ import Link from "next/link";
 import { Search, SearchX, Sparkles, ArrowLeft } from "lucide-react";
 
 import { buildMetadata } from "@/lib/seo/metadata";
-import { listProducts } from "@/lib/catalog/products";
-import { listCategories } from "@/lib/catalog/categories";
+import { listProducts } from "@/features/catalog/products/api/public";
+import { listCategories } from "@/features/catalog/categories/api";
 import { faNum } from "@/lib/products";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/features/catalog/products/components/product-card";
@@ -114,10 +114,10 @@ export default async function SearchPage({
               {categories.map((c) => (
                 <Link
                   key={c.id}
-                  href={`/categories/${c.slug}`}
+                  href={c.slug ? `/categories/${c.slug}` : "/categories"}
                   className="rounded-full border border-border bg-card/50 px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground"
                 >
-                  {c.name}
+                  {c.title}
                 </Link>
               ))}
             </div>

@@ -25,17 +25,19 @@ import { AddAllIngredientsButton } from "@/features/recipes/components/add-all-b
 import { faNum, formatPrice } from "@/lib/products";
 import {
   getRecipeBySlug,
-  getRelatedRecipes,
-  allRecipeSlugs,
+  listRecipeSlugs,
+  listRelatedRecipes,
+} from "@/features/recipes/api/server";
+import {
   difficultyFa,
   formatDuration,
-  type ShoppableProduct,
-} from "@/lib/recipes";
+} from "@/features/recipes/utils";
+import type { ShoppableProduct } from "@/features/recipes/types";
 
 export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  const slugs = await allRecipeSlugs();
+  const slugs = await listRecipeSlugs();
   return slugs.map((slug) => ({ slug }));
 }
 
@@ -71,7 +73,7 @@ export default async function RecipeDetailPage({
   const recipe = await getRecipeBySlug(slug);
   if (!recipe) notFound();
 
-  const related = await getRelatedRecipes(slug);
+  const related = await listRelatedRecipes(slug);
 
   const meta = [
     { icon: Clock, label: formatDuration(recipe.total_time_minutes) },

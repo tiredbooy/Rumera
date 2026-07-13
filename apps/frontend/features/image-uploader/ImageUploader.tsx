@@ -40,6 +40,7 @@ export const ImageUploader = React.forwardRef<
         onFilesSelected={addFiles}
         count={slots.length}
         maxImages={maxImages}
+        disabled={isPending}
       />
 
       {limitMessage && (

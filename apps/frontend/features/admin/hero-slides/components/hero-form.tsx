@@ -18,12 +18,14 @@ import { SmartImage } from "@/components/smart-image"
 import { FlexibleImageInput } from "@/components/admin/flexible-image-input"
 import { cn } from "@/lib/utils"
 import {
-  AdminApiError,
+  HeroSlideApiError,
   createHeroSlide,
   updateHeroSlide,
-  type HeroSlide,
-  type CreateHeroSlideInput,
-} from "@/lib/api/admin-client"
+} from "@/features/hero-slides/api/client"
+import type {
+  AdminHeroSlide,
+  CreateHeroSlideInput,
+} from "@/features/hero-slides/types"
 
 // ── Validation (mirrors HeroSlideReq; strings coerced to the API shape on submit) ─
 
@@ -56,7 +58,7 @@ type FormValues = z.infer<typeof schema>
 
 const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null)
 
-function defaults(slide?: HeroSlide): FormValues {
+function defaults(slide?: AdminHeroSlide): FormValues {
   return {
     title: slide?.title ?? "",
     eyebrow: slide?.eyebrow ?? "",
@@ -146,7 +148,7 @@ export function HeroForm({
   submitLabel = "ذخیره",
 }: {
   mode: "create" | "edit"
-  slide?: HeroSlide
+  slide?: AdminHeroSlide
   submitLabel?: string
 }) {
   const router = useRouter()
@@ -193,7 +195,7 @@ export function HeroForm({
   }
 
   function applyServerErrors(e: unknown) {
-    if (e instanceof AdminApiError) {
+    if (e instanceof HeroSlideApiError) {
       if (e.fields) {
         for (const [key, msgs] of Object.entries(e.fields)) {
           const field = FIELD_MAP[key]

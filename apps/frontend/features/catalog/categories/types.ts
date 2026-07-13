@@ -1,26 +1,17 @@
-// types/category.ts
-import { BaseFilter } from "@/lib/types/filters";
-
-// ------------------------------------------------
-// Enums / string unions
-// ------------------------------------------------
+import type { PaginationQuery } from "@/lib/api/types";
 
 export type CardSize = "small" | "large";
 
-// ------------------------------------------------
-// Public responses (no timestamps)
-// ------------------------------------------------
-
-/** Basic category info – used in storefront and product listings. */
-export interface CategoryResponse {
+/** Flat category returned by list, detail, featured, and mutation endpoints. */
+export interface Category {
   id: number;
   title: string;
-  description?: string | null;
-  parent_id?: number | null;
-  slug?: string | null;
-  image_url?: string | null;
+  description?: string;
+  parent_id?: number;
+  slug?: string;
+  image_url?: string;
   is_featured: boolean;
-  card_size?: CardSize; // "small" | "large", may be omitted if default
+  card_size?: CardSize;
   display_order: number;
 }
 
@@ -28,62 +19,48 @@ export interface CategoryResponse {
 export interface CategoryTree {
   id: number;
   title: string;
-  description?: string | null;
-  slug?: string | null;
-  image_url?: string | null;
-  children?: CategoryTree[]; // recursive
+  description?: string;
+  slug?: string;
+  image_url?: string;
+  children?: CategoryTree[];
 }
 
 /** Lightweight category reference used inside product responses. */
-export interface ProductCategoryResponse {
+export interface ProductCategory {
   id: number;
   title: string;
-  slug?: string | null;
+  slug: string | null;
 }
 
-// ------------------------------------------------
-// Admin responses (extend public with timestamps)
-// ------------------------------------------------
-
-/** Full category record for admin – includes audit timestamps. */
-export interface AdminCategoryResponse extends CategoryResponse {
-  created_at: string; // ISO datetime
-  updated_at: string; // ISO datetime
-}
-
-// ------------------------------------------------
-// Request payloads
-// ------------------------------------------------
-
-export interface CreateCategoryReq {
+export interface CreateCategoryInput {
   title: string;
   description?: string | null;
   parent_id?: number | null;
   slug?: string | null;
   image_url?: string | null;
-  is_featured?: boolean;
-  card_size?: CardSize;
-  display_order?: number; // int16
+  is_featured?: boolean | null;
+  card_size?: CardSize | null;
+  display_order?: number | null;
 }
 
-export interface UpdateCategoryReq {
+export interface UpdateCategoryInput {
   title?: string | null;
   description?: string | null;
   parent_id?: number | null;
   slug?: string | null;
   image_url?: string | null;
-  is_featured?: boolean;
-  card_size?: CardSize;
-  display_order?: number;
+  is_featured?: boolean | null;
+  card_size?: CardSize | null;
+  display_order?: number | null;
 }
 
-// ------------------------------------------------
-// Filter (extends BaseFilter)
-// ------------------------------------------------
+export type CategorySortField = "created_at" | "title" | "display_order";
+export type CategorySortDirection = "asc" | "desc";
 
-export interface CategoryFilter extends BaseFilter {
+export interface CategoryListQuery extends PaginationQuery {
+  sortBy?: CategorySortField;
+  orderBy?: CategorySortDirection;
+  search?: string;
   parent_id?: number;
   is_featured?: boolean;
 }
-
-export type Category = CategoryResponse;

@@ -2,12 +2,13 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { RotateCcw, Printer } from "lucide-react"
+import { Printer } from "lucide-react"
 import { toast } from "sonner"
 
-import { ORDER_STATUS_FA } from "@/lib/catalog/labels"
-import type { OrderStatus } from "@/lib/catalog/types"
-import { updateOrderStatus, AdminApiError } from "@/lib/api/admin-client"
+import { ORDER_STATUS_FA } from "@/features/orders/labels"
+import type { OrderStatus } from "@/features/orders/types"
+import { AdminOrderClientError } from "@/features/orders/api/admin-client"
+import { useUpdateAdminOrderStatus } from "@/features/admin/orders/hooks"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -16,17 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 
 const STATUS_OPTIONS = (Object.keys(ORDER_STATUS_FA) as OrderStatus[]).map((value) => ({
   value,
@@ -37,30 +27,25 @@ export function OrderActions({
   orderId,
   status,
   canWrite,
-  canRefund,
 }: {
   orderId: number
   status: OrderStatus
   canWrite: boolean
-  canRefund: boolean
 }) {
   const router = useRouter()
   const [current, setCurrent] = React.useState<OrderStatus>(status)
-  const [pending, setPending] = React.useState(false)
+  const updateStatus = useUpdateAdminOrderStatus(orderId)
 
   async function changeStatus(next: OrderStatus) {
     const previous = current
     setCurrent(next) // optimistic
-    setPending(true)
     try {
-      await updateOrderStatus(orderId, next)
+      await updateStatus.mutateAsync({ status: next })
       toast.success(`وضعیت سفارش به «${ORDER_STATUS_FA[next]}» تغییر کرد`)
       router.refresh()
     } catch (e) {
       setCurrent(previous) // roll back
-      toast.error(e instanceof AdminApiError ? e.message : "تغییر وضعیت ناموفق بود")
-    } finally {
-      setPending(false)
+      toast.error(e instanceof AdminOrderClientError ? e.message : "تغییر وضعیت ناموفق بود")
     }
   }
 
@@ -71,7 +56,7 @@ export function OrderActions({
       </Button>
 
       {canWrite ? (
-        <Select value={current} disabled={pending} onValueChange={(v) => changeStatus(v as OrderStatus)}>
+        <Select value={current} disabled={updateStatus.isPending} onValueChange={(v) => changeStatus(v as OrderStatus)}>
           <SelectTrigger size="sm" className="min-w-44">
             <SelectValue />
           </SelectTrigger>
@@ -83,35 +68,6 @@ export function OrderActions({
             ))}
           </SelectContent>
         </Select>
-      ) : null}
-
-      {canRefund ? (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pending || current === "refunded"}
-              className="text-destructive hover:text-destructive"
-            >
-              <RotateCcw className="size-4" /> بازپرداخت
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>بازپرداخت سفارش</AlertDialogTitle>
-              <AlertDialogDescription>
-                وضعیت سفارش به «بازپرداخت‌شده» تغییر می‌کند. این عمل قابل بازگشت نیست.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>انصراف</AlertDialogCancel>
-              <AlertDialogAction onClick={() => changeStatus("refunded")}>
-                تأیید بازپرداخت
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       ) : null}
     </div>
   )

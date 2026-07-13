@@ -20,8 +20,21 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
-import type { Review, RatingSummary } from "@/lib/catalog/reviews"
-import { fetchReviewsPage } from "@/app/(storefront)/products/[slug]/reviews-actions"
+import type {
+  CreateReviewInput,
+  ProductRatingSummary,
+  Review,
+  ReviewRating,
+  ReviewRatingKey,
+  ReviewReactionInput,
+} from "@/features/reviews/types"
+import { fetchReviewsPage } from "@/features/reviews/actions"
+import {
+  ReviewMutationError,
+  useCreateReview,
+  useReactToReview,
+} from "@/features/reviews/hooks"
+import { useRecordInteraction } from "@/features/recommendations/hooks"
 
 const PAGE_SIZE = 8
 
@@ -68,7 +81,7 @@ export function ReviewsSection({
   initialHasNext,
 }: {
   productId: number
-  summary: RatingSummary | null
+  summary: ProductRatingSummary | null
   initialReviews: Review[]
   initialHasNext: boolean
 }) {
@@ -77,7 +90,7 @@ export function ReviewsSection({
 
   const [reviews, setReviews] = React.useState<Review[]>(initialReviews)
   const [reacted, setReacted] = React.useState<Set<number>>(new Set())
-  const [filter, setFilter] = React.useState<number | null>(null)
+  const [filter, setFilter] = React.useState<ReviewRating | null>(null)
   const [page, setPage] = React.useState(1)
   const [hasNext, setHasNext] = React.useState(initialHasNext)
   const [loading, setLoading] = React.useState(false)
@@ -85,12 +98,13 @@ export function ReviewsSection({
   // Newly written reviews (pending moderation) — kept across filter changes so
   // the author sees their submission immediately.
   const [pending, setPendingReviews] = React.useState<Review[]>([])
+  const reactMutation = useReactToReview(productId)
 
   const total = summary?.total_reviews ?? reviews.length
   const avg = summary?.average_rating ?? 0
 
   // Apply a star filter → refetch page 1 from the server.
-  function applyFilter(rating: number | null) {
+  function applyFilter(rating: ReviewRating | null) {
     if (rating === filter) return
     setFilter(rating)
     setLoading(true)
@@ -134,12 +148,8 @@ export function ReviewsSection({
       setReviews((rs) => rs.map((r) => (r.id === id ? { ...r, like_count: r.like_count + delta } : r)))
     bump(1)
     try {
-      const res = await fetch(`/api/store/reviews/${id}/react`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ like: true }),
-      })
-      if (!res.ok) throw new Error()
+      const input: ReviewReactionInput = { like: true }
+      await reactMutation.mutateAsync({ id, input })
     } catch {
       bump(-1)
       setReacted((s) => {
@@ -173,8 +183,8 @@ export function ReviewsSection({
 
           {summary && total > 0 ? (
             <div className="mt-6 space-y-1.5" role="group" aria-label="پالایش بر اساس امتیاز">
-              {[5, 4, 3, 2, 1].map((star) => {
-                const count = summary.distribution[String(star) as "1"] ?? 0
+              {([5, 4, 3, 2, 1] as ReviewRating[]).map((star) => {
+                const count = summary.distribution[String(star) as ReviewRatingKey] ?? 0
                 const pct = total > 0 ? Math.round((count / total) * 100) : 0
                 const isActive = filter === star
                 return (
@@ -317,42 +327,45 @@ function WriteReviewDialog({
   onCreated: (r: Review) => void
 }) {
   const [open, setOpen] = React.useState(false)
-  const [rating, setRating] = React.useState(5)
+  const [rating, setRating] = React.useState<ReviewRating>(5)
   const [hover, setHover] = React.useState(0)
   const [title, setTitle] = React.useState("")
   const [content, setContent] = React.useState("")
-  const [submitting, setSubmitting] = React.useState(false)
+  const createReview = useCreateReview(productId)
+  const recordInteraction = useRecordInteraction()
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!content.trim() || rating < 1) return
-    setSubmitting(true)
+    if (!title.trim() || !content.trim()) return
     try {
-      const res = await fetch("/api/store/reviews", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product_id: productId, rating, title: title.trim(), content: content.trim() }),
+      const input: CreateReviewInput = {
+        product_id: productId,
+        rating,
+        title: title.trim(),
+        content: content.trim(),
+      }
+      const review = await createReview.mutateAsync(input)
+      onCreated(review)
+      recordInteraction.mutate({
+        product_id: productId,
+        interaction_type: "review",
+        source: "pdp",
       })
-      if (res.status === 409) {
-        toast.error("قبلاً برای این محصول نظر ثبت کرده‌اید")
-        return
-      }
-      if (res.status === 403) {
-        toast.error("تنها خریداران این محصول می‌توانند نظر ثبت کنند")
-        return
-      }
-      if (!res.ok) throw new Error()
-      const body = (await res.json()) as { data: Review }
-      onCreated(body.data)
       toast.success("نظر شما ثبت شد", { description: "پس از تأیید نمایش داده می‌شود." })
       setOpen(false)
       setTitle("")
       setContent("")
       setRating(5)
-    } catch {
+    } catch (error) {
+      if (error instanceof ReviewMutationError && error.status === 409) {
+        toast.error("قبلاً برای این محصول نظر ثبت کرده‌اید")
+        return
+      }
+      if (error instanceof ReviewMutationError && error.status === 403) {
+        toast.error("تنها خریداران این محصول می‌توانند نظر ثبت کنند")
+        return
+      }
       toast.error("ثبت نظر ناموفق بود. دوباره تلاش کنید.")
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -371,7 +384,7 @@ function WriteReviewDialog({
           <div>
             <Label className="mb-2 block">امتیاز شما</Label>
             <div className="flex items-center gap-1" onMouseLeave={() => setHover(0)}>
-              {[1, 2, 3, 4, 5].map((n) => (
+              {([1, 2, 3, 4, 5] as ReviewRating[]).map((n) => (
                 <button
                   key={n}
                   type="button"
@@ -393,11 +406,12 @@ function WriteReviewDialog({
             </div>
           </div>
           <div>
-            <Label htmlFor="review-title" className="mb-2 block">عنوان (اختیاری)</Label>
+            <Label htmlFor="review-title" className="mb-2 block">عنوان</Label>
             <Input
               id="review-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              required
               maxLength={255}
               placeholder="جمع‌بندی تجربه‌تان"
             />
@@ -414,9 +428,12 @@ function WriteReviewDialog({
             />
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={submitting || !content.trim()}>
-              {submitting ? <Loader2 className="animate-spin" /> : null}
-              {submitting ? "در حال ثبت…" : "ثبت نظر"}
+            <Button
+              type="submit"
+              disabled={createReview.isPending || !title.trim() || !content.trim()}
+            >
+              {createReview.isPending ? <Loader2 className="animate-spin" /> : null}
+              {createReview.isPending ? "در حال ثبت…" : "ثبت نظر"}
             </Button>
           </DialogFooter>
         </form>

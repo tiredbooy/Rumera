@@ -1,8 +1,15 @@
 import { Coins, ShoppingCart, Users, Percent } from "lucide-react";
 import { formatPrice, faNum } from "@/lib/products";
-import { fetchRevenueSummary } from "../api";
-import { num, trendOf } from "@/lib/admin/stats-format";
-import { windowFor, previousWindowFor, type RangeId } from "../analytics-range";
+import { fetchRevenueSummary } from "@/features/analytics/api";
+import {
+  previousWindowFor,
+  windowFor,
+  type RangeId,
+} from "@/features/analytics/range";
+import {
+  analyticsNumber,
+  analyticsTrend,
+} from "@/features/analytics/utils";
 import { StatCard } from "@/features/dashboard/components/stat-card";
 
 export async function AnalyticsKpis({ range }: { range: RangeId }) {
@@ -22,22 +29,27 @@ export async function AnalyticsKpis({ range }: { range: RangeId }) {
     );
   }
 
-  const rawConv = num(s.avg_conversion_rate);
+  const rawConv = analyticsNumber(s.avg_conversion_rate);
   const convPct = rawConv <= 1 ? rawConv * 100 : rawConv;
   const kpiConversion = Number.isFinite(convPct)
     ? `٪${faNum(Math.round(convPct * 10) / 10)}`
     : "—";
 
   const revTrend = p
-    ? trendOf(num(s.total_net_revenue), num(p.total_net_revenue))
+    ? analyticsTrend(
+        analyticsNumber(s.total_net_revenue),
+        analyticsNumber(p.total_net_revenue),
+      )
     : undefined;
-  const ordTrend = p ? trendOf(s.total_orders, p.total_orders) : undefined;
+  const ordTrend = p
+    ? analyticsTrend(s.total_orders, p.total_orders)
+    : undefined;
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
         label="درآمد خالص"
-        value={formatPrice(num(s.total_net_revenue))}
+        value={formatPrice(analyticsNumber(s.total_net_revenue))}
         icon={Coins}
         trend={revTrend}
       />

@@ -4,11 +4,12 @@ import { Users, AlertCircle } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { serverApi, ApiError } from "@/lib/api/client";
-import type { UserListItem } from "@/lib/api/admin-client";
-import type { Paginated } from "@/lib/catalog/types";
+import { ApiError } from "@/lib/api/client";
+import type { Paginated } from "@/lib/api/types";
 import { faNum } from "@/lib/products";
-import { faDate } from "@/lib/catalog/labels";
+import { faDate } from "@/lib/utils/date";
+import { listUsers } from "@/features/customers/api";
+import type { UserListItem } from "@/features/customers/types";
 import {
   Table,
   TableBody,
@@ -73,14 +74,11 @@ async function UsersTable({ query, page }: { query: string; page: number }) {
   let data: Paginated<UserListItem> | null = null;
   let failed = false;
   try {
-    const qs = new URLSearchParams({
-      page: String(page),
-      limit: String(PAGE_SIZE),
+    data = await listUsers({
+      page,
+      limit: PAGE_SIZE,
+      search: query || undefined,
     });
-    if (query) qs.set("search", query);
-    data = await serverApi<Paginated<UserListItem>>(
-      `/admin/users?${qs.toString()}`,
-    );
   } catch (e) {
     if (e instanceof ApiError) failed = true;
     else throw e;
@@ -148,11 +146,7 @@ async function UsersTable({ query, page }: { query: string; page: number }) {
           </TableHeader>
           <TableBody>
             {results.map((u) => {
-              const fullName = [u.first_name, u.last_name]
-                .filter(Boolean)
-                .join(" ")
-                .trim();
-              const initial = (fullName || u.email)
+              const initial = (u.full_name || u.email)
                 .trim()
                 .charAt(0)
                 .toUpperCase();
@@ -168,7 +162,7 @@ async function UsersTable({ query, page }: { query: string; page: number }) {
                       </span>
                       <span className="min-w-0 leading-tight">
                         <span className="block font-medium">
-                          {fullName || "—"}
+                          {u.full_name || "—"}
                         </span>
                         <span
                           className="block truncate text-xs text-muted-foreground"

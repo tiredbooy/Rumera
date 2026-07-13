@@ -79,3 +79,6 @@ type EventFilter struct {
 	Limit     int
 	Offset    int
 }
+
+// EventBreakdown is the analytics wire shape: event_type -> count.
+type EventBreakdown map[string]int64

@@ -7,7 +7,7 @@ import { ShoppingBag, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useAddCartItem } from "@/lib/api/hooks"
+import { useAddCartItem } from "@/features/cart/api"
 import { ApiClientError } from "@/lib/api/store-client"
 
 /**

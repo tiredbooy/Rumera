@@ -15,7 +15,7 @@ type SubscriptionRepository interface {
 	Create(ctx context.Context, sub models.Subscription) (*models.Subscription, error)
 	ListByUser(ctx context.Context, userID int64) ([]models.Subscription, error)
 	Get(ctx context.Context, id, userID int64) (*models.Subscription, error)
-	UpdateStatus(ctx context.Context, id, userID int64, status string) error
+	UpdateStatus(ctx context.Context, id, userID int64, status models.SubscriptionStatus) error
 	SetNextRenewal(ctx context.Context, id, userID int64, t time.Time) error
 	FindDue(ctx context.Context, now time.Time, limit int) ([]models.DueSubscription, error)
 	AdvanceRenewal(ctx context.Context, id int64, next time.Time) error
@@ -81,7 +81,7 @@ func (r *subscriptionRepository) Get(ctx context.Context, id, userID int64) (*mo
 	return &s, nil
 }
 
-func (r *subscriptionRepository) UpdateStatus(ctx context.Context, id, userID int64, status string) error {
+func (r *subscriptionRepository) UpdateStatus(ctx context.Context, id, userID int64, status models.SubscriptionStatus) error {
 	const q = `UPDATE subscriptions SET status = $3, updated_at = NOW() WHERE id = $1 AND user_id = $2`
 	tag, err := r.db.Exec(ctx, q, id, userID, status)
 	if err != nil {

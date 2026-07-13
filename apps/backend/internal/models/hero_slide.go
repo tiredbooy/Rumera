@@ -82,9 +82,12 @@ type HeroSlideUpdateReq struct {
 	EndsAt   *time.Time `json:"ends_at"`
 }
 
-// ── Response ──────────────────────────────────────────────────────────────────
+// ── Responses ─────────────────────────────────────────────────────────────────
 
-type HeroSlideResponse struct {
+// PublicHeroSlideResponse is the storefront carousel projection. Activation,
+// scheduling, and audit fields remain admin-only; list order is represented by
+// SortOrder and guaranteed by the repository query.
+type PublicHeroSlideResponse struct {
 	ID       int64   `json:"id"`
 	Eyebrow  *string `json:"eyebrow"`
 	Title    string  `json:"title"`
@@ -102,7 +105,14 @@ type HeroSlideResponse struct {
 
 	Theme     string `json:"theme"`
 	SortOrder int    `json:"sort_order"`
-	IsActive  bool   `json:"is_active"`
+}
+
+// AdminHeroSlideResponse is the complete projection used by admin list, detail,
+// create, and update responses.
+type AdminHeroSlideResponse struct {
+	PublicHeroSlideResponse
+
+	IsActive bool `json:"is_active"`
 
 	StartsAt *time.Time `json:"starts_at"`
 	EndsAt   *time.Time `json:"ends_at"`

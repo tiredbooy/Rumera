@@ -8,9 +8,8 @@ import { faNum } from "@/lib/products"
 import {
   difficultyFa,
   formatDuration,
-  type RecipeDifficulty,
-  type RecipeListItem,
-} from "@/lib/recipes"
+} from "@/features/recipes/utils"
+import type { RecipeDifficulty, RecipeListItem } from "@/features/recipes/types"
 
 // Difficulty → dot colour, so the level reads at a glance.
 const difficultyDot: Record<RecipeDifficulty, string> = {

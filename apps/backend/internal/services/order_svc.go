@@ -22,7 +22,7 @@ type OrderService interface {
 	CreateOrder(ctx context.Context, userID int64, req models.CreateOrderReq) (*models.Order, error)
 	GetOrder(ctx context.Context, id int64) (*models.Order, error)
 	GetUserOrder(ctx context.Context, id int64, userID int64) (*models.Order, error)
-	GetAllOrders(ctx context.Context, filter models.OrderFilter) ([]*models.Order, int64, error)
+	GetAllOrders(ctx context.Context, filter models.OrderFilter) ([]models.OrderListItem, int64, error)
 	GetOrderItems(ctx context.Context, orderID int64) ([]models.OrderItemResponse, error)
 	UpdateOrderStatus(ctx context.Context, id int64, req models.UpdateOrderStatusReq) (*models.Order, error)
 	CancelOrder(ctx context.Context, id int64, userID int64) error
@@ -313,7 +313,7 @@ func (s *orderService) GetUserOrder(ctx context.Context, id int64, userID int64)
 	return order, nil
 }
 
-func (s *orderService) GetAllOrders(ctx context.Context, filter models.OrderFilter) ([]*models.Order, int64, error) {
+func (s *orderService) GetAllOrders(ctx context.Context, filter models.OrderFilter) ([]models.OrderListItem, int64, error) {
 	orders, total, err := s.orderRepo.GetAll(ctx, filter)
 	if err != nil {
 		return nil, 0, fmt.Errorf("orderService.GetAllOrders: %w", err)

@@ -27,14 +27,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { faNum } from "@/lib/products";
-import type { Brand } from "@/lib/catalog/types";
+import type {
+  Brand,
+  CreateBrandInput,
+} from "@/features/catalog/brands/types";
 import {
-  AdminApiError,
+  BrandApiError,
   createBrand,
   updateBrand,
   deleteBrand,
-  type CreateBrandInput,
-} from "@/lib/api/admin-client";
+} from "@/features/admin/brands/client";
 import { BRANDS_QUERY_KEY } from "@/features/admin/brands/components/BrandsTable";
 
 // ── Validation (string fields coerced to the API shape on submit) ─────────────
@@ -216,7 +218,7 @@ export function BrandForm({
   }
 
   function applyServerErrors(e: unknown) {
-    if (e instanceof AdminApiError) {
+    if (e instanceof BrandApiError) {
       if (e.fields) {
         for (const [key, msgs] of Object.entries(e.fields)) {
           setError(key as keyof FormValues, { message: msgs[0] });
@@ -259,7 +261,7 @@ export function BrandForm({
       router.refresh();
     } catch (e) {
       setIsDeleting(false);
-      if (e instanceof AdminApiError) {
+      if (e instanceof BrandApiError) {
         toast.error(e.message);
       } else {
         toast.error("حذف برند ناموفق بود");

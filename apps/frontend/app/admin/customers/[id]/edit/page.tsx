@@ -3,11 +3,12 @@ import { ArrowRight, UserX } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { serverApi, ApiError } from "@/lib/api/client";
-import type { UserAdminResponse } from "@/lib/api/admin-client";
+import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/features/dashboard/components/page-header";
+import { getAdminUser } from "@/features/customers/api";
 import { UserEditForm } from "@/features/admin/customers/components/UserEditForm";
+import type { AdminUser } from "@/features/customers/types";
 
 export default async function AdminEditUserPage({
   params,
@@ -17,10 +18,10 @@ export default async function AdminEditUserPage({
   const session = await requirePermission(PERMISSIONS.CUSTOMERS_WRITE);
   const { id } = await params;
 
-  let user: UserAdminResponse | null = null;
+  let user: AdminUser | null = null;
   let notFoundUser = false;
   try {
-    user = await serverApi<UserAdminResponse>(`/admin/users/${id}`);
+    user = await getAdminUser(id);
   } catch (e) {
     // GET /admin/users/:id filters to active users, so a deactivated account
     // resolves as 404 here. Surface a friendly state instead of a hard 404 page.

@@ -6,7 +6,7 @@ import { MoreHorizontal, Pencil, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { formatPrice } from "@/lib/products";
-import type { ProductListItem } from "@/lib/catalog/types";
+import type { ProductListItem } from "@/features/catalog/products/types";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

@@ -4,47 +4,44 @@
 // Do not hand-edit fields without checking the Go source first —
 // drift here is what caused the alt_text null/undefined bug.
 
-export interface ImageResponse {
+import type { ProductTag } from "@/features/catalog/tags/types";
+
+export interface ProductImage {
   id: number;
   image_url: string; // canonical serving URL (/media/{key} for uploads)
-  storage_key?: string | null; // backend key; build transforms as /media/{key}?f=&q=&w=
-  alt_text?: string | null;
+  storage_key?: string; // backend key; build transforms as /media/{key}?f=&q=&w=
+  alt_text?: string;
   sort_order: number;
   is_primary: boolean;
-  width?: number | null;
-  height?: number | null;
+  width?: number;
+  height?: number;
 }
 
-export interface OptionValueResponse {
+export interface ProductOptionValue {
   id: number;
   option_type: string; // e.g. "Color"
   value: string; // e.g. "Red"
 }
 
-export interface VariantResponse {
+export interface ProductVariant {
   id: number;
-  sku?: string | null;
+  sku?: string;
   price: number;
-  compare_at_price?: number | null;
+  compare_at_price?: number;
   is_active: boolean;
-  options?: OptionValueResponse[];
-  images?: ImageResponse[];
-}
-
-export interface TagResponse {
-  id: number;
-  title: string;
+  options?: ProductOptionValue[];
+  images?: ProductImage[];
 }
 
 // Lightweight product list item
 export interface ProductListItem {
   id: number;
   title: string;
-  code?: string | null;
-  slug?: string | null;
-  image_response: ImageResponse | null;
-  brand?: string | null; // brand title, joined
-  category?: string | null; // category title, joined
+  code?: string;
+  slug?: string;
+  image_response: ProductImage | null;
+  brand?: string; // brand title, joined
+  category?: string; // category title, joined
   is_active: boolean;
   min_price: number; // cheapest variant
   max_price: number; // most expensive variant
@@ -54,21 +51,21 @@ export interface ProductListItem {
 export interface ProductDetail {
   id: number;
   title: string;
-  code?: string | null;
-  slug?: string | null;
-  category_id?: number | null;
-  description?: string | null;
-  brand_id?: number | null;
-  country_of_origin?: string | null;
-  abv?: number | null;
-  weight?: number | null;
+  code?: string;
+  slug?: string;
+  category_id?: number;
+  description?: string;
+  brand_id?: number;
+  country_of_origin?: string;
+  abv?: number;
+  weight?: number;
   is_active: boolean;
-  meta_title?: string | null;
-  meta_description?: string | null;
+  meta_title?: string;
+  meta_description?: string;
   meta_tags?: string[];
-  tags?: TagResponse[];
-  images?: ImageResponse[];
-  variants?: VariantResponse[];
+  tags?: ProductTag[];
+  images?: ProductImage[];
+  variants?: ProductVariant[];
 }
 
 // MeiliSearch document shape — flat, search-friendly
@@ -80,8 +77,8 @@ export interface MeiliProduct {
   description: string | null;
   brand_id: number | null;
   category_id: number | null;
-  tags: string[];
-  meta_tags: string[];
+  tags: string[] | null;
+  meta_tags: string[] | null;
   min_price: number;
   max_price: number;
   is_active: boolean;

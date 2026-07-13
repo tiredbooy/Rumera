@@ -8,7 +8,6 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
   badgeFa,
-  categoryFa,
   faNum,
   formatPrice,
   type Product,
@@ -56,7 +55,7 @@ export function ProductCard({ product }: { product: Product }) {
               alt={product.name}
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               monogram={product.name.charAt(0)}
-              label={categoryFa[product.category]}
+              label={product.category}
               fallbackClassName="from-accent/40 via-card to-secondary"
             />
           </div>
@@ -115,7 +114,7 @@ export function ProductCard({ product }: { product: Product }) {
       <div className="flex flex-1 flex-col gap-2 p-4 sm:gap-2.5 sm:p-5">
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-[11px] font-medium text-primary sm:text-xs">
-            {categoryFa[product.category]}
+            {product.category}
           </span>
           <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:text-xs">
             <Star className="size-3 fill-primary text-primary" />

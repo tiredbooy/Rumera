@@ -16,7 +16,7 @@ import {
   SheetFooter,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { useCart } from "@/lib/api/hooks"
+import { useCart } from "@/features/cart/api"
 import { CartLines } from "./cart-lines"
 
 /** Header cart control: icon + live count badge + slide-over drawer. */

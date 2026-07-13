@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useTransition } from "react";
-import { uploadProductImage } from "../admin/products/api/api";
+import { uploadProductImage } from "../admin/products/api/client";
 import {
   deleteProductImage,
   reorderProductImages,
@@ -10,12 +9,17 @@ import {
   updateImageAlt,
 } from "../admin/products/actions/images";
 import { isSameFile, validateFile } from "./constants";
+import type { ProductImage } from "../catalog/products/types";
 import type {
   ImageUploaderProps,
   Slot,
   StagedSlot,
   UploadedSlot,
 } from "./types";
+
+function asError(error: unknown, fallback: string): Error {
+  return error instanceof Error ? error : new Error(fallback);
+}
 
 export function useImageUploader({
   productId,
@@ -24,297 +28,580 @@ export function useImageUploader({
 }: ImageUploaderProps) {
   const live = typeof productId === "number" && productId > 0;
   const idRef = React.useRef(0);
-  const nextId = () => `slot-${idRef.current++}`;
-
-  const [isPending, startTransition] = useTransition();
-  const [slots, setSlots] = React.useState<Slot[]>(() =>
-    initialImages
-      .slice()
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .map((image) => ({
-        kind: "uploaded" as const,
-        localId: `init-${image.id}`,
-        image,
-        alt: image.alt_text ?? "",
-      })),
+  const initialSlots = React.useMemo<Slot[]>(
+    () =>
+      initialImages
+        .slice()
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((image) => ({
+          kind: "uploaded",
+          localId: `init-${image.id}`,
+          image,
+          alt: image.alt_text ?? "",
+        })),
+    [initialImages],
   );
+  const [slots, setSlots] = React.useState<Slot[]>(initialSlots);
+  const slotsRef = React.useRef(slots);
+  const objectUrlsRef = React.useRef(new Set<string>());
+  const inFlightUploadsRef = React.useRef(
+    new Map<string, Promise<ProductImage>>(),
+  );
+  const pendingPersistenceRef = React.useRef(new Set<Promise<void>>());
+  const persistenceErrorRef = React.useRef<Error | null>(null);
+  const flushingRef = React.useRef(false);
+  const [pendingCount, setPendingCount] = React.useState(0);
+  const [isFlushing, setIsFlushing] = React.useState(false);
   const [limitMessage, setLimitMessage] = React.useState<string | null>(null);
   const [announcement, setAnnouncement] = React.useState("");
-  const announce = React.useCallback((msg: string) => setAnnouncement(msg), []);
 
-  // Revoke object URLs on unmount to avoid leaks.
-  React.useEffect(() => {
-    return () => {
-      setSlots((cur) => {
-        cur.forEach(
-          (s) => s.kind === "staged" && URL.revokeObjectURL(s.previewUrl),
-        );
-        return cur;
-      });
-    };
+  const announce = React.useCallback((message: string) => {
+    setAnnouncement(message);
   }, []);
 
-  const patch = React.useCallback(
-    (localId: string, next: Partial<StagedSlot>) => {
-      setSlots((cur) =>
-        cur.map((s) =>
-          s.localId === localId && s.kind === "staged" ? { ...s, ...next } : s,
-        ),
-      );
+  const replaceSlots = React.useCallback(
+    (update: (current: Slot[]) => Slot[]) => {
+      const next = update(slotsRef.current);
+      slotsRef.current = next;
+      setSlots(next);
     },
     [],
   );
 
-  const uploadStaged = React.useCallback(
-    async (slot: StagedSlot, pid: number): Promise<ProductImage | null> => {
-      patch(slot.localId, {
-        status: "uploading",
-        progress: 0,
-        error: undefined,
-      });
-      try {
-        const image = await uploadProductImage(
-          pid,
-          slot.file,
-          { altText: slot.alt || undefined, isPrimary: slot.isPrimary },
-          (f) => patch(slot.localId, { progress: f }),
-        );
-        URL.revokeObjectURL(slot.previewUrl);
-        setSlots((cur) =>
-          cur.map((s) =>
-            s.localId === slot.localId
-              ? {
-                  kind: "uploaded",
-                  localId: s.localId,
-                  image,
-                  alt: image.alt_text ?? "",
-                }
-              : s,
-          ),
-        );
-        return image;
-      } catch (e) {
-        patch(slot.localId, {
-          status: "error",
-          error: e instanceof Error ? e.message : "بارگذاری ناموفق بود",
-        });
-        return null;
-      }
+  const revokePreview = React.useCallback((url: string) => {
+    if (!objectUrlsRef.current.delete(url)) return;
+    URL.revokeObjectURL(url);
+  }, []);
+
+  React.useEffect(() => {
+    const objectUrls = objectUrlsRef.current;
+    return () => {
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      objectUrls.clear();
+    };
+  }, []);
+
+  const patchStaged = React.useCallback(
+    (localId: string, next: Partial<StagedSlot>) => {
+      replaceSlots((current) =>
+        current.map((slot) =>
+          slot.localId === localId && slot.kind === "staged"
+            ? { ...slot, ...next }
+            : slot,
+        ),
+      );
     },
-    [patch],
+    [replaceSlots],
+  );
+
+  const trackPersistence = React.useCallback((operation: Promise<void>) => {
+    pendingPersistenceRef.current.add(operation);
+    setPendingCount((count) => count + 1);
+    void operation.finally(() => {
+      pendingPersistenceRef.current.delete(operation);
+      setPendingCount((count) => Math.max(0, count - 1));
+    });
+  }, []);
+
+  const waitForPersistence = React.useCallback(async () => {
+    while (pendingPersistenceRef.current.size > 0) {
+      await Promise.all(Array.from(pendingPersistenceRef.current));
+    }
+    if (persistenceErrorRef.current) {
+      const error = persistenceErrorRef.current;
+      persistenceErrorRef.current = null;
+      throw error;
+    }
+  }, []);
+
+  const uploadStaged = React.useCallback(
+    (slot: StagedSlot, pid: number): Promise<ProductImage> => {
+      const existing = inFlightUploadsRef.current.get(slot.localId);
+      if (existing) return existing;
+
+      const operation = (async () => {
+        patchStaged(slot.localId, {
+          status: "uploading",
+          progress: 0,
+          error: undefined,
+        });
+        try {
+          const image = await uploadProductImage(
+            pid,
+            slot.file,
+            { altText: slot.alt || undefined, isPrimary: slot.isPrimary },
+            (progress) => patchStaged(slot.localId, { progress }),
+          );
+          revokePreview(slot.previewUrl);
+          replaceSlots((current) =>
+            current.map((currentSlot) =>
+              currentSlot.localId === slot.localId
+                ? {
+                    kind: "uploaded",
+                    localId: currentSlot.localId,
+                    image: { ...image, is_primary: slot.isPrimary },
+                    alt: image.alt_text ?? "",
+                  }
+                : currentSlot,
+            ),
+          );
+          return image;
+        } catch (error) {
+          const uploadError = asError(error, "بارگذاری ناموفق بود");
+          patchStaged(slot.localId, {
+            status: "error",
+            error: uploadError.message,
+          });
+          throw uploadError;
+        } finally {
+          inFlightUploadsRef.current.delete(slot.localId);
+        }
+      })();
+
+      inFlightUploadsRef.current.set(slot.localId, operation);
+      return operation;
+    },
+    [patchStaged, replaceSlots, revokePreview],
   );
 
   const addFiles = React.useCallback(
     (files: FileList | File[]) => {
+      if (
+        flushingRef.current ||
+        pendingPersistenceRef.current.size > 0 ||
+        inFlightUploadsRef.current.size > 0
+      ) {
+        return;
+      }
       setLimitMessage(null);
-      const incomingFiles = Array.from(files);
-      let toUpload: StagedSlot[] = [];
+      const current = slotsRef.current;
+      const existingFiles = current
+        .filter((slot): slot is StagedSlot => slot.kind === "staged")
+        .map((slot) => slot.file);
+      const room =
+        typeof maxImages === "number"
+          ? Math.max(0, maxImages - current.length)
+          : Infinity;
 
-      setSlots((cur) => {
-        const existingFiles = cur
-          .filter((s): s is StagedSlot => s.kind === "staged")
-          .map((s) => s.file);
+      if (room === 0) {
+        setLimitMessage(`حداکثر ${maxImages} تصویر مجاز است.`);
+        return;
+      }
 
-        const room =
-          typeof maxImages === "number"
-            ? Math.max(0, maxImages - cur.length)
-            : Infinity;
-        if (room === 0) {
-          setLimitMessage(`حداکثر ${maxImages} تصویر مجاز است.`);
-          return cur;
+      const unique: File[] = [];
+      for (const file of Array.from(files)) {
+        if (
+          existingFiles.some((existing) => isSameFile(existing, file)) ||
+          unique.some((existing) => isSameFile(existing, file))
+        ) {
+          continue;
         }
-
-        const deduped = incomingFiles.filter(
-          (f) => !existingFiles.some((ef) => isSameFile(ef, f)),
+        unique.push(file);
+      }
+      const accepted = unique.slice(0, room);
+      if (accepted.length < Array.from(files).length) {
+        setLimitMessage(
+          accepted.length < unique.length
+            ? `فقط ${accepted.length} تصویر اضافه شد؛ حداکثر ${maxImages} تصویر مجاز است.`
+            : "برخی تصاویر تکراری بودند و نادیده گرفته شدند.",
         );
-        const accepted = deduped.slice(0, room);
+      }
 
-        if (accepted.length < incomingFiles.length) {
-          setLimitMessage(
-            accepted.length < deduped.length
-              ? `فقط ${accepted.length} تصویر اضافه شد؛ حداکثر ${maxImages} تصویر مجاز است.`
-              : "برخی تصاویر تکراری بودند و نادیده گرفته شدند.",
-          );
-        }
-
-        const incoming: StagedSlot[] = accepted.map((file) => {
-          const error = validateFile(file);
-          return {
-            kind: "staged",
-            localId: nextId(),
-            file,
-            previewUrl: URL.createObjectURL(file),
-            alt: "",
-            isPrimary: false,
-            status: error ? "error" : "idle",
-            progress: 0,
-            error: error ?? undefined,
-          };
-        });
-
-        const hasPrimary = cur.some((s) =>
-          s.kind === "uploaded" ? s.image.is_primary : s.isPrimary,
-        );
-        if (!hasPrimary && incoming[0] && !incoming[0].error)
-          incoming[0].isPrimary = true;
-
-        toUpload = incoming;
-        return [...cur, ...incoming];
+      const incoming: StagedSlot[] = accepted.map((file) => {
+        const error = validateFile(file);
+        const previewUrl = URL.createObjectURL(file);
+        objectUrlsRef.current.add(previewUrl);
+        return {
+          kind: "staged",
+          localId: `slot-${idRef.current++}`,
+          file,
+          previewUrl,
+          alt: "",
+          isPrimary: false,
+          status: error ? "error" : "idle",
+          progress: 0,
+          error: error ?? undefined,
+          validationError: Boolean(error),
+        };
       });
 
+      const hasPrimary = current.some((slot) =>
+        slot.kind === "uploaded" ? slot.image.is_primary : slot.isPrimary,
+      );
+      const firstValid = incoming.find((slot) => !slot.validationError);
+      if (!hasPrimary && firstValid) firstValid.isPrimary = true;
+      replaceSlots((existing) => [...existing, ...incoming]);
+
       if (live) {
-        toUpload.forEach((s) => {
-          if (!s.error) uploadStaged(s, productId as number);
-        });
+        void (async () => {
+          for (const slot of incoming) {
+            if (slot.validationError) continue;
+            try {
+              await uploadStaged(slot, productId);
+            } catch {
+              // The slot retains its actionable error state for retry/flush.
+            }
+          }
+        })();
       }
     },
-    [live, maxImages, productId, uploadStaged],
+    [live, maxImages, productId, replaceSlots, uploadStaged],
   );
 
   const removeSlot = React.useCallback(
     (slot: Slot) => {
       if (slot.kind === "staged") {
-        URL.revokeObjectURL(slot.previewUrl);
-        setSlots((cur) => cur.filter((s) => s.localId !== slot.localId));
+        if (inFlightUploadsRef.current.has(slot.localId)) return;
+        revokePreview(slot.previewUrl);
+        replaceSlots((current) =>
+          current.filter((currentSlot) => currentSlot.localId !== slot.localId),
+        );
         announce("تصویر حذف شد.");
         return;
       }
-      setSlots((cur) => cur.filter((s) => s.localId !== slot.localId));
+
+      const previousIndex = slotsRef.current.findIndex(
+        (currentSlot) => currentSlot.localId === slot.localId,
+      );
+      const wasPrimary = slot.image.is_primary;
+      replaceSlots((current) =>
+        current.filter((currentSlot) => currentSlot.localId !== slot.localId),
+      );
       announce("تصویر حذف شد.");
-      if (live) {
-        startTransition(async () => {
+      if (!live) return;
+
+      persistenceErrorRef.current = null;
+      trackPersistence(
+        (async () => {
+          const replacement = wasPrimary
+            ? slotsRef.current.find(
+                (candidate): candidate is UploadedSlot =>
+                  candidate.kind === "uploaded",
+              )
+            : undefined;
+
+          if (replacement) {
+            try {
+              await setPrimaryImage(productId, replacement.image.id);
+              replaceSlots((current) =>
+                current.map((candidate) =>
+                  candidate.kind === "uploaded"
+                    ? {
+                        ...candidate,
+                        image: {
+                          ...candidate.image,
+                          is_primary:
+                            candidate.localId === replacement.localId,
+                        },
+                      }
+                    : candidate,
+                ),
+              );
+            } catch (error) {
+              replaceSlots((current) => {
+                const restored = current.slice();
+                restored.splice(Math.max(0, previousIndex), 0, slot);
+                return restored;
+              });
+              persistenceErrorRef.current = asError(
+                error,
+                "تنظیم تصویر اصلی جایگزین ناموفق بود",
+              );
+              announce("حذف انجام نشد؛ تنظیم تصویر اصلی جایگزین ناموفق بود.");
+              return;
+            }
+          }
+
           try {
-            await deleteProductImage(productId as number, slot.image.id);
-          } catch {
-            // Re-add on failure so the UI stays truthful.
-            setSlots((cur) => [...cur, slot]);
+            await deleteProductImage(productId, slot.image.id);
+          } catch (error) {
+            replaceSlots((current) => {
+              if (
+                current.some(
+                  (currentSlot) => currentSlot.localId === slot.localId,
+                )
+              ) {
+                return current;
+              }
+              const restored = current.slice();
+              restored.splice(Math.max(0, previousIndex), 0, {
+                ...slot,
+                image: {
+                  ...slot.image,
+                  is_primary: replacement ? false : slot.image.is_primary,
+                },
+              });
+              return restored;
+            });
+            persistenceErrorRef.current = asError(
+              error,
+              "حذف تصویر ناموفق بود",
+            );
             announce("حذف تصویر ناموفق بود؛ بازگردانده شد.");
           }
-        });
-      }
+        })(),
+      );
     },
-    [live, productId, announce],
+    [announce, live, productId, replaceSlots, revokePreview, trackPersistence],
   );
 
   const makePrimary = React.useCallback(
     (slot: Slot) => {
-      setSlots((cur) =>
-        cur.map((s) => {
-          const isThis = s.localId === slot.localId;
-          if (s.kind === "uploaded")
-            return { ...s, image: { ...s.image, is_primary: isThis } };
-          return { ...s, isPrimary: isThis };
+      const previousPrimary = new Map(
+        slotsRef.current.map((currentSlot) => [
+          currentSlot.localId,
+          currentSlot.kind === "uploaded"
+            ? currentSlot.image.is_primary
+            : currentSlot.isPrimary,
+        ]),
+      );
+      replaceSlots((current) =>
+        current.map((currentSlot) => {
+          const isPrimary = currentSlot.localId === slot.localId;
+          return currentSlot.kind === "uploaded"
+            ? {
+                ...currentSlot,
+                image: { ...currentSlot.image, is_primary: isPrimary },
+              }
+            : { ...currentSlot, isPrimary };
         }),
       );
       announce("تصویر اصلی تنظیم شد.");
-      if (live && slot.kind === "uploaded") {
-        startTransition(async () => {
-          await setPrimaryImage(productId as number, slot.image.id).catch(
-            () => {},
-          );
-        });
-      }
+      if (!live || slot.kind !== "uploaded") return;
+
+      persistenceErrorRef.current = null;
+      trackPersistence(
+        (async () => {
+          try {
+            await setPrimaryImage(productId, slot.image.id);
+          } catch (error) {
+            replaceSlots((current) =>
+              current.map((currentSlot) => {
+                const isPrimary = previousPrimary.get(currentSlot.localId) ?? false;
+                return currentSlot.kind === "uploaded"
+                  ? {
+                      ...currentSlot,
+                      image: { ...currentSlot.image, is_primary: isPrimary },
+                    }
+                  : { ...currentSlot, isPrimary };
+              }),
+            );
+            persistenceErrorRef.current = asError(
+              error,
+              "تنظیم تصویر اصلی ناموفق بود",
+            );
+            announce("تنظیم تصویر اصلی ناموفق بود؛ تغییر بازگردانده شد.");
+          }
+        })(),
+      );
     },
-    [live, productId, announce],
+    [announce, live, productId, replaceSlots, trackPersistence],
   );
 
-  const setAlt = React.useCallback((slot: Slot, alt: string) => {
-    setSlots((cur) =>
-      cur.map((s) => (s.localId === slot.localId ? { ...s, alt } : s)),
-    );
-  }, []);
+  const setAlt = React.useCallback(
+    (slot: Slot, alt: string) => {
+      if (pendingPersistenceRef.current.size > 0 || flushingRef.current) return;
+      replaceSlots((current) =>
+        current.map((currentSlot) =>
+          currentSlot.localId === slot.localId
+            ? { ...currentSlot, alt }
+            : currentSlot,
+        ),
+      );
+    },
+    [replaceSlots],
+  );
 
   const commitAlt = React.useCallback(
     (slot: Slot) => {
-      if (live && slot.kind === "uploaded") {
-        startTransition(async () => {
-          await updateImageAlt(
-            productId as number,
-            slot.image.id,
-            slot.alt,
-          ).catch(() => {});
-        });
+      if (
+        !live ||
+        slot.kind !== "uploaded" ||
+        pendingPersistenceRef.current.size > 0 ||
+        flushingRef.current
+      ) {
+        return;
       }
+      const current = slotsRef.current.find(
+        (candidate) => candidate.localId === slot.localId,
+      );
+      if (!current || current.kind !== "uploaded") return;
+      const previousAlt = current.image.alt_text ?? "";
+      if (current.alt === previousAlt) return;
+
+      persistenceErrorRef.current = null;
+      trackPersistence(
+        (async () => {
+          try {
+            const image = await updateImageAlt(
+              productId,
+              current.image.id,
+              current.alt,
+            );
+            replaceSlots((items) =>
+              items.map((item) =>
+                item.localId === current.localId && item.kind === "uploaded"
+                  ? { ...item, image, alt: image.alt_text ?? "" }
+                  : item,
+              ),
+            );
+          } catch (error) {
+            replaceSlots((items) =>
+              items.map((item) =>
+                item.localId === current.localId
+                  ? { ...item, alt: previousAlt }
+                  : item,
+              ),
+            );
+            persistenceErrorRef.current = asError(
+              error,
+              "ذخیره متن جایگزین ناموفق بود",
+            );
+            announce("ذخیره متن جایگزین ناموفق بود؛ تغییر بازگردانده شد.");
+          }
+        })(),
+      );
     },
-    [live, productId],
+    [announce, live, productId, replaceSlots, trackPersistence],
   );
 
   const move = React.useCallback(
     (from: number, to: number) => {
-      setSlots((cur) => {
-        if (to < 0 || to >= cur.length || from === to) return cur;
-        const next = cur.slice();
-        const [m] = next.splice(from, 1);
-        next.splice(to, 0, m);
-        if (live) {
-          const ids = next
-            .filter((s): s is UploadedSlot => s.kind === "uploaded")
-            .map((s) => s.image.id);
-          if (ids.length > 1) {
-            startTransition(async () => {
-              await reorderProductImages(productId as number, ids).catch(
-                () => {},
-              );
-            });
+      const previous = slotsRef.current;
+      if (
+        pendingPersistenceRef.current.size > 0 ||
+        to < 0 ||
+        to >= previous.length ||
+        from === to
+      ) {
+        return false;
+      }
+      const next = previous.slice();
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      replaceSlots(() => next);
+      if (!live) return true;
+
+      const ids = next
+        .filter((slot): slot is UploadedSlot => slot.kind === "uploaded")
+        .map((slot) => slot.image.id);
+      if (ids.length < 2) return true;
+      persistenceErrorRef.current = null;
+      trackPersistence(
+        (async () => {
+          try {
+            await reorderProductImages(productId, ids);
+          } catch (error) {
+            replaceSlots(() => previous);
+            persistenceErrorRef.current = asError(
+              error,
+              "ذخیره ترتیب تصاویر ناموفق بود",
+            );
+            announce("ذخیره ترتیب تصاویر ناموفق بود؛ ترتیب بازگردانده شد.");
           }
-        }
-        return next;
-      });
+        })(),
+      );
+      return true;
     },
-    [live, productId],
+    [announce, live, productId, replaceSlots, trackPersistence],
   );
 
   const moveUp = React.useCallback(
     (index: number) => {
-      move(index, index - 1);
-      announce("ترتیب تصویر تغییر کرد.");
+      if (move(index, index - 1)) announce("ترتیب تصویر تغییر کرد.");
     },
-    [move, announce],
+    [announce, move],
   );
 
   const moveDown = React.useCallback(
     (index: number) => {
-      move(index, index + 1);
-      announce("ترتیب تصویر تغییر کرد.");
+      if (move(index, index + 1)) announce("ترتیب تصویر تغییر کرد.");
     },
-    [move, announce],
+    [announce, move],
   );
 
   const retryUpload = React.useCallback(
     (slot: StagedSlot) => {
-      if (live) uploadStaged(slot, productId as number);
+      if (!live || slot.validationError) return;
+      void uploadStaged(slot, productId).catch(() => {});
     },
     [live, productId, uploadStaged],
   );
 
   const flush = React.useCallback(
     async (pid: number) => {
-      const ordered: number[] = [];
-      let primaryId: number | null = null;
-      for (const s of slots) {
-        if (s.kind === "uploaded") {
-          ordered.push(s.image.id);
-          if (s.image.is_primary) primaryId = s.image.id;
-          continue;
+      if (flushingRef.current) throw new Error("ذخیره تصاویر در حال انجام است");
+      flushingRef.current = true;
+      setIsFlushing(true);
+      try {
+        await waitForPersistence();
+
+        for (const slot of slotsRef.current) {
+          if (slot.kind === "uploaded") continue;
+          if (slot.validationError) {
+            throw new Error(slot.error ?? "یکی از تصاویر معتبر نیست");
+          }
+          const inFlight = inFlightUploadsRef.current.get(slot.localId);
+          if (inFlight) {
+            await inFlight;
+            continue;
+          }
+          if (slot.status === "error") {
+            throw new Error(slot.error ?? "بارگذاری تصویر ناموفق بود");
+          }
+          await uploadStaged(slot, pid);
         }
-        if (s.status === "uploading") continue;
-        const image = await uploadStaged(s, pid);
-        if (image) {
-          ordered.push(image.id);
-          if (s.isPrimary) primaryId = image.id;
+
+        await waitForPersistence();
+        const current = slotsRef.current;
+        const failed = current.find((slot) => slot.kind === "staged");
+        if (failed?.kind === "staged") {
+          throw new Error(failed.error ?? "بارگذاری تصویر کامل نشد");
         }
+
+        const uploaded = current.filter(
+          (slot): slot is UploadedSlot => slot.kind === "uploaded",
+        );
+        if (uploaded.length > 1) {
+          await reorderProductImages(
+            pid,
+            uploaded.map((slot) => slot.image.id),
+          );
+        }
+        const primary =
+          uploaded.find((slot) => slot.image.is_primary) ?? uploaded[0];
+        if (primary) {
+          await setPrimaryImage(pid, primary.image.id);
+          replaceSlots((items) =>
+            items.map((item) =>
+              item.kind === "uploaded"
+                ? {
+                    ...item,
+                    image: {
+                      ...item.image,
+                      is_primary: item.localId === primary.localId,
+                    },
+                  }
+                : item,
+            ),
+          );
+        }
+      } finally {
+        flushingRef.current = false;
+        setIsFlushing(false);
       }
-      if (ordered.length > 1)
-        await reorderProductImages(pid, ordered).catch(() => {});
-      if (primaryId !== null)
-        await setPrimaryImage(pid, primaryId).catch(() => {});
     },
-    [slots, uploadStaged],
+    [replaceSlots, uploadStaged, waitForPersistence],
   );
 
   return {
     slots,
-    isPending,
+    isPending:
+      isFlushing ||
+      pendingCount > 0 ||
+      slots.some(
+        (slot) => slot.kind === "staged" && slot.status === "uploading",
+      ),
     limitMessage,
     announcement,
     addFiles,
@@ -327,6 +614,6 @@ export function useImageUploader({
     moveDown,
     retryUpload,
     flush,
-    hasStaged: slots.some((s) => s.kind === "staged"),
+    hasStaged: slots.some((slot) => slot.kind === "staged"),
   };
 }

@@ -24,6 +24,7 @@ type AddWishlistItemReq struct {
 type WishlistItemResponse struct {
 	ID             int64                 `json:"id"`
 	ProductID      int64                 `json:"product_id"`
+	ProductSlug    *string               `json:"product_slug,omitempty"`
 	ProductTitle   string                `json:"product_title"`
 	VariantID      int64                 `json:"variant_id"`
 	SKU            *string               `json:"sku,omitempty"`

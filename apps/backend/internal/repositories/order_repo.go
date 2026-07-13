@@ -17,7 +17,7 @@ type OrderRepository interface {
 	Create(ctx context.Context, tx pgx.Tx, req models.CreateOrderReq, userID int64, subtotal, discountAmount, shippingCost, taxAmount float64, couponID *int64) (*models.Order, error)
 	GetByID(ctx context.Context, id int64) (*models.Order, error)
 	GetByIDAndUserID(ctx context.Context, id int64, userID int64) (*models.Order, error)
-	GetAll(ctx context.Context, filter models.OrderFilter) ([]*models.Order, int64, error)
+	GetAll(ctx context.Context, filter models.OrderFilter) ([]models.OrderListItem, int64, error)
 	UpdateStatus(ctx context.Context, id int64, req models.UpdateOrderStatusReq) (*models.Order, error)
 	Cancel(ctx context.Context, id int64, userID int64) error
 	GetItems(ctx context.Context, orderID int64) ([]models.OrderItemResponse, error)
@@ -126,7 +126,7 @@ func (r *orderRepository) GetByIDAndUserID(ctx context.Context, id int64, userID
 	return &order, nil
 }
 
-func (r *orderRepository) GetAll(ctx context.Context, f models.OrderFilter) ([]*models.Order, int64, error) {
+func (r *orderRepository) GetAll(ctx context.Context, f models.OrderFilter) ([]models.OrderListItem, int64, error) {
 	where := []string{"1=1"}
 	args := pgx.NamedArgs{}
 
@@ -165,8 +165,14 @@ func (r *orderRepository) GetAll(ctx context.Context, f models.OrderFilter) ([]*
 	args["offset"] = f.Offset()
 
 	q := fmt.Sprintf(`
-		SELECT *, COUNT(*) OVER() AS total_count
-		FROM orders
+		SELECT o.id, o.status, o.payment_method, o.total_amount,
+			COALESCE((
+				SELECT SUM(oi.quantity)
+				FROM order_items oi
+				WHERE oi.order_id = o.id
+			), 0)::int AS item_count,
+			o.created_at, COUNT(*) OVER() AS total_count
+		FROM orders o
 		WHERE %s
 		ORDER BY %s %s
 		LIMIT @limit OFFSET @offset`,
@@ -180,25 +186,20 @@ func (r *orderRepository) GetAll(ctx context.Context, f models.OrderFilter) ([]*
 	defer rows.Close()
 
 	var (
-		orders []*models.Order
+		orders []models.OrderListItem
 		total  int64
 	)
 
 	for rows.Next() {
-		var o models.Order
+		var o models.OrderListItem
 		if err := rows.Scan(
-			&o.ID, &o.UserID, &o.AddressID,
-			&o.Status, &o.PaymentMethod,
-			&o.Subtotal, &o.DiscountAmount, &o.ShippingCost,
-			&o.TaxAmount, &o.TotalAmount,
-			&o.CouponID, &o.ShippingMethodID, &o.Notes,
-			&o.PaidAt, &o.ShippedAt, &o.DeliveredAt, &o.CancelledAt,
-			&o.CreatedAt, &o.UpdatedAt,
+			&o.ID, &o.Status, &o.PaymentMethod, &o.TotalAmount,
+			&o.ItemCount, &o.CreatedAt,
 			&total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("orderRepository.GetAll scan: %w", err)
 		}
-		orders = append(orders, &o)
+		orders = append(orders, o)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("orderRepository.GetAll rows: %w", err)

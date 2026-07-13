@@ -6,8 +6,9 @@ import type { Control, FieldErrors, UseFormRegister } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField, FormSection } from "./FormLayout";
+import type { Tag } from "@/features/catalog/tags/types";
 import type { ProductFormValues } from "../../validations";
-import { TagSelector, type AdminTag } from "./TagSelector";
+import { TagSelector } from "./TagSelector";
 
 export function SeoSection({
   register,
@@ -18,7 +19,7 @@ export function SeoSection({
   register: UseFormRegister<ProductFormValues>;
   control: Control<ProductFormValues>;
   errors: FieldErrors<ProductFormValues>;
-  tags: AdminTag[];
+  tags: Tag[];
 }) {
   return (
     <FormSection title="سئو و متادیتا" icon={<Search />}>

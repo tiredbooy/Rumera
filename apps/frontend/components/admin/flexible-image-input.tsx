@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { SmartImage } from "@/components/smart-image";
-import { uploadImage } from "@/lib/api/admin-client";
+import { uploadImage } from "@/features/admin/uploads/client";
 
 const MAX_MB = 15;
 const ACCEPT = ["image/jpeg", "image/png", "image/webp", "image/avif"];
@@ -17,7 +17,7 @@ const ACCEPT = ["image/jpeg", "image/png", "image/webp", "image/avif"];
  *
  * Controlled (`value`/`onChange` carry the image URL string), so it drops into
  * any react-hook-form via `<Controller>`. Uploads go to the shared
- * `POST /admin/uploads` endpoint and the resulting public URL is written back
+ * `POST /api/admin/admin/uploads` endpoint and the resulting public URL is written back
  * through `onChange`. Reused by the hero, recipe (and future journal) forms.
  */
 

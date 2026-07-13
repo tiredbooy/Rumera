@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ProductDetail } from "@/lib/catalog/types";
+import type { ProductDetail } from "@/features/catalog/products/types";
 
 const numberish = (msg: string) =>
   z
@@ -17,12 +17,13 @@ export const variantSchema = z.object({
   price: z
     .string()
     .refine(
-      (v) => v.trim() !== "" && !Number.isNaN(Number(v)) && Number(v) >= 0,
+      (v) => v.trim() !== "" && !Number.isNaN(Number(v)) && Number(v) > 0,
       {
         message: "قیمت معتبر وارد کنید",
       },
     ),
   compare_at_price: numberish("قیمت نامعتبر است"),
+  option_value_ids: z.array(z.number()),
 });
 
 export const productFormSchema = z.object({
@@ -90,6 +91,7 @@ export function getDefaultFormValues(
       price: String(v.price),
       compare_at_price:
         v.compare_at_price != null ? String(v.compare_at_price) : "",
+      option_value_ids: (v.options ?? []).map((option) => option.id),
     })),
   };
 }

@@ -1,30 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { apiFetch } from "@/lib/api/client";
-import type { ImageResponse } from "../types";
-
-export async function listProductImages(
-  productId: number,
-): Promise<ImageResponse[]> {
-  return apiFetch<ImageResponse[]>(`/admin/products/${productId}/images`);
-}
+import {
+  deleteProductImage as deleteImageOnServer,
+  reorderProductImages as reorderImagesOnServer,
+  setPrimaryProductImage,
+  updateProductImage,
+} from "@/features/admin/products/api/server";
 
 export async function reorderProductImages(
   productId: number,
   imageIds: number[],
 ) {
-  await apiFetch(`/admin/products/${productId}/images/order`, {
-    method: "PUT",
-    body: JSON.stringify({ image_ids: imageIds }),
-  });
+  await reorderImagesOnServer(productId, imageIds);
   revalidatePath(`/admin/products/${productId}`);
 }
 
 export async function setPrimaryImage(productId: number, imageId: number) {
-  await apiFetch(`/admin/products/${productId}/images/${imageId}/primary`, {
-    method: "PUT",
-  });
+  await setPrimaryProductImage(productId, imageId);
   revalidatePath(`/admin/products/${productId}`);
 }
 
@@ -33,16 +26,14 @@ export async function updateImageAlt(
   imageId: number,
   altText: string,
 ) {
-  await apiFetch(`/admin/products/${productId}/images/${imageId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ alt_text: altText }),
+  const image = await updateProductImage(productId, imageId, {
+    alt_text: altText,
   });
   revalidatePath(`/admin/products/${productId}`);
+  return image;
 }
 
 export async function deleteProductImage(productId: number, imageId: number) {
-  await apiFetch(`/admin/products/${productId}/images/${imageId}`, {
-    method: "DELETE",
-  });
+  await deleteImageOnServer(productId, imageId);
   revalidatePath(`/admin/products/${productId}`);
 }

@@ -252,7 +252,7 @@ func (s *seeder) seedCategories(ctx context.Context) (map[string]int64, error) {
 			if isRoot != pass {
 				continue
 			}
-			id, found, err := s.scalarID(ctx, `SELECT id FROM categories WHERE name = $1`, it.name)
+			id, found, err := s.scalarID(ctx, `SELECT id FROM categories WHERE title = $1`, it.name)
 			if err != nil {
 				return nil, err
 			}
@@ -263,7 +263,7 @@ func (s *seeder) seedCategories(ctx context.Context) (map[string]int64, error) {
 				continue
 			}
 			req := models.CreateCategoryReq{
-				Name:        it.name,
+				Title:       it.name,
 				Slug:        sp(it.slug),
 				Description: sp(it.desc),
 			}
@@ -280,7 +280,7 @@ func (s *seeder) seedCategories(ctx context.Context) (map[string]int64, error) {
 			}
 			out[it.key] = c.ID
 			s.c.created1("category")
-			s.log.Info("created category", zap.String("name", c.Name), zap.Int64("id", c.ID))
+			s.log.Info("created category", zap.String("name", c.Title), zap.Int64("id", c.ID))
 		}
 	}
 	return out, nil

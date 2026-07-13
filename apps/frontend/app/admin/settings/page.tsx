@@ -2,8 +2,8 @@ import { AlertTriangle } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { serverApi } from "@/lib/api/client";
-import type { SiteSettings } from "@/lib/api/admin-client";
+import { getAdminSiteSettings } from "@/features/settings/api/server";
+import type { SiteSettings } from "@/features/settings/types";
 import { PageHeader } from "@/features/dashboard/components/page-header";
 import { SettingsForm } from "@/features/admin/settings/components/SettingsForm";
 
@@ -13,7 +13,7 @@ export default async function AdminSettingsPage() {
   let settings: SiteSettings | null = null;
   let loadError = false;
   try {
-    settings = await serverApi<SiteSettings>("/admin/settings");
+    settings = await getAdminSiteSettings();
   } catch {
     loadError = true;
   }

@@ -91,8 +91,11 @@ func (r *referralRepository) CreateReferral(ctx context.Context, referrerID, ref
 }
 
 func (r *referralRepository) FindPendingByReferee(ctx context.Context, refereeID int64) (*models.Referral, error) {
-	const q = `SELECT * FROM referrals WHERE referee_user_id = $1 AND status = 'pending'`
-	rows, err := r.db.Query(ctx, q, refereeID)
+	const q = `
+		SELECT id, referrer_user_id, referee_user_id, status, reward_points, created_at, completed_at
+		FROM referrals
+		WHERE referee_user_id = $1 AND status = $2`
+	rows, err := r.db.Query(ctx, q, refereeID, models.ReferralStatusPending)
 	if err != nil {
 		return nil, fmt.Errorf("referralRepository.FindPendingByReferee: %w", err)
 	}
@@ -107,8 +110,8 @@ func (r *referralRepository) FindPendingByReferee(ctx context.Context, refereeID
 }
 
 func (r *referralRepository) Complete(ctx context.Context, id int64) error {
-	const q = `UPDATE referrals SET status = 'completed', completed_at = NOW() WHERE id = $1 AND status = 'pending'`
-	if _, err := r.db.Exec(ctx, q, id); err != nil {
+	const q = `UPDATE referrals SET status = $2, completed_at = NOW() WHERE id = $1 AND status = $3`
+	if _, err := r.db.Exec(ctx, q, id, models.ReferralStatusCompleted, models.ReferralStatusPending); err != nil {
 		return fmt.Errorf("referralRepository.Complete: %w", err)
 	}
 	return nil
@@ -117,10 +120,16 @@ func (r *referralRepository) Complete(ctx context.Context, id int64) error {
 func (r *referralRepository) Counts(ctx context.Context, referrerID int64) (pending, completed int, err error) {
 	const q = `
 		SELECT
-			COUNT(*) FILTER (WHERE status = 'pending')   AS pending,
-			COUNT(*) FILTER (WHERE status = 'completed') AS completed
+			COUNT(*) FILTER (WHERE status = $2) AS pending,
+			COUNT(*) FILTER (WHERE status = $3) AS completed
 		FROM referrals WHERE referrer_user_id = $1`
-	if err = r.db.QueryRow(ctx, q, referrerID).Scan(&pending, &completed); err != nil {
+	if err = r.db.QueryRow(
+		ctx,
+		q,
+		referrerID,
+		models.ReferralStatusPending,
+		models.ReferralStatusCompleted,
+	).Scan(&pending, &completed); err != nil {
 		return 0, 0, fmt.Errorf("referralRepository.Counts: %w", err)
 	}
 	return pending, completed, nil

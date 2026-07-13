@@ -2,28 +2,21 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { CheckCircle2, Gift, Truck, Package, ArrowLeft, Mail } from "lucide-react"
 
-import { serverApi } from "@/lib/api/client"
+import { ApiError } from "@/lib/api/client"
 import { faNum, formatPrice } from "@/lib/products"
-import type { Order, OrderStatus } from "@/lib/catalog/types"
+import { getAccountOrder } from "@/features/orders/api/account"
+import { ORDER_STATUS_FA } from "@/features/orders/labels"
+import type { Order } from "@/features/orders/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 
-const STATUS_FA: Partial<Record<OrderStatus, string>> = {
-  pending: "در انتظار پرداخت",
-  paid: "پرداخت‌شده",
-  processing: "در حال پردازش",
-  ready_to_ship: "آمادهٔ ارسال",
-  shipped: "ارسال‌شده",
-  delivered: "تحویل‌شده",
-  cancelled: "لغوشده",
-}
-
-async function getOrder(id: string): Promise<Order | null> {
+async function getOrder(id: number): Promise<Order | null> {
   try {
-    return await serverApi<Order>(`/orders/${id}`)
-  } catch {
-    return null
+    return await getAccountOrder(id)
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null
+    throw error
   }
 }
 
@@ -33,7 +26,9 @@ export default async function OrderConfirmationPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const order = await getOrder(id)
+  const orderId = Number(id)
+  if (!Number.isInteger(orderId) || orderId <= 0) notFound()
+  const order = await getOrder(orderId)
   if (!order) notFound()
 
   const scheduled = order.scheduled_delivery_date
@@ -60,7 +55,7 @@ export default async function OrderConfirmationPage({
           <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-4 py-1.5 text-sm font-medium backdrop-blur-sm ring-1 ring-foreground/10">
             شمارهٔ سفارش: <span className="text-foil tabular-nums">#{faNum(order.id)}</span>
           </span>
-          <Badge variant="secondary">{STATUS_FA[order.status] ?? order.status}</Badge>
+          <Badge variant="secondary">{ORDER_STATUS_FA[order.status]}</Badge>
         </div>
       </div>
 

@@ -29,14 +29,15 @@ import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
-import {
-  useCart,
-  useAddresses,
-  useShippingMethods,
-  useValidateCoupon,
-  usePlaceOrder,
-} from "@/lib/api/hooks"
-import type { Address, CouponValidation, PaymentMethod, ShippingMethod } from "@/lib/catalog/types"
+import { useAddresses } from "@/features/addresses/api"
+import { useCart } from "@/features/cart/api"
+import { useValidateCoupon } from "@/features/coupons/api"
+import { usePlaceOrder } from "@/features/orders/hooks"
+import { useShippingMethods } from "@/features/shipping/api"
+import type { Address } from "@/features/addresses/types"
+import type { CouponValidation } from "@/features/coupons/types"
+import type { PaymentMethod } from "@/features/orders/types"
+import type { ShippingMethod } from "@/features/shipping/types"
 import { ApiClientError } from "@/lib/api/store-client"
 import { AddAddressForm } from "./add-address-form"
 
@@ -252,7 +253,7 @@ export function CheckoutFlow() {
         address_id: addressId!,
         shipping_method_id: shippingId!,
         payment_method: payment,
-        coupon_code: coupon?.is_valid ? coupon.coupon.code : undefined,
+        coupon_code: coupon?.is_valid ? coupon.coupon.Code : undefined,
         ...(isGift
           ? {
               is_gift: true,
@@ -503,7 +504,7 @@ export function CheckoutFlow() {
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{item.product_title}</span>
                     <span className="text-xs text-muted-foreground">
-                      {faNum(item.quantity)} × {formatPrice(item.unit_price_snapshot)}
+                      {faNum(item.quantity)} × {formatPrice(item.line_total / item.quantity)}
                     </span>
                   </span>
                   <span className="font-medium tabular-nums">{formatPrice(item.line_total)}</span>

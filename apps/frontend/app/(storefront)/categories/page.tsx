@@ -12,8 +12,8 @@ import { buildMetadata } from "@/lib/seo/metadata";
 import { JsonLd } from "@/components/json-ld";
 import { breadcrumbLd } from "@/lib/seo/jsonld";
 import { absoluteUrl } from "@/lib/site";
-import { categoryTree } from "@/lib/catalog/categories";
-import type { Category } from "@/lib/catalog/types";
+import { getCategoryTree } from "@/features/catalog/categories/api";
+import type { CategoryTree } from "@/features/catalog/categories/types";
 import { faNum } from "@/lib/products";
 import { Reveal } from "@/features/motion/components/reveal";
 import { SmartImage } from "@/components/smart-image";
@@ -30,12 +30,11 @@ export const metadata: Metadata = buildMetadata({
 
 /**
  * Storefront category directory. Presents the full category tree as a browsable
- * grid of premium cards. The public `/categories/tree` payload carries no
- * imagery or product counts, so cards lean on `SmartImage`'s on-brand monogram
- * fallback and surface child categories as quick-jump chips instead.
+ * grid of premium cards. Cards use `SmartImage`'s on-brand monogram fallback and
+ * surface child categories as quick-jump chips.
  */
 export default async function CategoriesPage() {
-  const tree = await categoryTree();
+  const tree: CategoryTree[] = await getCategoryTree();
   const roots = tree.filter((c) => Boolean(c.slug));
   const totalChildren = roots.reduce(
     (sum, c) => sum + (c.children?.length ?? 0),
@@ -130,7 +129,7 @@ export default async function CategoriesPage() {
  * categories appear as keyboard-reachable chips that link straight to their own
  * landing without leaving the parent's card link in the way.
  */
-function CategoryCard({ category }: { category: Category }) {
+function CategoryCard({ category }: { category: CategoryTree }) {
   const href = `/categories/${category.slug}`;
   const children = (category.children ?? []).filter((c) => Boolean(c.slug));
   const visibleChildren = children.slice(0, 4);
@@ -144,9 +143,9 @@ function CategoryCard({ category }: { category: Category }) {
         <div className="absolute inset-0 transition-transform duration-[900ms] ease-out group-hover/cat:scale-[1.05]">
           <SmartImage
             src={null}
-            alt={category.name}
+            alt={category.title}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            monogram={category.name.charAt(0)}
+            monogram={category.title.charAt(0)}
             fallbackClassName="from-primary/20 via-card to-secondary"
           />
         </div>
@@ -168,7 +167,7 @@ function CategoryCard({ category }: { category: Category }) {
             className="outline-none transition-colors after:absolute after:inset-0 after:content-[''] hover:text-primary focus-visible:text-primary focus-visible:ring-2 focus-visible:ring-primary/40"
             data-category={category.slug}
           >
-            {category.name}
+            {category.title}
           </Link>
         </h2>
 
@@ -186,7 +185,7 @@ function CategoryCard({ category }: { category: Category }) {
                   href={`/categories/${child.slug}`}
                   className="inline-flex min-h-9 items-center rounded-full border border-border/70 bg-secondary/40 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
-                  {child.name}
+                  {child.title}
                 </Link>
               </li>
             ))}
@@ -215,7 +214,7 @@ function CategoryCard({ category }: { category: Category }) {
 
 /** Inline `ItemList` schema for the category directory (the tree carries no
  * Product nodes, so `itemListLd` from the SEO lib doesn't fit here). */
-function categoryListLd(roots: Category[]) {
+function categoryListLd(roots: CategoryTree[]) {
   return {
     "@context": "https://schema.org",
     "@type": "ItemList",
@@ -223,7 +222,7 @@ function categoryListLd(roots: Category[]) {
     itemListElement: roots.map((c, i) => ({
       "@type": "ListItem",
       position: i + 1,
-      name: c.name,
+      name: c.title,
       url: absoluteUrl(`/categories/${c.slug}`),
     })),
   };

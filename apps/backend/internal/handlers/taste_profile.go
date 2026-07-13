@@ -12,12 +12,12 @@ func (h *Handler) GetTasteProfile(c *gin.Context) {
 	if !ok {
 		return
 	}
-	prefs, err := h.TasteProfile.Get(c.Request.Context(), userID)
+	profile, err := h.TasteProfile.Get(c.Request.Context(), userID)
 	if err != nil {
 		response.HandleError(c, err)
 		return
 	}
-	response.OK(c, prefs)
+	response.OK(c, profile)
 }
 
 // SaveTasteProfile — PUT /me/taste-profile
@@ -26,14 +26,14 @@ func (h *Handler) SaveTasteProfile(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req models.TastePrefs
+	var req models.UpdateTasteProfileInput
 	if !h.bindJSON(c, &req) {
 		return
 	}
-	prefs, err := h.TasteProfile.Save(c.Request.Context(), userID, req)
+	profile, err := h.TasteProfile.Save(c.Request.Context(), userID, req)
 	if err != nil {
 		response.HandleError(c, err)
 		return
 	}
-	response.OK(c, prefs)
+	response.OK(c, profile)
 }

@@ -12,7 +12,7 @@ func (h *Handler) CreateAlert(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req models.CreateAlertReq
+	var req models.CreateProductAlertReq
 	if !h.bindJSON(c, &req) {
 		return
 	}

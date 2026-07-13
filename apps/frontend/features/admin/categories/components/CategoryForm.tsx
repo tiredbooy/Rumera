@@ -22,33 +22,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import type { Category } from "@/lib/catalog/types"
+import type {
+  Category,
+  CategoryTree,
+  CreateCategoryInput,
+} from "@/features/catalog/categories/types"
 import {
-  AdminApiError,
+  CategoryApiError,
   createCategory,
   updateCategory,
-  type CategoryTreeNode,
-  type CreateCategoryInput,
-} from "@/lib/api/admin-client"
+} from "@/features/admin/categories/client"
 import { CATEGORIES_QUERY_KEY } from "@/lib/admin/category-keys"
 import { ImageUrlInput } from "@/components/admin/ImageUrlInput"
-
-// The shoppable image and homepage-display fields are part of this screen's
-// spec but not yet on the shared category contract; widen the input/category
-// locally so the form typechecks without touching the shared api-client/types
-// modules.
-type CategoryInput = CreateCategoryInput & {
-  image_url?: string | null
-  is_featured?: boolean
-  card_size?: "small" | "large"
-  display_order?: number
-}
-type CategoryWithImage = Category & {
-  image_url?: string | null
-  is_featured?: boolean
-  card_size?: "small" | "large"
-  display_order?: number
-}
 
 // ── Validation (all fields are strings; coerced to the API shape on submit) ────
 
@@ -79,7 +64,7 @@ function toSlug(value: string): string {
     .replace(/^-|-$/g, "")
 }
 
-function defaults(category?: CategoryWithImage): FormValues {
+function defaults(category?: Category): FormValues {
   return {
     title: category?.title ?? "",
     slug: category?.slug ?? "",
@@ -100,7 +85,7 @@ function defaults(category?: CategoryWithImage): FormValues {
 type ParentOption = { id: number; label: string; depth: number }
 
 function flattenForPicker(
-  nodes: CategoryTreeNode[],
+  nodes: CategoryTree[],
   excludeId?: number,
   depth = 0,
   out: ParentOption[] = []
@@ -111,7 +96,7 @@ function flattenForPicker(
   if (!Array.isArray(nodes)) return out
   for (const node of nodes) {
     if (node.id === excludeId) continue // skips the node AND (by not recursing) its subtree
-    out.push({ id: node.id, label: node.name, depth })
+    out.push({ id: node.id, label: node.title, depth })
     if (node.children?.length) flattenForPicker(node.children, excludeId, depth + 1, out)
   }
   return out
@@ -147,8 +132,8 @@ export function CategoryForm({
   submitLabel = "ذخیره",
 }: {
   mode: "create" | "edit"
-  category?: CategoryWithImage
-  tree: CategoryTreeNode[]
+  category?: Category
+  tree: CategoryTree[]
   submitLabel?: string
 }) {
   const router = useRouter()
@@ -190,7 +175,7 @@ export function CategoryForm({
   )
 
   function applyServerErrors(e: unknown) {
-    if (e instanceof AdminApiError) {
+    if (e instanceof CategoryApiError) {
       if (e.fields) {
         for (const [key, msgs] of Object.entries(e.fields)) {
           setError(key as keyof FormValues, { message: msgs[0] })
@@ -202,14 +187,12 @@ export function CategoryForm({
     }
   }
 
-  function toPayload(v: FormValues): CategoryInput {
+  function toPayload(v: FormValues): CreateCategoryInput {
     return {
       title: v.title.trim(),
       slug: strOrNull(v.slug),
       parent_id: numOrNull(v.parent_id),
       description: strOrNull(v.description),
-      // image_url is part of the UI spec; the backend ignores unknown JSON keys,
-      // so it is safe to send and forward-compatible once persistence lands.
       image_url: strOrNull(v.image_url),
       is_featured: v.is_featured,
       card_size: v.card_size,

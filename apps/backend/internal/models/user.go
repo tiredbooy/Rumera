@@ -45,6 +45,23 @@ type User struct {
 // Requests  —  what the handler binds from the HTTP body
 // ─────────────────────────────────────────────────────────────
 
+// SignUpInput is the public POST /auth/register body. Role is accepted for
+// backward-compatible validation but ignored: every self-registered account is
+// a customer.
+type SignUpInput struct {
+	FirstName    *string    `json:"first_name"`
+	LastName     *string    `json:"last_name"`
+	Email        string     `json:"email"         validate:"required,email"`
+	Password     string     `json:"password"      validate:"required,min=8"`
+	Phone        *string    `json:"phone"`
+	NationalCode *string    `json:"national_code"`
+	BirthDate    *time.Time `json:"birth_date"`
+	Gender       *string    `json:"gender"        validate:"omitempty,oneof=male female other"`
+	Role         string     `json:"role"          validate:"omitempty,oneof=customer admin vendor"`
+}
+
+// CreateUserReq is the internal service/repository command produced from a
+// validated SignUpInput (or trusted bootstrap code).
 type CreateUserReq struct {
 	FirstName    *string    `json:"first_name"`
 	LastName     *string    `json:"last_name"`
@@ -55,6 +72,17 @@ type CreateUserReq struct {
 	BirthDate    *time.Time `json:"birth_date"`
 	Gender       *string    `json:"gender"        validate:"omitempty,oneof=male female other"`
 	Role         string     `json:"role"          validate:"omitempty,oneof=customer admin vendor"`
+}
+
+// UpdateProfileInput is the public PATCH /auth/me body. Email, password, role,
+// and account status are intentionally absent from the self-service contract.
+type UpdateProfileInput struct {
+	FirstName    *string    `json:"first_name"`
+	LastName     *string    `json:"last_name"`
+	Phone        *string    `json:"phone"`
+	NationalCode *string    `json:"national_code"`
+	BirthDate    *time.Time `json:"birth_date"`
+	Gender       *string    `json:"gender" validate:"omitempty,oneof=male female other"`
 }
 
 type UpdateUserReq struct {
@@ -102,7 +130,9 @@ type UserResponse struct {
 	CreatedAt time.Time  `json:"created_at"`
 }
 
-type UserAdminResponse struct {
+// AdminUser is the full user projection returned by the admin detail and update
+// endpoints. It intentionally excludes password and internal database fields.
+type AdminUser struct {
 	UserResponse
 	NationalCode    *string    `json:"national_code,omitempty"`
 	OAuthProvider   *string    `json:"oauth_provider,omitempty"`
@@ -113,16 +143,14 @@ type UserAdminResponse struct {
 }
 
 type UserListItem struct {
-	UserID    uuid.UUID `json:"user_id"`
-	// FirstName *string   `json:"first_name,omitempty"`
-	// LastName  *string   `json:"last_name,omitempty"`
-	FullName  string    `json:"full_name"`
-	Email     string    `json:"email"`
-	Phone     *string   `json:"phone,omitempty"`
-	Role      string    `json:"role"`
+	UserID      uuid.UUID `json:"user_id"`
+	FullName    string    `json:"full_name"`
+	Email       string    `json:"email"`
+	Phone       *string   `json:"phone,omitempty"`
+	Role        string    `json:"role"`
 	TotalOrders int       `json:"total_orders"`
-	IsActive  bool      `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
+	IsActive    bool      `json:"is_active"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // ─────────────────────────────────────────────────────────────

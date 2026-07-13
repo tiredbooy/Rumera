@@ -40,11 +40,6 @@ type WalletTransaction struct {
 	CreatedAt        time.Time         `db:"created_at"`
 }
 
-type DepositReq struct {
-	Amount      float64 `json:"amount"      validate:"required,gt=0"`
-	Description *string `json:"description"`
-}
-
 type WithdrawReq struct {
 	Amount      float64 `json:"amount"      validate:"required,gt=0"`
 	Description *string `json:"description"`
@@ -62,18 +57,18 @@ func (f *WalletTransactionFilter) Defaults() {
 
 type WalletResponse struct {
 	ID        int64     `json:"id"`
-	Balance   float64   `json:"balance"`
+	Balance   string    `json:"balance"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type WalletTransactionResponse struct {
 	ID               int64             `json:"id"`
-	Amount           float64           `json:"amount"`
+	Amount           string            `json:"amount"`
 	Type             TransactionType   `json:"type"`
 	Status           TransactionStatus `json:"status"`
-	BalanceBefore    *float64          `json:"balance_before,omitempty"`
-	BalanceAfter     *float64          `json:"balance_after,omitempty"`
+	BalanceBefore    *string           `json:"balance_before,omitempty"`
+	BalanceAfter     *string           `json:"balance_after,omitempty"`
 	ReferenceOrderID *int64            `json:"reference_order_id,omitempty"`
 	Description      *string           `json:"description,omitempty"`
 	CreatedAt        time.Time         `json:"created_at"`

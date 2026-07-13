@@ -6,6 +6,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// Decimal fields in analytics response models intentionally remain
+// decimal.Decimal: its JSON marshaler emits quoted decimal strings, preserving
+// precision across the Go/TypeScript boundary.
+
 // ── JSONB embedded types ──────────────────────────────────────────────────────
 
 type TopCategoryEntry struct {

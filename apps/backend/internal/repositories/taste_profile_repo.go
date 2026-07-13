@@ -12,8 +12,8 @@ import (
 )
 
 type TasteProfileRepository interface {
-	Get(ctx context.Context, userID int64) (*models.TastePrefs, error)
-	Upsert(ctx context.Context, userID int64, prefs models.TastePrefs) error
+	Get(ctx context.Context, userID int64) (*models.TasteProfile, error)
+	Upsert(ctx context.Context, userID int64, profile models.TasteProfile) error
 }
 
 type tasteProfileRepository struct {
@@ -24,7 +24,7 @@ func NewTasteProfileRepository(db *pgxpool.Pool) TasteProfileRepository {
 	return &tasteProfileRepository{db: db}
 }
 
-func (r *tasteProfileRepository) Get(ctx context.Context, userID int64) (*models.TastePrefs, error) {
+func (r *tasteProfileRepository) Get(ctx context.Context, userID int64) (*models.TasteProfile, error) {
 	const q = `SELECT prefs FROM taste_profiles WHERE user_id = $1`
 
 	var raw []byte
@@ -35,15 +35,15 @@ func (r *tasteProfileRepository) Get(ctx context.Context, userID int64) (*models
 		return nil, fmt.Errorf("tasteProfileRepository.Get: %w", err)
 	}
 
-	var prefs models.TastePrefs
-	if err := json.Unmarshal(raw, &prefs); err != nil {
+	var profile models.TasteProfile
+	if err := json.Unmarshal(raw, &profile); err != nil {
 		return nil, fmt.Errorf("tasteProfileRepository.Get unmarshal: %w", err)
 	}
-	return &prefs, nil
+	return &profile, nil
 }
 
-func (r *tasteProfileRepository) Upsert(ctx context.Context, userID int64, prefs models.TastePrefs) error {
-	raw, err := json.Marshal(prefs)
+func (r *tasteProfileRepository) Upsert(ctx context.Context, userID int64, profile models.TasteProfile) error {
+	raw, err := json.Marshal(profile)
 	if err != nil {
 		return fmt.Errorf("tasteProfileRepository.Upsert marshal: %w", err)
 	}

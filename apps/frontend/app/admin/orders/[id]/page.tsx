@@ -6,9 +6,11 @@ import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { can } from "@/lib/rbac/can";
 import { formatPrice, faNum } from "@/lib/products";
-import { PAYMENT_FA, faDate } from "@/lib/catalog/labels";
-import type { Order } from "@/lib/catalog/types";
-import { serverApi, ApiError } from "@/lib/api/client";
+import { PAYMENT_FA } from "@/features/orders/labels";
+import { getAdminOrder } from "@/features/orders/api/admin";
+import type { Order } from "@/features/orders/types";
+import { faDate } from "@/lib/utils/date";
+import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -19,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/features/dashboard/components/page-header";
-import { OrderStatusBadge } from "@/components/admin/status-badge";
+import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
 import { OrderActions } from "@/features/admin/orders/components/OrderActions";
 
 export default async function AdminOrderDetailPage({
@@ -34,14 +36,13 @@ export default async function AdminOrderDetailPage({
 
   let order: Order;
   try {
-    order = await serverApi<Order>(`/admin/orders/${orderId}`);
+    order = await getAdminOrder(orderId);
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
   }
 
   const canWrite = can(session, PERMISSIONS.ORDERS_WRITE);
-  const canRefund = can(session, PERMISSIONS.ORDERS_REFUND);
 
   return (
     <>
@@ -85,7 +86,6 @@ export default async function AdminOrderDetailPage({
           orderId={order.id}
           status={order.status}
           canWrite={canWrite}
-          canRefund={canRefund}
         />
       </div>
 

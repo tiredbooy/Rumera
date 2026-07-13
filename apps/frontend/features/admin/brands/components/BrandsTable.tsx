@@ -19,8 +19,12 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
-import type { Brand } from "@/lib/catalog/types"
-import { AdminApiError, listBrands, deleteBrand } from "@/lib/api/admin-client"
+import type { Brand } from "@/features/catalog/brands/types"
+import {
+  BrandApiError,
+  listBrands,
+  deleteBrand,
+} from "@/features/admin/brands/client"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -155,7 +159,7 @@ export function BrandsTable({
       queryClient.invalidateQueries({ queryKey: BRANDS_QUERY_KEY })
     },
     onError: (e: unknown) => {
-      toast.error(e instanceof AdminApiError ? e.message : "حذف برند ناموفق بود")
+      toast.error(e instanceof BrandApiError ? e.message : "حذف برند ناموفق بود")
     },
   })
 
@@ -173,7 +177,7 @@ export function BrandsTable({
         </span>
         <p className="text-sm font-medium">بارگذاری برندها ناموفق بود</p>
         <p className="max-w-xs text-xs text-muted-foreground">
-          {error instanceof AdminApiError
+          {error instanceof BrandApiError
             ? error.message
             : "ارتباط با سرور برقرار نشد. دوباره تلاش کنید."}
         </p>

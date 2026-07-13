@@ -2,7 +2,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
 import { formatPrice } from "@/lib/products"
-import type { ProductListItem } from "@/lib/catalog/types"
+import type { ProductListItem } from "@/features/catalog/products/types"
 import { Bottle } from "@/components/bottle"
 
 // The list endpoint carries no imagery, so cards use the Bottle visual; vary the

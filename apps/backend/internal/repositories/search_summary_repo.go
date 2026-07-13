@@ -176,7 +176,7 @@ func (r *searchSummaryRepository) GetRange(ctx context.Context, filter models.Se
 	}
 	defer rows.Close()
 
-	var summaries []*models.SearchSummary
+	summaries := make([]*models.SearchSummary, 0)
 	for rows.Next() {
 		s, err := scanSearchSummary(rows)
 		if err != nil {
@@ -233,7 +233,7 @@ func (r *searchSummaryRepository) aggregateTerms(
 	}
 	defer rows.Close()
 
-	var terms []*models.SearchTermSummary
+	terms := make([]*models.SearchTermSummary, 0)
 	for rows.Next() {
 		t := &models.SearchTermSummary{}
 		if err := rows.Scan(
@@ -274,6 +274,12 @@ func scanSearchSummary(row pgx.Row) (*models.SearchSummary, error) {
 	}
 	if err := json.Unmarshal(commonFiltersRaw, &s.CommonFiltersUsed); err != nil {
 		return nil, fmt.Errorf("unmarshalling common_filters_used: %w", err)
+	}
+	if s.TopClickedProducts == nil {
+		s.TopClickedProducts = make([]models.TopClickedProduct, 0)
+	}
+	if s.CommonFiltersUsed == nil {
+		s.CommonFiltersUsed = make([]models.CommonFilterUsed, 0)
 	}
 
 	return s, nil

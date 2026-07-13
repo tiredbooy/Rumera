@@ -17,13 +17,11 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req models.UpdateUserReq
-	if !h.bindJSON(c, &req) {
+	var input models.UpdateProfileInput
+	if !h.bindJSON(c, &input) {
 		return
 	}
-	// Password changes go through the dedicated reset flow — never accept a raw
-	// hash from the client here.
-	req.PasswordHash = nil
+	req := mappers.MapToUpdateUserReq(input)
 
 	user, err := h.User.Update(c.Request.Context(), id, req)
 	if err != nil {
@@ -62,7 +60,7 @@ func (h *Handler) GetUser(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	response.OK(c, mappers.MapToUserAdminResponse(user))
+	response.OK(c, mappers.MapToAdminUser(user))
 }
 
 // UpdateUser — PATCH /admin/users/:userID
@@ -99,7 +97,7 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.OK(c, mappers.MapToUserAdminResponse(user))
+	response.OK(c, mappers.MapToAdminUser(user))
 }
 
 // DeleteUser — DELETE /admin/users/:userID

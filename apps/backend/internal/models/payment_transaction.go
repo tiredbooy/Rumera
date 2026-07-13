@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/shopspring/decimal"
+)
 
 type PaymentStatus string
 
@@ -59,16 +63,16 @@ func (f *PaymentTransactionFilter) Defaults() {
 }
 
 type PaymentTransactionResponse struct {
-	ID            int64         `json:"id"`
-	OrderID       *int64        `json:"order_id,omitempty"`
-	Amount        float64       `json:"amount"`
-	Currency      string        `json:"currency"`
-	Status        PaymentStatus `json:"status"`
-	PaymentMethod PaymentMethod `json:"payment_method"`
-	TransactionID string        `json:"transaction_id"`
-	ErrorMessage  *string       `json:"error_message,omitempty"`
-	PaidAt        *time.Time    `json:"paid_at,omitempty"`
-	CreatedAt     time.Time     `json:"created_at"`
+	ID            int64           `json:"id"`
+	OrderID       *int64          `json:"order_id,omitempty"`
+	Amount        decimal.Decimal `json:"amount"`
+	Currency      string          `json:"currency"`
+	Status        PaymentStatus   `json:"status"`
+	PaymentMethod PaymentMethod   `json:"payment_method"`
+	TransactionID string          `json:"transaction_id"`
+	ErrorMessage  *string         `json:"error_message,omitempty"`
+	PaidAt        *time.Time      `json:"paid_at,omitempty"`
+	CreatedAt     time.Time       `json:"created_at"`
 }
 
 type PaymentTransactionAdminResponse struct {

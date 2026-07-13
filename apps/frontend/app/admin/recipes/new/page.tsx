@@ -3,20 +3,16 @@ import { ArrowRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { serverApi } from "@/lib/api/client";
-import type { Paginated } from "@/lib/catalog/types";
+import type { Tag } from "@/features/catalog/tags/types";
+import { listTags } from "@/features/catalog/tags/api/public";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/features/dashboard/components/page-header";
 import { RecipeForm } from "@/features/admin/recipes/components/RecipeForm";
 
-type AdminTag = { id: number; title: string };
-
 /** Tag lookups for the form. Empty on failure so the form still renders. */
-async function loadTags(): Promise<AdminTag[]> {
+async function loadTags(): Promise<Tag[]> {
   try {
-    return (
-      (await serverApi<Paginated<AdminTag>>("/tags?limit=200")).results ?? []
-    );
+    return (await listTags({ limit: 200 })).results ?? [];
   } catch {
     return [];
   }

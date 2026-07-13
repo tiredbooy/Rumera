@@ -19,7 +19,8 @@ type Review struct {
 	ProductID        int64         `db:"product_id"`
 	LikeCount        int           `db:"like_count"`
 	DislikeCount     int           `db:"dislike_count"`
-	Images           []ReviewImage `json:"images"`
+	Images           []ReviewImage `db:"-" json:"images"`
+	UserFullName     string        `db:"user_full_name" json:"-"`
 	VerifiedPurchase bool          `db:"verified_purchase"`
 	Status           ReviewStatus  `db:"status"`
 	CreatedAt        time.Time     `db:"created_at"`
@@ -79,6 +80,27 @@ type ReviewAdminResponse struct {
 	UpdatedAt time.Time  `json:"updated_at"`
 }
 
+type AccountReviewResponse struct {
+	ID           int64        `db:"id" json:"id"`
+	ProductID    int64        `db:"product_id" json:"product_id"`
+	ProductSlug  *string      `db:"product_slug" json:"product_slug,omitempty"`
+	ProductTitle string       `db:"product_title" json:"product_title"`
+	ImageURL     *string      `db:"image_url" json:"image_url,omitempty"`
+	Rating       int          `db:"rating" json:"rating"`
+	Content      string       `db:"content" json:"content"`
+	Status       ReviewStatus `db:"status" json:"status"`
+	CreatedAt    time.Time    `db:"created_at" json:"created_at"`
+}
+
+type PendingReviewResponse struct {
+	ProductID    int64      `db:"product_id" json:"product_id"`
+	ProductSlug  *string    `db:"product_slug" json:"product_slug,omitempty"`
+	ProductTitle string     `db:"product_title" json:"product_title"`
+	ImageURL     *string    `db:"image_url" json:"image_url,omitempty"`
+	OrderID      int64      `db:"order_id" json:"order_id"`
+	DeliveredAt  *time.Time `db:"delivered_at" json:"delivered_at,omitempty"`
+}
+
 type ProductRatingSummary struct {
 	ProductID     int64       `json:"product_id"`
 	AverageRating float64     `json:"average_rating"`
@@ -90,7 +112,7 @@ type ReviewImage struct {
 	ID        int64     `json:"id"`
 	ReviewID  int64     `json:"review_id"`
 	ImageURL  string    `json:"image_url"`
-	AltTxt    string    `json:"alt_text"`
+	AltTxt    *string   `json:"alt_text"`
 	SortOrder int       `json:"sort_order"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -99,6 +121,6 @@ type ReviewImage struct {
 type ReviewImageReq struct {
 	ReviewID  int64   `json:"review_id"`
 	ImageURL  string  `json:"image_url" validate:"required,max=2048"`
-	AltTxt    *string `json:"alt_text" validate:"omitempty,max=300"`
+	AltTxt    *string `json:"alt_text" validate:"omitempty,max=255"`
 	SortOrder *int    `json:"sort_order"`
 }

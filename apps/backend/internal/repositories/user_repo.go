@@ -154,7 +154,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*models.
 }
 
 func (r *userRepository) GetAll(ctx context.Context, f models.UserFilter) ([]*models.User, int64, error) {
-	where := []string{"is_active = true"}
+	where := []string{}
 	args := pgx.NamedArgs{}
 
 	if f.Role != nil {
@@ -164,6 +164,10 @@ func (r *userRepository) GetAll(ctx context.Context, f models.UserFilter) ([]*mo
 	if f.IsActive != nil {
 		where = append(where, "is_active = @is_active")
 		args["is_active"] = *f.IsActive
+	} else {
+		// Preserve the existing default list while allowing an explicit false
+		// filter to retrieve deactivated users.
+		where = append(where, "is_active = true")
 	}
 	if f.Gender != nil {
 		where = append(where, "gender = @gender")
@@ -232,6 +236,7 @@ func (r *userRepository) GetAll(ctx context.Context, f models.UserFilter) ([]*mo
 			&user.OAuthProvider, &user.OAuthID,
 			&user.Role, &user.IsActive,
 			&user.EmailVerifiedAt, &user.LastLoginAt,
+			&user.IsBanned, &user.BannedAt,
 			&user.CreatedAt, &user.UpdatedAt,
 			&total, // COUNT(*) OVER()
 		); err != nil {

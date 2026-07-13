@@ -1,8 +1,8 @@
 # Frontend API / Data-Access Layer
 
-Everything the frontend uses to talk to the Go backend lives under
-`lib/api/`, `lib/catalog/`, and a handful of top-level `lib/*.ts` fetchers. This
-doc covers the **client/data layer**: the request helpers, the typed CRUD
+Frontend access to the Go backend is split between shared transport under
+`lib/api/` and resource-owned APIs under `features/`. This doc covers the
+**client/data layer**: the request helpers, the typed CRUD
 functions, how the various response envelopes are unwrapped, how errors (and 422
 field errors) propagate, and a recipe for adding a new endpoint.
 
@@ -27,15 +27,15 @@ There are **four** request entry points, split by *where the code runs* and
                                                                               lib/journal.ts
   CUSTOMER (session)     storeRequest()  ── lib/api/store-client.ts          serverApi()  ── lib/api/client.ts
                           ↳ via /api/store/* BFF proxy            ↳ injects bearer from session
-  STAFF (session+staff)  adminRequest()  ── lib/api/admin-client.ts          serverApi()  (admin-tier paths)
-                          ↳ via /api/admin/* BFF proxy
+  STAFF (session+staff)  resource client ── features/<owner>/...             apiFetch()  (admin-tier paths)
+                           ↳ via /api/admin/* BFF proxy                       ↳ server actions/API modules
 ```
 
 | Helper | File | Runs in | Reaches backend via | Unwraps |
 |---|---|---|---|---|
 | `apiFetch` / `serverApi` | `lib/api/client.ts` | **server only** (`import "server-only"`) | direct `fetch` to `${API_BASE}` | `{ data }` → `T` |
 | `storeRequest` | `lib/api/store-client.ts` | browser | `/api/store/*` BFF proxy | **nothing** — returns body verbatim |
-| `adminRequest` | `lib/api/admin-client.ts` | browser | `/api/admin/*` BFF proxy | `{ data }` → `T` |
+| Resource-owned admin client | `features/<owner>/.../client.ts` | browser | `/api/admin/*` BFF proxy | endpoint-specific, usually `{ data }` → `T` |
 | `publicGet` (local) | `lib/catalog/*`, `lib/recipes.ts`, `lib/journal.ts` | **server only** (ISR) | direct `fetch` to `${API_BASE}` | per-fetcher (see below) |
 
 `API_BASE` is `${API_URL}/api/v1` (resolved in `lib/api/client.ts` from
@@ -51,7 +51,7 @@ right one depends on the endpoint, and the helper you call reflects that choice.
 
 | Envelope | Example endpoint | How callers unwrap |
 |---|---|---|
-| `{ data: T }` — single resource | `GET /products/:id`, `POST /admin/categories` | `adminRequest`/`serverApi` do `body?.data ?? body`. `storeRequest` callers do `.then(b => b.data)`. |
+| `{ data: T }` — single resource | `GET /products/:id`, `POST /admin/categories` | Domain clients and server API modules unwrap `body?.data ?? body`. `storeRequest` callers do `.then(b => b.data)`. |
 | `{ results: T[], pagination }` — list | `GET /products`, `GET /admin/users`, `GET /wallet/transactions` | typed as `Paginated<T>` (`lib/catalog/types.ts`); callers keep the **whole** envelope. |
 | `{ error: { code, message, fields? } }` — failure | any 4xx/5xx | parsed into a typed error class (see *Error handling*). |
 
@@ -63,8 +63,8 @@ right one depends on the endpoint, and the helper you call reflects that choice.
 
 ### Why `storeRequest` does NOT unwrap
 
-`adminRequest` and `serverApi` collapse `{ data }` → `T` for you. `storeRequest`
-deliberately returns the **raw body** because the store endpoints are a mix of
+Domain clients and server API modules collapse `{ data }` → `T` where their
+endpoint contract requires it. `storeRequest` deliberately returns the **raw body** because the store endpoints are a mix of
 `{ data }` *and* `{ results, pagination }`, and the caller knows which it is:
 
 ```ts
@@ -80,63 +80,30 @@ This is why the hooks in `lib/api/hooks.ts` are littered with `.then(b => b.data
 
 ---
 
-## `adminRequest` — the admin client core
+## Resource-owned admin clients
 
-`lib/api/admin-client.ts`. One helper, then a flat set of typed CRUD functions.
+There is no global admin browser client. Each resource owns the smallest client
+or server API module needed by its UI, so adding one endpoint cannot expand a
+catch-all dependency. Current examples include:
 
-```ts
-export async function adminRequest<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const res = await fetch(`/api/admin/${path}`, {
-    ...opts,
-    headers: { ...(opts.body ? { "Content-Type": "application/json" } : {}), ...opts.headers },
-  })
-  if (res.status === 204) return undefined as T   // DELETE / no-content
-  if (!res.ok) return parseError(res)             // throws AdminApiError
-  const body = await res.json().catch(() => null)
-  return (body?.data ?? body) as T                // unwrap { data }, else pass through
-}
-```
-
-Key behaviours:
-
-- **`path` is the backend path after `/api/v1`.** Admin-namespaced calls include
-  the literal `admin/` segment, so `adminRequest("admin/products")` hits
-  `/api/admin/admin/products` (the proxy prefix + the backend path). Public
-  catalogue reads the forms need (`categories`, `brands`, …) skip that segment.
-- `204` → `undefined`. `body?.data ?? body` means it tolerates both
-  `{ data }` and bare-object responses.
-- On `!res.ok` it throws **`AdminApiError(status, code, message, fields?)`** —
-  the `fields` map is what drives 422 → form mapping.
-
-### Exported admin CRUD functions
-
-All real, all in `admin-client.ts`. Grouped by resource:
-
-| Resource | Functions | Backend (after `/api/v1`) |
+| Resource | Owner | Browser transport |
 |---|---|---|
-| **Products** | `createProduct`, `updateProduct` | `admin/products`, `admin/products/:id` |
-| **Variants** | `createVariant`, `updateVariant`, `deleteVariant` | `admin/products/:id/variants`, `admin/variants/:id` |
-| **Images** | `listProductImages`, `uploadProductImage`, `reorderProductImages`, `setPrimaryImage`, `updateImageAlt`, `deleteProductImage` | `admin/products/:id/images[...]` |
-| **Categories** | `listCategories`, `getCategoryTree`, `createCategory`, `updateCategory`, `deleteCategory` | `categories` (read), `admin/categories[/:id]` (write) |
-| **Brands** | `listBrands`, `createBrand`, `updateBrand`, `deleteBrand` | `brands` (read), `admin/brands[/:id]` (write) |
-| **Recipes** | `listAdminRecipes`, `getAdminRecipe`, `createRecipe`, `updateRecipe`, `deleteRecipe` | `admin/recipes[/:id]` |
-| **Users** | `getAdminUser`, `adminUpdateUser`, `listUsers` | `admin/users[/:id]` |
-| **Site settings** | `getSiteSettings`, `updateSiteSettings` | `admin/settings` (GET / **PUT**) |
-| **Hero slides** | `listHeroSlides`, `createHeroSlide`, `updateHeroSlide`, `deleteHeroSlide` | `admin/hero-slides[/:id]` |
+| **Products and product images** | `features/admin/products/` | product client plus server actions |
+| **Categories and brands** | `features/admin/categories/`, `features/admin/brands/` | resource clients for interactive forms |
+| **Recipes** | `features/recipes/api/` | recipe client |
+| **Customers** | `features/customers/` | customer client |
+| **Site settings** | `features/settings/api/` | settings client |
+| **Hero slides** | `features/hero-slides/api/` | hero-slide client |
+| **Standalone uploads** | `features/admin/uploads/` | upload client |
 
-> **Tags** have no dedicated admin CRUD function. The `tags` segment *is*
-> allowlisted in the admin proxy and products/recipes accept `tag_ids[]`, but
-> there is no `createTag`/`listTags` in `admin-client.ts` today. Tag selection
-> is driven by whatever the form loads; don't document tag CRUD that isn't built.
-
-Reads vs writes split deliberately: `listCategories` / `listBrands` hit the
-**public** read endpoints (`categories?limit=100`, `brands?limit=100`) — they
-return `Paginated<T>` — while create/update/delete hit the `admin/`-namespaced
-write endpoints and return the single resource.
+The path passed by a resource client is still the backend path after `/api/v1`.
+Admin-namespaced calls therefore retain the literal `admin/` segment and hit a
+doubled browser path such as `/api/admin/admin/products`. Public catalogue reads
+needed by forms skip that segment.
 
 ### Request typing pattern
 
-Every mutation takes a typed `*Input` that **mirrors the Go request struct**.
+Every mutation takes a resource-owned typed `*Input` that **mirrors the Go request struct**.
 Create inputs are explicit; update inputs are `Partial<>` of create (so PATCH
 sends only changed keys). Examples:
 
@@ -155,14 +122,16 @@ List params (`ListRecipesParams`, `ListUsersParams`) are serialized with
 the shared `buildQuery` helper in `lib/api/qs.ts` instead — same skip rule, plus
 array-repeat support: `ids=1&ids=2`.)
 
-### The one special case: image upload
+### Image uploads
 
-`uploadProductImage(productId, file, opts, onProgress)` does **not** go through
-`adminRequest`. It uses a raw `XMLHttpRequest` so it can report real upload
-progress via `xhr.upload.onprogress`, supports an `AbortSignal`, and posts
-`multipart/form-data` (the admin proxy preserves the multipart boundary
-verbatim). It still resolves the `{ data }` row and rejects with an
-`AdminApiError` on failure — same contract, different transport.
+Image clients use raw `XMLHttpRequest` so they can report browser-to-Next upload
+progress through `xhr.upload.onprogress`; the admin proxy preserves the
+multipart boundary verbatim. Product images are owned by
+`features/admin/products/`. Standalone hero/recipe/journal images are owned by
+`features/admin/uploads/`: `uploadImage(file, { folder, signal }, onProgress)`
+posts `file` and optional `folder` fields to `/api/admin/admin/uploads`, resolves
+the exact `{ data: { url, key, width, height } }` contract, and throws a typed
+`UploadApiError` from `{ error: { code, message, fields? } }`.
 
 ---
 
@@ -191,11 +160,9 @@ avoid a refetch round-trip; wishlist add/remove are optimistic with rollback.
 > (`reviews/mine`, `reviews/pending`, `addresses/:id/default`,
 > `recommendations`). Treat those as not-yet-verified.
 
-> **`lib/api/admin-hooks.ts` is split-brain.** Its product/image hooks
-> (`useCreateProduct`, `useProductImages`, …) call the **real** `admin-client.ts`
-> functions. But orders/customers/inventory/reviews/recipes hooks still resolve
-> the in-memory mock from `lib/admin/data.ts` (`const resolve = v => Promise.resolve(v)`,
-> with a `TODO(api)` to swap for real calls). Don't present those as live yet.
+> The remaining `lib/api/admin-hooks.ts` product/image hooks delegate to the
+> product-owned actions under `features/admin/products/`. New admin data access
+> belongs to its resource owner rather than this shared hook module.
 
 ---
 
@@ -263,7 +230,7 @@ accordingly:
 
 ## Error handling
 
-Three typed error classes, one per request helper, all carrying
+Shared transports and resource clients expose typed errors carrying
 `(status, code, message)` parsed from the `{ error: { code, message } }`
 envelope:
 
@@ -271,13 +238,13 @@ envelope:
 |---|---|---|
 | `ApiError` | `apiFetch` / `serverApi` (`lib/api/client.ts`) | — |
 | `ApiClientError` | `storeRequest` (`lib/api/store-client.ts`) | — |
-| `AdminApiError` | `adminRequest` & `uploadProductImage` (`lib/api/admin-client.ts`) | **`fields?: Record<string, string[]>`** |
+| Resource errors such as `CategoryApiError`, `RecipeApiError`, and `UploadApiError` | Matching resource-owned browser client | validation-aware clients carry **`fields?: Record<string, string[]>`** |
 
 Public `publicGet` fetchers do **not** throw — they swallow and fall back.
 
 ### 422 field errors → react-hook-form
 
-Only `AdminApiError` carries `fields`. The backend returns validation failures as
+Validation-aware resource errors carry `fields`. The backend returns failures as
 `{ error: { code, message, fields: { <field>: ["msg", ...] } } }`. Admin forms
 catch the error and map each field onto the form via `setError`. The pattern
 (identical across `category-form.tsx`, `product-form.tsx`, `brand-form.tsx`,
@@ -285,7 +252,7 @@ catch the error and map each field onto the form via `setError`. The pattern
 
 ```ts
 function applyServerErrors(e: unknown) {
-  if (e instanceof AdminApiError) {
+  if (e instanceof CategoryApiError) {
     if (e.fields) {
       for (const [key, msgs] of Object.entries(e.fields)) {
         setError(key as keyof FormValues, { message: msgs[0] })  // first message wins
@@ -309,8 +276,8 @@ field names identical to the backend JSON keys.
 
 Worked example: add admin CRUD for a hypothetical `collections` resource.
 
-**1. Add the type(s)** in `lib/catalog/types.ts` (or co-located in the client),
-mirroring the Go response/request structs exactly — same field names:
+**1. Add the type(s)** in `features/collections/types.ts`, mirroring the Go
+response/request structs exactly — same field names:
 
 ```ts
 export type Collection = { id: number; title: string; slug: string; is_active: boolean }
@@ -318,25 +285,26 @@ export type CreateCollectionInput = { title: string; slug?: string | null }
 export type UpdateCollectionInput = Partial<CreateCollectionInput> & { is_active?: boolean }
 ```
 
-**2. Add the client functions** in `lib/api/admin-client.ts`, reusing
-`adminRequest`. Remember the `admin/` segment for write paths:
+**2. Add a collection-owned client** in `features/collections/api/client.ts`.
+Keep its request helper private to that resource and remember the `admin/`
+segment for write paths:
 
 ```ts
 export function listCollections() {
-  return adminRequest<Paginated<Collection>>("admin/collections")
+  return collectionRequest<Paginated<Collection>>("admin/collections")
 }
 export function createCollection(input: CreateCollectionInput) {
-  return adminRequest<Collection>("admin/collections", {
+  return collectionRequest<Collection>("admin/collections", {
     method: "POST", body: JSON.stringify(input),
   })
 }
 export function updateCollection(id: number, input: UpdateCollectionInput) {
-  return adminRequest<Collection>(`admin/collections/${id}`, {
+  return collectionRequest<Collection>(`admin/collections/${id}`, {
     method: "PATCH", body: JSON.stringify(input),
   })
 }
 export function deleteCollection(id: number) {
-  return adminRequest<void>(`admin/collections/${id}`, { method: "DELETE" })
+  return collectionRequest<void>(`admin/collections/${id}`, { method: "DELETE" })
 }
 ```
 
@@ -360,9 +328,9 @@ export function useCreateCollection() {
 }
 ```
 
-**5. Map 422s in the form** — catch `AdminApiError`, loop `e.fields`, call
-`setError` (see the snippet above). Make sure the input field names match the
-backend's JSON keys so they line up.
+**5. Map 422s in the form** — catch the collection client's typed error, loop
+`e.fields`, and call `setError` (see the snippet above). Make sure the input
+field names match the backend's JSON keys so they line up.
 
 ### For a public (server-side, ISR) read instead
 
@@ -384,5 +352,5 @@ Need data on the SERVER (RSC / route handler)?
 
 Need data in the BROWSER (client component)?
   ├─ customer/checkout resource                      → a hook in lib/api/hooks.ts | account-hooks.ts (→ storeRequest)
-  └─ admin console                                   → an admin-client.ts function, usually via a lib/api/admin-hooks.ts hook
+  └─ admin console                                   → the resource-owned client/action under features/<owner>/
 ```

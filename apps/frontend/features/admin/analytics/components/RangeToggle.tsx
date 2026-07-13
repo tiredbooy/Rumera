@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { RANGES, type RangeId } from "../analytics-range";
+import { RANGES, type RangeId } from "@/features/analytics/range";
 
 export function RangeToggle({ current }: { current: RangeId }) {
   const router = useRouter();

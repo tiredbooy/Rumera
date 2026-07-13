@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OptimizedImage } from "@/components/admin/optimized-image";
 import { cn } from "@/lib/utils";
 import {
   AlertCircle,
@@ -61,10 +62,11 @@ export function ImageSlotItem({
 
   const preview =
     slot.kind === "uploaded" ? (
-      // eslint-disable-next-line @next/next/no-img-element -- swap for SmartImage/next-image once confirmed.
-      <img
+      <OptimizedImage
+        imageKey={slot.image.storage_key}
         src={slot.image.image_url}
         alt={slot.alt || "تصویر محصول"}
+        width={160}
         className="h-full w-full object-cover"
       />
     ) : (
@@ -78,7 +80,7 @@ export function ImageSlotItem({
 
   return (
     <li
-      draggable={!uploading}
+      draggable={!uploading && !isPending}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
@@ -88,11 +90,11 @@ export function ImageSlotItem({
         isDragging && "opacity-50",
       )}
     >
-      <div className="hidden flex-col items-center gap-0.5 sm:flex">
+      <div className="flex flex-col items-center gap-0.5">
         <button
           type="button"
           aria-label="جابه‌جایی به بالا"
-          disabled={index === 0 || uploading}
+          disabled={index === 0 || uploading || isPending}
           onClick={onMoveUp}
           className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
         >
@@ -107,7 +109,7 @@ export function ImageSlotItem({
         <button
           type="button"
           aria-label="جابه‌جایی به پایین"
-          disabled={index === total - 1 || uploading}
+          disabled={index === total - 1 || uploading || isPending}
           onClick={onMoveDown}
           className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
         >
@@ -130,13 +132,19 @@ export function ImageSlotItem({
           onChange={(e) => onAltChange(e.target.value)}
           onBlur={onAltCommit}
           placeholder="متن جایگزین (alt)"
-          aria-label="متن جایگزین تصویر"
-          disabled={uploading}
+          aria-label={`متن جایگزین تصویر ${index + 1}`}
+          disabled={uploading || isPending}
         />
         {uploading ? (
-          <UploadProgressBar progress={slot.progress || 0} />
+          <UploadProgressBar
+            progress={slot.progress || 0}
+            label={`پیشرفت بارگذاری تصویر ${index + 1}`}
+          />
         ) : errored ? (
-          <p className="flex items-center gap-1 text-xs text-destructive">
+          <p
+            role="alert"
+            className="flex items-center gap-1 text-xs text-destructive"
+          >
             <AlertCircle className="size-3" aria-hidden />{" "}
             {(slot as StagedSlot).error}
           </p>
@@ -152,6 +160,7 @@ export function ImageSlotItem({
             variant="ghost"
             size="icon-sm"
             aria-label="تلاش دوباره"
+            disabled={isPending}
             onClick={onRetry}
           >
             <RotateCcw className="size-4" />

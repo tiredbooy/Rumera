@@ -7,8 +7,9 @@ import { Plus, Pencil, BookOpen, Clock, Users, AlertCircle, Star } from "lucide-
 
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
-import { formatDuration, difficultyFa } from "@/lib/recipes"
-import { listAdminRecipes, type RecipeStatus } from "@/lib/api/admin-client"
+import { listAdminRecipes } from "@/features/recipes/api/client"
+import { formatDuration, difficultyFa } from "@/features/recipes/utils"
+import type { RecipeStatus } from "@/features/recipes/types"
 import { Button } from "@/components/ui/button"
 import { OptimizedImage } from "@/components/admin/optimized-image"
 
@@ -132,7 +133,6 @@ export function RecipesBoard({ canWrite }: { canWrite: boolean }) {
     <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {recipes.map((recipe) => {
         const href = `/admin/recipes/${recipe.id}`
-        const status: RecipeStatus = recipe.published_at ? "published" : "draft"
         return (
           <li
             key={recipe.id}
@@ -148,7 +148,7 @@ export function RecipesBoard({ canWrite }: { canWrite: boolean }) {
                 />
                 <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                 <div className="absolute end-3 top-3">
-                  <StatusPill status={status} />
+                  <StatusPill status={recipe.status} />
                 </div>
                 {recipe.is_featured ? (
                   <span className="absolute start-3 top-3 inline-flex items-center gap-1 rounded-full bg-gold/90 px-2 py-0.5 text-xs font-medium text-gold-foreground">

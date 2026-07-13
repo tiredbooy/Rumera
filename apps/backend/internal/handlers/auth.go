@@ -26,19 +26,20 @@ func blankToNil(s *string) *string {
 	return &trimmed
 }
 
-// LoginReq is the credentials payload for POST /auth/login.
-type LoginReq struct {
+// SignInInput is the credentials payload for POST /auth/login.
+type SignInInput struct {
 	Email    string `json:"email"    validate:"required,email"`
 	Password string `json:"password" validate:"required"`
 }
 
-// RefreshReq carries the refresh token for POST /auth/refresh.
-type RefreshReq struct {
+// RefreshTokenInput carries the refresh token for refresh and logout.
+type RefreshTokenInput struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
-// AuthResponse is returned by register/login/refresh.
-type AuthResponse struct {
+// TokenResponse is returned by register/login/refresh. User is present for a
+// new authenticated session and omitted for token rotation.
+type TokenResponse struct {
 	AccessToken  string               `json:"access_token"`
 	RefreshToken string               `json:"refresh_token"`
 	User         *models.UserResponse `json:"user,omitempty"`
@@ -48,15 +49,14 @@ type AuthResponse struct {
 //
 // POST /auth/register
 func (h *Handler) Register(c *gin.Context) {
-	var req models.CreateUserReq
-	if !h.bindJSON(c, &req) {
+	var input models.SignUpInput
+	if !h.bindJSON(c, &input) {
 		return
 	}
-	// Never let a client self-assign a privileged role.
-	req.Role = "customer"
 	// Normalise blank names to NULL so we never store empty strings.
-	req.FirstName = blankToNil(req.FirstName)
-	req.LastName = blankToNil(req.LastName)
+	input.FirstName = blankToNil(input.FirstName)
+	input.LastName = blankToNil(input.LastName)
+	req := mappers.MapToCreateUserReq(input)
 
 	hash, err := crypto.HashPassword(req.Password)
 	if err != nil {
@@ -82,7 +82,7 @@ func (h *Handler) Register(c *gin.Context) {
 		_ = h.Loyalty.AwardSignup(c.Request.Context(), user.ID)
 	}
 
-	response.Created(c, AuthResponse{
+	response.Created(c, TokenResponse{
 		AccessToken:  pair.Access,
 		RefreshToken: pair.Refresh,
 		User:         mappers.MapToUserResponse(user),
@@ -93,7 +93,7 @@ func (h *Handler) Register(c *gin.Context) {
 //
 // POST /auth/login
 func (h *Handler) Login(c *gin.Context) {
-	var req LoginReq
+	var req SignInInput
 	if !h.bindJSON(c, &req) {
 		return
 	}
@@ -117,7 +117,7 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	response.OK(c, AuthResponse{
+	response.OK(c, TokenResponse{
 		AccessToken:  pair.Access,
 		RefreshToken: pair.Refresh,
 		User:         mappers.MapToUserResponse(user),
@@ -129,7 +129,7 @@ func (h *Handler) Login(c *gin.Context) {
 //
 // POST /auth/refresh
 func (h *Handler) Refresh(c *gin.Context) {
-	var req RefreshReq
+	var req RefreshTokenInput
 	if !h.bindJSON(c, &req) {
 		return
 	}
@@ -164,7 +164,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 		return
 	}
 
-	response.OK(c, AuthResponse{
+	response.OK(c, TokenResponse{
 		AccessToken:  pair.Access,
 		RefreshToken: pair.Refresh,
 	})
@@ -195,7 +195,7 @@ func (h *Handler) Me(c *gin.Context) {
 //
 // POST /auth/logout
 func (h *Handler) Logout(c *gin.Context) {
-	var req RefreshReq
+	var req RefreshTokenInput
 	// Body is optional; bind best-effort.
 	_ = c.ShouldBindJSON(&req)
 	h.revokeRefresh(c.Request.Context(), req.RefreshToken)

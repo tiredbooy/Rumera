@@ -72,7 +72,7 @@ type BlogCategoryReq struct {
 }
 
 type BlogReq struct {
-	AuthorID        int64      `json:"author_id"`
+	AuthorID        int64      `json:"-"`
 	Title           string     `json:"title"            validate:"required,max=255"`
 	Slug            string     `json:"slug"             validate:"omitempty,max=255"`
 	Content         string     `json:"content"          validate:"required"`

@@ -52,7 +52,7 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 	if !h.bindJSON(c, &req) {
 		return
 	}
-	sub, err := h.Subscription.Update(c.Request.Context(), userID, id, req.Action)
+	sub, err := h.Subscription.Update(c.Request.Context(), userID, id, string(req.Action))
 	if err != nil {
 		response.HandleError(c, err)
 		return

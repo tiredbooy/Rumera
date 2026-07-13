@@ -1,4 +1,4 @@
-import { LoginTabs } from "@/components/auth/login-tabs"
+import { LoginTabs } from "@/features/auth/components/login-tabs"
 
 export default async function LoginPage({
   searchParams,

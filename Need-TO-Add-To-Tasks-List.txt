@@ -1,0 +1,26 @@
+In this changes im telling you have to add it to tasks list if its haven't done or in progress or currently in tasklist
+
+1. Fix image upload actually store the image instead of mock url and use the path as a url make it work with local aswell,
+
+for product cards both in home and products make it use the product image not randomg svg and make the product card a bit bigger and more modern ui ux i want
+a very good hover style maybe add to favorite and add to cart and this features appear on hover on center of the only image and the card be a bit bigger and show more information while staying luxe minimal,
+
+in create product you have to improve add variant its need more than just a sku an price variants have sizes and other things make it ready for production,
+
+make create journal better and more production ready too its need so much improvements in the ui ux,
+
+make hero section creator more modular so we will get most out of it,
+
+make roles and rbac managable in admin dashboard,
+
+make the settings more item and it will make the site more modular,
+
+in account dashboard make the my taste quiz more i mean we get more information and even some technical information so we can recommend user better product he needs,
+
+and in admin dashboard add more items to sidebar and i mean we have lots of things in backend but in frontend we added very few so we added them to backend to use them they are not for decorate,
+
+and in storefront first in header where you hover products and its open a drop down showing categories i want you to make this more proffesional and ui ux firendly,
+
+and make the storefront specially home page more modular it will help to have better site
+
+add this tasks if they don't exists check each one

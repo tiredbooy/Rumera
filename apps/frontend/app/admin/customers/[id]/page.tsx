@@ -1,52 +1,19 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  ShoppingBag,
-  Coins,
-  TrendingUp,
-  Wallet,
-  Pencil,
-  UserX,
-} from "lucide-react";
+import { ArrowRight, Pencil, UserX } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { can } from "@/lib/rbac/can";
-import { serverApi, ApiError } from "@/lib/api/client";
-import type { UserAdminResponse } from "@/lib/api/admin-client";
-import { formatPrice, faNum } from "@/lib/products";
-import { faDate } from "@/lib/catalog/labels";
-import {
-  adminCustomers,
-  ordersForCustomer,
-  TIER_LABELS,
-} from "@/lib/admin/data";
+import { ApiError } from "@/lib/api/client";
+import { faDate } from "@/lib/utils/date";
+import { getAdminUser } from "@/features/customers/api";
+import type { AdminUser } from "@/features/customers/types";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { PageHeader } from "@/features/dashboard/components/page-header";
-import { StatCard } from "@/features/dashboard/components/stat-card";
 import {
-  PaymentBadge,
-  FulfilmentBadge,
   UserStatusBadge,
   UserRoleBadge,
 } from "@/components/admin/status-badge";
-
-/** Small inline tag flagging a section as illustrative sample data, not live. */
-function SampleNote() {
-  return (
-    <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[0.6875rem] font-medium text-amber-600 ring-1 ring-inset ring-amber-500/20 dark:text-amber-400">
-      نمونه
-    </span>
-  );
-}
 
 export default async function AdminCustomerDetailPage({
   params,
@@ -56,10 +23,10 @@ export default async function AdminCustomerDetailPage({
   const session = await requirePermission(PERMISSIONS.CUSTOMERS_READ);
   const { id } = await params;
 
-  let user: UserAdminResponse | null = null;
+  let user: AdminUser | null = null;
   let notFoundUser = false;
   try {
-    user = await serverApi<UserAdminResponse>(`/admin/users/${id}`);
+    user = await getAdminUser(id);
   } catch (e) {
     // GET /admin/users/:id filters to active users, so a deactivated account
     // resolves as 404 here. Surface a friendly state instead of crashing.
@@ -112,15 +79,6 @@ export default async function AdminCustomerDetailPage({
     .join(" ")
     .trim();
   const displayName = fullName || user.email;
-
-  // Auxiliary sections below are illustrative sample data — there is no
-  // per-customer orders / loyalty / wallet endpoint yet, so they render a
-  // representative fixture clearly marked «نمونه» rather than faking live data.
-  const sample = adminCustomers[0];
-  const sampleOrders = ordersForCustomer(sample.id);
-  const sampleAvgOrder = sample.ordersCount
-    ? Math.round(sample.ltv / sample.ordersCount)
-    : 0;
 
   return (
     <>
@@ -198,125 +156,6 @@ export default async function AdminCustomerDetailPage({
               <dd className="mt-1 font-medium tabular-nums">
                 {faDate(user.created_at)}
               </dd>
-            </div>
-          </dl>
-        </div>
-      </div>
-
-      {/* ─── Sample sections (no per-customer endpoints yet) ─────────────── */}
-      <div className="mt-8 flex items-center gap-2">
-        <h2 className="font-serif text-lg">فعالیت و باشگاه</h2>
-        <SampleNote />
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        داده‌های این بخش نمونه و صرفاً برای نمایش هستند؛ هنوز به سرویس واقعی
-        سفارش‌ها و باشگاه مشتریان متصل نشده‌اند.
-      </p>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="ارزش کل"
-          value={formatPrice(sample.ltv)}
-          icon={Coins}
-        />
-        <StatCard
-          label="سفارش‌ها"
-          value={faNum(sample.ordersCount)}
-          icon={ShoppingBag}
-        />
-        <StatCard
-          label="میانگین سبد"
-          value={formatPrice(sampleAvgOrder)}
-          icon={TrendingUp}
-        />
-        <StatCard
-          label="کیف پول"
-          value={formatPrice(sample.walletBalance)}
-          icon={Wallet}
-        />
-      </div>
-
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <div className="mb-3 flex items-center gap-2">
-            <h3 className="font-serif text-lg">تاریخچهٔ سفارش‌ها</h3>
-            <SampleNote />
-          </div>
-          <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
-            {sampleOrders.length === 0 ? (
-              <p className="p-8 text-center text-sm text-muted-foreground">
-                سفارشی برای نمایش وجود ندارد.
-              </p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-border/60 bg-muted/30 hover:bg-muted/30">
-                    <TableHead className="h-10 text-xs font-medium text-muted-foreground">
-                      شماره
-                    </TableHead>
-                    <TableHead className="h-10 text-xs font-medium text-muted-foreground">
-                      تاریخ
-                    </TableHead>
-                    <TableHead className="h-10 text-xs font-medium text-muted-foreground">
-                      مبلغ
-                    </TableHead>
-                    <TableHead className="h-10 text-xs font-medium text-muted-foreground">
-                      پرداخت
-                    </TableHead>
-                    <TableHead className="h-10 text-end text-xs font-medium text-muted-foreground">
-                      ارسال
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sampleOrders.map((o) => (
-                    <TableRow key={o.id} className="border-border/40">
-                      <TableCell className="font-medium">
-                        #{faNum(o.number)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground" dir="ltr">
-                        {o.date}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {formatPrice(o.total)}
-                      </TableCell>
-                      <TableCell>
-                        <PaymentBadge status={o.payment} />
-                      </TableCell>
-                      <TableCell className="text-end">
-                        <FulfilmentBadge status={o.fulfilment} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-        </div>
-
-        <div className="border-hairline h-fit rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
-          <div className="mb-4 flex items-center gap-2">
-            <p className="font-serif text-base">باشگاه و کیف پول</p>
-            <SampleNote />
-          </div>
-          <dl className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">سطح باشگاه</dt>
-              <dd className="font-medium">{TIER_LABELS[sample.tier]}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">موجودی کیف پول</dt>
-              <dd className="font-medium">
-                {formatPrice(sample.walletBalance)}
-              </dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">شهر</dt>
-              <dd>{sample.city}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">آخرین بازدید</dt>
-              <dd>{sample.lastSeen}</dd>
             </div>
           </dl>
         </div>

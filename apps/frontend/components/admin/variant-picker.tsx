@@ -6,8 +6,14 @@ import { Check, ChevronsUpDown, Loader2, Search, PackageSearch } from "lucide-re
 
 import { cn } from "@/lib/utils"
 import { faNum, formatPrice } from "@/lib/products"
-import { adminRequest } from "@/lib/api/admin-client"
-import type { Paginated, ProductListItem, Variant } from "@/lib/catalog/types"
+import {
+  listProductVariants,
+  listSelectableProducts,
+} from "@/features/admin/products/api/client"
+import type {
+  ProductListItem,
+  ProductVariant,
+} from "@/features/catalog/products/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -32,9 +38,7 @@ function useProducts(search: string) {
   return useQuery({
     queryKey: ["admin", "products", "picker", search],
     queryFn: () =>
-      adminRequest<Paginated<ProductListItem>>(
-        `products?limit=50${search ? `&search=${encodeURIComponent(search)}` : ""}`
-      ),
+      listSelectableProducts({ limit: 50, ...(search ? { search } : {}) }),
     staleTime: 2 * 60 * 1000,
   })
 }
@@ -43,7 +47,7 @@ function useVariants(productId: number | null) {
   return useQuery({
     queryKey: ["admin", "products", productId, "variants"],
     enabled: !!productId,
-    queryFn: () => adminRequest<Variant[]>(`products/${productId}/variants`),
+    queryFn: () => listProductVariants(productId as number),
     staleTime: 2 * 60 * 1000,
   })
 }
@@ -94,7 +98,7 @@ export function VariantPicker({
 
   const products = productsQuery.data?.results ?? []
 
-  function chooseVariant(v: Variant) {
+  function chooseVariant(v: ProductVariant) {
     const option: VariantOption = {
       variantId: v.id,
       productTitle: selectedProduct?.title ?? "",

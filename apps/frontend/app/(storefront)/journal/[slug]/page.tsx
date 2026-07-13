@@ -14,21 +14,23 @@ import { JournalCard } from "@/features/journal/components/journal-card";
 import { ArticleBody } from "@/features/journal/components/article-body";
 import { ShareLinks } from "@/features/journal/components/share-links";
 import { AddToCartButton } from "@/features/catalog/products/components/add-to-cart-button";
+import type { ProductDetail } from "@/features/catalog/products/types";
 import { faNum, formatPrice } from "@/lib/products";
-import { getProductById } from "@/lib/catalog/products";
-import type { ProductDetail } from "@/lib/catalog/types";
+import { getProductById } from "@/features/catalog/products/api/public";
 import {
-  getBlogBySlug,
-  getRelatedBlogs,
-  allBlogSlugs,
-  formatBlogDate,
-  readingTime,
-} from "@/lib/journal";
+  getJournalPostBySlug,
+  listJournalSlugs,
+  listRelatedJournalPosts,
+} from "@/features/journal/api/server";
+import {
+  formatJournalDate,
+  formatReadingTime,
+} from "@/features/journal/utils";
 
 export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  const slugs = await allBlogSlugs();
+  const slugs = await listJournalSlugs();
   return slugs.map((slug) => ({ slug }));
 }
 
@@ -38,7 +40,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const post = await getBlogBySlug(slug);
+  const post = await getJournalPostBySlug(slug);
   if (!post) return buildMetadata({ title: "نوشته یافت نشد", index: false });
   return buildMetadata({
     title: post.meta_title ?? post.title,
@@ -55,7 +57,7 @@ export default async function JournalPostPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const post = await getBlogBySlug(slug);
+  const post = await getJournalPostBySlug(slug);
   if (!post) notFound();
 
   // Hydrate linked products (cap a few) for the "shop this article" upsell, plus
@@ -64,7 +66,7 @@ export default async function JournalPostPage({
     Promise.all(
       (post.product_ids ?? []).slice(0, 4).map((id) => getProductById(id)),
     ).then((list) => list.filter((p): p is ProductDetail => Boolean(p))),
-    getRelatedBlogs(slug, 3),
+    listRelatedJournalPosts(slug, 3),
   ]);
 
   const url = absoluteUrl(`/journal/${post.slug}`);
@@ -141,12 +143,12 @@ export default async function JournalPostPage({
           <div className="mt-7 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {post.published_at ? (
               <time dateTime={post.published_at}>
-                {formatBlogDate(post.published_at)}
+                {formatJournalDate(post.published_at)}
               </time>
             ) : null}
             <span className="inline-flex items-center gap-1.5">
               <Clock className="size-4" aria-hidden />{" "}
-              {readingTime(post.time_to_read)}
+              {formatReadingTime(post.time_to_read)}
             </span>
             {post.total_reads > 0 ? (
               <span className="inline-flex items-center gap-1.5">

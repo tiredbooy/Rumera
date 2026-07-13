@@ -17,7 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { Address, AddressInput } from "@/lib/catalog/types"
+import type {
+  Address,
+  CreateAddressInput,
+} from "@/features/addresses/types"
 
 /** Iranian provinces — static reference data for the address select. */
 export const PROVINCES = [
@@ -79,7 +82,7 @@ export function AddressForm({
 }: {
   defaultValues?: Address
   submitting: boolean
-  onSubmit: (values: AddressInput) => void
+  onSubmit: (values: CreateAddressInput) => void
   onCancel: () => void
 }) {
   const {

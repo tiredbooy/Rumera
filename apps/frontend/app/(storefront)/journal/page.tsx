@@ -7,9 +7,9 @@ import { JsonLd } from "@/components/json-ld";
 import { breadcrumbLd } from "@/lib/seo/jsonld";
 import { Reveal } from "@/features/motion/components/reveal";
 import { Button } from "@/components/ui/button";
-import { JournalExplorer } from "@/features/loyality/components/journal-explorer";
+import { JournalExplorer } from "@/features/journal/components/journal-explorer";
 import { JournalCard } from "@/features/journal/components/journal-card";
-import { listBlogs } from "@/lib/journal";
+import { listJournalPage } from "@/features/journal/api/server";
 import { faNum } from "@/lib/products";
 
 export const revalidate = 3600;
@@ -40,7 +40,7 @@ export default async function JournalPage({
   // The featured lead story only headlines the untouched first page.
   const isFirstPage = page === 1;
 
-  const { posts, pagination } = await listBlogs({ page, limit: PAGE_SIZE });
+  const { posts, pagination } = await listJournalPage({ page, limit: PAGE_SIZE });
 
   // Headline the post the editors marked `is_featured`; fall back to the newest.
   const featured = isFirstPage

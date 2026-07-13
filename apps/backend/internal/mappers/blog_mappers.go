@@ -84,6 +84,13 @@ func ToBlogDetailResponse(
 	productIDs []int64,
 	tagIDs []int64,
 ) models.BlogDetailResponse {
+	if productIDs == nil {
+		productIDs = []int64{}
+	}
+	if tagIDs == nil {
+		tagIDs = []int64{}
+	}
+
 	return models.BlogDetailResponse{
 		BlogResponse: ToBlogResponse(b),
 		Categories:   ToBlogCategoryResponses(categories),

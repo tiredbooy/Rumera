@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/response"
 )
 
@@ -56,7 +57,7 @@ func (h *Handler) RevenueSummary(c *gin.Context) {
 	}
 	summary, err := h.RevenueStats.GetSummary(c.Request.Context(), from, to)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, summary)
@@ -70,7 +71,7 @@ func (h *Handler) RevenueTimeSeries(c *gin.Context) {
 	}
 	series, err := h.RevenueStats.GetTimeSeries(c.Request.Context(), from, to)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, series)
@@ -80,13 +81,17 @@ func (h *Handler) RevenueTimeSeries(c *gin.Context) {
 func (h *Handler) RevenueToday(c *gin.Context) {
 	today, err := h.RevenueStats.GetToday(c.Request.Context())
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, today)
 }
 
 // ── Products ───────────────────────────────────────────────────────────────
+
+// Backend blocker: these routes expose analytics UUIDs, but catalog product
+// routes expose BIGINT IDs. The UUID is deliberately not presented as a catalog
+// identifier until the databases share a canonical product key.
 
 // TopProductsByRevenue — GET /admin/analytics/products/top-revenue
 func (h *Handler) TopProductsByRevenue(c *gin.Context) {
@@ -96,7 +101,7 @@ func (h *Handler) TopProductsByRevenue(c *gin.Context) {
 	}
 	entries, err := h.ProductStats.TopByRevenue(c.Request.Context(), from, to, queryLimit(c, 10))
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, entries)
@@ -110,7 +115,7 @@ func (h *Handler) TopProductsByViews(c *gin.Context) {
 	}
 	entries, err := h.ProductStats.TopByViews(c.Request.Context(), from, to, queryLimit(c, 10))
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, entries)
@@ -128,7 +133,7 @@ func (h *Handler) ProductStatsSummary(c *gin.Context) {
 	}
 	summary, err := h.ProductStats.GetSummary(c.Request.Context(), productID, from, to)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, summary)
@@ -146,7 +151,7 @@ func (h *Handler) ProductStatsTimeSeries(c *gin.Context) {
 	}
 	series, err := h.ProductStats.GetTimeSeries(c.Request.Context(), productID, from, to)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, series)
@@ -162,7 +167,7 @@ func (h *Handler) TopSearchTerms(c *gin.Context) {
 	}
 	terms, err := h.SearchSummary.TopTerms(c.Request.Context(), from, to, queryLimit(c, 20))
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, terms)
@@ -176,7 +181,7 @@ func (h *Handler) ZeroResultSearchTerms(c *gin.Context) {
 	}
 	terms, err := h.SearchSummary.ZeroResultTerms(c.Request.Context(), from, to, queryLimit(c, 20))
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, terms)
@@ -190,7 +195,7 @@ func (h *Handler) TopConvertingSearchTerms(c *gin.Context) {
 	}
 	terms, err := h.SearchSummary.TopConvertingTerms(c.Request.Context(), from, to, queryLimit(c, 20))
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, terms)
@@ -206,8 +211,8 @@ func (h *Handler) EventBreakdown(c *gin.Context) {
 	}
 	breakdown, err := h.Event.GetEventBreakdown(c.Request.Context(), from, to)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
-	response.OK(c, breakdown)
+	response.OK(c, models.EventBreakdown(breakdown))
 }

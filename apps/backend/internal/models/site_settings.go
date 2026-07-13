@@ -10,7 +10,7 @@ import "time"
 // as one JSONB blob (see migrations/.../create_site_settings.sql) of typed
 // groups so the shape can grow without a schema migration. The admin edits every
 // group; the public API exposes only the storefront-safe subset (see
-// PublicSiteSettings / SiteSettings.Public).
+// PublicSiteSettings and the site-settings mappers).
 // ─────────────────────────────────────────────────────────────
 
 // StoreSettings holds the store's public identity.
@@ -76,7 +76,7 @@ type SiteSettings struct {
 
 	// UpdatedAt is the last time the document was written. Populated from the
 	// row's updated_at column, not the JSONB body.
-	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedAt time.Time `json:"-"`
 }
 
 // PublicSiteSettings is the storefront-safe projection returned by the public
@@ -91,16 +91,16 @@ type PublicSiteSettings struct {
 	Maintenance MaintenanceSettings `json:"maintenance"`
 }
 
-// Public returns the storefront-safe subset of the settings document.
-func (s *SiteSettings) Public() PublicSiteSettings {
-	return PublicSiteSettings{
-		Store:       s.Store,
-		Contact:     s.Contact,
-		Social:      s.Social,
-		Shipping:    s.Shipping,
-		SEO:         s.SEO,
-		Maintenance: s.Maintenance,
-	}
+// SiteSettingsResponse is the full admin response. UpdatedAt belongs to this
+// transport DTO rather than the JSONB-backed entity.
+type SiteSettingsResponse struct {
+	Store       StoreSettings       `json:"store"`
+	Contact     ContactSettings     `json:"contact"`
+	Social      SocialSettings      `json:"social"`
+	Shipping    ShippingSettings    `json:"shipping"`
+	SEO         SEOSettings         `json:"seo"`
+	Maintenance MaintenanceSettings `json:"maintenance"`
+	UpdatedAt   time.Time           `json:"updatedAt"`
 }
 
 // ─────────────────────────────────────────────────────────────

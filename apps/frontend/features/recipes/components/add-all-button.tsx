@@ -7,9 +7,9 @@ import { Loader2, ShoppingBag, Check } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { useBulkAddCartItems } from "@/lib/api/hooks"
+import { useBulkAddCartItems } from "@/features/cart/api"
 import { faNum } from "@/lib/products"
-import type { ShoppableProduct } from "@/lib/recipes"
+import type { ShoppableProduct } from "@/features/recipes/types"
 
 /**
  * AddAllIngredientsButton — one tap adds every in-stock product of a recipe to

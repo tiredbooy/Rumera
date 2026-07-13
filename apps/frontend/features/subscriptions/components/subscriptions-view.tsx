@@ -21,7 +21,6 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
-import { faDate } from "@/lib/catalog/labels"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -34,21 +33,32 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  useSubscriptions,
-  useCreateSubscription,
-  useUpdateSubscription,
-  useAddresses,
-  type Subscription,
-  type SubscriptionAction,
-  type SubscriptionStatus,
-} from "@/lib/api/hooks"
-import type { Address } from "@/lib/catalog/types"
+import { useCreateSubscription, useSubscriptions, useUpdateSubscription } from "@/features/subscriptions/hooks"
+import type {
+  Subscription,
+  SubscriptionAction,
+  SubscriptionCadence,
+  SubscriptionStatus,
+} from "@/features/subscriptions/types"
+import { useAddresses } from "@/features/addresses/api"
+import type { Address } from "@/features/addresses/types"
 
 // ── Labels & human copy ──────────────────────────────────────────────────────
 
 const planFa: Record<string, string> = { "cellar-box": "باکس سرداب" }
 const planName = (plan: string) => planFa[plan] ?? "باکس دوره‌ای"
+
+const faDateFormatter = new Intl.DateTimeFormat("fa-IR", {
+  dateStyle: "medium",
+})
+
+function faDate(iso: string): string {
+  try {
+    return faDateFormatter.format(new Date(iso))
+  } catch {
+    return iso
+  }
+}
 
 /** Human cadence, e.g. «هر ۳۰ روز» / «هر ۳ ماه» — built with Persian digits. */
 function cadenceLabel(cadence: Subscription["cadence"]): string {
@@ -109,7 +119,7 @@ export function SubscriptionsView() {
   const create = useCreateSubscription()
   const update = useUpdateSubscription()
 
-  const [cadence, setCadence] = React.useState<"monthly" | "quarterly">("monthly")
+  const [cadence, setCadence] = React.useState<SubscriptionCadence>("monthly")
   const [confirm, setConfirm] = React.useState<PendingAction>(null)
   /** Tracks which subscription row is mid-mutation so we only spin its buttons. */
   const [busyId, setBusyId] = React.useState<number | null>(null)
@@ -121,10 +131,13 @@ export function SubscriptionsView() {
   }, [addresses])
 
   function subscribe() {
-    create.mutate(cadence, {
-      onSuccess: () => toast.success("اشتراک شما فعال شد"),
-      onError: () => toast.error("ایجاد اشتراک ناموفق بود"),
-    })
+    create.mutate(
+      { cadence },
+      {
+        onSuccess: () => toast.success("اشتراک شما فعال شد"),
+        onError: () => toast.error("ایجاد اشتراک ناموفق بود"),
+      }
+    )
   }
 
   function run(id: number, action: SubscriptionAction) {
@@ -148,12 +161,16 @@ export function SubscriptionsView() {
     )
   }
 
-  const subs = data ?? []
   // Surface everything — including paused & cancelled history.
   const ordered = React.useMemo(() => {
-    const rank: Record<SubscriptionStatus, number> = { active: 0, paused: 1, cancelled: 2 }
+    const rank: Record<SubscriptionStatus, number> = {
+      active: 0,
+      paused: 1,
+      cancelled: 2,
+    }
+    const subs = data ?? []
     return [...subs].sort((a, b) => rank[a.status] - rank[b.status])
-  }, [subs])
+  }, [data])
 
   return (
     <div className="flex flex-col gap-6">

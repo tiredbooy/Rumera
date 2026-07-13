@@ -24,7 +24,7 @@ func NewAlertService(
 	return &AlertService{alertRepo: alertRepo, variantRepo: variantRepo, inventoryRepo: inventoryRepo}
 }
 
-func (s *AlertService) Create(ctx context.Context, userID int64, req models.CreateAlertReq) (*models.AlertResponse, error) {
+func (s *AlertService) Create(ctx context.Context, userID int64, req models.CreateProductAlertReq) (*models.ProductAlertResponse, error) {
 	if req.ProductVariantID <= 0 {
 		return nil, apperr.ErrInvalidRequest
 	}
@@ -62,17 +62,17 @@ func (s *AlertService) Create(ctx context.Context, userID int64, req models.Crea
 	if err != nil {
 		return nil, apperr.ErrInternal
 	}
-	return toAlertResponse(alert), nil
+	return toProductAlertResponse(alert), nil
 }
 
-func (s *AlertService) List(ctx context.Context, userID int64) ([]models.AlertResponse, error) {
+func (s *AlertService) List(ctx context.Context, userID int64) ([]models.ProductAlertResponse, error) {
 	alerts, err := s.alertRepo.ListByUser(ctx, userID)
 	if err != nil {
 		return nil, apperr.ErrInternal
 	}
-	out := make([]models.AlertResponse, len(alerts))
+	out := make([]models.ProductAlertResponse, len(alerts))
 	for i := range alerts {
-		out[i] = *toAlertResponse(&alerts[i])
+		out[i] = *toProductAlertResponse(&alerts[i])
 	}
 	return out, nil
 }
@@ -90,8 +90,8 @@ func (s *AlertService) Delete(ctx context.Context, userID, id int64) error {
 	return nil
 }
 
-func toAlertResponse(a *models.ProductAlert) *models.AlertResponse {
-	return &models.AlertResponse{
+func toProductAlertResponse(a *models.ProductAlert) *models.ProductAlertResponse {
+	return &models.ProductAlertResponse{
 		ID:               a.ID,
 		ProductVariantID: a.ProductVariantID,
 		AlertType:        a.AlertType,

@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { CategoryResponse as Category } from "@/features/catalog/categories/types";
+import type { Category } from "@/features/catalog/categories/types";
 import type { Brand } from "@/features/catalog/brands/types";
 import { FormField, FormSection } from "./FormLayout";
 import type { ProductFormValues } from "../../validations";

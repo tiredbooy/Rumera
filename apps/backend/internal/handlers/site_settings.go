@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tiredbooy/internal/mappers"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/response"
@@ -27,7 +28,7 @@ func (h *Handler) GetSiteSettings(c *gin.Context) {
 		if err != nil {
 			return nil, err
 		}
-		return settings.Public(), nil
+		return mappers.ToPublicSiteSettings(settings), nil
 	})
 	if err != nil {
 		h.handleError(c, err)
@@ -46,7 +47,7 @@ func (h *Handler) GetSiteSettingsAdmin(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.OK(c, settings)
+	response.OK(c, mappers.ToSiteSettingsResponse(settings))
 }
 
 // UpdateSiteSettings — PUT /admin/settings. Partial update: only the groups
@@ -65,5 +66,5 @@ func (h *Handler) UpdateSiteSettings(c *gin.Context) {
 	}
 
 	h.invalidate(c.Request.Context(), cache.KeySiteSettings())
-	response.OK(c, settings)
+	response.OK(c, mappers.ToSiteSettingsResponse(settings))
 }

@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Minus, Plus, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
-import { categories, categoryFa, faNum } from "@/lib/products";
-import { inventory, type InventoryRow } from "@/lib/admin/data";
+import { faNum } from "@/lib/products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,16 +14,52 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { StockBadge } from "@/components/admin/status-badge";
 import {
   DataTable,
   type Column,
   type Filter,
 } from "@/features/admin/analytics/components/DataTable";
+import { InventoryStockBadge } from "@/features/inventory/components/inventory-stock-badge";
+import { useAdjustVariantStock } from "@/features/inventory/hooks";
+import type {
+  InventoryItem,
+  InventoryStatus,
+} from "@/features/inventory/types";
+import { getInventoryStatus } from "@/features/inventory/utils";
 
-function AdjustPopover({ row }: { row: InventoryRow }) {
-  const [qty, setQty] = React.useState(row.onHand);
+type InventoryTableRow = InventoryItem & { status: InventoryStatus };
+
+function AdjustPopover({ row }: { row: InventoryTableRow }) {
+  const router = useRouter();
+  const adjustment = useAdjustVariantStock();
+  const [qty, setQty] = React.useState(row.stock_on_hand);
   const [open, setOpen] = React.useState(false);
+
+  async function save() {
+    const delta = qty - row.stock_on_hand;
+    if (delta === 0) {
+      setOpen(false);
+      return;
+    }
+
+    try {
+      await adjustment.mutateAsync({
+        variantID: row.product_variant_id,
+        input: {
+          quantity: delta,
+          type: "adjustment",
+          note: "Admin inventory adjustment",
+        },
+      });
+      toast.success(
+        `موجودی «${row.product_title}» روی ${faNum(qty)} تنظیم شد`,
+      );
+      setOpen(false);
+      router.refresh();
+    } catch {
+      toast.error("ذخیرهٔ موجودی انجام نشد. دوباره تلاش کنید.");
+    }
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -33,12 +69,12 @@ function AdjustPopover({ row }: { row: InventoryRow }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64">
-        <p className="text-sm font-medium">{row.product.name}</p>
+        <p className="text-sm font-medium">{row.product_title}</p>
         <p className="mt-0.5 text-xs text-muted-foreground" dir="ltr">
-          {row.sku}
+          {row.sku ?? `#${row.product_variant_id}`}
         </p>
         <Label
-          htmlFor={`stock-${row.product.id}`}
+          htmlFor={`stock-${row.product_variant_id}`}
           className="mt-4 block text-xs"
         >
           موجودی انبار
@@ -53,7 +89,7 @@ function AdjustPopover({ row }: { row: InventoryRow }) {
             <Minus className="size-4" />
           </Button>
           <Input
-            id={`stock-${row.product.id}`}
+            id={`stock-${row.product_variant_id}`}
             type="number"
             dir="ltr"
             className="text-center"
@@ -72,31 +108,41 @@ function AdjustPopover({ row }: { row: InventoryRow }) {
         <Button
           className="mt-3 w-full"
           size="sm"
-          onClick={() => {
-            toast.success(
-              `موجودی «${row.product.name}» روی ${faNum(qty)} تنظیم شد (نمونه)`,
-            );
-            setOpen(false);
-          }}
+          disabled={adjustment.isPending}
+          onClick={save}
         >
-          ذخیرهٔ موجودی
+          {adjustment.isPending ? "در حال ذخیره…" : "ذخیرهٔ موجودی"}
         </Button>
       </PopoverContent>
     </Popover>
   );
 }
 
-export function InventoryTable({ canWrite }: { canWrite: boolean }) {
-  const columns: Column<InventoryRow>[] = [
+export function InventoryTable({
+  canWrite,
+  inventory,
+}: {
+  canWrite: boolean;
+  inventory: InventoryItem[];
+}) {
+  const rows: InventoryTableRow[] = inventory.map((row) => ({
+    ...row,
+    status: getInventoryStatus(row),
+  }));
+  const categories = Array.from(
+    new Set(rows.flatMap((row) => row.category_title ?? [])),
+  );
+
+  const columns: Column<InventoryTableRow>[] = [
     {
       id: "name",
       header: "محصول",
-      sortValue: (r) => r.product.name,
+      sortValue: (r) => r.product_title,
       cell: (r) => (
         <div className="leading-tight">
-          <p className="font-medium">{r.product.name}</p>
+          <p className="font-medium">{r.product_title}</p>
           <p className="text-xs text-muted-foreground">
-            {categoryFa[r.product.category]}
+            {r.category_title ?? "بدون دسته"}
           </p>
         </div>
       ),
@@ -106,39 +152,43 @@ export function InventoryTable({ canWrite }: { canWrite: boolean }) {
       header: "کد کالا",
       cell: (r) => (
         <span className="font-mono text-xs text-muted-foreground" dir="ltr">
-          {r.sku}
+          {r.sku ?? "—"}
         </span>
       ),
     },
     {
       id: "onHand",
       header: "موجود",
-      sortValue: (r) => r.onHand,
-      cell: (r) => <span className="tabular-nums">{faNum(r.onHand)}</span>,
+      sortValue: (r) => r.stock_on_hand,
+      cell: (r) => (
+        <span className="tabular-nums">{faNum(r.stock_on_hand)}</span>
+      ),
     },
     {
       id: "reserved",
       header: "رزرو",
-      sortValue: (r) => r.reserved,
+      sortValue: (r) => r.committed_stock,
       cell: (r) => (
         <span className="tabular-nums text-muted-foreground">
-          {faNum(r.reserved)}
+          {faNum(r.committed_stock)}
         </span>
       ),
     },
     {
       id: "available",
       header: "قابل فروش",
-      sortValue: (r) => r.available,
+      sortValue: (r) => r.available_stock,
       cell: (r) => (
-        <span className="font-medium tabular-nums">{faNum(r.available)}</span>
+        <span className="font-medium tabular-nums">
+          {faNum(r.available_stock)}
+        </span>
       ),
     },
     {
       id: "status",
       header: "وضعیت",
-      sortValue: (r) => r.available,
-      cell: (r) => <StockBadge status={r.status} />,
+      sortValue: (r) => r.available_stock,
+      cell: (r) => <InventoryStockBadge status={r.status} />,
     },
     ...(canWrite
       ? [
@@ -146,20 +196,20 @@ export function InventoryTable({ canWrite }: { canWrite: boolean }) {
             id: "actions",
             header: "",
             align: "end",
-            cell: (r: InventoryRow) => <AdjustPopover row={r} />,
-          } as Column<InventoryRow>,
+            cell: (r: InventoryTableRow) => <AdjustPopover row={r} />,
+          } as Column<InventoryTableRow>,
         ]
       : []),
   ];
 
-  const filters: Filter<InventoryRow>[] = [
+  const filters: Filter<InventoryTableRow>[] = [
     {
       id: "category",
       label: "دسته",
-      getValue: (r) => r.product.category,
-      options: categories.map((c) => ({
-        value: c.name,
-        label: categoryFa[c.name],
+      getValue: (r) => r.category_title ?? "",
+      options: categories.map((category) => ({
+        value: category,
+        label: category,
       })),
     },
     {
@@ -176,10 +226,10 @@ export function InventoryTable({ canWrite }: { canWrite: boolean }) {
 
   return (
     <DataTable
-      rows={inventory}
+      rows={rows}
       columns={columns}
-      getRowKey={(r) => r.product.id}
-      searchText={(r) => `${r.product.name} ${r.sku}`}
+      getRowKey={(r) => String(r.id)}
+      searchText={(r) => `${r.product_title} ${r.sku ?? ""}`}
       searchPlaceholder="جستجوی محصول یا کد کالا…"
       filters={filters}
       pageSize={10}

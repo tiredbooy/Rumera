@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/tiredbooy/internal/models"
@@ -49,6 +50,9 @@ func (s *WishlistService) RemoveItem(ctx context.Context, wishlistID int64, item
 
 	err := s.wishlistRepo.RemoveItem(ctx, wishlistID, itemID)
 	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
 		return apperr.ErrInternal
 	}
 

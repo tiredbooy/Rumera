@@ -3,6 +3,7 @@ package mappers
 import (
 	"fmt"
 
+	"github.com/shopspring/decimal"
 	"github.com/tiredbooy/internal/models"
 )
 
@@ -72,12 +73,29 @@ func ToRecipeListItems(rs []*models.Recipe) []models.RecipeListItem {
 	return out
 }
 
+func ToRecipeAdminListItem(r *models.Recipe) models.RecipeAdminListItem {
+	return models.RecipeAdminListItem{
+		RecipeListItem: ToRecipeListItem(r),
+		Status:         r.Status,
+		CreatedAt:      r.CreatedAt,
+		UpdatedAt:      r.UpdatedAt,
+	}
+}
+
+func ToRecipeAdminListItems(rs []*models.Recipe) []models.RecipeAdminListItem {
+	out := make([]models.RecipeAdminListItem, len(rs))
+	for i, r := range rs {
+		out[i] = ToRecipeAdminListItem(r)
+	}
+	return out
+}
+
 func ToRecipeIngredientResponse(i *models.RecipeIngredient) models.RecipeIngredientResponse {
 	return models.RecipeIngredientResponse{
 		ID:               i.ID,
 		ProductVariantID: i.ProductVariantID,
 		IngredientName:   i.IngredientName,
-		Quantity:         i.Quantity,
+		Quantity:         decimalString(i.Quantity),
 		Unit:             i.Unit,
 		Optional:         i.Optional,
 		Notes:            i.Notes,
@@ -93,12 +111,37 @@ func ToRecipeIngredientResponses(ingredients []*models.RecipeIngredient) []model
 	return out
 }
 
-func ToShoppableProducts(products []*models.ShoppableProduct) []models.ShoppableProduct {
-	out := make([]models.ShoppableProduct, len(products))
+func ToShoppableProductResponses(products []*models.ShoppableProduct) []models.ShoppableProductResponse {
+	out := make([]models.ShoppableProductResponse, len(products))
 	for i, p := range products {
-		out[i] = *p
+		out[i] = models.ShoppableProductResponse{
+			RecipeProductID:  p.RecipeProductID,
+			ProductVariantID: p.ProductVariantID,
+			ProductID:        p.ProductID,
+			ProductTitle:     p.ProductTitle,
+			ProductSlug:      p.ProductSlug,
+			Brand:            p.Brand,
+			SKU:              p.SKU,
+			Price:            p.Price,
+			CompareAtPrice:   p.CompareAtPrice,
+			ImageURL:         p.ImageURL,
+			IsAvailable:      p.IsAvailable,
+			Quantity:         decimalString(p.Quantity),
+			Unit:             p.Unit,
+			SortOrder:        p.SortOrder,
+			IsPrimary:        p.IsPrimary,
+			Role:             p.Role,
+		}
 	}
 	return out
+}
+
+func decimalString(value *decimal.Decimal) *string {
+	if value == nil {
+		return nil
+	}
+	formatted := value.String()
+	return &formatted
 }
 
 func ToRecipeTagInfos(tags []*models.RecipeTagInfo) []models.RecipeTagInfo {
@@ -118,7 +161,7 @@ func ToRecipeDetailResponse(
 	detail := models.RecipeDetailResponse{
 		RecipeResponse: ToRecipeResponse(r),
 		Ingredients:    ToRecipeIngredientResponses(ingredients),
-		Products:       ToShoppableProducts(products),
+		Products:       ToShoppableProductResponses(products),
 		Tags:           ToRecipeTagInfos(tags),
 	}
 	detail.StructuredData = BuildRecipeJSONLD(r, ingredients)

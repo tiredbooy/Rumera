@@ -5,21 +5,22 @@ import { toast } from "sonner";
 import { Heart, Plus, ShoppingCart, Check, Ban } from "lucide-react";
 
 import { faNum, formatPrice } from "@/lib/products";
-import type { WishlistItem } from "@/lib/catalog/types";
+import type { WishlistItem } from "@/features/wishlist/types";
 import {
   useWishlist,
   useRemoveWishlistItem,
-  useAddCartItem,
-} from "@/lib/api/hooks";
+} from "@/features/wishlist/hooks";
+import { useAddCartItem } from "@/features/cart/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SmartImage } from "@/components/smart-image";
 import { EmptyState } from "../../EmptyState";
 
-// The wishlist API carries no slug, so cards link to a title search rather than
-// straight to the PDP (a small backend change to add `slug` would fix this).
-const searchHref = (title: string) => `/search?q=${encodeURIComponent(title)}`;
+const productHref = (item: WishlistItem) =>
+  item.product_slug
+    ? `/products/${item.product_slug}`
+    : `/search?q=${encodeURIComponent(item.product_title)}`;
 
 export function WishlistView() {
   const wishlist = useWishlist();
@@ -129,7 +130,7 @@ export function WishlistView() {
             >
               <div className="relative aspect-4/5 overflow-hidden">
                 <Link
-                  href={searchHref(item.product_title)}
+                  href={productHref(item)}
                   className="absolute inset-0"
                   aria-label={item.product_title}
                 >
@@ -195,7 +196,7 @@ export function WishlistView() {
                 </div>
 
                 <h3 className="line-clamp-2 font-serif text-base leading-tight transition-colors group-hover/product:text-primary sm:text-lg">
-                  <Link href={searchHref(item.product_title)}>
+                  <Link href={productHref(item)}>
                     {item.product_title}
                   </Link>
                 </h3>

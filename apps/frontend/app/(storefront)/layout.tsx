@@ -7,20 +7,14 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AgeGate } from "@/components/age-gate";
 import { ReferralTracker } from "@/features/referral/components/referral-tracker";
-import { listCategories } from "@/lib/catalog/categories";
-import { fetchCategoryTree } from "@/features/catalog/categories/api";
+import { getCategoryTree } from "@/features/catalog/categories/api";
 
 export default async function StorefrontLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Feed the header's products mega-menu with live top-level categories. Falls
-  // back to the curated sample set when the API is unreachable so the menu is
-  // never empty (error-safe, mirrors the rest of the storefront).
-  const live = await listCategories();
-  const topLevel = live.filter((c) => c.parent_id == null);
-  const categories = await fetchCategoryTree();
+  const categories = await getCategoryTree();
 
   return (
     <>

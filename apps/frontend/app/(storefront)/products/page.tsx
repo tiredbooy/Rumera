@@ -6,8 +6,9 @@ import { buildMetadata } from "@/lib/seo/metadata";
 import { JsonLd } from "@/components/json-ld";
 import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld";
 import { buildQuery } from "@/lib/api/qs";
-import { listProducts } from "@/lib/catalog/products";
-import { listCategories } from "@/lib/catalog/categories";
+import { listProducts } from "@/features/catalog/products/api/public";
+import type { ProductSortField } from "@/features/catalog/products/queries";
+import { listCategories } from "@/features/catalog/categories/api";
 import { faNum } from "@/lib/products";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/features/catalog/products/components/product-card";
@@ -24,7 +25,7 @@ export const metadata: Metadata = buildMetadata({
 type SP = {
   page?: string;
   search?: string;
-  sortBy?: string;
+  sortBy?: ProductSortField;
   orderBy?: "asc" | "desc";
 };
 
@@ -79,10 +80,10 @@ export default async function ProductsPage({
             {categories.map((c) => (
               <Link
                 key={c.id}
-                href={`/categories/${c.slug}`}
+                href={c.slug ? `/categories/${c.slug}` : "/categories"}
                 className="rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
               >
-                {c.name}
+                {c.title}
               </Link>
             ))}
           </div>

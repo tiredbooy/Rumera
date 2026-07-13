@@ -26,11 +26,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
 import {
-  AdminApiError,
+  SettingsApiError,
   updateSiteSettings,
-  type SiteSettings,
-  type UpdateSiteSettingsInput,
-} from "@/lib/api/admin-client"
+} from "@/features/settings/api/client"
+import type {
+  SiteSettings,
+  UpdateSiteSettingsInput,
+} from "@/features/settings/types"
 
 // ── Validation ──────────────────────────────────────────────────────────────
 // Every field is a string in the form (freeThreshold is a numeric string),
@@ -46,22 +48,26 @@ const emailish = z
 
 const schema = z.object({
   // store
-  name: z.string().trim().max(120, "حداکثر ۱۲۰ نویسه"),
-  tagline: z.string().trim().max(160, "حداکثر ۱۶۰ نویسه"),
-  logoUrl: z.string().trim().max(500, "حداکثر ۵۰۰ نویسه"),
+  name: z
+    .string()
+    .trim()
+    .min(1, "نام فروشگاه الزامی است")
+    .max(255, "حداکثر ۲۵۵ نویسه"),
+  tagline: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
+  logoUrl: z.string().trim().max(2048, "حداکثر ۲۰۴۸ نویسه"),
   description: z.string().max(2000, "حداکثر ۲۰۰۰ نویسه"),
   // contact
   supportEmail: emailish,
   supportPhone: z.string().trim().max(40, "حداکثر ۴۰ نویسه"),
   address: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
-  workingHours: z.string().trim().max(160, "حداکثر ۱۶۰ نویسه"),
+  workingHours: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
   // social
-  instagram: z.string().trim().max(300),
-  telegram: z.string().trim().max(300),
-  whatsapp: z.string().trim().max(300),
-  twitter: z.string().trim().max(300),
-  youtube: z.string().trim().max(300),
-  linkedin: z.string().trim().max(300),
+  instagram: z.string().trim().max(255),
+  telegram: z.string().trim().max(255),
+  whatsapp: z.string().trim().max(255),
+  twitter: z.string().trim().max(255),
+  youtube: z.string().trim().max(255),
+  linkedin: z.string().trim().max(255),
   // shipping
   freeThreshold: z
     .string()
@@ -71,11 +77,11 @@ const schema = z.object({
         (/^\d+$/.test(v.trim()) && Number.isInteger(Number(v)) && Number(v) >= 0),
       { message: "عدد صحیح و نامنفی وارد کنید" }
     ),
-  note: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
+  note: z.string().max(1000, "حداکثر ۱۰۰۰ نویسه"),
   // seo
-  defaultTitle: z.string().trim().max(160, "حداکثر ۱۶۰ نویسه"),
-  defaultDescription: z.string().max(320, "حداکثر ۳۲۰ نویسه"),
-  ogImage: z.string().trim().max(500, "حداکثر ۵۰۰ نویسه"),
+  defaultTitle: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
+  defaultDescription: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
+  ogImage: z.string().trim().max(2048, "حداکثر ۲۰۴۸ نویسه"),
   keywords: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
   // maintenance
   enabled: z.boolean(),
@@ -262,7 +268,7 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
       : undefined
 
   function applyServerErrors(e: unknown) {
-    if (e instanceof AdminApiError) {
+    if (e instanceof SettingsApiError) {
       if (e.fields) {
         for (const [key, msgs] of Object.entries(e.fields)) {
           if (FIELD_KEYS.has(key as keyof FormValues)) {

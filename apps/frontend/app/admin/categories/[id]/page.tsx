@@ -4,16 +4,22 @@ import { ArrowRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { serverApi, ApiError } from "@/lib/api/client";
-import type { Category } from "@/lib/catalog/types";
-import type { CategoryTreeNode } from "@/lib/api/admin-client";
+import { ApiError } from "@/lib/api/client";
+import {
+  getCategory,
+  getCategoryTree,
+} from "@/features/admin/categories/api";
+import type {
+  Category,
+  CategoryTree,
+} from "@/features/catalog/categories/types";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/features/dashboard/components/page-header";
 import { CategoryForm } from "@/features/admin/categories/components/CategoryForm";
 
-async function loadTree(): Promise<CategoryTreeNode[]> {
+async function loadTree(): Promise<CategoryTree[]> {
   try {
-    return (await serverApi<CategoryTreeNode[]>("/categories/tree")) ?? [];
+    return await getCategoryTree();
   } catch {
     return [];
   }
@@ -29,7 +35,7 @@ export default async function AdminEditCategoryPage({
 
   let category: Category;
   try {
-    category = await serverApi<Category>(`/categories/${id}`);
+    category = await getCategory(id);
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
@@ -41,7 +47,7 @@ export default async function AdminEditCategoryPage({
     <>
       <PageHeader
         title="ویرایش دسته‌بندی"
-        description={category.name}
+        description={category.title}
         actions={
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin/categories">

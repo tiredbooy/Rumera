@@ -1,4 +1,5 @@
-import type { CategoryTreeNode } from "./category"
+import type { CategoryTree } from "@/features/catalog/categories/types"
+import type { ApiSuccess } from "@/lib/api/types"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1"
 
@@ -12,7 +13,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/a
  * already using elsewhere (axios instance, fetch wrapper, etc.) — this is a
  * minimal placeholder since that file hasn't been shared yet.
  */
-export async function getCategoryTree(): Promise<CategoryTreeNode[]> {
+export async function getCategoryTree(): Promise<CategoryTree[]> {
   const res = await fetch(`${API_BASE_URL}/categories/tree`, {
     next: { revalidate: 300 }, // category structure changes rarely
   })
@@ -21,5 +22,6 @@ export async function getCategoryTree(): Promise<CategoryTreeNode[]> {
     throw new Error(`Failed to fetch category tree: ${res.status}`)
   }
 
-  return res.json()
+  const body = (await res.json()) as ApiSuccess<CategoryTree[]>
+  return body.data
 }

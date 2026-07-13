@@ -7,6 +7,11 @@ func ToInventoryResponse(inv *models.Inventory) models.InventoryResponse {
 	return models.InventoryResponse{
 		ID:               inv.ID,
 		ProductVariantID: inv.ProductVariantID,
+		ProductID:        inv.ProductID,
+		ProductTitle:     inv.ProductTitle,
+		SKU:              inv.SKU,
+		CategoryTitle:    inv.CategoryTitle,
+		UnitPrice:        inv.UnitPrice,
 		StockOnHand:      inv.StockOnHand,
 		CommittedStock:   inv.CommittedStock,
 		AvailableStock:   inv.StockOnHand - inv.CommittedStock,

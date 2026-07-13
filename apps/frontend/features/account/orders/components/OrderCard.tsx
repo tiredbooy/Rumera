@@ -3,8 +3,9 @@ import { ArrowLeft, Package } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { faNum, formatPrice } from "@/lib/products";
-import { ORDER_STATUS_FA, PAYMENT_FA, faDate } from "@/lib/catalog/labels";
-import type { OrderListItem } from "@/lib/catalog/types";
+import { ORDER_STATUS_FA, PAYMENT_FA } from "@/features/orders/labels";
+import type { OrderListItem } from "@/features/orders/types";
+import { faDate } from "@/lib/utils/date";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { OrderStatusStepper } from "./OrderStatusStepper";

@@ -13,12 +13,18 @@ import {
 import { buildMetadata } from "@/lib/seo/metadata";
 import { JsonLd } from "@/components/json-ld";
 import { productDetailLd, breadcrumbLd } from "@/lib/seo/jsonld";
-import { getProductBySlug, allProductSlugs } from "@/lib/catalog/products";
 import {
-  getSimilar,
+  allProductSlugs,
+  getProductBySlug,
+} from "@/features/catalog/products/api/public";
+import {
   getFrequentlyBoughtTogether,
-} from "@/lib/catalog/recommendations";
-import { getReviewSummary, listReviews } from "@/lib/catalog/reviews";
+  getSimilar,
+} from "@/features/recommendations/api";
+import {
+  getProductRatingSummary,
+  listProductReviews,
+} from "@/features/reviews/api";
 import { faNum } from "@/lib/products";
 import { Bottle } from "@/components/bottle";
 import { ProductGallery } from "@/features/catalog/products/components/product-gallery";
@@ -90,8 +96,8 @@ export default async function ProductDetailPage({
   const [similar, fbtRaw, reviewSummary, reviewsPage] = await Promise.all([
     getSimilar(product.id, { limit: 8 }),
     getFrequentlyBoughtTogether(product.id, { limit: 4 }),
-    getReviewSummary(product.id),
-    listReviews(product.id, { limit: 8 }),
+    getProductRatingSummary(product.id),
+    listProductReviews(product.id, { limit: 8 }),
   ]);
   // FBT falls back to "similar" server-side — drop overlaps so the rails differ.
   const fbt = fbtRaw.filter(
@@ -320,7 +326,7 @@ export default async function ProductDetailPage({
       {/* Recently viewed (records this product) */}
       <RecentlyViewedRail
         current={{
-          slug: product.slug,
+          slug,
           title: product.title,
           image: images[0]?.image_url,
           price: minPrice,

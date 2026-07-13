@@ -6,8 +6,11 @@ import { PackageOpen, ChevronLeft } from "lucide-react";
 import { buildMetadata } from "@/lib/seo/metadata";
 import { JsonLd } from "@/components/json-ld";
 import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld";
-import { listCategories, getCategoryBySlug } from "@/lib/catalog/categories";
-import { listProducts } from "@/lib/catalog/products";
+import {
+  getCategoryBySlug,
+  listCategories,
+} from "@/features/catalog/categories/api";
+import { listProducts } from "@/features/catalog/products/api/public";
 import { faNum } from "@/lib/products";
 import { ProductCard } from "@/features/catalog/products/components/product-card";
 import { Placeholder } from "@/features/dashboard/components/placeholder";
@@ -15,7 +18,9 @@ import { Placeholder } from "@/features/dashboard/components/placeholder";
 export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  return (await listCategories()).map((c) => ({ category: c.slug }));
+  return (await listCategories()).flatMap((c) =>
+    c.slug ? [{ category: c.slug }] : [],
+  );
 }
 
 export async function generateMetadata({
@@ -27,9 +32,9 @@ export async function generateMetadata({
   const cat = await getCategoryBySlug(category);
   if (!cat) return buildMetadata({ title: "دسته یافت نشد", index: false });
   return buildMetadata({
-    title: cat.name,
-    description: cat.description ?? `خرید ${cat.name} از مجموعهٔ منتخب رومرا.`,
-    path: `/categories/${cat.slug}`,
+    title: cat.title,
+    description: cat.description ?? `خرید ${cat.title} از مجموعهٔ منتخب رومرا.`,
+    path: `/categories/${category}`,
   });
 }
 
@@ -54,9 +59,9 @@ export default async function CategoryPage({
           breadcrumbLd([
             { name: "خانه", path: "/" },
             { name: "فروشگاه", path: "/products" },
-            { name: cat.name, path: `/categories/${cat.slug}` },
+            { name: cat.title, path: `/categories/${category}` },
           ]),
-          productListLd(cat.name, results),
+          productListLd(cat.title, results),
         ]}
       />
 
@@ -78,10 +83,10 @@ export default async function CategoryPage({
               فروشگاه
             </Link>
             <ChevronLeft className="size-3.5 opacity-50" />
-            <span className="font-medium text-foreground">{cat.name}</span>
+            <span className="font-medium text-foreground">{cat.title}</span>
           </nav>
           <p className="eyebrow mb-3">دسته‌بندی</p>
-          <h1 className="section-title">{cat.name}</h1>
+          <h1 className="section-title">{cat.title}</h1>
           {cat.description ? (
             <p className="mt-4 max-w-2xl text-muted-foreground">
               {cat.description}

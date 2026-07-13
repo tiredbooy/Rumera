@@ -5,7 +5,7 @@ import { AnalyticsKpis } from "./AnalyticsKpis";
 import { AnalyticsRevenueCharts } from "./AnalyticsRevenueCharts";
 import { AnalyticsTopProducts } from "./AnalyticsTopProducts";
 import { KpiSkeleton, ChartsSkeleton } from "./skeleton";
-import { isValidRange, type RangeId } from "../analytics-range";
+import { isValidRange, type RangeId } from "@/features/analytics/range";
 
 export default async function AnalyticsPage({
   searchParams,

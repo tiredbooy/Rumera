@@ -10,19 +10,19 @@ import { TestimonialSection } from "@/features/home/components/TestimonialSectio
 import { NewsletterSection } from "@/features/home/components/NewsletterSection";
 import { TrendingUp } from "lucide-react";
 
-import { getHeroSlides } from "@/lib/home/hero";
-import { getTrending } from "@/lib/catalog/recommendations";
-import { getFeaturedBrands } from "@/lib/home/brands";
-import { fetchFeaturedCategories } from "@/features/catalog/categories/api";
+import { listActiveHeroSlides } from "@/features/hero-slides/api/server";
+import { getTrending } from "@/features/recommendations/api";
+import { getFeaturedBrands } from "@/features/catalog/brands/api";
+import { getFeaturedCategories } from "@/features/catalog/categories/api";
 
 // Home is ISR — the hero slides are admin-managed and refetched periodically.
 export const revalidate = 300;
 
 export default async function Home() {
   const [heroSlides, trending, homeCategories, brands] = await Promise.all([
-    getHeroSlides(),
+    listActiveHeroSlides(),
     getTrending({ limit: 8 }),
-    fetchFeaturedCategories(),
+    getFeaturedCategories(),
     getFeaturedBrands(),
   ]);
 

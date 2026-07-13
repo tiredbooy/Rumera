@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { useForm, Controller } from "react-hook-form"
+import { useForm, Controller, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
@@ -20,17 +20,20 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { ROLE_LABELS, type Role } from "@/lib/rbac/roles"
+import { ROLE_LABELS } from "@/lib/rbac/roles"
 import {
-  AdminApiError,
-  adminUpdateUser,
-  type UpdateUserInput,
-  type UserAdminResponse,
-  type UserGender,
-} from "@/lib/api/admin-client"
+  AdminCustomerApiError,
+  updateAdminUser,
+} from "@/features/customers/client"
+import type {
+  AdminUser,
+  AdminUserRole,
+  AdminUserUpdateInput,
+  UserGender,
+} from "@/features/customers/types"
 
-/** Roles offered in the picker (the backend self-service set). */
-const ROLE_OPTIONS: Role[] = ["customer", "vendor", "admin"]
+/** Roles accepted by the admin user update validator. */
+const ROLE_OPTIONS: AdminUserRole[] = ["customer", "vendor", "admin"]
 
 const GENDER_LABELS: Record<UserGender, string> = {
   male: "مرد",
@@ -59,8 +62,8 @@ const schema = z.object({
       message: "کد ملی باید ۱۰ رقم باشد",
     }),
   birth_date: z.string(), // YYYY-MM-DD from <input type="date">, or ""
-  gender: z.string(), // "" | UserGender
-  role: z.enum(["customer", "vendor", "admin", "support", "manager"]),
+  gender: z.union([z.literal(""), z.enum(["male", "female", "other"])]),
+  role: z.enum(["customer", "vendor", "admin"]),
   is_active: z.boolean(),
 })
 
@@ -88,7 +91,7 @@ function dateInputToRfc3339(v: string): string | null {
 
 const strOrNull = (v: string) => (v.trim() === "" ? null : v.trim())
 
-function defaults(user: UserAdminResponse): FormValues {
+function defaults(user: AdminUser): FormValues {
   return {
     first_name: user.first_name ?? "",
     last_name: user.last_name ?? "",
@@ -136,7 +139,7 @@ export function UserEditForm({
   /** True when the row being edited is the signed-in admin's own account. */
   isSelf,
 }: {
-  user: UserAdminResponse
+  user: AdminUser
   isSelf: boolean
 }) {
   const router = useRouter()
@@ -146,7 +149,6 @@ export function UserEditForm({
     handleSubmit,
     control,
     reset,
-    watch,
     setError,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({
@@ -154,19 +156,11 @@ export function UserEditForm({
     defaultValues: defaults(user),
   })
 
-  const watchedActive = watch("is_active")
-  const watchedRole = watch("role")
-
-  // If the picker is shown a role not in the canonical option set (e.g. a
-  // legacy support/manager account), surface it so it isn't silently dropped.
-  const roleOptions = React.useMemo<Role[]>(() => {
-    return ROLE_OPTIONS.includes(user.role)
-      ? ROLE_OPTIONS
-      : [user.role, ...ROLE_OPTIONS]
-  }, [user.role])
+  const watchedActive = useWatch({ control, name: "is_active" })
+  const watchedRole = useWatch({ control, name: "role" })
 
   function applyServerErrors(e: unknown) {
-    if (e instanceof AdminApiError) {
+    if (e instanceof AdminCustomerApiError) {
       if (e.status === 403 || e.code === "ACCESS_DENIED") {
         toast.error("شما اجازهٔ تغییر نقش یا وضعیت این حساب را ندارید.")
         return
@@ -199,14 +193,14 @@ export function UserEditForm({
   }
 
   async function onSubmit(v: FormValues) {
-    const input: UpdateUserInput = {
+    const input: AdminUserUpdateInput = {
       first_name: strOrNull(v.first_name),
       last_name: strOrNull(v.last_name),
       phone: v.phone.trim() === "" ? null : toAsciiDigits(v.phone.trim()),
       national_code:
         v.national_code.trim() === "" ? null : toAsciiDigits(v.national_code.trim()),
       birth_date: dateInputToRfc3339(v.birth_date),
-      gender: v.gender === "" ? null : (v.gender as UserGender),
+      gender: v.gender === "" ? null : v.gender,
     }
     // Role/status are admin-only and locked for self-edits — only send them when
     // editing someone else, so we never trip the server lock-out guard.
@@ -216,7 +210,7 @@ export function UserEditForm({
     }
 
     try {
-      const updated = await adminUpdateUser(user.user_id, input)
+      const updated = await updateAdminUser(user.user_id, input)
       toast.success("تغییرات کاربر ذخیره شد.")
       // Re-baseline the form to the server truth (clears the dirty state).
       reset(defaults(updated))
@@ -367,7 +361,7 @@ export function UserEditForm({
                       <SelectValue placeholder="انتخاب نقش" />
                     </SelectTrigger>
                     <SelectContent>
-                      {roleOptions.map((r) => (
+                      {ROLE_OPTIONS.map((r) => (
                         <SelectItem key={r} value={r}>
                           {ROLE_LABELS[r]}
                         </SelectItem>
@@ -455,7 +449,7 @@ export function UserEditForm({
               {user.email}
             </p>
             <p className="mt-3 inline-flex rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
-              {ROLE_LABELS[watchedRole as Role] ?? ROLE_LABELS[user.role]}
+              {ROLE_LABELS[watchedRole] ?? ROLE_LABELS[user.role]}
             </p>
           </div>
 

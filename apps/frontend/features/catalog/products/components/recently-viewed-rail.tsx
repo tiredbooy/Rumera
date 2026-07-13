@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useSession } from "next-auth/react"
 import { History } from "lucide-react"
 
 import { formatPrice } from "@/lib/products"
@@ -11,6 +12,7 @@ import {
   useRecentlyViewed,
   type RecentProduct,
 } from "@/lib/recently-viewed"
+import { recordInteractionClient } from "@/features/recommendations/client"
 
 /**
  * RecentlyViewedRail — shows the visitor's recently-viewed products (localStorage,
@@ -30,18 +32,20 @@ export function RecentlyViewedRail({
   title?: string
   className?: string
 }) {
+  const { status } = useSession()
+
   React.useEffect(() => {
     if (!current?.slug) return
     recordRecentlyViewed(current)
     // Fire-and-forget interaction (the BFF adds auth; ignored for guests/errors).
-    if (currentProductId) {
-      fetch("/api/store/recommendations/interactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product_id: currentProductId, interaction_type: "view" }),
+    if (currentProductId && status === "authenticated") {
+      void recordInteractionClient({
+        product_id: currentProductId,
+        interaction_type: "view",
+        source: "pdp",
       }).catch(() => {})
     }
-  }, [current, currentProductId])
+  }, [current, currentProductId, status])
 
   const items = useRecentlyViewed(current?.slug)
   if (items.length < 2) return null

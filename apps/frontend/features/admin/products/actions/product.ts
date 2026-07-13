@@ -1,12 +1,15 @@
 "use server";
 
 import type {
-  CreateProductReq,
-  UpdateProductReq,
-  CreateVariantReq,
-  ProductDetail,
-  VariantResponse,
+  CreateProductInput,
+  UpdateProductInput,
+  CreateProductVariantInput,
+  UpdateProductVariantInput,
 } from "@/features/admin/products/types";
+import type {
+  ProductDetail,
+  ProductVariant,
+} from "@/features/catalog/products/types";
 
 // Import the actual implementations from the API layer
 import {
@@ -16,18 +19,18 @@ import {
   createVariant as _createVariant,
   updateVariant as _updateVariant,
   deleteVariant as _deleteVariant,
-} from "@/features/admin/products/api/api";
+} from "@/features/admin/products/api/server";
 
 // Wrap each as an explicit async function
 export async function createProduct(
-  payload: CreateProductReq,
+  payload: CreateProductInput,
 ): Promise<ProductDetail> {
   return _createProduct(payload);
 }
 
 export async function updateProduct(
   id: number,
-  payload: UpdateProductReq,
+  payload: UpdateProductInput,
 ): Promise<ProductDetail> {
   return _updateProduct(id, payload);
 }
@@ -38,15 +41,15 @@ export async function deleteProduct(id: number): Promise<void> {
 
 export async function createVariant(
   productId: number,
-  payload: CreateVariantReq,
-): Promise<VariantResponse> {
+  payload: CreateProductVariantInput,
+): Promise<ProductVariant> {
   return _createVariant(productId, payload);
 }
 
 export async function updateVariant(
   variantId: number,
-  payload: Partial<CreateVariantReq>,
-): Promise<VariantResponse> {
+  payload: UpdateProductVariantInput,
+): Promise<ProductVariant> {
   return _updateVariant(variantId, payload);
 }
 

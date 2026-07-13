@@ -1,15 +1,30 @@
 import { Coins, ShoppingCart, Users, TrendingUp } from "lucide-react";
 import { formatPrice, faNum } from "@/lib/products";
 import { StatCard } from "@/features/dashboard/components/stat-card";
-import { fetchRevenueToday } from "../api";
+import { fetchRevenueToday } from "@/features/analytics/api";
+import type { DailyRevenueStats } from "@/features/analytics/types";
 
 export async function RevenueCards() {
-  const today = await fetchRevenueToday().catch(() => null);
+  let today: DailyRevenueStats | null = null;
+  let failed = false;
+  try {
+    today = await fetchRevenueToday();
+  } catch {
+    failed = true;
+  }
 
-  if (!today) {
+  if (failed) {
     return (
       <p className="col-span-full py-6 text-center text-sm text-destructive">
         خطا در دریافت آمار امروز
+      </p>
+    );
+  }
+
+  if (!today) {
+    return (
+      <p className="col-span-full py-6 text-center text-sm text-muted-foreground">
+        آمار امروز هنوز ثبت نشده است.
       </p>
     );
   }

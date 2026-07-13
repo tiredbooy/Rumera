@@ -22,17 +22,21 @@ import {
 
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
-import type { RecipeDetail, RecipeDifficulty } from "@/lib/recipes"
-import { difficultyFa } from "@/lib/recipes"
+import type { Tag } from "@/features/catalog/tags/types"
+import { difficultyFa } from "@/features/recipes/utils"
 import {
-  AdminApiError,
   createRecipe,
+  RecipeApiError,
   updateRecipe,
-  type CreateRecipeInput,
-  type RecipeIngredientInput,
-  type RecipeProductInput,
-  type RecipeStatus,
-} from "@/lib/api/admin-client"
+} from "@/features/recipes/api/client"
+import type {
+  AdminRecipeDetail,
+  CreateRecipeInput,
+  RecipeDifficulty,
+  RecipeIngredientInput,
+  RecipeProductInput,
+  RecipeStatus,
+} from "@/features/recipes/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -55,8 +59,6 @@ import { OptimizedImage } from "@/components/admin/optimized-image"
 import { RichTextEditor } from "@/components/admin/rich-text-editor"
 import { VariantPicker, type VariantOption } from "@/components/admin/variant-picker"
 import { FlexibleImageInput } from "@/components/admin/flexible-image-input"
-
-type AdminTag = { id: number; title: string }
 
 // ── Validation ──────────────────────────────────────────────────────────────
 // Numeric fields are kept as strings in the form and coerced on submit, matching
@@ -128,7 +130,7 @@ const statusFa: Record<RecipeStatus, string> = {
 const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null)
 const intOrZero = (v?: string) => (v && v.trim() !== "" ? Number(v) : 0)
 
-function defaults(recipe?: RecipeDetail): FormValues {
+function defaults(recipe?: AdminRecipeDetail): FormValues {
   return {
     title: recipe?.title ?? "",
     slug: recipe?.slug ?? "",
@@ -138,7 +140,7 @@ function defaults(recipe?: RecipeDetail): FormValues {
     prep_time_minutes: recipe?.prep_time_minutes ? String(recipe.prep_time_minutes) : "",
     cook_time_minutes: recipe?.cook_time_minutes ? String(recipe.cook_time_minutes) : "",
     servings: recipe?.servings ? String(recipe.servings) : "",
-    status: recipe ? recipeStatus(recipe) : "draft",
+    status: recipe?.status ?? "draft",
     image_url: recipe?.image_url ?? "",
     is_featured: recipe?.is_featured ?? false,
     meta_title: recipe?.meta_title ?? "",
@@ -162,13 +164,6 @@ function defaults(recipe?: RecipeDetail): FormValues {
       is_primary: p.is_primary,
     })),
   }
-}
-
-/** RecipeDetail doesn't echo `status` on the public type; derive a safe default. */
-function recipeStatus(recipe: RecipeDetail): RecipeStatus {
-  const s = (recipe as RecipeDetail & { status?: RecipeStatus }).status
-  if (s === "draft" || s === "published" || s === "archived") return s
-  return recipe.published_at ? "published" : "draft"
 }
 
 // ── Layout helpers ────────────────────────────────────────────────────────────
@@ -537,8 +532,8 @@ export function RecipeForm({
   submitLabel = "ذخیره",
 }: {
   mode: "create" | "edit"
-  recipe?: RecipeDetail
-  tags: AdminTag[]
+  recipe?: AdminRecipeDetail
+  tags: Tag[]
   submitLabel?: string
 }) {
   const router = useRouter()
@@ -599,7 +594,7 @@ export function RecipeForm({
   }
 
   function applyServerErrors(e: unknown) {
-    if (e instanceof AdminApiError) {
+    if (e instanceof RecipeApiError) {
       if (e.fields) {
         for (const [key, msgs] of Object.entries(e.fields)) {
           setError(key as keyof FormValues, { message: msgs[0] })

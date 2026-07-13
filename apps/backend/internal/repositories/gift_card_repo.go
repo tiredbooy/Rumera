@@ -7,14 +7,15 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 	"github.com/tiredbooy/internal/models"
 )
 
 type GiftCardRepository interface {
-	Create(ctx context.Context, code string, amount float64) (*models.GiftCard, error)
+	Create(ctx context.Context, code string, amount decimal.Decimal) (*models.GiftCard, error)
 	// Redeem atomically flips an active card to redeemed and returns its amount.
 	// Returns models.ErrNotFound when the code is unknown or already used.
-	Redeem(ctx context.Context, code string, userID int64) (float64, error)
+	Redeem(ctx context.Context, code string, userID int64) (decimal.Decimal, error)
 	// Reactivate restores a card to active (compensation if a wallet credit fails).
 	Reactivate(ctx context.Context, code string) error
 }
@@ -27,7 +28,7 @@ func NewGiftCardRepository(db *pgxpool.Pool) GiftCardRepository {
 	return &giftCardRepository{db: db}
 }
 
-func (r *giftCardRepository) Create(ctx context.Context, code string, amount float64) (*models.GiftCard, error) {
+func (r *giftCardRepository) Create(ctx context.Context, code string, amount decimal.Decimal) (*models.GiftCard, error) {
 	const q = `
 		INSERT INTO gift_cards (code, initial_amount) VALUES ($1, $2)
 		ON CONFLICT (code) DO NOTHING
@@ -46,18 +47,18 @@ func (r *giftCardRepository) Create(ctx context.Context, code string, amount flo
 	return &gc, nil
 }
 
-func (r *giftCardRepository) Redeem(ctx context.Context, code string, userID int64) (float64, error) {
+func (r *giftCardRepository) Redeem(ctx context.Context, code string, userID int64) (decimal.Decimal, error) {
 	const q = `
 		UPDATE gift_cards
 		SET status = 'redeemed', redeemed_by = $2, redeemed_at = NOW()
 		WHERE code = $1 AND status = 'active'
 		RETURNING initial_amount`
-	var amount float64
+	var amount decimal.Decimal
 	if err := r.db.QueryRow(ctx, q, code, userID).Scan(&amount); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, models.ErrNotFound
+			return decimal.Zero, models.ErrNotFound
 		}
-		return 0, fmt.Errorf("giftCardRepository.Redeem: %w", err)
+		return decimal.Zero, fmt.Errorf("giftCardRepository.Redeem: %w", err)
 	}
 	return amount, nil
 }

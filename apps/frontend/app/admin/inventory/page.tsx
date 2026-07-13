@@ -4,15 +4,28 @@ import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { can } from "@/lib/rbac/can";
 import { formatPrice, faNum } from "@/lib/products";
-import { inventorySummary } from "@/lib/admin/data";
 import { PageHeader } from "@/features/dashboard/components/page-header";
 import { StatCard } from "@/features/dashboard/components/stat-card";
 import { InventoryTable } from "@/features/admin/inventory/components/InventoryTable";
+import { listAllInventory } from "@/features/inventory/api";
 
 export default async function AdminInventoryPage() {
   const session = await requirePermission(PERMISSIONS.INVENTORY_READ);
   const canWrite = can(session, PERMISSIONS.INVENTORY_WRITE);
-  const s = inventorySummary;
+  const inventory = await listAllInventory();
+  const s = {
+    skuCount: inventory.length,
+    outOfStock: inventory.filter((row) => row.available_stock <= 0).length,
+    lowStock: inventory.filter(
+      (row) =>
+        row.available_stock > 0 &&
+        row.available_stock <= row.reorder_point,
+    ).length,
+    stockValue: inventory.reduce(
+      (total, row) => total + row.stock_on_hand * Number(row.unit_price),
+      0,
+    ),
+  };
 
   return (
     <>
@@ -42,7 +55,7 @@ export default async function AdminInventoryPage() {
         />
       </div>
 
-      <InventoryTable canWrite={canWrite} />
+      <InventoryTable canWrite={canWrite} inventory={inventory} />
     </>
   );
 }

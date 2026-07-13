@@ -23,7 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useProfile, useUpdateProfile } from "@/lib/api/account-hooks";
+import { useProfile, useUpdateProfile } from "@/features/profile/hooks";
+import type { UpdateProfileInput } from "@/features/profile/types";
 import { AccountSection } from "../../account/components/account-section";
 
 const profileSchema = z.object({
@@ -136,13 +137,14 @@ function ProfileTab({
   const initial = (displayName || email || "?").trim().charAt(0);
 
   function onSubmit(values: ProfileValues) {
+    const input: UpdateProfileInput = {
+      first_name: values.first_name,
+      last_name: values.last_name,
+      // Preserve the existing null payload; Go currently treats it as omitted.
+      phone: values.phone || null,
+    };
     update.mutate(
-      {
-        first_name: values.first_name,
-        last_name: values.last_name,
-        // Empty string clears the phone (stored as NULL by the backend).
-        phone: values.phone || null,
-      },
+      input,
       {
         onSuccess: (next) => {
           toast.success("پروفایل به‌روزرسانی شد");

@@ -7,19 +7,12 @@ import { Loader2, ArrowLeft, ArrowRight, Check, Sparkles, Wine, Wallet, HeartHan
 import type { LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 
+import { faNum, formatPrice } from "@/lib/products"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { useTasteProfile, useSaveTasteProfile, type TastePrefs } from "@/lib/api/hooks"
-
-
-const budgets = [
-  { label: "تا ۵ میلیون", value: 5_000_000 },
-  { label: "تا ۱۰ میلیون", value: 10_000_000 },
-  { label: "تا ۲۰ میلیون", value: 20_000_000 },
-  { label: "بدون محدودیت", value: 0 },
-]
-const flavors = ["ملایم", "خشک", "دودی", "میوه‌ای", "تلخ", "شیرین"]
-const occasions = ["مهمانی", "هدیه", "لذت شخصی", "جشن"]
+import { useTasteProfile, useUpdateTasteProfile } from "../hooks"
+import { tasteProfileOptions } from "../options"
+import type { TasteCategory, UpdateTasteProfileInput } from "../types"
 
 const STEPS: { title: string; icon: LucideIcon }[] = [
   { title: "دسته‌بندی", icon: Wine },
@@ -27,7 +20,7 @@ const STEPS: { title: string; icon: LucideIcon }[] = [
   { title: "ذائقه", icon: HeartHandshake },
 ]
 
-function toggle(list: string[], v: string): string[] {
+function toggle<T extends string>(list: T[], v: T): T[] {
   return list.includes(v) ? list.filter((x) => x !== v) : [...list, v]
 }
 
@@ -60,13 +53,13 @@ function Chip({
 
 export function TasteQuiz() {
   const { data, isLoading } = useTasteProfile()
-  const save = useSaveTasteProfile()
+  const update = useUpdateTasteProfile()
   const reduceMotion = useReducedMotion()
 
   const [step, setStep] = React.useState(0)
   // Direction drives the slide animation: +1 forward, -1 back.
   const [dir, setDir] = React.useState(1)
-  const [cats, setCats] = React.useState<string[]>([])
+  const [cats, setCats] = React.useState<TasteCategory[]>([])
   const [budget, setBudget] = React.useState<number | null>(null)
   const [flavor, setFlavor] = React.useState<string[]>([])
   const [occ, setOcc] = React.useState<string[]>([])
@@ -89,13 +82,13 @@ export function TasteQuiz() {
   }
 
   function finish() {
-    const prefs: TastePrefs = {
+    const input: UpdateTasteProfileInput = {
       categories: cats,
       budget_max: budget ?? 0,
       flavor,
       occasions: occ,
     }
-    save.mutate(prefs, {
+    update.mutate(input, {
       onSuccess: () => {
         setDone(true)
         toast.success("سلیقهٔ شما ذخیره شد")
@@ -113,7 +106,9 @@ export function TasteQuiz() {
   }
 
   if (done) {
-    const topCat = cats[0] as Category | undefined
+    const topCategory = tasteProfileOptions.categories.find(
+      (option) => option.value === cats[0]
+    )
     return (
       <motion.div
         initial={reduceMotion ? false : { opacity: 0, y: 12 }}
@@ -132,10 +127,10 @@ export function TasteQuiz() {
           از این پس پیشنهادها بر اساس انتخاب‌های شما شخصی‌سازی می‌شوند.
         </p>
         <div className="mt-7 flex flex-wrap justify-center gap-3">
-          {topCat ? (
+          {topCategory ? (
             <Button asChild>
-              <Link href={`/categories/${topCat.toLowerCase()}`}>
-                مشاهدهٔ {categoryFa[topCat]} <ArrowLeft className="size-4" />
+              <Link href={`/categories/${topCategory.slug}`}>
+                مشاهدهٔ {topCategory.label} <ArrowLeft className="size-4" />
               </Link>
             </Button>
           ) : null}
@@ -234,9 +229,13 @@ export function TasteQuiz() {
                   یک یا چند دسته را انتخاب کنید.
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2.5">
-                  {categories.map((c) => (
-                    <Chip key={c.name} active={cats.includes(c.name)} onClick={() => setCats(toggle(cats, c.name))}>
-                      {categoryFa[c.name]}
+                  {tasteProfileOptions.categories.map((category) => (
+                    <Chip
+                      key={category.value}
+                      active={cats.includes(category.value)}
+                      onClick={() => setCats(toggle(cats, category.value))}
+                    >
+                      {category.label}
                     </Chip>
                   ))}
                 </div>
@@ -250,8 +249,12 @@ export function TasteQuiz() {
                   این به ما کمک می‌کند پیشنهادهای متناسب با بودجه‌تان بدهیم.
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2.5">
-                  {budgets.map((b) => (
-                    <Chip key={b.label} active={budget === b.value} onClick={() => setBudget(b.value)}>
+                  {tasteProfileOptions.budgets.map((b) => (
+                    <Chip
+                      key={b.label}
+                      active={budget === b.value}
+                      onClick={() => setBudget(b.value)}
+                    >
                       {b.label}
                     </Chip>
                   ))}
@@ -273,8 +276,12 @@ export function TasteQuiz() {
                 <div>
                   <p className="mb-2.5 text-sm font-medium">طعم مورد علاقه</p>
                   <div className="flex flex-wrap gap-2.5">
-                    {flavors.map((f) => (
-                      <Chip key={f} active={flavor.includes(f)} onClick={() => setFlavor(toggle(flavor, f))}>
+                    {tasteProfileOptions.flavors.map((f) => (
+                      <Chip
+                        key={f}
+                        active={flavor.includes(f)}
+                        onClick={() => setFlavor(toggle(flavor, f))}
+                      >
                         {f}
                       </Chip>
                     ))}
@@ -283,8 +290,12 @@ export function TasteQuiz() {
                 <div>
                   <p className="mb-2.5 text-sm font-medium">بیشتر برای چه مناسبتی؟</p>
                   <div className="flex flex-wrap gap-2.5">
-                    {occasions.map((o) => (
-                      <Chip key={o} active={occ.includes(o)} onClick={() => setOcc(toggle(occ, o))}>
+                    {tasteProfileOptions.occasions.map((o) => (
+                      <Chip
+                        key={o}
+                        active={occ.includes(o)}
+                        onClick={() => setOcc(toggle(occ, o))}
+                      >
                         {o}
                       </Chip>
                     ))}
@@ -315,8 +326,8 @@ export function TasteQuiz() {
             بعدی <ArrowLeft className="size-4" />
           </Button>
         ) : (
-          <Button onClick={finish} disabled={save.isPending} className="cursor-pointer">
-            {save.isPending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+          <Button onClick={finish} disabled={update.isPending} className="cursor-pointer">
+            {update.isPending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
             ذخیرهٔ سلیقه
           </Button>
         )}

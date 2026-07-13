@@ -20,12 +20,16 @@ import { RecipeCard } from "@/features/recipes/components/recipe-card";
 import { RecipeFilters } from "@/features/recipes/components/recipe-filters";
 import {
   listRecipes,
-  getFeaturedRecipes,
+  listFeaturedRecipes,
+} from "@/features/recipes/api/server";
+import {
   difficultyFa,
   formatDuration,
-  type RecipeDifficulty,
-  type RecipeListParams,
-} from "@/lib/recipes";
+} from "@/features/recipes/utils";
+import type {
+  RecipeDifficulty,
+  RecipeListQuery,
+} from "@/features/recipes/types";
 import { faNum } from "@/lib/products";
 
 export const revalidate = 3600;
@@ -46,8 +50,8 @@ type SearchParams = Promise<{
   page?: string;
 }>;
 
-function toParams(sp: Awaited<SearchParams>): RecipeListParams {
-  const params: RecipeListParams = { limit: PAGE_SIZE };
+function toParams(sp: Awaited<SearchParams>): RecipeListQuery {
+  const params: RecipeListQuery = { limit: PAGE_SIZE };
   if (sp.q) params.search = sp.q;
   if (
     sp.difficulty === "easy" ||
@@ -62,7 +66,7 @@ function toParams(sp: Awaited<SearchParams>): RecipeListParams {
       params.orderBy = "desc";
       break;
     case "quick":
-      params.sortBy = "total_time_minutes";
+      params.sortBy = "total_time";
       params.orderBy = "asc";
       break;
     default:
@@ -97,7 +101,7 @@ export default async function RecipesPage({
 
   const [{ results: recipes, pagination }, featuredList] = await Promise.all([
     listRecipes(toParams(sp)),
-    isDefaultView ? getFeaturedRecipes() : Promise.resolve([]),
+    isDefaultView ? listFeaturedRecipes() : Promise.resolve([]),
   ]);
   const spotlight = featuredList[0];
 

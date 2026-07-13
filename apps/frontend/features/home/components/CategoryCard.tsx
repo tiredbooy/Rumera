@@ -1,21 +1,20 @@
 import Link from "next/link";
+import { createElement } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { SmartImage } from "@/components/smart-image";
 import { Reveal } from "@/features/motion/components/reveal";
 import { categoryIconFor } from "@/lib/home/category-icons";
-import type { CategoryResponse } from "@/features/catalog/categories/types";
+import type { Category } from "@/features/catalog/categories/types";
 
 interface CategoryCardProps {
-  category: CategoryResponse;
+  category: Category;
   delay?: number;
 }
 
 export function CategoryCard({ category, delay = 0 }: CategoryCardProps) {
-  const Icon = categoryIconFor(category.slug ?? "");
   const isLarge = category.card_size === "large";
 
-  console.log("categoryImage:", category.image_url);
   return (
     <Reveal
       delay={delay}
@@ -44,7 +43,9 @@ export function CategoryCard({ category, delay = 0 }: CategoryCardProps) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent transition-opacity duration-300 group-hover/cat:from-black/85" />
 
         <span className="absolute end-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/10 text-white/90 ring-1 ring-white/20 backdrop-blur-md transition-colors group-hover/cat:bg-primary group-hover/cat:text-primary-foreground sm:end-4 sm:top-4 sm:size-10">
-          <Icon className="size-4 sm:size-5" />
+          {createElement(categoryIconFor(category.slug ?? ""), {
+            className: "size-4 sm:size-5",
+          })}
         </span>
 
         <div className="relative p-4 text-white sm:p-5">
