@@ -1,4 +1,4 @@
-import { CheckoutFlow } from "@/components/checkout/checkout-flow"
+import { CheckoutFlow } from "@/features/checkout/components/checkout-flow"
 
 export default function CheckoutPage() {
   return (

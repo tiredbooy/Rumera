@@ -164,10 +164,11 @@ func (h *Handler) DeleteProductImage(c *gin.Context) {
 // uploadFolders is the allow-list of storage folders a standalone upload may
 // target, keeping arbitrary path segments out of storage keys.
 var uploadFolders = map[string]bool{
-	"hero":     true,
-	"recipes":  true,
-	"journals": true,
-	"uploads":  true,
+	"hero":       true,
+	"categories": true,
+	"recipes":    true,
+	"journals":   true,
+	"uploads":    true,
 }
 
 // UploadImage — POST /admin/uploads (multipart: file, folder?)

@@ -18,11 +18,11 @@ import { toast } from "sonner";
 
 import { faNum } from "@/lib/products";
 import {
-  AdminApiError,
+  CategoryApiError,
   getCategoryTree,
   deleteCategory,
-  type CategoryTreeNode,
-} from "@/lib/api/admin-client";
+} from "@/features/admin/categories/client";
+import type { CategoryTree } from "@/features/catalog/categories/types";
 import { CATEGORIES_QUERY_KEY } from "@/lib/admin/category-keys";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -54,13 +54,13 @@ import {
 
 /** One flattened tree node carrying its depth and child count for the table. */
 type FlatRow = {
-  node: CategoryTreeNode;
+  node: CategoryTree;
   depth: number;
   childCount: number;
 };
 
 function flatten(
-  nodes: CategoryTreeNode[],
+  nodes: CategoryTree[],
   depth = 0,
   out: FlatRow[] = [],
 ): FlatRow[] {
@@ -72,16 +72,18 @@ function flatten(
   return out;
 }
 
-function countTree(nodes: CategoryTreeNode[]): number {
+function countTree(nodes: CategoryTree[]): number {
   return nodes.reduce((n, node) => n + 1 + countTree(node.children ?? []), 0);
 }
 
 export function CategoriesTable({ canWrite }: { canWrite: boolean }) {
   const queryClient = useQueryClient();
   const [pendingDelete, setPendingDelete] =
-    React.useState<CategoryTreeNode | null>(null);
+    React.useState<CategoryTree | null>(null);
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery<
+    CategoryTree[]
+  >({
     queryKey: CATEGORIES_QUERY_KEY,
     queryFn: getCategoryTree,
   });
@@ -94,11 +96,11 @@ export function CategoriesTable({ canWrite }: { canWrite: boolean }) {
       await queryClient.invalidateQueries({ queryKey: CATEGORIES_QUERY_KEY });
     },
     onError: (e) => {
-      if (e instanceof AdminApiError && e.code === "HAS_CHILDREN") {
+      if (e instanceof CategoryApiError && e.code === "HAS_CHILDREN") {
         toast.error(
           "این دسته‌بندی زیرمجموعه دارد و قابل حذف نیست. ابتدا زیرمجموعه‌ها را حذف یا جابه‌جا کنید.",
         );
-      } else if (e instanceof AdminApiError) {
+      } else if (e instanceof CategoryApiError) {
         toast.error(e.message);
       } else {
         toast.error("حذف دسته‌بندی ناموفق بود");
@@ -225,7 +227,7 @@ export function CategoriesTable({ canWrite }: { canWrite: boolean }) {
                         depth === 0 ? "font-medium" : "text-foreground/90"
                       }
                     >
-                      {node.name}
+                      {node.title}
                     </span>
                   </div>
                 </TableCell>
@@ -253,7 +255,7 @@ export function CategoriesTable({ canWrite }: { canWrite: boolean }) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label={`عملیات دستهٔ ${node.name}`}
+                        aria-label={`عملیات دستهٔ ${node.title}`}
                       >
                         <MoreHorizontal className="size-4" />
                       </Button>
@@ -294,7 +296,7 @@ export function CategoriesTable({ canWrite }: { canWrite: boolean }) {
           <AlertDialogHeader>
             <AlertDialogTitle>حذف دسته‌بندی</AlertDialogTitle>
             <AlertDialogDescription>
-              آیا از حذف «{pendingDelete?.name}» مطمئن هستید؟ این عمل قابل
+              آیا از حذف «{pendingDelete?.title}» مطمئن هستید؟ این عمل قابل
               بازگشت نیست.
               {pendingDelete?.children?.length
                 ? " توجه: دسته‌بندی دارای زیرمجموعه قابل حذف نیست."

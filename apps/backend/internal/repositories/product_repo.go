@@ -256,17 +256,31 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
         p.id, p.title, p.code, p.slug, p.is_active,
         b.title AS brand,
         c.title AS category,
-        COALESCE(pr.min_price, 0) AS min_price,
-        COALESCE(pr.max_price, 0) AS max_price,
+		COALESCE(pr.min_price, 0) AS min_price,
+		COALESCE(pr.max_price, 0) AS max_price,
+		COALESCE(pr.active_variant_count, 0) AS active_variant_count,
+		COALESCE(pr.available_variant_count, 0) AS available_variant_count,
+		pr.purchasable_variant_id,
         img.id AS image_id, img.image_url, img.storage_key, img.alt_text, img.width, img.height,
         COUNT(*) OVER() AS total_count
     FROM products p
     LEFT JOIN brands b ON b.id = p.brand_id
     LEFT JOIN categories c ON c.id = p.category_id
-    LEFT JOIN LATERAL (
-        SELECT MIN(price) AS min_price, MAX(price) AS max_price
-        FROM product_variants pv WHERE pv.product_id = p.id AND pv.is_active
-    ) pr ON TRUE
+	LEFT JOIN LATERAL (
+		SELECT
+			MIN(price) AS min_price,
+			MAX(price) AS max_price,
+			COUNT(*) AS active_variant_count,
+			COUNT(*) FILTER (WHERE COALESCE(i.stock_on_hand, 0) > 0) AS available_variant_count,
+			CASE
+				WHEN COUNT(*) = 1
+					AND COALESCE(MAX(i.stock_on_hand), 0) > 0
+				THEN MIN(pv.id)
+			END AS purchasable_variant_id
+		FROM product_variants pv
+		LEFT JOIN inventory i ON i.product_variant_id = pv.id
+		WHERE pv.product_id = p.id AND pv.is_active
+	) pr ON TRUE
     LEFT JOIN LATERAL (
         SELECT id, image_url, storage_key, alt_text, width, height
         FROM product_images pi
@@ -306,6 +320,8 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		if err := rows.Scan(
 			&it.ID, &it.Title, &it.Code, &it.Slug, &it.IsActive,
 			&it.Brand, &it.Category, &it.MinPrice, &it.MaxPrice,
+			&it.ActiveVariantCount, &it.AvailableVariantCount,
+			&it.PurchasableVariantID,
 			&imgID, &imgURL, &imgStorageKey, &imgAltText, &imgWidth, &imgHeight,
 			&total,
 		); err != nil {

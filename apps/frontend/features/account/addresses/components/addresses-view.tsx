@@ -33,13 +33,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useAddresses, useCreateAddress } from "@/lib/api/hooks";
 import {
+  useAddresses,
+  useCreateAddress,
   useUpdateAddress,
   useDeleteAddress,
   useSetDefaultAddress,
-} from "@/lib/api/account-hooks";
-import type { Address, AddressInput } from "@/lib/catalog/types";
+} from "@/features/addresses/api";
+import type {
+  Address,
+  CreateAddressInput,
+} from "@/features/addresses/types";
 import { AccountSection } from "../../account/components/account-section";
 import { EmptyState } from "../../EmptyState";
 import { AddressForm } from "./address-form";
@@ -62,7 +66,7 @@ export function AddressesView() {
     setEditing(null);
   }
 
-  function handleSubmit(values: AddressInput) {
+  function handleSubmit(values: CreateAddressInput) {
     if (editing) {
       update.mutate(
         { id: editing.id, input: values },

@@ -20,14 +20,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { AccountStatCard } from "./account-stat-card";
 import { SmartImage } from "@/components/smart-image";
-import {
-  useOrders,
-  useAddresses,
-  useLoyalty,
-  useTasteProfile,
-} from "@/lib/api/hooks";
-import { useWallet, useRecommendations } from "@/lib/api/account-hooks";
-import type { OrderStatus } from "@/lib/catalog/types";
+import { useAddresses } from "@/features/addresses/api";
+import { useLoyalty } from "@/features/loyalty/hooks";
+import { useTasteProfile } from "@/features/taste/hooks";
+import { useOrders } from "@/features/orders/hooks";
+import { useWallet } from "@/features/wallet/hooks";
+import { useForYou } from "@/features/recommendations/hooks";
+import type { OrderStatus } from "@/features/orders/types";
 import { AccountSection } from "../../account/components/account-section";
 import { OrderCard } from "../../orders/components/OrderCard";
 import { EmptyState } from "../../EmptyState";
@@ -67,7 +66,7 @@ export function AccountOverview() {
   const wallet = useWallet();
   const loyalty = useLoyalty();
   const taste = useTasteProfile();
-  const recs = useRecommendations();
+  const recs = useForYou();
 
   const results = orders.data?.results ?? [];
   const activeCount = results.filter((o) =>
@@ -113,7 +112,7 @@ export function AccountOverview() {
         ) : (
           <AccountStatCard
             label="موجودی کیف پول"
-            value={wallet.data ? formatPrice(wallet.data.balance) : "—"}
+            value={wallet.data ? formatPrice(Number(wallet.data.balance)) : "—"}
             icon={Wallet}
             href="/account/wallet"
             accent="gold"
@@ -320,8 +319,8 @@ export function AccountOverview() {
           <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {recs.data.slice(0, 4).map((p) => (
               <Link
-                key={p.id}
-                href={`/products/${p.slug}`}
+                key={p.product_id}
+                href={p.slug ? `/products/${p.slug}` : "/products"}
                 className="group/rec border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-colors hover:ring-primary/30"
               >
                 <div className="relative aspect-4/5 overflow-hidden">

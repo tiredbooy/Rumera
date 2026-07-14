@@ -99,7 +99,7 @@ Removes the wishlist item with the given **item id** (the `id` from each entry i
 
 **Response** `204 No Content`.
 
-**Errors:** `400 INVALID_PARAMS`, `404 WISHLIST_NOT_FOUND`, `401 UNAUTHORIZED`.
+**Errors:** `400 INVALID_PARAMS`, `404 NOT_FOUND`, `401 UNAUTHORIZED`.
 
 ---
 

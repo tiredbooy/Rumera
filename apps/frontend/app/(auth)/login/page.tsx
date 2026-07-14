@@ -1,4 +1,5 @@
-import { LoginTabs } from "@/components/auth/login-tabs"
+import { LoginTabs } from "@/features/auth/components/login-tabs"
+import { safeCallbackUrl } from "@/features/auth/redirects"
 
 export default async function LoginPage({
   searchParams,
@@ -6,5 +7,5 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string }>
 }) {
   const { callbackUrl } = await searchParams
-  return <LoginTabs callbackUrl={callbackUrl || "/account"} />
+  return <LoginTabs callbackUrl={safeCallbackUrl(callbackUrl)} />
 }

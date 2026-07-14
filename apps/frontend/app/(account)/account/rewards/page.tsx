@@ -1,5 +1,5 @@
 import { AccountPageHeader } from "@/features/account/account/components/account-page-header";
-import { RewardsView } from "@/components/loyalty/rewards-view";
+import { RewardsView } from "@/features/loyalty/components/rewards-view";
 import { ReferralCard } from "@/features/referral/components/referral-card";
 
 export default function AccountRewardsPage() {

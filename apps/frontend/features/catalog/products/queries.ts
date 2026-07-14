@@ -1,0 +1,19 @@
+import type { PaginationQuery } from "@/lib/api/types";
+
+export type ProductSortField = "created_at" | "title" | "updated_at";
+export type ProductSortDirection = "asc" | "desc";
+
+/** Query contract shared by public and admin product listings. */
+export interface ProductListQuery extends PaginationQuery {
+  sortBy?: ProductSortField;
+  orderBy?: ProductSortDirection;
+  search?: string;
+  category_id?: number;
+  brand_id?: number;
+  tag_id?: number;
+  is_active?: boolean;
+  min_price?: number;
+  max_price?: number;
+}
+
+export type PublicProductListQuery = Omit<ProductListQuery, "is_active">;

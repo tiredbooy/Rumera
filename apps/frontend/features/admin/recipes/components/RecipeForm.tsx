@@ -4,7 +4,6 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { useForm, useFieldArray, Controller, type Control } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { toast } from "sonner"
 import {
   Loader2,
@@ -22,17 +21,25 @@ import {
 
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
-import type { RecipeDetail, RecipeDifficulty } from "@/lib/recipes"
-import { difficultyFa } from "@/lib/recipes"
+import type { Tag } from "@/features/catalog/tags/types"
+import { difficultyFa } from "@/features/recipes/utils"
 import {
-  AdminApiError,
   createRecipe,
+  RecipeApiError,
   updateRecipe,
-  type CreateRecipeInput,
-  type RecipeIngredientInput,
-  type RecipeProductInput,
-  type RecipeStatus,
-} from "@/lib/api/admin-client"
+} from "@/features/recipes/api/client"
+import type {
+  AdminRecipeDetail,
+  CreateRecipeInput,
+  RecipeDifficulty,
+  RecipeIngredientInput,
+  RecipeProductInput,
+  RecipeStatus,
+} from "@/features/recipes/types"
+import {
+  recipeFormSchema,
+  type RecipeFormValues,
+} from "@/features/recipes/validations"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -51,72 +58,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { OptimizedImage } from "@/components/admin/optimized-image"
+import { OptimizedImage } from "@/components/optimized-image"
 import { RichTextEditor } from "@/components/admin/rich-text-editor"
-import { VariantPicker, type VariantOption } from "@/components/admin/variant-picker"
-import { FlexibleImageInput } from "@/components/admin/flexible-image-input"
-
-type AdminTag = { id: number; title: string }
+import { VariantPicker, type VariantOption } from "@/features/admin/products/components/variant-picker"
+import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input"
 
 // ── Validation ──────────────────────────────────────────────────────────────
 // Numeric fields are kept as strings in the form and coerced on submit, matching
 // product-form.tsx. Empty strings round-trip to the API's optional/zero values.
-
-const intish = (msg: string, opts: { min?: number } = {}) =>
-  z.string().refine(
-    (v) => {
-      if (v.trim() === "") return true
-      const n = Number(v)
-      return Number.isInteger(n) && (opts.min === undefined || n >= opts.min)
-    },
-    { message: msg }
-  )
-
-const ingredientSchema = z.object({
-  ingredient_name: z.string().trim().min(1, "نام ماده الزامی است").max(255, "حداکثر ۲۵۵ نویسه"),
-  quantity: z.string().trim().max(50),
-  unit: z.string().trim().max(50),
-  notes: z.string().trim().max(255),
-  optional: z.boolean(),
-  product_variant_id: z.number().nullable(),
-})
-
-const productSchema = z.object({
-  product_variant_id: z
-    .number({ message: "یک فرآورده انتخاب کنید" })
-    .int()
-    .min(1, "یک فرآورده انتخاب کنید"),
-  // Carried for the picker label only (not sent to the API).
-  _label: z.string().optional(),
-  _brand: z.string().nullable().optional(),
-  _sku: z.string().nullable().optional(),
-  quantity: z.string().trim().max(50),
-  unit: z.string().trim().max(50),
-  is_primary: z.boolean(),
-})
-
-const schema = z.object({
-  title: z.string().trim().min(1, "عنوان دستور الزامی است").max(255, "حداکثر ۲۵۵ نویسه"),
-  slug: z.string().trim().max(255),
-  excerpt: z.string().trim().max(500),
-  content: z.string().refine((v) => v.trim() !== "" && v !== "<p></p>", {
-    message: "محتوای دستور الزامی است",
-  }),
-  difficulty: z.enum(["easy", "medium", "hard"]),
-  prep_time_minutes: intish("عدد صحیح وارد کنید", { min: 0 }),
-  cook_time_minutes: intish("عدد صحیح وارد کنید", { min: 0 }),
-  servings: intish("حداقل ۱", { min: 1 }),
-  status: z.enum(["draft", "published", "archived"]),
-  image_url: z.string().trim().max(500),
-  is_featured: z.boolean(),
-  meta_title: z.string().trim().max(255),
-  meta_description: z.string().trim().max(500),
-  tag_ids: z.array(z.number()),
-  ingredients: z.array(ingredientSchema),
-  products: z.array(productSchema),
-})
-
-type FormValues = z.infer<typeof schema>
 
 const difficultyOptions: RecipeDifficulty[] = ["easy", "medium", "hard"]
 const statusFa: Record<RecipeStatus, string> = {
@@ -128,7 +77,7 @@ const statusFa: Record<RecipeStatus, string> = {
 const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null)
 const intOrZero = (v?: string) => (v && v.trim() !== "" ? Number(v) : 0)
 
-function defaults(recipe?: RecipeDetail): FormValues {
+function defaults(recipe?: AdminRecipeDetail): RecipeFormValues {
   return {
     title: recipe?.title ?? "",
     slug: recipe?.slug ?? "",
@@ -138,7 +87,7 @@ function defaults(recipe?: RecipeDetail): FormValues {
     prep_time_minutes: recipe?.prep_time_minutes ? String(recipe.prep_time_minutes) : "",
     cook_time_minutes: recipe?.cook_time_minutes ? String(recipe.cook_time_minutes) : "",
     servings: recipe?.servings ? String(recipe.servings) : "",
-    status: recipe ? recipeStatus(recipe) : "draft",
+    status: recipe?.status ?? "draft",
     image_url: recipe?.image_url ?? "",
     is_featured: recipe?.is_featured ?? false,
     meta_title: recipe?.meta_title ?? "",
@@ -162,13 +111,6 @@ function defaults(recipe?: RecipeDetail): FormValues {
       is_primary: p.is_primary,
     })),
   }
-}
-
-/** RecipeDetail doesn't echo `status` on the public type; derive a safe default. */
-function recipeStatus(recipe: RecipeDetail): RecipeStatus {
-  const s = (recipe as RecipeDetail & { status?: RecipeStatus }).status
-  if (s === "draft" || s === "published" || s === "archived") return s
-  return recipe.published_at ? "published" : "draft"
 }
 
 // ── Layout helpers ────────────────────────────────────────────────────────────
@@ -238,9 +180,9 @@ function IngredientsBuilder({
   register,
   errors,
 }: {
-  control: Control<FormValues>
-  register: ReturnType<typeof useForm<FormValues>>["register"]
-  errors: ReturnType<typeof useForm<FormValues>>["formState"]["errors"]
+  control: Control<RecipeFormValues>
+  register: ReturnType<typeof useForm<RecipeFormValues>>["register"]
+  errors: ReturnType<typeof useForm<RecipeFormValues>>["formState"]["errors"]
 }) {
   const { fields, append, remove, move } = useFieldArray({ control, name: "ingredients" })
 
@@ -391,10 +333,10 @@ function ShoppableBuilder({
   errors,
   setValue,
 }: {
-  control: Control<FormValues>
-  register: ReturnType<typeof useForm<FormValues>>["register"]
-  errors: ReturnType<typeof useForm<FormValues>>["formState"]["errors"]
-  setValue: ReturnType<typeof useForm<FormValues>>["setValue"]
+  control: Control<RecipeFormValues>
+  register: ReturnType<typeof useForm<RecipeFormValues>>["register"]
+  errors: ReturnType<typeof useForm<RecipeFormValues>>["formState"]["errors"]
+  setValue: ReturnType<typeof useForm<RecipeFormValues>>["setValue"]
 }) {
   const { fields, append, remove } = useFieldArray({ control, name: "products" })
 
@@ -537,11 +479,12 @@ export function RecipeForm({
   submitLabel = "ذخیره",
 }: {
   mode: "create" | "edit"
-  recipe?: RecipeDetail
-  tags: AdminTag[]
+  recipe?: AdminRecipeDetail
+  tags: Tag[]
   submitLabel?: string
 }) {
   const router = useRouter()
+  const [imageUploading, setImageUploading] = React.useState(false)
 
   const {
     register,
@@ -551,8 +494,8 @@ export function RecipeForm({
     setValue,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  } = useForm<RecipeFormValues>({
+    resolver: zodResolver(recipeFormSchema),
     defaultValues: defaults(recipe),
   })
 
@@ -561,7 +504,7 @@ export function RecipeForm({
   const status = watch("status")
 
   /** Map the (string-keyed, form-shaped) values onto the API payload. */
-  function toPayload(v: FormValues): CreateRecipeInput {
+  function toPayload(v: RecipeFormValues): CreateRecipeInput {
     const ingredients: RecipeIngredientInput[] = v.ingredients.map((ing, idx) => ({
       ingredient_name: ing.ingredient_name.trim(),
       quantity: strOrNull(ing.quantity),
@@ -599,10 +542,10 @@ export function RecipeForm({
   }
 
   function applyServerErrors(e: unknown) {
-    if (e instanceof AdminApiError) {
+    if (e instanceof RecipeApiError) {
       if (e.fields) {
         for (const [key, msgs] of Object.entries(e.fields)) {
-          setError(key as keyof FormValues, { message: msgs[0] })
+          setError(key as keyof RecipeFormValues, { message: msgs[0] })
         }
       }
       toast.error(e.message)
@@ -611,7 +554,7 @@ export function RecipeForm({
     }
   }
 
-  async function onSubmit(v: FormValues) {
+  async function onSubmit(v: RecipeFormValues) {
     try {
       const payload = toPayload(v)
       if (mode === "create") {
@@ -820,6 +763,7 @@ export function RecipeForm({
               name="image_url"
               render={({ field }) => (
                 <FlexibleImageInput
+                  id="image_url"
                   value={field.value}
                   onChange={field.onChange}
                   onBlur={field.onBlur}
@@ -827,6 +771,7 @@ export function RecipeForm({
                   placeholder="https://… یا بارگذاری فایل"
                   ariaInvalid={!!errors.image_url}
                   hidePreview
+                  onUploadingChange={setImageUploading}
                 />
               )}
             />
@@ -918,15 +863,15 @@ export function RecipeForm({
           ) : null}
 
           <div className="flex flex-col gap-2">
-            <Button type="submit" size="lg" disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+            <Button type="submit" size="lg" disabled={isSubmitting || imageUploading}>
+              {isSubmitting || imageUploading ? <Loader2 className="size-4 animate-spin" /> : null}
               {submitLabel}
             </Button>
             <Button
               type="button"
               variant="outline"
               size="lg"
-              disabled={isSubmitting}
+              disabled={isSubmitting || imageUploading}
               onClick={() => router.push("/admin/recipes")}
             >
               انصراف

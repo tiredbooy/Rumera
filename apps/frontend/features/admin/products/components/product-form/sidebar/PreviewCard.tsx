@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { OptimizedImage } from "@/components/admin/optimized-image";
+import { OptimizedImage } from "@/components/optimized-image";
 
 export function PreviewCard({
   imageUrl,

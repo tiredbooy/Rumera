@@ -1,47 +1,21 @@
-// features/admin/products/types.ts
-//
-// Admin-only request/filter payloads. Entity and response shapes
-// (ImageResponse, ProductDetail, VariantResponse, TagResponse, etc.)
-// live in features/catalog/products/types.ts — import them from there
-// rather than redefining them here, to avoid drift like the
-// alt_text null/undefined bug.
+// Admin product write contracts. Product response entities and list queries
+// live in features/catalog/products and are imported directly from that owner.
 
-import type { BaseFilter } from "@/lib/types/filters";
-import type {
-  ProductDetail,
-  ProductListItem,
-  ImageResponse,
-  VariantResponse,
-  TagResponse,
-  OptionValueResponse,
-  MeiliProduct,
-} from "@/features/catalog/products/types";
-
-// Re-exported for convenience so admin code can import everything
-// product-related from one place if desired.
-export type {
-  ProductDetail,
-  ProductListItem,
-  ImageResponse,
-  VariantResponse,
-  TagResponse,
-  OptionValueResponse,
-  MeiliProduct,
-};
-
-// ------------------------------------------------
-// Request payloads (admin writes only)
-// ------------------------------------------------
-
-export interface CreateVariantReq {
+export interface CreateProductVariantInput {
   sku?: string | null;
   price: number;
   compare_at_price?: number | null;
-  options?: Array<{ option_type: string; value: string }>;
-  // images are handled separately via the images API, not included here
+  option_value_ids?: number[] | null;
 }
 
-export interface CreateProductReq {
+export interface UpdateProductVariantInput {
+  sku?: string | null;
+  price?: number | null;
+  compare_at_price?: number | null;
+  is_active?: boolean | null;
+}
+
+export interface CreateProductInput {
   title: string;
   code?: string | null;
   slug?: string | null;
@@ -53,12 +27,12 @@ export interface CreateProductReq {
   weight?: number | null;
   meta_title?: string | null;
   meta_description?: string | null;
-  meta_tags?: string[];
-  tag_ids?: number[]; // tag IDs for junction
-  variants: CreateVariantReq[]; // created together with product
+  meta_tags?: string[] | null;
+  tag_ids?: number[] | null;
+  variants?: CreateProductVariantInput[] | null;
 }
 
-export interface UpdateProductReq {
+export interface UpdateProductInput {
   title?: string | null;
   code?: string | null;
   slug?: string | null;
@@ -68,22 +42,25 @@ export interface UpdateProductReq {
   country_of_origin?: string | null;
   abv?: number | null;
   weight?: number | null;
-  is_active?: boolean;
+  is_active?: boolean | null;
   meta_title?: string | null;
   meta_description?: string | null;
-  meta_tags?: string[];
-  tag_ids?: number[];
+  meta_tags?: string[] | null;
+  tag_ids?: number[] | null;
 }
 
-// ------------------------------------------------
-// Filter (extends BaseFilter)
-// ------------------------------------------------
+export interface ProductTagIdsInput {
+  tag_ids: number[];
+}
 
-export interface ProductFilter extends BaseFilter {
-  category_id?: number;
-  brand_id?: number;
-  tag_id?: number;
-  is_active?: boolean;
-  min_price?: number;
-  max_price?: number;
+export interface ProductVariantOptionIdsInput {
+  option_value_ids: number[];
+}
+
+export interface ReorderProductImagesInput {
+  ids: number[];
+}
+
+export interface UpdateProductImageInput {
+  alt_text: string | null;
 }

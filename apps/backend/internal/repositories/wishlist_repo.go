@@ -82,6 +82,7 @@ func (r *wishlistRepository) GetItems(ctx context.Context, wishlistID int64) ([]
 		SELECT
 			wi.id,
 			p.id                                    AS product_id,
+			p.slug                                  AS product_slug,
 			p.title                                 AS product_title,
 			pv.id                                   AS variant_id,
 			pv.sku,
@@ -94,12 +95,12 @@ func (r *wishlistRepository) GetItems(ctx context.Context, wishlistID int64) ([]
 				  AND  pi.is_primary = true
 				LIMIT  1
 			)                                       AS image_url,
-			(
+			COALESCE((
 				SELECT inv.stock_on_hand > 0
 				FROM   inventory inv
 				WHERE  inv.product_variant_id = pv.id
 				LIMIT  1
-			)                                       AS is_in_stock,
+			), false)                                AS is_in_stock,
 			wi.created_at                           AS added_at
 		FROM wishlist_items wi
 		INNER JOIN product_variants pv ON pv.id = wi.product_variant_id
@@ -121,6 +122,7 @@ func (r *wishlistRepository) GetItems(ctx context.Context, wishlistID int64) ([]
 		if err := rows.Scan(
 			&item.ID,
 			&item.ProductID,
+			&item.ProductSlug,
 			&item.ProductTitle,
 			&item.VariantID,
 			&item.SKU,

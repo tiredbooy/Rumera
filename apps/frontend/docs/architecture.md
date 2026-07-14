@@ -80,8 +80,8 @@ drawn deliberately and as low in the tree as possible:
   the provider stack ([`app/providers.tsx`](../app/providers.tsx)), React Query
   hook modules ([`lib/api/hooks.ts`](../lib/api/hooks.ts), `account-hooks.ts`,
   `admin-hooks.ts`), form components, the theme toggle, carousels, and the
-  `SessionGuard`. The browser-side API clients (`store-client.ts`,
-  `admin-client.ts`) are imported only by client code.
+  `SessionGuard`. Browser-side admin API clients are owned by their resource
+  under `features/`; `store-client.ts` remains shared customer transport.
 
 **The pattern:** a server page fetches the initial data and renders mostly static
 RTL markup, then mounts small client "islands" (a purchase panel, a gallery, a
@@ -106,10 +106,10 @@ There are two distinct fetch helpers, and they must not be confused:
 | Helper | Runs | Target | Auth |
 |--------|------|--------|------|
 | `serverApi` / `apiFetch` ([`lib/api/client.ts`](../lib/api/client.ts)) | Server only (`import "server-only"`) | `${API_URL}/api/v1` directly | bearer token pulled from session |
-| `storeRequest` ([`lib/api/store-client.ts`](../lib/api/store-client.ts)), `adminRequest` ([`lib/api/admin-client.ts`](../lib/api/admin-client.ts)) | Browser | same-origin `/api/store/*`, `/api/admin/*` | handled by the BFF proxy |
+| `storeRequest` ([`lib/api/store-client.ts`](../lib/api/store-client.ts)), domain-owned browser clients (for example [`features/admin/uploads/client.ts`](../features/admin/uploads/client.ts)) | Browser | same-origin `/api/store/*`, `/api/admin/*` | handled by the BFF proxy |
 
-Both unwrap the backend's `{ data }` success envelope and throw a typed error
-(`ApiError` / `ApiClientError` / `AdminApiError`) built from the
+The relevant client unwraps the backend's `{ data }` success envelope and throws
+a typed server, store, or domain error built from the
 `{ error: { code, message } }` envelope (see
 [`apps/backend/docs/conventions.md`](../../backend/docs/conventions.md)).
 
@@ -179,7 +179,7 @@ Notes that are easy to get wrong:
 
 - The proxied path is **relative to `/api/v1`**, so admin-namespaced endpoints
   carry a *doubled* `admin/` segment — e.g. creating a product is
-  `adminRequest("admin/products")` → `/api/admin/admin/products` →
+  a domain API call to `/api/admin/admin/products` →
   `${API}/api/v1/admin/products`.
 - `/api/admin` preserves **`multipart/form-data` bodies verbatim** (boundary
   intact) so product image uploads pass through; `/api/store` forwards JSON only.
@@ -247,7 +247,7 @@ mounted once by the root layout. The nesting order matters:
   survives re-renders. Defaults: `staleTime: 60_000`, `refetchOnWindowFocus:
   false`.
 - **Session** — `SessionProvider` exposes `useSession()` to client code;
-  `SessionGuard` ([`components/auth/session-guard.tsx`](../components/auth/session-guard.tsx))
+  `SessionGuard` ([`features/auth/components/session-guard.tsx`](../features/auth/components/session-guard.tsx))
   watches for `session.error === "RefreshAccessTokenError"` and, only on that
   *terminal* refresh failure, calls `signOut({ callbackUrl: "/login" })`.
 
@@ -277,13 +277,17 @@ and the client-side `SessionGuard` signs the user out.
 
 | Path | What lives here |
 |------|-----------------|
-| `lib/api/` | API plumbing: `client.ts` (server `apiFetch`/`serverApi`), `store-client.ts` + `admin-client.ts` (browser BFF clients), `hooks.ts`/`account-hooks.ts`/`admin-hooks.ts` (React Query), `query-keys.ts`, `qs.ts` (`buildQuery`), `endpoints.ts` |
+| `lib/api/` | Shared API plumbing: `client.ts` (server `apiFetch`), `store-client.ts` (customer browser BFF), shared envelope types, query helpers, and remaining shared hooks |
 | `lib/auth/` | `auth.ts`, `auth.config.ts`, `session.ts` (server guards), `types.ts` (next-auth module augmentation) |
 | `lib/rbac/` | `roles.ts` (Role→Permission map, `isStaff`, `permissionsForRole`), `permissions.ts` (`PERMISSIONS` catalogue), `can.ts` (`can`/`hasAny`/`hasAll`), `nav.ts` (permission-filtered sidebar) |
 | `lib/catalog/` | Public, ISR-cached, **error-safe** server fetchers + types: `products.ts`, `categories.ts`, `reviews.ts`, `recommendations.ts`, `labels.ts`, `types.ts` |
 | `lib/seo/` | `metadata.ts` (`buildMetadata` / `noindexMetadata`), `jsonld.ts` (structured-data builders) |
 | `lib/home/`, `lib/journal/`, `lib/admin/` | Section-specific server data helpers |
 | `lib/` (root) | `site.ts` (`siteConfig`, `absoluteUrl`), `utils.ts` (`cn`), `products.ts` (`faNum`, `categoryFa`, sample data), `recipes.ts`, `journal.ts`, `recently-viewed.ts` |
+
+Admin browser clients live with their resource under `features/` rather than in
+`lib/api/`; standalone image uploads, for example, are owned by
+`features/admin/uploads/`.
 
 **Cache vs. no-cache contract:** public catalogue fetchers
 (`lib/catalog/*.ts`) use `next: { revalidate: 3600 }` (ISR) and swallow errors

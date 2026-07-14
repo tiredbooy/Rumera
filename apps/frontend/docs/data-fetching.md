@@ -151,7 +151,8 @@ view).
 > so client admin tables render against a real query lifecycle before the
 > `GET /api/v1/admin/*` endpoints exist. Keys/signatures are stable so only the
 > `queryFn` bodies change when the endpoints land. Product/image admin hooks are
-> already real (via `lib/api/admin-client.ts`).
+> already real through the product-owned actions under
+> `features/admin/products/`.
 
 ### Reading data — `useQuery`
 

@@ -482,7 +482,7 @@ func (r *blogRepository) GetProductIDsByBlogID(ctx context.Context, blogID int64
 	}
 	defer rows.Close()
 
-	var ids []int64
+	ids := make([]int64, 0)
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {
@@ -526,7 +526,7 @@ func (r *blogRepository) GetTagIDsByBlogID(ctx context.Context, blogID int64) ([
 	}
 	defer rows.Close()
 
-	var ids []int64
+	ids := make([]int64, 0)
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {

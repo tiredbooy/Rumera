@@ -134,7 +134,7 @@ func (r *dailyRevenueStatsRepository) GetByDate(ctx context.Context, date time.T
 	s, err := scanRevenueStats(r.db.QueryRow(ctx, query, date))
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("daily revenue stats not found for date: %s", date.Format("2006-01-02"))
+			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("getting daily revenue stats: %w", err)
 	}
@@ -164,7 +164,7 @@ func (r *dailyRevenueStatsRepository) GetRange(ctx context.Context, filter model
 	}
 	defer rows.Close()
 
-	var stats []*models.DailyRevenueStats
+	stats := make([]*models.DailyRevenueStats, 0)
 	for rows.Next() {
 		s, err := scanRevenueStats(rows)
 		if err != nil {
@@ -178,18 +178,18 @@ func (r *dailyRevenueStatsRepository) GetRange(ctx context.Context, filter model
 func (r *dailyRevenueStatsRepository) Summary(ctx context.Context, filter models.RevenueStatsFilter) (*models.RevenueStatsSummary, error) {
 	query := `
 		SELECT
-			SUM(orders_total)                                           AS total_orders,
-			SUM(gross_revenue)                                          AS total_gross_revenue,
-			SUM(net_revenue)                                            AS total_net_revenue,
-			SUM(refunds_total)                                          AS total_refunds,
-			SUM(discounts_total)                                        AS total_discounts,
-			CASE WHEN SUM(orders_total) > 0
+			COALESCE(SUM(orders_total), 0)                              AS total_orders,
+			COALESCE(SUM(gross_revenue), 0)                             AS total_gross_revenue,
+			COALESCE(SUM(net_revenue), 0)                               AS total_net_revenue,
+			COALESCE(SUM(refunds_total), 0)                              AS total_refunds,
+			COALESCE(SUM(discounts_total), 0)                            AS total_discounts,
+			CASE WHEN COALESCE(SUM(orders_total), 0) > 0
 			     THEN SUM(gross_revenue) / SUM(orders_total)
 			     ELSE 0 END                                             AS avg_order_value,
-			CASE WHEN SUM(sessions_total) > 0
+			CASE WHEN COALESCE(SUM(sessions_total), 0) > 0
 			     THEN SUM(orders_total)::numeric / SUM(sessions_total)
 			     ELSE 0 END                                             AS avg_conversion_rate,
-			SUM(unique_customers)                                       AS unique_customers
+			COALESCE(SUM(unique_customers), 0)                           AS unique_customers
 		FROM daily_revenue_stats
 		WHERE date >= $1 AND date <= $2`
 
@@ -238,6 +238,12 @@ func scanRevenueStats(row pgx.Row) (*models.DailyRevenueStats, error) {
 	}
 	if err := json.Unmarshal(topProdRaw, &s.TopProducts); err != nil {
 		return nil, fmt.Errorf("unmarshalling top_products: %w", err)
+	}
+	if s.TopCategories == nil {
+		s.TopCategories = make([]models.TopCategoryEntry, 0)
+	}
+	if s.TopProducts == nil {
+		s.TopProducts = make([]models.TopProductRevenueEntry, 0)
 	}
 
 	return s, nil

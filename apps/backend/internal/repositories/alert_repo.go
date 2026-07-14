@@ -37,7 +37,8 @@ func (r *alertRepository) Create(ctx context.Context, a models.ProductAlert) (*m
 			    reference_price = EXCLUDED.reference_price,
 			    notified_at     = NULL,
 			    created_at      = NOW()
-		RETURNING *`
+		RETURNING id, user_id, product_variant_id, alert_type, target_price,
+		          reference_price, notified_at, created_at`
 
 	args := pgx.NamedArgs{
 		"user_id":         a.UserID,
@@ -59,7 +60,12 @@ func (r *alertRepository) Create(ctx context.Context, a models.ProductAlert) (*m
 }
 
 func (r *alertRepository) ListByUser(ctx context.Context, userID int64) ([]models.ProductAlert, error) {
-	const q = `SELECT * FROM product_alerts WHERE user_id = $1 ORDER BY created_at DESC`
+	const q = `
+		SELECT id, user_id, product_variant_id, alert_type, target_price,
+		       reference_price, notified_at, created_at
+		FROM product_alerts
+		WHERE user_id = $1
+		ORDER BY created_at DESC`
 
 	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {

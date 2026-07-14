@@ -5,16 +5,23 @@
  * represented in generated answers.
  */
 import { absoluteUrl, siteConfig } from "@/lib/site"
-import { categories, categoryFa } from "@/lib/products"
-import { listRecipes } from "@/lib/recipes"
-import { listBlogPosts } from "@/lib/journal"
+import { listCategories } from "@/features/catalog/categories/api"
+import { listRecipes } from "@/features/recipes/api/server"
+import { listJournalPosts } from "@/features/journal/api/server"
 
 export const dynamic = "force-static"
 export const revalidate = 86400
 
 export async function GET() {
+  const categories = await listCategories()
   const categoryLinks = categories
-    .map((c) => `- [${categoryFa[c.name]}](${absoluteUrl(`/categories/${c.name.toLowerCase()}`)}): ${c.tagline}`)
+    .flatMap((category) =>
+      category.slug
+        ? [
+            `- [${category.title}](${absoluteUrl(`/categories/${category.slug}`)})${category.description ? `: ${category.description}` : ""}`,
+          ]
+        : []
+    )
     .join("\n")
 
   const { results: recipes } = await listRecipes({ limit: 50 })
@@ -22,7 +29,7 @@ export async function GET() {
     .map((r) => `- [${r.title}](${absoluteUrl(`/recipes/${r.slug}`)})${r.excerpt ? `: ${r.excerpt}` : ""}`)
     .join("\n")
 
-  const journalPosts = await listBlogPosts(50)
+  const journalPosts = await listJournalPosts(50)
   const journalLinks = journalPosts
     .map((p) => `- [${p.title}](${absoluteUrl(`/journal/${p.slug}`)})${p.excerpt ? `: ${p.excerpt}` : ""}`)
     .join("\n")

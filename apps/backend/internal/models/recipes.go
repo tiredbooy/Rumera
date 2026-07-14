@@ -260,15 +260,24 @@ type RecipeListItem struct {
 	PublishedAt      *time.Time       `json:"published_at"`
 }
 
+// RecipeAdminListItem keeps the public card projection lightweight while adding
+// the workflow fields the admin board needs to represent drafts and archives.
+type RecipeAdminListItem struct {
+	RecipeListItem
+	Status    RecipeStatus `json:"status"`
+	CreatedAt time.Time    `json:"created_at"`
+	UpdatedAt time.Time    `json:"updated_at"`
+}
+
 type RecipeIngredientResponse struct {
-	ID               int64            `json:"id"`
-	ProductVariantID *int64           `json:"product_variant_id"`
-	IngredientName   string           `json:"ingredient_name"`
-	Quantity         *decimal.Decimal `json:"quantity"`
-	Unit             *string          `json:"unit"`
-	Optional         bool             `json:"optional"`
-	Notes            *string          `json:"notes"`
-	SortOrder        int              `json:"sort_order"`
+	ID               int64   `json:"id"`
+	ProductVariantID *int64  `json:"product_variant_id"`
+	IngredientName   string  `json:"ingredient_name"`
+	Quantity         *string `json:"quantity"`
+	Unit             *string `json:"unit"`
+	Optional         bool    `json:"optional"`
+	Notes            *string `json:"notes"`
+	SortOrder        int     `json:"sort_order"`
 }
 
 // ShoppableProduct is a recipe's linked product enriched with the live catalogue
@@ -293,6 +302,27 @@ type ShoppableProduct struct {
 	Role             *string          `json:"role,omitempty"`
 }
 
+// ShoppableProductResponse is the transport projection. Decimal quantities are
+// strings so JSON consumers never lose precision through floating-point parsing.
+type ShoppableProductResponse struct {
+	RecipeProductID  int64    `json:"recipe_product_id"`
+	ProductVariantID int64    `json:"product_variant_id"`
+	ProductID        int64    `json:"product_id"`
+	ProductTitle     string   `json:"product_title"`
+	ProductSlug      *string  `json:"product_slug"`
+	Brand            *string  `json:"brand,omitempty"`
+	SKU              *string  `json:"sku,omitempty"`
+	Price            float64  `json:"price"`
+	CompareAtPrice   *float64 `json:"compare_at_price,omitempty"`
+	ImageURL         *string  `json:"image_url,omitempty"`
+	IsAvailable      bool     `json:"is_available"`
+	Quantity         *string  `json:"quantity,omitempty"`
+	Unit             *string  `json:"unit,omitempty"`
+	SortOrder        int      `json:"sort_order"`
+	IsPrimary        bool     `json:"is_primary"`
+	Role             *string  `json:"role,omitempty"`
+}
+
 type RecipeTagInfo struct {
 	ID    int64  `json:"id"`
 	Title string `json:"title"`
@@ -301,7 +331,7 @@ type RecipeTagInfo struct {
 type RecipeDetailResponse struct {
 	RecipeResponse
 	Ingredients []RecipeIngredientResponse `json:"ingredients"`
-	Products    []ShoppableProduct         `json:"products"`
+	Products    []ShoppableProductResponse `json:"products"`
 	Tags        []RecipeTagInfo            `json:"tags"`
 	// StructuredData is a ready-to-embed schema.org/Recipe JSON-LD object for SEO.
 	StructuredData map[string]any `json:"structured_data,omitempty"`

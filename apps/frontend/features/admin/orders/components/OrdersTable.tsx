@@ -1,38 +1,22 @@
 "use client";
 
 import * as React from "react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import { formatPrice, faNum } from "@/lib/products";
-import { ORDER_STATUS_FA, PAYMENT_FA, faDate } from "@/lib/catalog/labels";
-import type { OrderListItem, OrderStatus } from "@/lib/catalog/types";
-import { listOrders } from "@/lib/api/admin-client";
-import { adminOrders, type FulfilmentStatus } from "@/lib/admin/data";
-import { OrderStatusBadge } from "@/components/admin/status-badge";
+import { ORDER_STATUS_FA, PAYMENT_FA } from "@/features/orders/labels";
+import type { OrderListItem, OrderStatus } from "@/features/orders/types";
+import { useAdminOrders } from "@/features/admin/orders/hooks";
+import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
+import { faDate } from "@/lib/utils/date";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   type Column,
   type Filter,
 } from "@/features/admin/analytics/components/DataTable";
 
-// Curated fallback (mapped from the sample set into the live shape) so the table
-// is never empty when the backend is unreachable. The list endpoint exposes no
-// customer/address and item_count is not yet computed, so those columns are gone.
-const FULFIL_TO_STATUS: Record<FulfilmentStatus, OrderStatus> = {
-  processing: "processing",
-  packed: "ready_to_ship",
-  shipped: "shipped",
-  delivered: "delivered",
-  cancelled: "cancelled",
-};
-
-const FALLBACK_ORDERS: OrderListItem[] = adminOrders.map((o) => ({
-  id: o.number,
-  status: FULFIL_TO_STATUS[o.fulfilment],
-  payment_method: "gateway",
-  total_amount: o.total,
-  item_count: o.itemsCount,
-  created_at: o.date,
-}));
+const PAGE_SIZE = 50;
 
 const STATUS_FILTER_OPTIONS = (
   Object.keys(ORDER_STATUS_FA) as OrderStatus[]
@@ -42,24 +26,14 @@ const STATUS_FILTER_OPTIONS = (
 }));
 
 export function OrdersTable() {
-  const [rows, setRows] = React.useState<OrderListItem[] | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    listOrders({ limit: 50, sortBy: "created_at", orderBy: "desc" })
-      .then((page) => {
-        if (!cancelled) setRows(page?.results ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setRows(null); // keep the sample fallback
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Empty live result still shows the empty state; only a failed fetch falls back.
-  const data = rows ?? FALLBACK_ORDERS;
+  const [page, setPage] = React.useState(1);
+  const { data, isLoading, isError, isFetching, refetch } = useAdminOrders({
+    page,
+    limit: PAGE_SIZE,
+    sortBy: "created_at",
+    orderBy: "desc",
+  });
+  const rows = data?.results ?? [];
 
   const columns: Column<OrderListItem>[] = [
     {
@@ -117,16 +91,72 @@ export function OrdersTable() {
     },
   ];
 
+  if (isLoading) {
+    return (
+      <div
+        className="border-hairline flex min-h-64 items-center justify-center rounded-2xl bg-card text-muted-foreground"
+        role="status"
+      >
+        <Loader2 className="me-2 size-5 animate-spin" aria-hidden />
+        در حال دریافت سفارش‌ها…
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div
+        className="border-hairline flex min-h-64 flex-col items-center justify-center gap-3 rounded-2xl bg-card text-center"
+        role="alert"
+      >
+        <p className="text-sm text-destructive">خطا در دریافت سفارش‌ها.</p>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          تلاش دوباره
+        </Button>
+      </div>
+    );
+  }
+
+  const pagination = data?.pagination;
+
   return (
-    <DataTable
-      rows={data}
-      columns={columns}
-      getRowKey={(o) => String(o.id)}
-      searchText={(o) => `${o.id}`}
-      searchPlaceholder="جستجوی شمارهٔ سفارش…"
-      filters={filters}
-      rowHref={(o) => `/admin/orders/${o.id}`}
-      pageSize={10}
-    />
+    <div className="space-y-4" aria-busy={isFetching}>
+      <DataTable
+        rows={rows}
+        columns={columns}
+        getRowKey={(o) => String(o.id)}
+        searchText={(o) => `${o.id}`}
+        searchPlaceholder="جستجوی شمارهٔ سفارش…"
+        filters={filters}
+        rowHref={(o) => `/admin/orders/${o.id}`}
+        pageSize={PAGE_SIZE}
+      />
+      {pagination && pagination.total_pages > 1 ? (
+        <nav
+          className="flex items-center justify-center gap-2"
+          aria-label="صفحه‌بندی سفارش‌ها"
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!pagination.has_prev || isFetching}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+          >
+            <ChevronRight className="size-4" aria-hidden /> قبلی
+          </Button>
+          <span className="px-2 text-sm text-muted-foreground" aria-live="polite">
+            صفحهٔ {faNum(pagination.page)} از {faNum(pagination.total_pages)}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!pagination.has_next || isFetching}
+            onClick={() => setPage((current) => current + 1)}
+          >
+            بعدی <ChevronLeft className="size-4" aria-hidden />
+          </Button>
+        </nav>
+      ) : null}
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/mappers"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/response"
 )
 
@@ -21,14 +22,12 @@ func (h *Handler) CreateReview(c *gin.Context) {
 	if !h.bindJSON(c, &req) {
 		return
 	}
-	// verifiedPurchase is determined server-side; default false until an
-	// order-history check is wired in.
-	review, err := h.Review.Create(c.Request.Context(), userID, req, false)
+	review, err := h.Review.Create(c.Request.Context(), userID, req)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
-	response.Created(c, mappers.ToReviewResponse(review, ""))
+	response.Created(c, mappers.ToReviewResponse(review))
 }
 
 // ProductReviews — GET /products/:id/reviews
@@ -57,7 +56,7 @@ func (h *Handler) listReviews(c *gin.Context, filter models.ReviewFilter) {
 	}
 	out := make([]models.ReviewResponse, len(reviews))
 	for i, r := range reviews {
-		out[i] = mappers.ToReviewResponse(r, "")
+		out[i] = mappers.ToReviewResponse(r)
 	}
 	response.Paginated(c, out, paginate(filter.Page, filter.Limit, total))
 }
@@ -73,7 +72,11 @@ func (h *Handler) GetReview(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.OK(c, mappers.ToReviewResponse(review, ""))
+	if review.Status != models.ReviewStatusApproved {
+		h.handleError(c, apperr.ErrNotFound)
+		return
+	}
+	response.OK(c, mappers.ToReviewResponse(review))
 }
 
 // ProductRatingSummary — GET /products/:id/reviews/summary
@@ -109,7 +112,7 @@ func (h *Handler) UpdateReview(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.OK(c, mappers.ToReviewResponse(review, ""))
+	response.OK(c, mappers.ToReviewResponse(review))
 }
 
 // DeleteReview — DELETE /reviews/:id
@@ -129,8 +132,40 @@ func (h *Handler) DeleteReview(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// MyReviews — GET /reviews/mine
+func (h *Handler) MyReviews(c *gin.Context) {
+	userID, ok := h.uid(c)
+	if !ok {
+		return
+	}
+	reviews, err := h.Review.GetMine(c.Request.Context(), userID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.OK(c, reviews)
+}
+
+// PendingReviews — GET /reviews/pending
+func (h *Handler) PendingReviews(c *gin.Context) {
+	userID, ok := h.uid(c)
+	if !ok {
+		return
+	}
+	items, err := h.Review.GetPending(c.Request.Context(), userID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.OK(c, items)
+}
+
 // ReactToReview — POST /reviews/:id/react
 func (h *Handler) ReactToReview(c *gin.Context) {
+	userID, ok := h.uid(c)
+	if !ok {
+		return
+	}
 	id, ok := h.paramInt64(c, "id")
 	if !ok {
 		return
@@ -139,7 +174,7 @@ func (h *Handler) ReactToReview(c *gin.Context) {
 	if !h.bindJSON(c, &req) {
 		return
 	}
-	if err := h.Review.React(c.Request.Context(), id, req.Like); err != nil {
+	if err := h.Review.React(c.Request.Context(), id, userID, req.Like); err != nil {
 		h.handleError(c, err)
 		return
 	}
@@ -148,11 +183,15 @@ func (h *Handler) ReactToReview(c *gin.Context) {
 
 // ReviewImages — GET /reviews/:id/images
 func (h *Handler) ReviewImages(c *gin.Context) {
+	userID, ok := h.uid(c)
+	if !ok {
+		return
+	}
 	id, ok := h.paramInt64(c, "id")
 	if !ok {
 		return
 	}
-	images, err := h.Review.GetImages(c.Request.Context(), id)
+	images, err := h.Review.GetImages(c.Request.Context(), id, userID)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -200,7 +239,7 @@ func (h *Handler) ListReviewsAdmin(c *gin.Context) {
 	}
 	out := make([]models.ReviewAdminResponse, len(reviews))
 	for i, r := range reviews {
-		out[i] = mappers.ToReviewAdminResponse(r, "")
+		out[i] = mappers.ToReviewAdminResponse(r)
 	}
 	response.Paginated(c, out, paginate(filter.Page, filter.Limit, total))
 }
@@ -220,5 +259,5 @@ func (h *Handler) UpdateReviewStatus(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.OK(c, mappers.ToReviewAdminResponse(review, ""))
+	response.OK(c, mappers.ToReviewAdminResponse(review))
 }

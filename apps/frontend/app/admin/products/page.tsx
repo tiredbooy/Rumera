@@ -1,52 +1,39 @@
+import Link from "next/link";
+import { Plus } from "lucide-react";
+
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { can } from "@/lib/rbac/can";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/features/dashboard/components/page-header";
-import { ProductForm } from "@/features/admin/products/components/ProductForm";
+import { fetchAdminProducts } from "@/features/admin/products/api/server";
+import { ProductsTable } from "@/features/admin/products/components/ProductsTable";
 
-import { fetchCategories } from "@/features/catalog/categories/api";
-import { fetchBrands } from "@/features/catalog/brands/api";
-import { fetchTags } from "@/features/catalog/tags/api/public";
-
-export default async function NewProductPage() {
-  await requirePermission(PERMISSIONS.PRODUCTS_WRITE);
-
-  const [categoriesResult, brandsResult, tagsResult] = await Promise.allSettled(
-    [fetchCategories(), fetchBrands(), fetchTags()],
-  );
-
-  const categories =
-    categoriesResult.status === "fulfilled"
-      ? categoriesResult.value.results
-      : [];
-  const brands =
-    brandsResult.status === "fulfilled" ? brandsResult.value.items : [];
-  const tags = tagsResult.status === "fulfilled" ? tagsResult.value : [];
-
-  const lookupFailed =
-    categoriesResult.status === "rejected" ||
-    brandsResult.status === "rejected" ||
-    tagsResult.status === "rejected";
+export default async function AdminProductsPage() {
+  const session = await requirePermission(PERMISSIONS.PRODUCTS_READ);
+  const canWrite = can(session, PERMISSIONS.PRODUCTS_WRITE);
+  const products = await fetchAdminProducts({
+    limit: 100,
+    sortBy: "created_at",
+    orderBy: "desc",
+  });
 
   return (
     <>
       <PageHeader
-        title="محصول جدید"
-        description="اطلاعات محصول جدید را وارد کنید"
+        title="محصولات"
+        description="محصولات فعال و پیش‌نویس کاتالوگ را مدیریت کنید."
+        actions={
+          canWrite ? (
+            <Button size="sm" asChild>
+              <Link href="/admin/products/new">
+                <Plus className="size-4" /> محصول جدید
+              </Link>
+            </Button>
+          ) : null
+        }
       />
-
-      {lookupFailed ? (
-        <p className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-700">
-          بارگذاری برخی فهرست‌ها (دسته‌بندی، برند یا برچسب) با خطا مواجه شد.
-          می‌توانید بدون آن‌ها ادامه دهید یا صفحه را دوباره بارگذاری کنید.
-        </p>
-      ) : null}
-
-      <ProductForm
-        mode="create"
-        categories={categories}
-        brands={brands}
-        tags={tags}
-      />
+      <ProductsTable products={products.results} canWrite={canWrite} />
     </>
   );
 }

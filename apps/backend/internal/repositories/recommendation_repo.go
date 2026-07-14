@@ -100,7 +100,8 @@ func (r *recommendationRepository) PurchasedProductIDs(ctx context.Context, user
 	rows, err := r.db.Query(ctx,
 		`SELECT DISTINCT oi.product_id
 		 FROM order_items oi JOIN orders o ON o.id = oi.order_id
-		 WHERE o.user_id = $1 AND o.status NOT IN ('cancelled','payment_failed')`,
+		 WHERE o.user_id = $1
+		   AND o.status IN ('paid','processing','ready_to_ship','shipped','out_for_delivery','delivered','refund_requested','refund_approved','partially_refunded')`,
 		userID,
 	)
 	if err != nil {
@@ -138,7 +139,7 @@ func (r *recommendationRepository) ActiveUserIDs(ctx context.Context, sinceDays,
 				SELECT user_id, created_at
 				FROM orders
 				WHERE created_at >= NOW() - make_interval(days => $1)
-				  AND status NOT IN ('cancelled','payment_failed')
+				  AND status IN ('paid','processing','ready_to_ship','shipped','out_for_delivery','delivered','refund_requested','refund_approved','partially_refunded')
 				  AND user_id IS NOT NULL
 			) activity
 			GROUP BY user_id
@@ -177,16 +178,22 @@ func (r *recommendationRepository) Trending(ctx context.Context, q models.Recomm
 	}
 
 	query := fmt.Sprintf(`
-		WITH signals AS (
-			SELECT product_id, SUM(weight) AS s
+		WITH deduped_interactions AS (
+			SELECT DISTINCT ON (user_id, product_id, interaction_type, created_at::date)
+				user_id, product_id, interaction_type, weight, created_at
 			FROM user_product_interactions
 			WHERE created_at >= NOW() - make_interval(days => @window)
+			ORDER BY user_id, product_id, interaction_type, created_at::date, created_at DESC
+		),
+		signals AS (
+			SELECT product_id, SUM(weight) AS s
+			FROM deduped_interactions
 			GROUP BY product_id
 			UNION ALL
 			SELECT oi.product_id, SUM(oi.quantity) * 10.0 AS s
 			FROM order_items oi JOIN orders o ON o.id = oi.order_id
 			WHERE o.created_at >= NOW() - make_interval(days => @window)
-			  AND o.status NOT IN ('cancelled','payment_failed')
+			  AND o.status IN ('paid','processing','ready_to_ship','shipped','out_for_delivery','delivered','refund_requested','refund_approved','partially_refunded')
 			GROUP BY oi.product_id
 		),
 		agg AS (SELECT product_id, SUM(s) AS score FROM signals GROUP BY product_id)
@@ -257,7 +264,7 @@ func (r *recommendationRepository) FrequentlyBoughtTogether(ctx context.Context,
 			FROM orders o
 			JOIN order_items s  ON s.order_id  = o.id AND s.product_id  = @pid
 			JOIN order_items oi ON oi.order_id = o.id AND oi.product_id <> @pid
-			WHERE o.status NOT IN ('cancelled','payment_failed')
+			WHERE o.status IN ('paid','processing','ready_to_ship','shipped','out_for_delivery','delivered','refund_requested','refund_approved','partially_refunded')
 			GROUP BY oi.product_id
 		)
 		SELECT %s, fbt.score
@@ -416,11 +423,12 @@ func (r *recommendationRepository) ComputeProfile(ctx context.Context, userID in
 			+ COALESCE((
 				SELECT SUM(oi.quantity * 10.0)
 				FROM order_items oi JOIN orders o ON o.id = oi.order_id
-				WHERE o.user_id = $1 AND o.status NOT IN ('cancelled','payment_failed')
+				WHERE o.user_id = $1
+				  AND o.status IN ('paid','processing','ready_to_ship','shipped','out_for_delivery','delivered','refund_requested','refund_approved','partially_refunded')
 			), 0),
 			GREATEST(
 				(SELECT MAX(created_at) FROM user_product_interactions WHERE user_id = $1),
-				(SELECT MAX(created_at) FROM orders WHERE user_id = $1 AND status NOT IN ('cancelled','payment_failed'))
+				(SELECT MAX(created_at) FROM orders WHERE user_id = $1 AND status IN ('paid','processing','ready_to_ship','shipped','out_for_delivery','delivered','refund_requested','refund_approved','partially_refunded'))
 			)`, userID,
 	).Scan(&engagement, &profile.LastInteractionAt); err != nil {
 		return nil, fmt.Errorf("computing engagement: %w", err)
@@ -441,7 +449,8 @@ func (r *recommendationRepository) ComputeProfile(ctx context.Context, userID in
 			UNION ALL
 			SELECT oi.unit_price
 			FROM order_items oi JOIN orders o ON o.id = oi.order_id
-			WHERE o.user_id = $1 AND o.status NOT IN ('cancelled','payment_failed')
+			WHERE o.user_id = $1
+			  AND o.status IN ('paid','processing','ready_to_ship','shipped','out_for_delivery','delivered','refund_requested','refund_approved','partially_refunded')
 		 ) prices`,
 		userID,
 	).Scan(&priceMin, &priceMax); err != nil {
@@ -493,7 +502,8 @@ const userSignalsCTE = `
 		SELECT oi.product_id, oi.quantity * 10.0 AS weight
 		FROM order_items oi
 		JOIN orders o ON o.id = oi.order_id
-		WHERE o.user_id = $1 AND o.status NOT IN ('cancelled','payment_failed')
+		WHERE o.user_id = $1
+		  AND o.status IN ('paid','processing','ready_to_ship','shipped','out_for_delivery','delivered','refund_requested','refund_approved','partially_refunded')
 	)`
 
 func (r *recommendationRepository) affinityByCategory(ctx context.Context, userID int64) ([]models.AffinityScore, error) {

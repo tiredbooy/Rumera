@@ -61,7 +61,14 @@ export function VariantsSection({
           variant="outline"
           size="sm"
           className="self-start"
-          onClick={() => append({ sku: "", price: "", compare_at_price: "" })}
+          onClick={() =>
+            append({
+              sku: "",
+              price: "",
+              compare_at_price: "",
+              option_value_ids: [],
+            })
+          }
         >
           <Plus className="size-4" /> افزودن تنوع
         </Button>

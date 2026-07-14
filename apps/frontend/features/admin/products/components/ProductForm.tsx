@@ -7,8 +7,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { useTransition } from "react";
 
-import type { ProductDetail } from "@/features/admin/products/types";
+import type { ProductDetail } from "@/features/catalog/products/types";
 import type { Brand } from "@/features/catalog/brands/types";
+import type { Tag } from "@/features/catalog/tags/types";
 
 import {
   createProduct,
@@ -19,8 +20,9 @@ import {
 } from "@/features/admin/products/actions/product";
 
 import type {
-  CreateProductReq,
-  UpdateProductReq,
+  CreateProductInput,
+  UpdateProductInput,
+  UpdateProductVariantInput,
 } from "@/features/admin/products/types";
 
 import {
@@ -31,13 +33,6 @@ import {
   parseTags,
   type ProductFormValues,
 } from "../validations";
-import type { AdminTag } from "./product-form/TagSelector";
-
-// 👇 New imports for the refactored ImageUploader
-// import {
-//   ImageUploader,
-//   type ImageUploaderHandle,
-// } from "@/components/admin/image-uploader"; // adjust path if needed
 
 import { FormHeaderBar } from "./product-form/sidebar/FormHeaderBar";
 import { MobileActionBar } from "./product-form/sidebar/MobileActionBar";
@@ -45,15 +40,14 @@ import { PreviewCard } from "./product-form/sidebar/PreviewCard";
 import { GeneralInfoSection } from "./product-form/GeneralInfoSection";
 import { SpecificationsSection } from "./product-form/SpecificationsSection";
 import { VariantsSection } from "./product-form/VariantsSection";
-// Removed: import { ImagesSection } from "./product-form/ImagesSection";
+import { ImagesSection } from "./product-form/ImagesSection";
 import { SeoSection } from "./product-form/SeoSection";
-import { CategoryResponse } from "@/features/catalog/categories/types";
-import { ImageUploaderHandle } from "@/features/image-uploader/types";
-import { ImageUploader } from "@/features/image-uploader/ImageUploader";
+import type { Category } from "@/features/catalog/categories/types";
+import type { ImageUploaderHandle } from "@/features/image-uploader/types";
 
 // ── Payload helpers ─────────────────────────────────────────────
 
-function toCreatePayload(v: ProductFormValues): CreateProductReq {
+function toCreatePayload(v: ProductFormValues): CreateProductInput {
   return {
     title: v.title.trim(),
     code: strOrNull(v.code),
@@ -72,7 +66,7 @@ function toCreatePayload(v: ProductFormValues): CreateProductReq {
   };
 }
 
-function toUpdatePayload(v: ProductFormValues): UpdateProductReq {
+function toUpdatePayload(v: ProductFormValues): UpdateProductInput {
   return {
     title: v.title.trim(),
     code: strOrNull(v.code),
@@ -102,9 +96,9 @@ export function ProductForm({
 }: {
   mode: "create" | "edit";
   product?: ProductDetail;
-  categories: CategoryResponse[];
+  categories: Category[];
   brands: Brand[];
-  tags: AdminTag[];
+  tags: Tag[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -152,11 +146,22 @@ export function ProductForm({
               sku: strOrNull(vr.sku),
               price: Number(vr.price),
               compare_at_price: numOrNull(vr.compare_at_price),
+              option_value_ids: vr.option_value_ids,
             });
           }
 
-          // Upload staged images
-          await uploaderRef.current?.flush(created.id);
+          try {
+            await uploaderRef.current?.flush(created.id);
+          } catch (error) {
+            toast.error(
+              error instanceof Error
+                ? `محصول ایجاد شد، اما تصاویر کامل ذخیره نشدند: ${error.message}`
+                : "محصول ایجاد شد، اما تصاویر کامل ذخیره نشدند.",
+            );
+            router.push(`/admin/products/${created.id}`);
+            router.refresh();
+            return;
+          }
           toast.success("محصول ایجاد شد");
           router.push(`/admin/products/${created.id}`);
           router.refresh();
@@ -178,13 +183,18 @@ export function ProductForm({
             .map((ov) => deleteVariant(ov.id)),
         );
         for (const vr of v.variants) {
-          const body = {
+          const body: UpdateProductVariantInput = {
             sku: strOrNull(vr.sku),
             price: Number(vr.price),
             compare_at_price: numOrNull(vr.compare_at_price),
           };
           if (vr._id) await updateVariant(vr._id, body);
-          else await createVariant(product.id, body);
+          else
+            await createVariant(product.id, {
+              ...body,
+              price: body.price ?? 0,
+              option_value_ids: vr.option_value_ids,
+            });
         }
 
         await uploaderRef.current?.flush(product.id);
@@ -224,10 +234,10 @@ export function ProductForm({
             remove={remove}
           />
 
-          {/* 👇 Replace old ImagesSection with new ImageUploader */}
-          <ImageUploader
-            ref={uploaderRef}
+          <ImagesSection
+            uploaderRef={uploaderRef}
             productId={product?.id ?? null}
+            mode={mode}
             initialImages={product?.images ?? []}
           />
 

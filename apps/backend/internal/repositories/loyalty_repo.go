@@ -29,7 +29,10 @@ func NewLoyaltyRepository(db *pgxpool.Pool) LoyaltyRepository {
 }
 
 func (r *loyaltyRepository) GetAccount(ctx context.Context, userID int64) (*models.LoyaltyAccount, error) {
-	const q = `SELECT * FROM loyalty_accounts WHERE user_id = $1`
+	const q = `
+		SELECT user_id, points_balance, lifetime_points, tier, tier_since, updated_at
+		FROM loyalty_accounts
+		WHERE user_id = $1`
 
 	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {
@@ -128,7 +131,8 @@ func (r *loyaltyRepository) Spend(ctx context.Context, userID, points int64, ref
 
 func (r *loyaltyRepository) ListTransactions(ctx context.Context, userID int64, limit int) ([]models.LoyaltyTransaction, error) {
 	const q = `
-		SELECT * FROM loyalty_transactions
+		SELECT id, user_id, delta, reason, ref_type, ref_id, created_at
+		FROM loyalty_transactions
 		WHERE user_id = $1
 		ORDER BY created_at DESC
 		LIMIT $2`

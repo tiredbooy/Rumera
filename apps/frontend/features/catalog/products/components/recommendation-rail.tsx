@@ -4,7 +4,7 @@ import { ArrowLeft, type LucideIcon } from "lucide-react";
 import { formatPrice } from "@/lib/products";
 import { SmartImage } from "@/components/smart-image";
 import { Reveal } from "@/features/motion/components/reveal";
-import type { RecommendationItem } from "@/lib/catalog/recommendations";
+import type { RecommendationItem } from "@/features/recommendations/types";
 
 /**
  * RecommendationRail — a titled product rail backed by the recommendation engine

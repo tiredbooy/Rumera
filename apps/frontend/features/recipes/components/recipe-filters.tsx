@@ -10,7 +10,8 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select"
-import { difficultyFa, type RecipeDifficulty } from "@/lib/recipes"
+import { difficultyFa } from "@/features/recipes/utils"
+import type { RecipeDifficulty } from "@/features/recipes/types"
 
 const difficulties: { value: RecipeDifficulty | ""; label: string }[] = [
   { value: "", label: "همه" },

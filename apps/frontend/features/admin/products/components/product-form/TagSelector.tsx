@@ -1,26 +1,25 @@
 "use client";
 
 import { Controller, type Control } from "react-hook-form";
-import { Tag } from "lucide-react";
+import { Tag as TagIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import type { Tag } from "@/features/catalog/tags/types";
 import type { ProductFormValues } from "../../validations";
-
-export type AdminTag = { id: number; title: string };
 
 export function TagSelector({
   control,
   tags,
 }: {
   control: Control<ProductFormValues>;
-  tags: AdminTag[];
+  tags: Tag[];
 }) {
   if (tags.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-2 sm:col-span-2">
       <span className="flex items-center gap-1.5 text-sm font-medium">
-        <Tag className="size-3.5 text-muted-foreground" />
+        <TagIcon className="size-3.5 text-muted-foreground" />
         برچسب‌ها
       </span>
       <Controller

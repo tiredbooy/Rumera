@@ -21,7 +21,7 @@ links below.
 | [Architecture](./architecture.md) | App Router layout, route groups, server/client split, request flow, providers, the `lib/`/`components/` map |
 | [BFF Proxy & Auth / Session](./bff-and-auth.md) | The `app/api/{public,store,admin}/*` proxies, next-auth v5 split-config, token lifecycle, silent refresh, `SessionGuard` |
 | [RBAC](./rbac.md) | Roles, the `lib/rbac/*` permission model, `can()`/`filterNav()`, server guards, and how it maps onto backend enforcement |
-| [API Layer](./api-layer.md) | The fetch clients (`serverApi`/`apiFetch`, `storeRequest`, `adminRequest`), React Query hooks, query keys, error types |
+| [API Layer](./api-layer.md) | Server and store fetch clients, domain-owned admin clients, React Query hooks, query keys, error types |
 | [Design System](./design-system.md) | Design tokens (`--gold`/`--wine`), the two themes, RTL logical props, `font-serif` headings, brand utilities, `faNum()`/`formatPrice()` |
 | [Data Fetching](./data-fetching.md) | Server vs. client fetching, ISR/cache contract for `lib/catalog/*`, error-safe fallbacks, when to use React Query vs. a server fetcher |
 
@@ -93,8 +93,7 @@ app/
   forbidden/        # 403 target for the staff guard
   robots.ts sitemap.ts manifest.ts icon.tsx opengraph-image.tsx llms.txt
 lib/
-  api/    # client.ts (server serverApi/apiFetch), store-client.ts, admin-client.ts,
-          # hooks.ts/account-hooks.ts/admin-hooks.ts, query-keys.ts, qs.ts, endpoints.ts
+  api/    # client.ts (server apiFetch), store-client.ts, shared envelope/query plumbing
   auth/   # auth.ts (Node), auth.config.ts (Edge-safe), session.ts (server guards), types.ts
   rbac/   # permissions.ts, roles.ts, can.ts, nav.ts
   catalog/# ISR-cached, error-safe public server fetchers + types
@@ -107,6 +106,7 @@ components/
   recipes/ loyalty/ subscriptions/ taste/ wallet/ referral/ motion/   # by surface
   site-header.tsx site-footer.tsx age-gate.tsx product-card.tsx smart-image.tsx …
 hooks/    # sparse — just use-mobile.ts; most stateful logic is React Query under lib/api/
+features/ # business domains and resource-owned APIs; admin browser clients stay with owners
 middleware.ts  next.config.ts  globals.css  components.json
 ```
 
@@ -118,7 +118,7 @@ Quick rules of thumb:
 | `app/admin/` | A **real** path segment (not a group); contributes `/admin`. |
 | Dynamic APIs | `await params` / `await searchParams`; in BFF handlers `(await ctx.params).path`. |
 | Server vs. client | Server Component by default. Add `"use client"` as **low** in the tree as possible. |
-| Browser API calls | Go through the BFF: `storeRequest()` / `adminRequest()` → `/api/{store,admin}/*`. Never hit the backend host directly. |
+| Browser API calls | Go through the BFF: `storeRequest()` or a domain-owned client → `/api/{store,admin}/*`. Never hit the backend host directly. |
 | Server API calls | Use `serverApi`/`apiFetch` from `lib/api/client.ts` (imports `"server-only"`). |
 | Caching | Public catalogue fetchers (`lib/catalog/*`) use ISR (`revalidate: 3600`) and swallow errors; per-user fetches use `cache: "no-store"`. |
 | Rendering mode | Declare it per route: dashboards `export const dynamic = "force-dynamic"`; cacheable pages `export const revalidate = 3600`. |

@@ -1,6 +1,7 @@
 // lib/api/client.ts
 import "server-only";
 import { auth } from "@/lib/auth/auth";
+import type { ApiErrorEnvelope, ApiSuccess } from "./types";
 
 const API =
   process.env.API_URL ??
@@ -59,22 +60,25 @@ export async function apiFetch<T>(
   const res = await fetch(`${API_BASE}${path}`, {
     ...rest,
     headers: {
-      "Content-Type": "application/json",
+      ...(rest.body instanceof FormData
+        ? {}
+        : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     cache: rest.cache ?? "no-store",
   });
 
-  const body = await res.json().catch(() => null);
+  const body: unknown = await res.json().catch(() => null);
 
   if (!res.ok) {
+    const error = (body as ApiErrorEnvelope | null)?.error;
     throw new ApiError(
       res.status,
-      body?.error?.code ?? "UNKNOWN",
-      body?.error?.message ?? res.statusText,
+      error?.code ?? "UNKNOWN",
+      error?.message ?? res.statusText,
     );
   }
 
-  return (body?.data ?? body) as T;
+  return ((body as ApiSuccess<T> | null)?.data ?? body) as T;
 }

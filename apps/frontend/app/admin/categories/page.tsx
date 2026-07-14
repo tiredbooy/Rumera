@@ -6,7 +6,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { can } from "@/lib/rbac/can";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/features/dashboard/components/page-header";
-import { CategoriesTable } from "@/features/admin/categories/components/categories-table";
+import { CategoriesTable } from "@/features/admin/categories/components/CategoryTable";
 
 export default async function AdminCategoriesPage() {
   const session = await requirePermission(PERMISSIONS.PRODUCTS_READ);

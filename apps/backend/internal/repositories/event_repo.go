@@ -14,7 +14,7 @@ type EventRepository interface {
 	InsertBatch(ctx context.Context, reqs []*models.EventReq) error
 	GetByID(ctx context.Context, id string) (*models.Event, error)
 	List(ctx context.Context, filter models.EventFilter) ([]*models.Event, error)
-	CountByType(ctx context.Context, filter models.EventFilter) (map[string]int64, error)
+	CountByType(ctx context.Context, filter models.EventFilter) (models.EventBreakdown, error)
 }
 
 type eventRepository struct{ db *pgxpool.Pool }
@@ -152,7 +152,7 @@ func (r *eventRepository) List(ctx context.Context, filter models.EventFilter) (
 	return events, rows.Err()
 }
 
-func (r *eventRepository) CountByType(ctx context.Context, filter models.EventFilter) (map[string]int64, error) {
+func (r *eventRepository) CountByType(ctx context.Context, filter models.EventFilter) (models.EventBreakdown, error) {
 	query := `
 		SELECT event_type, COUNT(*) 
 		FROM events
@@ -167,7 +167,7 @@ func (r *eventRepository) CountByType(ctx context.Context, filter models.EventFi
 	}
 	defer rows.Close()
 
-	counts := make(map[string]int64)
+	counts := make(models.EventBreakdown)
 	for rows.Next() {
 		var eventType string
 		var count int64

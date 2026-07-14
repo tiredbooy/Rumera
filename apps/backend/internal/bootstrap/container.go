@@ -179,7 +179,7 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		Brand:    services.NewBrandService(brandRepo),
 		Tag:      services.NewTagService(tagRepo),
 
-		Cart:         services.NewCartService(cartRepo, variantRepo, db),
+		Cart:         services.NewCartService(cartRepo, variantRepo, inventoryRepo, db),
 		Coupon:       services.NewCouponService(couponRepo),
 		Order:        orderService,
 		Wishlist:     services.NewWishlistService(wishlistRepo),

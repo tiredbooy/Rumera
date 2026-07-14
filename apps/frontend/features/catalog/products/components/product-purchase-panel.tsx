@@ -8,17 +8,21 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { formatPrice, faNum } from "@/lib/products"
-import type { ProductDetail, Variant } from "@/lib/catalog/types"
+import type {
+  ProductDetail,
+  ProductVariant,
+} from "@/features/catalog/products/types"
 import {
   useWishlist,
   useAddWishlistItem,
   useRemoveWishlistItem,
-  useRecordInteraction,
-} from "@/lib/api/hooks"
-import { AddToCartButton } from "./add-to-cart-button"
+} from "@/features/wishlist/hooks"
+import { useRecordInteraction } from "@/features/recommendations/hooks"
+import { AddToCartButton } from "@/features/cart/components/add-to-cart-button"
 import { AlertButton } from "./alert-button"
 
-const variantLabel = (v: Variant) => v.options?.map((o) => o.value).join(" · ") || v.sku
+const variantLabel = (v: ProductVariant) =>
+  v.options?.map((o) => o.value).join(" · ") || v.sku
 const MAX_QTY = 12
 
 /**

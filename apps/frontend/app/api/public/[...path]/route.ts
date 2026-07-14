@@ -1,8 +1,8 @@
 /**
- * Public (unauthenticated) BFF proxy for the storefront's auth forms.
+ * Public (unauthenticated) BFF proxy for allowlisted storefront operations.
  *
- * Client forms (register / forgot-password / reset-password) POST here, to the
- * SAME origin, and this handler forwards to `${API}/api/v1/<path>` server-side.
+ * Browser-side public features call this SAME-origin route, and this handler
+ * forwards only explicitly allowed paths to `${API}/api/v1/<path>` server-side.
  *
  * Why this exists: in production the API is bound to loopback behind a reverse
  * proxy and is NOT reachable from the browser, and `NEXT_PUBLIC_API_URL` isn't
@@ -23,6 +23,7 @@ const ALLOW = new Set([
   "auth/password/reset",
   "auth/password/validate",
   "auth/otp/request",
+  "categories/tree",
 ])
 
 async function handle(req: NextRequest, segments: string[]) {

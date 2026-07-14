@@ -153,7 +153,7 @@ func (h *Handler) ListRecipesAdmin(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.Paginated(c, mappers.ToRecipeListItems(recipes), paginate(filter.Page, filter.Limit, total))
+	response.Paginated(c, mappers.ToRecipeAdminListItems(recipes), paginate(filter.Page, filter.Limit, total))
 }
 
 // GetRecipeAdmin — GET /admin/recipes/:id

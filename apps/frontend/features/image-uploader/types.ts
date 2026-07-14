@@ -1,4 +1,4 @@
-import { ImageResponse } from "../catalog/products/types";
+import type { ProductImage } from "../catalog/products/types";
 
 export type SlotStatus = "idle" | "uploading" | "error";
 
@@ -12,12 +12,13 @@ export type StagedSlot = {
   status: SlotStatus;
   progress: number;
   error?: string;
+  validationError?: boolean;
 };
 
 export type UploadedSlot = {
   kind: "uploaded";
   localId: string;
-  image: ImageResponse;
+  image: ProductImage;
   alt: string;
 };
 
@@ -25,13 +26,13 @@ export type Slot = StagedSlot | UploadedSlot;
 
 export type ImageUploaderHandle = {
   hasStaged: boolean;
-  /** Upload every staged file (in display order) against `productId`. */
+  /** Resolves only after every staged image and ordering change is durable. */
   flush: (productId: number) => Promise<void>;
 };
 
 export type ImageUploaderProps = {
   productId?: number | null;
-  initialImages?: ImageResponse[];
+  initialImages?: ProductImage[];
   /** Optional cap on total images (staged + uploaded). Omit for no limit. */
   maxImages?: number;
 };

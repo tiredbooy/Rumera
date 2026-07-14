@@ -7,7 +7,7 @@ import { NuqsAdapter } from "nuqs/adapters/next/app"
 
 import { ThemeProvider } from "@/components/theme-provider"
 import { DirectionProvider } from "@/components/ui/direction"
-import { SessionGuard } from "@/components/auth/session-guard"
+import { SessionGuard } from "@/features/auth/components/session-guard"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = React.useState(

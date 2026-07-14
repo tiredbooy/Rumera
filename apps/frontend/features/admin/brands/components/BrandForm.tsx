@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2, ImageOff, Tag } from "lucide-react";
@@ -26,53 +25,29 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { faNum } from "@/lib/products";
-import type { Brand } from "@/lib/catalog/types";
+import type {
+  Brand,
+  CreateBrandInput,
+} from "@/features/catalog/brands/types";
 import {
-  AdminApiError,
+  BrandApiError,
   createBrand,
   updateBrand,
   deleteBrand,
-  type CreateBrandInput,
-} from "@/lib/api/admin-client";
+} from "@/features/admin/brands/client";
+import {
+  BRAND_CURRENT_YEAR,
+  brandFormSchema,
+  type BrandFormValues,
+} from "@/features/catalog/brands/validations";
 import { BRANDS_QUERY_KEY } from "@/features/admin/brands/components/BrandsTable";
 
 // ── Validation (string fields coerced to the API shape on submit) ─────────────
 
-const currentYear = new Date().getFullYear();
-
-const schema = z.object({
-  title: z
-    .string()
-    .trim()
-    .min(1, "نام برند الزامی است")
-    .max(255, "حداکثر ۲۵۵ نویسه"),
-  country: z.string().trim().max(80, "حداکثر ۸۰ نویسه"),
-  founded_year: z
-    .string()
-    .refine(
-      (v) =>
-        v.trim() === "" ||
-        (/^\d+$/.test(v.trim()) &&
-          Number(v) >= 1000 &&
-          Number(v) <= currentYear),
-      { message: `سالی بین ۱۰۰۰ تا ${faNum(currentYear)} وارد کنید` },
-    ),
-  image_url: z
-    .string()
-    .trim()
-    .refine((v) => v === "" || /^https?:\/\/.+/i.test(v), {
-      message: "نشانی تصویر باید یک URL معتبر باشد (با http یا https)",
-    }),
-  description: z.string(),
-});
-
-type FormValues = z.infer<typeof schema>;
-
 const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null);
 const numOrNull = (v?: string) => (v && v.trim() !== "" ? Number(v) : null);
 
-function defaults(brand?: Brand): FormValues {
+function defaults(brand?: Brand): BrandFormValues {
   return {
     title: brand?.title ?? "",
     country: brand?.country ?? "",
@@ -197,15 +172,15 @@ export function BrandForm({
     watch,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  } = useForm<BrandFormValues>({
+    resolver: zodResolver(brandFormSchema),
     defaultValues: defaults(brand),
   });
 
   const title = watch("title");
   const imageUrl = watch("image_url");
 
-  function toPayload(v: FormValues): CreateBrandInput {
+  function toPayload(v: BrandFormValues): CreateBrandInput {
     return {
       title: v.title.trim(),
       country: strOrNull(v.country),
@@ -216,10 +191,10 @@ export function BrandForm({
   }
 
   function applyServerErrors(e: unknown) {
-    if (e instanceof AdminApiError) {
+    if (e instanceof BrandApiError) {
       if (e.fields) {
         for (const [key, msgs] of Object.entries(e.fields)) {
-          setError(key as keyof FormValues, { message: msgs[0] });
+          setError(key as keyof BrandFormValues, { message: msgs[0] });
         }
       }
       toast.error(e.message);
@@ -228,7 +203,7 @@ export function BrandForm({
     }
   }
 
-  async function onSubmit(v: FormValues) {
+  async function onSubmit(v: BrandFormValues) {
     try {
       if (mode === "create") {
         await createBrand(toPayload(v));
@@ -259,7 +234,7 @@ export function BrandForm({
       router.refresh();
     } catch (e) {
       setIsDeleting(false);
-      if (e instanceof AdminApiError) {
+      if (e instanceof BrandApiError) {
         toast.error(e.message);
       } else {
         toast.error("حذف برند ناموفق بود");
@@ -306,7 +281,7 @@ export function BrandForm({
               inputMode="numeric"
               dir="ltr"
               min={1000}
-              max={currentYear}
+              max={BRAND_CURRENT_YEAR}
               placeholder="1887"
               aria-invalid={!!errors.founded_year}
               {...register("founded_year")}

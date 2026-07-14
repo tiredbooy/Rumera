@@ -24,9 +24,10 @@ Legend: 🌐 public · 🔒 customer · 🛡️ admin.
 
 The engine reads two first-party signal sources from the main database:
 
-1. **`user_product_interactions`** — a lean, queryable implicit-feedback log
-   (view, add_to_cart, purchase, wishlist, review, recipe_view, search_click).
-   Each type carries a tuned weight (purchase ≫ view).
+1. **`user_product_interactions`** — a lean, queryable implicit-feedback log.
+   Customer requests may record `view`, `wishlist`, `review`, `recipe_view`, and
+   `search_click`; purchase/order signals are derived from authoritative order
+   data rather than accepted from the browser.
 2. **Order history** — folded directly into profile building, so personalization
    works from existing data before any interaction is ever recorded.
 
@@ -109,16 +110,17 @@ POST /recommendations/interactions
 ```json
 {
   "product_id": 42,
-  "interaction_type": "add_to_cart",
+  "interaction_type": "wishlist",
   "source": "product_page",
   "metadata": { "variant_id": 5, "position": 2 }
 }
 ```
 
-The server applies the configured weight for the interaction type. Returns
-`204 No Content`. Call this from the storefront on views, cart adds, wishlist
-adds, search-result clicks, and recipe views to continuously enrich
-personalization.
+The server applies the configured weight for the interaction type. `source` is
+optional and limited to 40 characters. Returns `204 No Content`. Call this from
+the storefront on views, wishlist/review actions, search-result clicks, and
+recipe views to continuously enrich personalization. Purchase signals are never
+accepted from this endpoint.
 
 ## Profile
 

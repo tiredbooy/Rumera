@@ -6,10 +6,7 @@ import {
   Loader2,
   XCircle,
   RotateCcw,
-  FileDown,
   MessageSquarePlus,
-  MapPin,
-  Truck,
 } from "lucide-react";
 
 import { faNum, formatPrice } from "@/lib/products";
@@ -17,18 +14,18 @@ import {
   ORDER_STATUS_FA,
   PAYMENT_FA,
   isCancellable,
-  faDate,
-} from "@/lib/catalog/labels";
-import type { Address } from "@/lib/catalog/types";
+} from "@/features/orders/labels";
+import { faDate } from "@/lib/utils/date";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SmartImage } from "@/components/smart-image";
-import { useOrder, useCancelOrder, useBulkAddCartItems } from "@/lib/api/hooks";
-import { AccountSection } from "./account-section";
+import { useBulkAddCartItems } from "@/features/cart/api";
+import { useCancelOrder, useOrder } from "@/features/orders/hooks";
+import { AccountSection } from "../../account/components/account-section";
 import { OrderStatusStepper } from "./OrderStatusStepper";
 
-export function OrderDetail({ id }: { id: string }) {
+export function OrderDetail({ id }: { id: number }) {
   const { data: order, isLoading, isError } = useOrder(id);
   const cancel = useCancelOrder();
   const reorder = useBulkAddCartItems();
@@ -52,10 +49,7 @@ export function OrderDetail({ id }: { id: string }) {
     );
   }
 
-  // Shipping address isn't guaranteed on the order payload — render only if present.
-  const shipping = (order as { shipping_address?: Address }).shipping_address;
   const isDelivered = order.status === "delivered";
-  const isTrackable = ["shipped", "out_for_delivery"].includes(order.status);
 
   function doReorder() {
     if (!order) return;
@@ -153,27 +147,6 @@ export function OrderDetail({ id }: { id: string }) {
           </dl>
         </AccountSection>
 
-        {shipping ? (
-          <AccountSection title="آدرس تحویل">
-            <div className="flex items-start gap-3">
-              <MapPin className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-              <div className="text-sm leading-relaxed">
-                <p className="font-medium">{shipping.full_name}</p>
-                <p className="text-muted-foreground">
-                  {shipping.state_province
-                    ? `${shipping.state_province}، `
-                    : ""}
-                  {shipping.city}، {shipping.address_line1}
-                  {shipping.address_line2 ? `، ${shipping.address_line2}` : ""}
-                </p>
-                <p className="text-muted-foreground">
-                  کد پستی: {faNum(Number(shipping.postal_code) || 0)}
-                  {shipping.phone_number ? ` · ${shipping.phone_number}` : ""}
-                </p>
-              </div>
-            </div>
-          </AccountSection>
-        ) : null}
       </div>
 
       {/* Side column: status + actions */}
@@ -211,24 +184,6 @@ export function OrderDetail({ id }: { id: string }) {
               <RotateCcw className="size-4" />
             )}
             سفارش مجدد
-          </Button>
-          {isTrackable ? (
-            <Button
-              variant="outline"
-              className="justify-start"
-              onClick={() => toast.info("رهگیری مرسوله به‌زودی فعال می‌شود")}
-            >
-              {/* TODO(api): wire to shipment tracking once a carrier integration lands */}
-              <Truck className="size-4" /> رهگیری مرسوله
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            className="justify-start"
-            onClick={() => toast.info("دانلود فاکتور به‌زودی فعال می‌شود")}
-          >
-            {/* TODO(api): wire to GET /api/v1/orders/:id/invoice */}
-            <FileDown className="size-4" /> دانلود فاکتور
           </Button>
           {isCancellable(order.status) ? (
             <Button

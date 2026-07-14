@@ -9,39 +9,42 @@ type ImageDropzoneProps = {
   onFilesSelected: (files: FileList | File[]) => void;
   count: number;
   maxImages?: number;
+  disabled?: boolean;
 };
 
 export function ImageDropzone({
   onFilesSelected,
   count,
   maxImages,
+  disabled = false,
 }: ImageDropzoneProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = React.useState(false);
   const atLimit = typeof maxImages === "number" && count >= maxImages;
+  const unavailable = atLimit || disabled;
 
   return (
     <div className="flex flex-col gap-1.5">
       <button
         type="button"
-        disabled={atLimit}
+        disabled={unavailable}
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => {
           e.preventDefault();
-          if (!atLimit) setIsDragOver(true);
+          if (!unavailable) setIsDragOver(true);
         }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={(e) => {
           e.preventDefault();
           setIsDragOver(false);
-          if (!atLimit && e.dataTransfer.files.length)
+          if (!unavailable && e.dataTransfer.files.length)
             onFilesSelected(e.dataTransfer.files);
         }}
         className={cn(
           "flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl",
           "border border-dashed border-border bg-input/30 px-4 py-6 text-center text-muted-foreground",
           "transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none",
-          atLimit
+          unavailable
             ? "cursor-not-allowed opacity-50"
             : "cursor-pointer hover:border-primary/50 hover:text-foreground",
           isDragOver && "border-primary bg-primary/5 text-foreground",

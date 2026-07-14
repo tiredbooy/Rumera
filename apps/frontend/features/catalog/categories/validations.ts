@@ -1,0 +1,18 @@
+import { z } from "zod";
+
+export const categoryFormSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, "نام دسته‌بندی الزامی است")
+    .max(255, "حداکثر ۲۵۵ نویسه"),
+  slug: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
+  parent_id: z.string(),
+  description: z.string(),
+  image_url: z.string().trim(),
+  is_featured: z.boolean(),
+  card_size: z.enum(["small", "large"]),
+  display_order: z.string().trim(),
+});
+
+export type CategoryFormValues = z.infer<typeof categoryFormSchema>;

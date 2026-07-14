@@ -3,9 +3,9 @@
  * values. Array values repeat the key (`ids=1&ids=2`). Isomorphic — safe in both
  * server fetchers and client hooks.
  */
-type QueryValue = string | number | boolean | null | undefined | (string | number)[]
+import type { ApiQueryParams } from "./types"
 
-export function buildQuery(params: Record<string, QueryValue> = {}): string {
+export function buildQuery(params: ApiQueryParams = {}): string {
   const sp = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value === null || value === undefined || value === "") continue

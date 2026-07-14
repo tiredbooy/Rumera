@@ -6,7 +6,7 @@ import { MoreHorizontal, Pencil, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { formatPrice } from "@/lib/products";
-import type { ProductListItem } from "@/lib/catalog/types";
+import type { ProductListItem } from "@/features/catalog/products/types";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,7 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { UserStatusBadge } from "@/components/admin/status-badge";
+import { ProductStatusBadge } from "./product-status-badge";
 import {
   DataTable,
   type Column,
@@ -82,7 +82,7 @@ export function ProductsTable({
       id: "status",
       header: "وضعیت",
       sortValue: (p) => (p.is_active ? "active" : "inactive"),
-      cell: (p) => <UserStatusBadge active={p.is_active} />,
+      cell: (p) => <ProductStatusBadge active={p.is_active} />,
     },
     {
       id: "actions",

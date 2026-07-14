@@ -7,8 +7,8 @@ import { AlertCircle, RotateCw, SearchX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { listAdminHeroSlides } from "@/features/hero-slides/api/client";
 import { HeroForm } from "@/features/admin/hero-slides/components/hero-form";
-import { listHeroSlides } from "@/lib/api/admin-client";
 
 /**
  * Client-side loader for the hero-slide editor. Fetches the admin slide list
@@ -20,7 +20,7 @@ import { listHeroSlides } from "@/lib/api/admin-client";
 export function HeroEditLoader({ id }: { id: number }) {
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["admin", "hero-slides"],
-    queryFn: listHeroSlides,
+    queryFn: listAdminHeroSlides,
   });
 
   if (isPending) {

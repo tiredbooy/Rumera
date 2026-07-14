@@ -8,7 +8,11 @@ import { cn } from "@/lib/utils"
 import { formatPrice, faNum } from "@/lib/products"
 import { Button } from "@/components/ui/button"
 import { Bottle } from "@/components/bottle"
-import { useCart, useUpdateCartItem, useRemoveCartItem } from "@/lib/api/hooks"
+import {
+  useCart,
+  useRemoveCartItem,
+  useUpdateCartItem,
+} from "@/features/cart/api"
 
 /**
  * Live cart line items, shared by the drawer and the full cart page. Quantity

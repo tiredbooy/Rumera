@@ -1,14 +1,26 @@
-import { fetchTopProductsByRevenue } from "../api";
+import { fetchTopProductsByRevenue } from "@/features/analytics/api";
+import type { TopProductEntry } from "@/features/analytics/types";
 import { formatPrice } from "@/lib/products";
 import { ChartCard, HorizontalBars } from "./Charts";
-export async function AnalyticsTopProducts() {
-  const products = await fetchTopProductsByRevenue(8).catch(() => null);
 
-  if (!products || products.length === 0) {
+export async function AnalyticsTopProducts() {
+  let products: TopProductEntry[] = [];
+  let failed = false;
+  try {
+    products = await fetchTopProductsByRevenue({ limit: 8 });
+  } catch {
+    failed = true;
+  }
+
+  if (failed || products.length === 0) {
     return (
       <ChartCard title="پرفروش‌ترین محصولات" description="بر اساس درآمد">
-        <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-          داده‌ای موجود نیست.
+        <div
+          className={`flex h-40 items-center justify-center text-sm ${failed ? "text-destructive" : "text-muted-foreground"}`}
+        >
+          {failed
+            ? "خطا در دریافت محصولات پرفروش"
+            : "داده‌ای برای این بازه ثبت نشده است."}
         </div>
       </ChartCard>
     );
@@ -16,7 +28,7 @@ export async function AnalyticsTopProducts() {
 
   const data = products.map((p) => ({
     label: p.product_id,
-    value: Number(p.revenue),
+    value: Number(p.total_revenue),
   }));
 
   return (

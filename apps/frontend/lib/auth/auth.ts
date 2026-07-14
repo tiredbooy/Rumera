@@ -13,37 +13,19 @@ import Credentials from "next-auth/providers/credentials"
 import type { JWT } from "next-auth/jwt"
 
 import { authConfig } from "./auth.config"
+import {
+  authenticateWithOtp,
+  authenticateWithPassword,
+  AuthServerError,
+  refreshAuthTokens,
+} from "@/features/auth/api/server"
+import type { AccessTokenClaims } from "@/features/auth/types"
 import type { Role } from "@/lib/rbac/roles"
 import "./types"
 
-// ── Configuration ─────────────────────────────────────────────────────────────
-
-const getApiBase = () => {
-  // Priority for server-side (inside Docker)
-  if (process.env.BACKEND_INTERNAL_URL) {
-    return process.env.BACKEND_INTERNAL_URL
-  }
-  // Fallback for local dev without Docker
-  if (process.env.API_URL) {
-    return process.env.API_URL
-  }
-  // Browser-safe public URL (should not reach here on server)
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
-}
-
-const API = getApiBase()
-const BASE = `${API.replace(/\/$/, "")}/api/v1`
-
-console.log("🔗 Auth using backend base:", BASE) // Helpful for debugging
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-type DecodedAccess = {
-  uid?: number
-  user_id?: string
-  role?: string
-  exp?: number
-}
+type DecodedAccess = Partial<AccessTokenClaims>
 
 function decodeJwt(token: string): DecodedAccess {
   try {
@@ -58,15 +40,7 @@ async function rotate(token: JWT): Promise<JWT> {
   try {
     if (!token.refreshToken) throw new Error("missing refresh token")
 
-    const res = await fetch(`${BASE}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: token.refreshToken }),
-    })
-
-    if (!res.ok) throw new Error(`refresh failed: ${res.status}`)
-
-    const { data } = await res.json()
+    const data = await refreshAuthTokens({ refresh_token: token.refreshToken })
     const decoded = decodeJwt(data.access_token)
 
     return {
@@ -98,21 +72,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!creds?.email || !creds?.password) return null
 
         try {
-          const res = await fetch(`${BASE}/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: creds.email,
-              password: creds.password,
-            }),
+          const data = await authenticateWithPassword({
+            email: String(creds.email),
+            password: String(creds.password),
           })
-
-          if (!res.ok) {
-            console.error("Login failed with status:", res.status)
-            return null
-          }
-
-          const { data } = await res.json()
           if (!data?.access_token) return null
 
           const decoded = decodeJwt(data.access_token)
@@ -131,7 +94,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             accessTokenExpires: (decoded.exp ?? 0) * 1000,
           }
         } catch (error) {
-          console.error("❌ Authorize fetch error:", error)
+          if (error instanceof AuthServerError) {
+            console.error("Login failed with status:", error.status)
+          } else {
+            console.error("❌ Authorize fetch error:", error)
+          }
           return null
         }
       },
@@ -146,14 +113,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!creds?.phone || !creds?.code) return null
 
         try {
-          const res = await fetch(`${BASE}/auth/otp/verify`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ phone: creds.phone, code: creds.code }),
+          const data = await authenticateWithOtp({
+            phone: String(creds.phone),
+            code: String(creds.code),
           })
-          if (!res.ok) return null
-
-          const { data } = await res.json()
           if (!data?.access_token) return null
 
           const decoded = decodeJwt(data.access_token)

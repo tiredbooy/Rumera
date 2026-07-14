@@ -7,8 +7,8 @@ import { faNum } from "@/lib/products";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useOrders } from "@/lib/api/hooks";
-import type { OrderListItem, OrderStatus } from "@/lib/catalog/types";
+import { useOrders } from "@/features/orders/hooks";
+import type { OrderListItem, OrderStatus } from "@/features/orders/types";
 import { OrderCard } from "./OrderCard";
 import { EmptyState } from "@/features/account/EmptyState";
 

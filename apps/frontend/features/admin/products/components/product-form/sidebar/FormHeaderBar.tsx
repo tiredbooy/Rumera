@@ -28,7 +28,9 @@ export function FormHeaderBar({
           {mode === "create" ? "افزودن محصول جدید" : title || "ویرایش محصول"}
         </p>
         <p className="text-xs text-muted-foreground">
-          {mode === "create" ? "اطلاعات محصول را تکمیل کنید" : "تغییرات به‌صورت خودکار ذخیره نمی‌شوند"}
+          {mode === "create"
+            ? "اطلاعات محصول را تکمیل کنید"
+            : "تغییرات فرم با دکمهٔ ذخیره ثبت می‌شوند"}
         </p>
       </div>
 

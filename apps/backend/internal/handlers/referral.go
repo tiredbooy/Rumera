@@ -28,7 +28,7 @@ func (h *Handler) ClaimReferral(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req models.ClaimReferralReq
+	var req models.ClaimReferralInput
 	if !h.bindJSON(c, &req) {
 		return
 	}

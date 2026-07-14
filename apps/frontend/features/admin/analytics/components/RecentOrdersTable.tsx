@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { formatPrice, faNum } from "@/lib/products";
-import { faDate } from "@/lib/catalog/labels";
+import { faDate } from "@/lib/utils/date";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -11,15 +11,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { OrderStatusBadge } from "@/components/admin/status-badge";
-import { listOrders } from "@/features/admin/orders/api";
+import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
+import { listAdminOrders } from "@/features/orders/api/admin";
 
 export async function RecentOrdersTable() {
   let result = null;
   let error = false;
 
   try {
-    result = await listOrders({ limit: 10, sort_by: "-created_at" });
+    result = await listAdminOrders({
+      limit: 10,
+      sortBy: "created_at",
+      orderBy: "desc",
+    });
   } catch {
     error = true;
   }

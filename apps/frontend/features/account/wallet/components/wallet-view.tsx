@@ -26,7 +26,6 @@ import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatPrice, faNum } from "@/lib/products";
-import { faDate } from "@/lib/catalog/labels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,9 +50,13 @@ import { GiftCardRedeem } from "@/features/wallet/gift-card-redeem";
 import {
   useWallet,
   useWalletTransactions,
-  isCreditTx,
+} from "@/features/wallet/hooks";
+import {
+  isCreditTransaction,
   type WalletTransaction,
-} from "@/lib/api/account-hooks";
+  type WalletTransactionStatus,
+  type WalletTransactionType,
+} from "@/features/wallet/types";
 import { AccountSection } from "../../account/components/account-section";
 import { EmptyState } from "../../EmptyState";
 
@@ -61,7 +64,10 @@ import { EmptyState } from "../../EmptyState";
 // collapse into two ledger directions (credit/debit) for colour, but every row
 // also carries an explicit icon + Persian label so colour is never the sole
 // signal of meaning.
-const TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
+const TYPE_META: Record<
+  WalletTransactionType,
+  { label: string; icon: LucideIcon }
+> = {
   deposit: { label: "افزایش موجودی", icon: ArrowDownLeft },
   refund: { label: "بازگشت وجه", icon: RotateCcw },
   withdraw: { label: "برداشت", icon: ArrowUpRight },
@@ -69,7 +75,7 @@ const TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
 };
 
 const STATUS_META: Record<
-  string,
+  WalletTransactionStatus,
   { label: string; variant: "secondary" | "outline" | "destructive" }
 > = {
   completed: { label: "تکمیل‌شده", variant: "secondary" },
@@ -89,8 +95,16 @@ const PAGE_SIZE = 8;
 // accurate; the ledger is then filtered + paged client-side.
 const FETCH_LIMIT = 100;
 
-function typeMeta(type: string) {
-  return TYPE_META[type] ?? { label: type, icon: Wallet };
+const faDateFormatter = new Intl.DateTimeFormat("fa-IR", {
+  dateStyle: "medium",
+});
+
+function faDate(iso: string): string {
+  try {
+    return faDateFormatter.format(new Date(iso));
+  } catch {
+    return iso;
+  }
 }
 
 /** A read-only ISO date (yyyy-mm-dd) → start/end-of-day millis, or null. */
@@ -202,8 +216,8 @@ export function WalletView() {
   // Apply direction + date-range filters client-side over the fetched window.
   const filtered = React.useMemo(() => {
     return all.filter((t) => {
-      if (direction === "credit" && !isCreditTx(t)) return false;
-      if (direction === "debit" && isCreditTx(t)) return false;
+      if (direction === "credit" && !isCreditTransaction(t)) return false;
+      if (direction === "debit" && isCreditTransaction(t)) return false;
       const ts = new Date(t.created_at).getTime();
       if (fromMs !== null && ts < fromMs) return false;
       if (toMs !== null && ts > toMs) return false;
@@ -219,8 +233,8 @@ export function WalletView() {
     let spent = 0;
     for (const t of all) {
       if (new Date(t.created_at).getTime() < start) continue;
-      if (isCreditTx(t)) credited += t.amount;
-      else spent += t.amount;
+      if (isCreditTransaction(t)) credited += Number(t.amount);
+      else spent += Number(t.amount);
     }
     return { credited, spent };
   }, [all]);
@@ -274,7 +288,7 @@ export function WalletView() {
                 dir="ltr"
                 data-testid="wallet-balance"
               >
-                {formatPrice(wallet.data?.balance ?? 0)}
+                {formatPrice(Number(wallet.data?.balance ?? 0))}
               </p>
             )}
           </div>
@@ -449,9 +463,9 @@ export function WalletView() {
                 </TableHeader>
                 <TableBody>
                   {pageRows.map((t: WalletTransaction) => {
-                    const meta = typeMeta(t.type);
+                    const meta = TYPE_META[t.type];
                     const Icon = meta.icon;
-                    const credit = isCreditTx(t);
+                    const credit = isCreditTransaction(t);
                     const status = STATUS_META[t.status];
                     const voided =
                       t.status === "failed" || t.status === "cancelled";
@@ -474,7 +488,7 @@ export function WalletView() {
                               <Icon className="size-3" aria-hidden />{" "}
                               {meta.label}
                             </Badge>
-                            {status && t.status !== "completed" ? (
+                            {t.status !== "completed" ? (
                               <Badge
                                 variant={status.variant}
                                 className="text-[10px]"
@@ -500,14 +514,14 @@ export function WalletView() {
                           dir="ltr"
                         >
                           {credit ? "+" : "−"}
-                          {formatPrice(t.amount)}
+                          {formatPrice(Number(t.amount))}
                         </TableCell>
                         <TableCell
                           className="text-end tabular-nums whitespace-nowrap text-muted-foreground"
                           dir="ltr"
                         >
-                          {typeof t.balance_after === "number"
-                            ? formatPrice(t.balance_after)
+                          {t.balance_after !== undefined
+                            ? formatPrice(Number(t.balance_after))
                             : "—"}
                         </TableCell>
                       </TableRow>

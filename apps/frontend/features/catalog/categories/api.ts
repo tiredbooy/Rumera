@@ -1,80 +1,63 @@
-// api/categories.ts
-import { BASE_API_URL } from "@/lib/utils/api-helpers";
+import type { ApiFetchOptions } from "@/lib/api/client";
+import { publicRequest } from "@/lib/api/public";
+import type { Paginated } from "@/lib/api/types";
 import { buildQueryString } from "@/lib/utils/api-helpers";
 import type {
-  CategoryResponse,
+  Category,
+  CategoryListQuery,
   CategoryTree,
-  CreateCategoryReq,
-  UpdateCategoryReq,
-  CategoryFilter,
 } from "./types";
 
-// ── Public ────────────────────────────────────
+const PUBLIC_CACHE_OPTIONS: ApiFetchOptions = {
+  cache: "force-cache",
+  next: { revalidate: 3600 },
+};
 
-export async function fetchCategories(filter: CategoryFilter = {}) {
-  const qs = buildQueryString(filter as Record<string, unknown>);
-  const res = await fetch(`${BASE_API_URL}/categories${qs}`);
-  if (!res.ok) throw new Error(`Failed to fetch categories: ${res.statusText}`);
-  return res.json() as Promise<{ results: CategoryResponse[]; total: number }>;
+export function listCategoryPage(
+  query: CategoryListQuery = {},
+): Promise<Paginated<Category>> {
+  return publicRequest<Paginated<Category>>(
+    `/categories${buildQueryString(query)}`,
+  );
 }
 
-export async function fetchCategoryTree() {
-  const res = await fetch(`${BASE_API_URL}/categories/tree`);
-  if (!res.ok)
-    throw new Error(`Failed to fetch category tree: ${res.statusText}`);
-  const data = await res.json();
-  return data?.data as Promise<CategoryTree[]>;
+export async function listCategories(): Promise<Category[]> {
+  try {
+    const page = await publicRequest<Paginated<Category>>(
+      `/categories${buildQueryString({ limit: 100 })}`,
+      PUBLIC_CACHE_OPTIONS,
+    );
+    return page.results;
+  } catch {
+    return [];
+  }
 }
 
-export async function fetchFeaturedCategories() {
-  const res = await fetch(`${BASE_API_URL}/categories/featured`);
-  if (!res.ok)
-    throw new Error(`Failed to fetch featured categories: ${res.statusText}`);
-  const data = await res.json();
-  return data?.data as Promise<CategoryResponse[]>;
+export async function getCategoryBySlug(
+  slug: string,
+): Promise<Category | null> {
+  const categories = await listCategories();
+  return categories.find((category) => category.slug === slug) ?? null;
 }
 
-export async function fetchCategory(id: number) {
-  const res = await fetch(`${BASE_API_URL}/categories/${id}`);
-  if (!res.ok)
-    throw new Error(`Failed to fetch category ${id}: ${res.statusText}`);
-  return res.json() as Promise<CategoryResponse>;
+export async function getCategoryTree(): Promise<CategoryTree[]> {
+  try {
+    return await publicRequest<CategoryTree[]>(
+      "/categories/tree",
+      PUBLIC_CACHE_OPTIONS,
+    );
+  } catch {
+    return [];
+  }
 }
 
-export async function fetchCategoryChildren(id: number) {
-  const res = await fetch(`${BASE_API_URL}/categories/${id}/children`);
-  if (!res.ok)
-    throw new Error(`Failed to fetch children of ${id}: ${res.statusText}`);
-  return res.json() as Promise<CategoryResponse[]>;
-}
-
-// ── Admin ─────────────────────────────────────
-
-export async function createCategory(data: CreateCategoryReq) {
-  const res = await fetch(`${BASE_API_URL}/admin/categories`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error(`Failed to create category: ${res.statusText}`);
-  return res.json() as Promise<CategoryResponse>;
-}
-
-export async function updateCategory(id: number, data: UpdateCategoryReq) {
-  const res = await fetch(`${BASE_API_URL}/admin/categories/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok)
-    throw new Error(`Failed to update category ${id}: ${res.statusText}`);
-  return res.json() as Promise<CategoryResponse>;
-}
-
-export async function deleteCategory(id: number) {
-  const res = await fetch(`${BASE_API_URL}/admin/categories/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok)
-    throw new Error(`Failed to delete category ${id}: ${res.statusText}`);
+export async function getFeaturedCategories(): Promise<Category[]> {
+  try {
+    return await publicRequest<Category[]>(
+      "/categories/featured",
+      PUBLIC_CACHE_OPTIONS,
+    );
+  } catch {
+    return [];
+  }
 }

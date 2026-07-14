@@ -89,7 +89,7 @@ func (m *OrderRepo) GetByID(context.Context, int64) (*models.Order, error) { ret
 func (m *OrderRepo) GetByIDAndUserID(context.Context, int64, int64) (*models.Order, error) {
 	return nil, nil
 }
-func (m *OrderRepo) GetAll(context.Context, models.OrderFilter) ([]*models.Order, int64, error) {
+func (m *OrderRepo) GetAll(context.Context, models.OrderFilter) ([]models.OrderListItem, int64, error) {
 	return nil, 0, nil
 }
 func (m *OrderRepo) UpdateStatus(context.Context, int64, models.UpdateOrderStatusReq) (*models.Order, error) {

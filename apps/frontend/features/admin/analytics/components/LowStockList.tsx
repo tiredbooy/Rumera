@@ -2,18 +2,13 @@ import Link from "next/link";
 import { Boxes } from "lucide-react";
 import { faNum } from "@/lib/products";
 import { Button } from "@/components/ui/button";
-import { StockBadge } from "@/components/admin/status-badge";
-import {
-  fetchLowStockInventory,
-  type AdminInventoryRow,
-} from "@/features/admin/inventory/api";
-
-function stockStatus(row: AdminInventoryRow): "out" | "low" {
-  return row.available_stock <= 0 ? "out" : "low";
-}
+import { InventoryStockBadge } from "@/features/inventory/components/inventory-stock-badge";
+import { fetchLowStockInventory } from "@/features/inventory/api";
+import type { InventoryItem } from "@/features/inventory/types";
+import { getInventoryStatus } from "@/features/inventory/utils";
 
 export async function LowStockList() {
-  let rows: AdminInventoryRow[] | null = null;
+  let rows: InventoryItem[] | null = null;
   let error = false;
 
   try {
@@ -62,7 +57,7 @@ export async function LowStockList() {
                   موجودی قابل فروش: {faNum(row.available_stock)}
                 </p>
               </div>
-              <StockBadge status={stockStatus(row)} />
+              <InventoryStockBadge status={getInventoryStatus(row)} />
             </div>
           ))
         )}

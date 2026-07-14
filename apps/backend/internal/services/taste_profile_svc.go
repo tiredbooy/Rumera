@@ -20,20 +20,21 @@ func NewTasteProfileService(repo repositories.TasteProfileRepository) *TasteProf
 
 // Get returns the saved preferences, or an empty (non-nil) set when the customer
 // hasn't taken the quiz yet — callers can treat "empty" as "not configured".
-func (s *TasteProfileService) Get(ctx context.Context, userID int64) (*models.TastePrefs, error) {
-	prefs, err := s.repo.Get(ctx, userID)
+func (s *TasteProfileService) Get(ctx context.Context, userID int64) (*models.TasteProfile, error) {
+	profile, err := s.repo.Get(ctx, userID)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			return &models.TastePrefs{}, nil
+			return &models.TasteProfile{}, nil
 		}
 		return nil, apperr.ErrInternal
 	}
-	return prefs, nil
+	return profile, nil
 }
 
-func (s *TasteProfileService) Save(ctx context.Context, userID int64, prefs models.TastePrefs) (*models.TastePrefs, error) {
-	if err := s.repo.Upsert(ctx, userID, prefs); err != nil {
+func (s *TasteProfileService) Save(ctx context.Context, userID int64, input models.UpdateTasteProfileInput) (*models.TasteProfile, error) {
+	profile := input.TasteProfile()
+	if err := s.repo.Upsert(ctx, userID, profile); err != nil {
 		return nil, apperr.ErrInternal
 	}
-	return &prefs, nil
+	return &profile, nil
 }

@@ -13,17 +13,24 @@ import (
 // add-time so the basket total is stable even if catalogue prices change later
 // (the cart read surfaces price drift via the `price_changed` flag).
 type CartService struct {
-	cartRepo    repositories.CartRepository
-	variantRepo repositories.VariantRepository
-	db          pgxBeginner
+	cartRepo      repositories.CartRepository
+	variantRepo   repositories.VariantRepository
+	inventoryRepo repositories.InventoryRepository
+	db            pgxBeginner
 }
 
 func NewCartService(
 	cartRepo repositories.CartRepository,
 	variantRepo repositories.VariantRepository,
+	inventoryRepo repositories.InventoryRepository,
 	db pgxBeginner,
 ) *CartService {
-	return &CartService{cartRepo: cartRepo, variantRepo: variantRepo, db: db}
+	return &CartService{
+		cartRepo:      cartRepo,
+		variantRepo:   variantRepo,
+		inventoryRepo: inventoryRepo,
+		db:            db,
+	}
 }
 
 // Get returns the user's cart with hydrated items and a computed summary,
@@ -59,15 +66,31 @@ func (s *CartService) AddItem(ctx context.Context, userID int64, req models.AddC
 	if !variant.IsActive {
 		return nil, apperr.ErrProductUnavailable
 	}
-
 	cart, err := s.cartRepo.GetOrCreate(ctx, userID)
 	if err != nil {
 		return nil, apperr.ErrInternal
+	}
+	items, err := s.cartRepo.GetItems(ctx, cart.ID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	totalQuantity := req.Quantity
+	for _, item := range items {
+		if item.VariantID == req.ProductVariantID {
+			totalQuantity += item.Quantity
+			break
+		}
+	}
+	if err := s.ensureAvailable(ctx, req.ProductVariantID, totalQuantity); err != nil {
+		return nil, err
 	}
 
 	// Price is set server-side from the live variant — never trusted from input.
 	req.UnitPriceSnapshot = variant.Price
 	if _, err := s.cartRepo.AddItem(ctx, cart.ID, req); err != nil {
+		if errors.Is(err, models.ErrInsufficientStock) {
+			return nil, apperr.ErrOutOfStock
+		}
 		return nil, apperr.ErrInternal
 	}
 
@@ -86,6 +109,14 @@ func (s *CartService) AddItems(ctx context.Context, userID int64, req models.Add
 	cart, err := s.cartRepo.GetOrCreate(ctx, userID)
 	if err != nil {
 		return nil, apperr.ErrInternal
+	}
+	existingItems, err := s.cartRepo.GetItems(ctx, cart.ID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	quantities := make(map[int64]int, len(existingItems))
+	for _, existing := range existingItems {
+		quantities[existing.VariantID] = existing.Quantity
 	}
 
 	skipped := make([]models.SkippedCartItem, 0)
@@ -108,10 +139,23 @@ func (s *CartService) AddItems(ctx context.Context, userID int64, req models.Add
 			skipped = append(skipped, models.SkippedCartItem{ProductVariantID: item.ProductVariantID, Reason: "unavailable"})
 			continue
 		}
+		totalQuantity := quantities[item.ProductVariantID] + item.Quantity
+		if err := s.ensureAvailable(ctx, item.ProductVariantID, totalQuantity); err != nil {
+			if errors.Is(err, apperr.ErrOutOfStock) {
+				skipped = append(skipped, models.SkippedCartItem{ProductVariantID: item.ProductVariantID, Reason: "out_of_stock"})
+				continue
+			}
+			return nil, err
+		}
+		quantities[item.ProductVariantID] = totalQuantity
 
 		// Price is set server-side from the live variant — never trusted from input.
 		item.UnitPriceSnapshot = variant.Price
 		if _, err := s.cartRepo.AddItem(ctx, cart.ID, item); err != nil {
+			if errors.Is(err, models.ErrInsufficientStock) {
+				skipped = append(skipped, models.SkippedCartItem{ProductVariantID: item.ProductVariantID, Reason: "out_of_stock"})
+				continue
+			}
 			return nil, apperr.ErrInternal
 		}
 		added++
@@ -124,6 +168,20 @@ func (s *CartService) AddItems(ctx context.Context, userID int64, req models.Add
 	return &models.BulkAddResult{Cart: cartResp, Added: added, Skipped: skipped}, nil
 }
 
+func (s *CartService) ensureAvailable(ctx context.Context, variantID int64, quantity int) error {
+	inventory, err := s.inventoryRepo.GetByVariantID(ctx, variantID)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return apperr.ErrOutOfStock
+		}
+		return apperr.ErrInternal
+	}
+	if inventory.StockOnHand < quantity {
+		return apperr.ErrOutOfStock
+	}
+	return nil
+}
+
 // UpdateItem sets the quantity of an existing cart line.
 func (s *CartService) UpdateItem(ctx context.Context, userID, itemID int64, req models.UpdateCartItemReq) (*models.CartResponse, error) {
 	if itemID <= 0 || req.Quantity <= 0 {
@@ -134,8 +192,28 @@ func (s *CartService) UpdateItem(ctx context.Context, userID, itemID int64, req 
 	if err != nil {
 		return nil, apperr.ErrInternal
 	}
+	items, err := s.cartRepo.GetItems(ctx, cart.ID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	var variantID int64
+	for _, item := range items {
+		if item.ID == itemID {
+			variantID = item.VariantID
+			break
+		}
+	}
+	if variantID == 0 {
+		return nil, apperr.ErrNotFound
+	}
+	if err := s.ensureAvailable(ctx, variantID, req.Quantity); err != nil {
+		return nil, err
+	}
 
 	if _, err := s.cartRepo.UpdateItem(ctx, cart.ID, itemID, req); err != nil {
+		if errors.Is(err, models.ErrInsufficientStock) {
+			return nil, apperr.ErrOutOfStock
+		}
 		if errors.Is(err, models.ErrNotFound) {
 			return nil, apperr.ErrNotFound
 		}

@@ -1,70 +1,128 @@
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import Link from "next/link";
+import { ArrowLeft, Boxes } from "lucide-react";
 
-import { formatPrice } from "@/lib/products"
-import type { ProductListItem } from "@/lib/catalog/types"
-import { Bottle } from "@/components/bottle"
+import { OptimizedImage } from "@/components/optimized-image";
+import type { ProductListItem } from "@/features/catalog/products/types";
+import { formatPrice } from "@/lib/products";
 
-// The list endpoint carries no imagery, so cards use the Bottle visual; vary the
-// hue by id for a lively grid (real photography shows on the product page).
-const HUES: [string, string][] = [
-  ["oklch(0.62 0.13 65)", "oklch(0.32 0.08 50)"],
-  ["oklch(0.45 0.16 18)", "oklch(0.24 0.08 20)"],
-  ["oklch(0.82 0.1 95)", "oklch(0.55 0.09 80)"],
-  ["oklch(0.7 0.11 200)", "oklch(0.4 0.08 220)"],
-  ["oklch(0.55 0.13 55)", "oklch(0.3 0.07 45)"],
-  ["oklch(0.78 0.12 110)", "oklch(0.5 0.1 120)"],
-]
+import { ProductCardActions } from "./product-card-actions";
 
-/** Storefront product card for live `ProductListItem` data. Links to the PDP. */
+/** Luxe storefront card backed only by the real product-list projection. */
 export function ProductCard({ product }: { product: ProductListItem }) {
-  const hue = HUES[product.id % HUES.length]
-  const ranged = product.max_price > product.min_price
+  const href = product.slug
+    ? `/products/${encodeURIComponent(product.slug)}`
+    : null;
+  const hasActiveVariants = product.active_variant_count > 0;
+  const hasAvailableVariants = product.available_variant_count > 0;
+  const hasPrice = product.min_price > 0;
+  const ranged = hasPrice && product.max_price > product.min_price;
+  const image = product.image_response;
+  const imageAlt = image?.alt_text?.trim() || product.title;
+  const monogram = product.title.trim().charAt(0) || "ر";
+
+  const imageContent = (
+    <OptimizedImage
+      imageKey={image?.storage_key}
+      src={image?.image_url}
+      alt={imageAlt}
+      width={640}
+      format="webp"
+      quality={82}
+      widths={[320, 480, 640, 800]}
+      fit="cover"
+      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+      monogram={monogram}
+      className="h-full w-full transition-transform duration-500 ease-out group-hover/product:scale-[1.035] motion-reduce:transition-none"
+      fallbackClassName="from-accent/45 via-card to-secondary"
+    />
+  );
 
   return (
-    <Link
-      href={`/products/${product.slug}`}
-      className="group/product press border-hairline shadow-e1 hover:shadow-e3 relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:ring-primary/30 sm:rounded-3xl"
-    >
-      <div className="relative flex h-44 items-end justify-center overflow-hidden sm:h-56">
-        <div
-          className="absolute inset-0 opacity-90 transition-opacity duration-300 group-hover/product:opacity-100"
-          style={{ background: `radial-gradient(75% 60% at 50% 120%, ${hue[0]}, transparent 70%)` }}
-        />
-        {/* Sheen sweep on hover — premium catch-light across the bottle stage. */}
-        <span
-          aria-hidden
-          className="sheen pointer-events-none absolute inset-0 -translate-x-full opacity-0 transition-all duration-700 ease-out group-hover/product:translate-x-full group-hover/product:opacity-100 motion-reduce:hidden"
-        />
-        <Bottle
-          product={{ id: product.id, hue, maker: product.brand }}
-          className="relative h-36 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/product:-translate-y-1.5 group-hover/product:scale-105 sm:h-48"
+    <article className="group/product border-hairline shadow-e1 hover:shadow-e3 relative flex h-full min-w-0 flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1 hover:ring-primary/30 focus-within:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none">
+      <div className="relative aspect-4/5 overflow-hidden bg-secondary">
+        {href ? (
+          <Link
+            href={href}
+            aria-label={`مشاهدهٔ ${product.title}`}
+            className="absolute inset-0 z-10 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+          >
+            {imageContent}
+          </Link>
+        ) : (
+          <div className="absolute inset-0">{imageContent}</div>
+        )}
+
+        <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-black/45 via-transparent to-black/5 opacity-70 transition-opacity duration-300 group-hover/product:opacity-90 motion-reduce:transition-none" />
+
+        {product.category ? (
+          <span className="pointer-events-none absolute start-3 top-3 z-20 max-w-[60%] truncate rounded-full border border-white/15 bg-background/80 px-3 py-1 text-[11px] font-medium text-foreground shadow-sm backdrop-blur-md">
+            {product.category}
+          </span>
+        ) : null}
+
+        <ProductCardActions
+          productId={product.id}
+          productTitle={product.title}
+          productHref={href}
+          purchasableVariantId={product.purchasable_variant_id}
+          hasActiveVariants={hasActiveVariants}
+          hasAvailableVariants={hasAvailableVariants}
         />
       </div>
 
-      <div className="flex flex-1 flex-col gap-1.5 border-t border-border/60 p-4 sm:gap-2 sm:p-5">
-        {product.brand ? (
-          <span className="truncate text-[11px] font-medium text-primary sm:text-xs">
-            {product.brand}
-          </span>
-        ) : null}
-        <h3 className="line-clamp-2 font-serif text-base leading-tight transition-colors group-hover/product:text-primary sm:text-xl">
-          {product.title}
+      <div className="flex flex-1 flex-col gap-2 border-t border-border/60 p-5 sm:p-6">
+        <div className="min-h-5">
+          {product.brand ? (
+            <p className="truncate text-xs font-semibold tracking-wide text-primary">
+              {product.brand}
+            </p>
+          ) : null}
+        </div>
+
+        <h3 className="line-clamp-2 font-serif text-xl leading-snug text-foreground transition-colors group-hover/product:text-primary sm:text-2xl">
+          {href ? (
+            <Link
+              href={href}
+              className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {product.title}
+            </Link>
+          ) : (
+            product.title
+          )}
         </h3>
-        <div className="mt-auto flex items-end justify-between gap-2 pt-1.5 sm:pt-2">
-          <span className="flex min-w-0 flex-col leading-tight">
-            {ranged ? (
-              <span className="text-[10px] text-muted-foreground sm:text-[11px]">از</span>
-            ) : null}
-            <span className="truncate font-serif text-base text-foreground sm:text-lg">
-              {formatPrice(product.min_price)}
-            </span>
-          </span>
-          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary transition-opacity sm:text-sm sm:opacity-0 sm:group-hover/product:opacity-100">
-            مشاهده <ArrowLeft className="size-4 transition-transform group-hover/product:-translate-x-0.5" />
-          </span>
+
+        <div className="mt-auto flex min-h-14 items-end justify-between gap-3 pt-3">
+          <div className="min-w-0">
+            {hasPrice ? (
+              <>
+                <p className="text-[11px] text-muted-foreground">
+                  {ranged ? "شروع قیمت از" : "قیمت"}
+                </p>
+                <p className="truncate font-serif text-xl text-foreground sm:text-2xl">
+                  {formatPrice(product.min_price)}
+                </p>
+              </>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                <Boxes className="size-4" /> در حال تأمین
+              </span>
+            )}
+          </div>
+
+          {href ? (
+            <Link
+              href={href}
+              className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-xl px-2 text-sm font-semibold text-primary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              جزئیات
+              <ArrowLeft className="size-4 transition-transform group-hover/product:-translate-x-0.5 motion-reduce:transition-none" />
+            </Link>
+          ) : (
+            <span className="text-xs text-muted-foreground">بدون صفحهٔ عمومی</span>
+          )}
         </div>
       </div>
-    </Link>
-  )
+    </article>
+  );
 }

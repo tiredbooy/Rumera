@@ -125,14 +125,6 @@
 │   │   ├── status-badge.tsx
 │   │   └── variant-picker.tsx
 │   ├── age-gate.tsx
-│   ├── auth
-│   │   ├── forgot-password-form.tsx
-│   │   ├── login-form.tsx
-│   │   ├── login-tabs.tsx
-│   │   ├── phone-login-form.tsx
-│   │   ├── register-form.tsx
-│   │   ├── reset-password-form.tsx
-│   │   └── session-guard.tsx
 │   ├── bottle.tsx
 │   ├── brand-marquee.tsx
 │   ├── categories.ts
@@ -343,15 +335,26 @@
 │   │   │   ├── components
 │   │   │   ├── types.ts
 │   │   │   └── validations.ts
-│   │   └── shipping
-│   │       ├── api.ts
-│   │       ├── components
-│   │       ├── types.ts
-│   │       └── validations.ts
+│   │   ├── shipping
+│   │   │   ├── api.ts
+│   │   │   ├── components
+│   │   │   ├── types.ts
+│   │   │   └── validations.ts
+│   │   └── uploads
+│   │       ├── client.ts
+│   │       └── types.ts
 │   ├── auth
-│   │   ├── api.ts
+│   │   ├── api
+│   │   │   ├── client.ts
+│   │   │   └── server.ts
 │   │   ├── components
-│   │   ├── hooks.ts
+│   │   │   ├── forgot-password-form.tsx
+│   │   │   ├── login-form.tsx
+│   │   │   ├── login-tabs.tsx
+│   │   │   ├── phone-login-form.tsx
+│   │   │   ├── register-form.tsx
+│   │   │   ├── reset-password-form.tsx
+│   │   │   └── session-guard.tsx
 │   │   ├── types.ts
 │   │   └── validation.ts
 │   ├── cart
@@ -477,7 +480,6 @@
 │   │   └── stats-format.ts
 │   ├── api
 │   │   ├── account-hooks.ts
-│   │   ├── admin-client.txt
 │   │   ├── admin-hooks.ts
 │   │   ├── client.ts
 │   │   ├── endpoints.ts

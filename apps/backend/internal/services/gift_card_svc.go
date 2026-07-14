@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/shopspring/decimal"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/pkg/apperr"
@@ -24,8 +25,8 @@ func NewGiftCardService(repo repositories.GiftCardRepository, wallet *WalletServ
 }
 
 // Issue creates `count` gift cards of `amount` and returns them (with codes).
-func (s *GiftCardService) Issue(ctx context.Context, amount float64, count int) ([]models.GiftCardResponse, error) {
-	if amount <= 0 {
+func (s *GiftCardService) Issue(ctx context.Context, amount decimal.Decimal, count int) ([]models.GiftCardResponse, error) {
+	if !amount.GreaterThan(decimal.Zero) {
 		return nil, apperr.ErrInvalidRequest
 	}
 	if count <= 0 {
@@ -48,7 +49,7 @@ func (s *GiftCardService) Issue(ctx context.Context, amount float64, count int) 
 	return out, nil
 }
 
-func (s *GiftCardService) createOne(ctx context.Context, amount float64) (*models.GiftCard, error) {
+func (s *GiftCardService) createOne(ctx context.Context, amount decimal.Decimal) (*models.GiftCard, error) {
 	for i := 0; i < 6; i++ {
 		gc, err := s.repo.Create(ctx, genGiftCode(), amount)
 		if err == nil {
@@ -78,7 +79,7 @@ func (s *GiftCardService) Redeem(ctx context.Context, userID int64, code string)
 	}
 
 	desc := "شارژ کیف پول با کارت هدیه"
-	if _, err := s.wallet.Deposit(ctx, userID, amount, nil, &desc); err != nil {
+	if _, err := s.wallet.Deposit(ctx, userID, amount.InexactFloat64(), nil, &desc); err != nil {
 		// Compensate so the card isn't burned without crediting the wallet.
 		_ = s.repo.Reactivate(ctx, code)
 		return nil, apperr.ErrInternal

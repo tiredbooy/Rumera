@@ -96,10 +96,18 @@ func (r *cartRepository) Delete(ctx context.Context, cartID int64) error {
 func (r *cartRepository) AddItem(ctx context.Context, cartID int64, req models.AddCartItemReq) (*models.CartItem, error) {
 	const q = `
 		INSERT INTO cart_items (cart_id, product_variant_id, quantity, unit_price_snapshot)
-		VALUES (@cart_id, @variant_id, @quantity, @unit_price_snapshot)
+		SELECT @cart_id, @variant_id, @quantity, @unit_price_snapshot
+		FROM inventory i
+		WHERE i.product_variant_id = @variant_id
+		  AND i.stock_on_hand >= @quantity
 		ON CONFLICT (cart_id, product_variant_id) DO UPDATE
 			SET quantity   = cart_items.quantity + EXCLUDED.quantity,
 			    updated_at = NOW()
+			WHERE cart_items.quantity + EXCLUDED.quantity <= (
+				SELECT i.stock_on_hand
+				FROM inventory i
+				WHERE i.product_variant_id = EXCLUDED.product_variant_id
+			)
 		RETURNING *`
 
 	args := pgx.NamedArgs{
@@ -116,6 +124,9 @@ func (r *cartRepository) AddItem(ctx context.Context, cartID int64, req models.A
 
 	item, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.CartItem])
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrInsufficientStock
+		}
 		return nil, fmt.Errorf("cartRepository.AddItem scan: %w", err)
 	}
 	return &item, nil
@@ -123,12 +134,15 @@ func (r *cartRepository) AddItem(ctx context.Context, cartID int64, req models.A
 
 func (r *cartRepository) UpdateItem(ctx context.Context, cartID int64, itemID int64, req models.UpdateCartItemReq) (*models.CartItem, error) {
 	const q = `
-		UPDATE cart_items
+		UPDATE cart_items ci
 		SET quantity   = @quantity,
 		    updated_at = NOW()
-		WHERE id      = @id
-		  AND cart_id = @cart_id
-		RETURNING *`
+		FROM inventory i
+		WHERE ci.id      = @id
+		  AND ci.cart_id = @cart_id
+		  AND i.product_variant_id = ci.product_variant_id
+		  AND i.stock_on_hand >= @quantity
+		RETURNING ci.*`
 
 	args := pgx.NamedArgs{
 		"id":       itemID,
@@ -144,7 +158,19 @@ func (r *cartRepository) UpdateItem(ctx context.Context, cartID int64, itemID in
 	item, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.CartItem])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, models.ErrNotFound
+			var exists bool
+			if lookupErr := r.db.QueryRow(
+				ctx,
+				`SELECT EXISTS (SELECT 1 FROM cart_items WHERE id = $1 AND cart_id = $2)`,
+				itemID,
+				cartID,
+			).Scan(&exists); lookupErr != nil {
+				return nil, fmt.Errorf("cartRepository.UpdateItem existence check: %w", lookupErr)
+			}
+			if !exists {
+				return nil, models.ErrNotFound
+			}
+			return nil, models.ErrInsufficientStock
 		}
 		return nil, fmt.Errorf("cartRepository.UpdateItem scan: %w", err)
 	}

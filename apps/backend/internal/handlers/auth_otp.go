@@ -143,7 +143,7 @@ func (h *Handler) VerifyOTP(c *gin.Context) {
 		_ = h.Loyalty.AwardSignup(ctx, user.ID)
 	}
 
-	response.OK(c, AuthResponse{
+	response.OK(c, TokenResponse{
 		AccessToken:  pair.Access,
 		RefreshToken: pair.Refresh,
 		User:         mappers.MapToUserResponse(user),

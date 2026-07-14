@@ -1,12 +1,15 @@
 package mappers
 
-import "github.com/tiredbooy/internal/models"
+import (
+	"github.com/shopspring/decimal"
+	"github.com/tiredbooy/internal/models"
+)
 
 func ToPaymentTransactionResponse(pt *models.PaymentTransaction) models.PaymentTransactionResponse {
 	return models.PaymentTransactionResponse{
 		ID:            pt.ID,
 		OrderID:       pt.OrderID,
-		Amount:        pt.Amount,
+		Amount:        decimal.NewFromFloat(pt.Amount),
 		Currency:      pt.Currency,
 		Status:        pt.Status,
 		PaymentMethod: pt.PaymentMethod,

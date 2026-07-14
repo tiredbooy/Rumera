@@ -17,7 +17,7 @@ func (h *Handler) ListHeroSlides(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.OK(c, mappers.ToHeroSlideResponses(slides))
+	response.OK(c, mappers.ToPublicHeroSlideResponses(slides))
 }
 
 // ── Admin ────────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ func (h *Handler) ListHeroSlidesAdmin(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.OK(c, mappers.ToHeroSlideResponses(slides))
+	response.OK(c, mappers.ToAdminHeroSlideResponses(slides))
 }
 
 // GetHeroSlide — GET /admin/hero-slides/:id
@@ -43,7 +43,7 @@ func (h *Handler) GetHeroSlide(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.OK(c, mappers.ToHeroSlideResponse(slide))
+	response.OK(c, mappers.ToAdminHeroSlideResponse(slide))
 }
 
 // CreateHeroSlide — POST /admin/hero-slides
@@ -57,7 +57,7 @@ func (h *Handler) CreateHeroSlide(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.Created(c, mappers.ToHeroSlideResponse(slide))
+	response.Created(c, mappers.ToAdminHeroSlideResponse(slide))
 }
 
 // UpdateHeroSlide — PATCH /admin/hero-slides/:id
@@ -75,7 +75,7 @@ func (h *Handler) UpdateHeroSlide(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.OK(c, mappers.ToHeroSlideResponse(slide))
+	response.OK(c, mappers.ToAdminHeroSlideResponse(slide))
 }
 
 // DeleteHeroSlide — DELETE /admin/hero-slides/:id

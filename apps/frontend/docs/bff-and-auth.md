@@ -67,7 +67,7 @@ const ALLOW = new Set([
 ```
 
 It attaches **no token** and only forwards a body for non-`GET`/`HEAD` methods.
-Consumers (all in `components/auth/`):
+Consumers (all in `features/auth/components/`):
 
 - `register-form.tsx` → `POST /api/public/auth/register`
 - `forgot-password-form.tsx` → `POST /api/public/auth/password/forgot`
@@ -119,7 +119,8 @@ deliberately a coarse gate, not the authority.
 > doubled from the client: creating a product calls
 > `/api/admin/admin/products`, which forwards to `/api/v1/admin/products`. The
 > admin image upload uses the same shape: `/api/admin/admin/products/:id/images`
-> (see `lib/api/admin-client.ts`).
+> (see `features/admin/products/api/client.ts`). Standalone uploads use
+> `/api/admin/admin/uploads` through `features/admin/uploads/client.ts`.
 
 Unlike the store proxy, the admin proxy preserves **`multipart/form-data`**
 bodies byte-for-byte (boundary intact) so product image uploads pass through:
@@ -133,9 +134,9 @@ if (isMultipart) {
 }
 ```
 
-Consumed via `adminRequest()` / `uploadProductImage()` in `lib/api/admin-client.ts`,
-which throw a typed `AdminApiError` (it also carries a `fields` map for
-validation errors).
+Consumed by resource-owned browser clients under `features/`, including
+`uploadProductImage()` and `uploadImage()`. Each client owns its typed error;
+validation-aware clients also carry the backend `fields` map.
 
 ---
 
@@ -274,7 +275,7 @@ There are **two layers** of refresh and they fail differently:
 | BFF proxy (store/admin) | reactively, on a `401` mid-request | returns the original `401` |
 
 When `rotate()` fails, the error is projected onto `session.error`. The
-client-side **`SessionGuard`** (`components/auth/session-guard.tsx`) watches the
+client-side **`SessionGuard`** (`features/auth/components/session-guard.tsx`) watches the
 session via `useSession()` and reacts **only** to that terminal state:
 
 ```tsx
@@ -294,8 +295,8 @@ Crucially, `SessionGuard` signs the user out **only on terminal refresh
 failure** — never on a healthy session, and never on a routine access-token
 expiry (the silent refreshes above handle those transparently). A `401` from a
 single BFF call does **not** trigger sign-out by itself; it surfaces to the
-caller as a typed `ApiClientError` / `AdminApiError`. The session ends only when
-the refresh token is genuinely dead.
+caller as a typed store or domain-client error. The session ends only when the
+refresh token is genuinely dead.
 
 ---
 
@@ -309,7 +310,7 @@ This single path must stay in lock-step across:
 - `middleware.ts` → redirects unauthenticated `/account` & `/admin` hits to `/login`
 - `lib/auth/session.ts` → `requireUser` / `requireStaff` redirect to
   `/login?callbackUrl=…`
-- `components/auth/session-guard.tsx` → `signOut({ callbackUrl: "/login" })`
+- `features/auth/components/session-guard.tsx` → `signOut({ callbackUrl: "/login" })`
 
 The same `(group)` rule applies to `(account)` and `(storefront)`.
 
@@ -332,22 +333,22 @@ per-permission RBAC regardless of what the frontend allows through.
 
 ---
 
-## Request lifecycle — an authed admin call
+## Request lifecycle — an authed admin upload
 
-End-to-end for an admin creating a product (`createProduct()` →
-`/api/admin/admin/products`), including the silent-refresh branch:
+End-to-end for a standalone image upload (`uploadImage()` →
+`/api/admin/admin/uploads`), including the silent-refresh branch:
 
 ```
 Browser (admin console)
-  │  createProduct() → adminRequest("admin/products", POST)
-  │  fetch POST /api/admin/admin/products      (same origin, session cookie auto-sent)
+  │  uploadImage() → XHR POST /api/admin/admin/uploads
+  │  multipart { file, folder? }               (same origin, session cookie auto-sent)
   ▼
 Next.js route handler — app/api/admin/[...path]/route.ts  (Node runtime)
-  │  segments = ["admin","products"]
+  │  segments = ["admin","uploads"]
   │  ① ALLOW.has("admin")?                     ── no  → 403 FORBIDDEN_PATH
   │  ② auth() → session; isStaff(session.role)? ── no  → 403 FORBIDDEN
   │  ③ build Bearer header from session.accessToken
-  │  fetch POST {API_BASE}/admin/products       (= /api/v1/admin/products)
+  │  fetch POST {API_BASE}/admin/uploads        (= /api/v1/admin/uploads)
   ▼
 Go backend
   │  validate Bearer JWT + per-permission RBAC
@@ -357,15 +358,15 @@ Next.js handler — refresh-and-retry-once
   │  getToken() → raw JWT → refreshToken        (refresh token stays server-side)
   │  POST {API_BASE}/auth/refresh { refresh_token }
   │     • fail → return the original 401 ─────────────────────┐
-  │     • ok   → re-send POST /admin/products with fresh Bearer │
+  │     • ok   → re-send POST /admin/uploads with fresh Bearer │
   ▼                                                            │
-Go backend → 201 { data: ProductDetail }                       │
+Go backend → 201 { data: { url, key, width, height } }         │
   ▼                                                            │
 Next.js handler → pass body + Content-Type through (or 204)    │
   ▼                                                            ▼
 Browser                                            Browser receives 401
-  adminRequest unwraps { data }                    → no auto sign-out here; surfaces
-  → ProductDetail                                    as AdminApiError(401). Sign-out
+  uploadImage unwraps { data }                     → no auto sign-out here; surfaces
+  → UploadedImage                                    as UploadApiError(401). Sign-out
                                                      happens only later, if the JWT
                                                      callback's rotate() also fails and
                                                      stamps session.error, which

@@ -26,7 +26,7 @@ func NewReviewService(
 
 // ── Review ────────────────────────────────────────────────────────────────────
 
-func (s *ReviewService) Create(ctx context.Context, userID int64, req models.CreateReviewReq, verifiedPurchase bool) (*models.Review, error) {
+func (s *ReviewService) Create(ctx context.Context, userID int64, req models.CreateReviewReq) (*models.Review, error) {
 	if userID <= 0 || req.ProductID <= 0 {
 		return nil, apperr.ErrInvalidRequest
 	}
@@ -41,13 +41,51 @@ func (s *ReviewService) Create(ctx context.Context, userID int64, req models.Cre
 	if already {
 		return nil, apperr.ErrConflict
 	}
-
-	review, err := s.reviewRepo.Create(ctx, userID, req, verifiedPurchase)
+	verifiedPurchase, err := s.reviewRepo.HasPurchased(ctx, userID, req.ProductID)
 	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	if !verifiedPurchase {
+		return nil, apperr.ErrAccessDenied
+	}
+
+	review, err := s.reviewRepo.Create(ctx, userID, req, true)
+	if err != nil {
+		if errors.Is(err, models.ErrConflict) {
+			return nil, apperr.ErrConflict
+		}
 		return nil, apperr.ErrInternal
 	}
 
 	return review, nil
+}
+
+func (s *ReviewService) GetMine(ctx context.Context, userID int64) ([]models.AccountReviewResponse, error) {
+	if userID <= 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+	reviews, err := s.reviewRepo.GetMine(ctx, userID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	if reviews == nil {
+		reviews = []models.AccountReviewResponse{}
+	}
+	return reviews, nil
+}
+
+func (s *ReviewService) GetPending(ctx context.Context, userID int64) ([]models.PendingReviewResponse, error) {
+	if userID <= 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+	items, err := s.reviewRepo.GetPending(ctx, userID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	if items == nil {
+		items = []models.PendingReviewResponse{}
+	}
+	return items, nil
 }
 
 func (s *ReviewService) GetByID(ctx context.Context, id int64) (*models.Review, error) {
@@ -153,12 +191,12 @@ func (s *ReviewService) GetRatingSummary(ctx context.Context, productID int64) (
 	return summary, nil
 }
 
-func (s *ReviewService) React(ctx context.Context, id int64, like bool) error {
-	if id <= 0 {
+func (s *ReviewService) React(ctx context.Context, id int64, userID int64, like bool) error {
+	if id <= 0 || userID <= 0 {
 		return apperr.ErrInvalidRequest
 	}
 
-	if err := s.reviewRepo.React(ctx, id, like); err != nil {
+	if err := s.reviewRepo.React(ctx, id, userID, like); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return apperr.ErrNotFound
 		}
@@ -183,16 +221,20 @@ func (s *ReviewService) HasReviewed(ctx context.Context, userID int64, productID
 
 // ── Review images ─────────────────────────────────────────────────────────────
 
-func (s *ReviewService) GetImages(ctx context.Context, reviewID int64) ([]*models.ReviewImage, error) {
-	if reviewID <= 0 {
+func (s *ReviewService) GetImages(ctx context.Context, reviewID int64, userID int64) ([]*models.ReviewImage, error) {
+	if reviewID <= 0 || userID <= 0 {
 		return nil, apperr.ErrInvalidRequest
 	}
 
-	if _, err := s.reviewRepo.GetByID(ctx, reviewID); err != nil {
+	review, err := s.reviewRepo.GetByID(ctx, reviewID)
+	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return nil, apperr.ErrNotFound
 		}
 		return nil, apperr.ErrInternal
+	}
+	if review.Status != models.ReviewStatusApproved && review.UserID != userID {
+		return nil, apperr.ErrAccessDenied
 	}
 
 	images, err := s.reviewImageRepo.GetImagesByReviewID(ctx, reviewID)
@@ -200,6 +242,9 @@ func (s *ReviewService) GetImages(ctx context.Context, reviewID int64) ([]*model
 		return nil, apperr.ErrInternal
 	}
 
+	if images == nil {
+		images = []*models.ReviewImage{}
+	}
 	return images, nil
 }
 

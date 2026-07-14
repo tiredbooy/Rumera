@@ -88,7 +88,7 @@ func (h *Handler) ListMyOrders(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.Paginated(c, toOrderListItems(orders), paginate(filter.Page, filter.Limit, total))
+	response.Paginated(c, orders, paginate(filter.Page, filter.Limit, total))
 }
 
 // GetMyOrder — GET /orders/:id
@@ -148,7 +148,7 @@ func (h *Handler) ListOrders(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	response.Paginated(c, toOrderListItems(orders), paginate(filter.Page, filter.Limit, total))
+	response.Paginated(c, orders, paginate(filter.Page, filter.Limit, total))
 }
 
 // GetOrder — GET /admin/orders/:id
@@ -188,12 +188,4 @@ func (h *Handler) UpdateOrderStatus(c *gin.Context) {
 		return
 	}
 	response.OK(c, mappers.ToOrderListItem(order, 0))
-}
-
-func toOrderListItems(orders []*models.Order) []models.OrderListItem {
-	out := make([]models.OrderListItem, len(orders))
-	for i, o := range orders {
-		out[i] = mappers.ToOrderListItem(o, 0)
-	}
-	return out
 }

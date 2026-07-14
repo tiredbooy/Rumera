@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, ZoomIn } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
-import type { ProductImage } from "@/lib/catalog/types"
+import type { ProductImage } from "@/features/catalog/products/types"
 
 /**
  * ProductGallery — the PDP's image viewer. A large primary frame (`.cellar-glow`

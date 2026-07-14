@@ -2,7 +2,7 @@ import { Check, Clock, CreditCard, PackageOpen, Truck, Home, XCircle } from "luc
 import type { LucideIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import type { OrderStatus } from "@/lib/catalog/types"
+import type { OrderStatus } from "@/features/orders/types"
 
 /**
  * OrderStatusStepper — the customer-facing fulfilment timeline:

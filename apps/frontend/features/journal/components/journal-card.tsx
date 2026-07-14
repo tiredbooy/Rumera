@@ -4,7 +4,8 @@ import { Clock, ArrowLeft, Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
 import { SmartImage } from "@/components/smart-image"
-import { formatBlogDate, readingTime, type BlogListItem } from "@/lib/journal"
+import type { JournalListItem } from "@/features/journal/types"
+import { formatJournalDate, formatReadingTime } from "@/features/journal/utils"
 
 // Rotated placeholder tints so an occasional cover-less post still feels
 // editorial (SmartImage uses these as its gradient fallback).
@@ -34,7 +35,7 @@ export function JournalCard({
   featured = false,
   priority = false,
 }: {
-  post: BlogListItem
+  post: JournalListItem
   index?: number
   featured?: boolean
   /** Pass for above-the-fold cards (e.g. the featured lead) to prioritize the cover. */
@@ -60,7 +61,7 @@ export function JournalCard({
               className="transition-transform duration-500 ease-cellar group-hover/feat:scale-[1.03]"
             />
             <span className="absolute bottom-3 end-3 inline-flex items-center gap-1.5 rounded-full bg-background/75 px-2.5 py-1 text-xs font-medium text-foreground shadow-e1 backdrop-blur-sm">
-              <Clock className="size-3.5" aria-hidden /> {readingTime(post.time_to_read)}
+              <Clock className="size-3.5" aria-hidden /> {formatReadingTime(post.time_to_read)}
             </span>
           </div>
         </Link>
@@ -79,7 +80,7 @@ export function JournalCard({
             <p className="line-clamp-3 leading-relaxed text-muted-foreground">{post.excerpt}</p>
           ) : null}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {post.published_at ? <span>{formatBlogDate(post.published_at)}</span> : null}
+            {post.published_at ? <span>{formatJournalDate(post.published_at)}</span> : null}
             {post.total_reads > 0 ? (
               <span className="inline-flex items-center gap-1.5">
                 <Eye className="size-3.5" aria-hidden /> {faNum(post.total_reads)} بازدید
@@ -112,14 +113,14 @@ export function JournalCard({
             className="transition-transform duration-500 ease-cellar group-hover/post:scale-105"
           />
           <span className="absolute bottom-3 end-3 inline-flex items-center gap-1.5 rounded-full bg-background/75 px-2.5 py-1 text-xs font-medium text-foreground shadow-e1 backdrop-blur-sm">
-            <Clock className="size-3.5" aria-hidden /> {readingTime(post.time_to_read)}
+            <Clock className="size-3.5" aria-hidden /> {formatReadingTime(post.time_to_read)}
           </span>
         </div>
       </Link>
 
       <div className="flex flex-1 flex-col gap-3 p-5 sm:p-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          {post.published_at ? <span>{formatBlogDate(post.published_at)}</span> : null}
+          {post.published_at ? <span>{formatJournalDate(post.published_at)}</span> : null}
           {post.total_reads > 0 ? (
             <span className="inline-flex items-center gap-1.5">
               <Eye className="size-3.5" aria-hidden /> {faNum(post.total_reads)}
@@ -148,6 +149,3 @@ export function JournalCard({
     </article>
   )
 }
-
-/** Back-compat alias — older imports referenced `BlogCard`. */
-export { JournalCard as BlogCard }

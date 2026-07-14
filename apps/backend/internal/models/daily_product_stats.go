@@ -10,7 +10,10 @@ import (
 // ── Entity ────────────────────────────────────────────────────────────────────
 
 type DailyProductStats struct {
-	Date      time.Time `json:"date"`
+	Date time.Time `json:"date"`
+	// Backend blocker: the analytics database uses UUID product IDs, while the
+	// catalog products table uses BIGINT IDs. Do not join or translate this value
+	// until a canonical cross-database product identifier is introduced.
 	ProductID uuid.UUID `json:"product_id"`
 
 	// views

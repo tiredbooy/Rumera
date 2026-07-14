@@ -7,7 +7,7 @@ import { ArrowLeft, LogIn, ShieldCheck, Truck, Tag, Lock } from "lucide-react"
 import { formatPrice, faNum } from "@/lib/products"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { useCart } from "@/lib/api/hooks"
+import { useCart } from "@/features/cart/api"
 import { CartLines } from "./cart-lines"
 
 /** Full cart page body (client). Server page wraps it for metadata/noindex. */

@@ -9,6 +9,8 @@ See [Authentication](../authentication.md) for the token model and trust tiers, 
 | GET | `/products/:id/reviews` | 🌐 public | List a product's approved reviews |
 | GET | `/products/:id/reviews/summary` | 🌐 public | Rating summary for a product |
 | GET | `/reviews/:id` | 🌐 public | Fetch a single review |
+| GET | `/reviews/mine` | 🔒 customer | List the caller's reviews with product details |
+| GET | `/reviews/pending` | 🔒 customer | List delivered products not yet reviewed |
 | POST | `/reviews` | 🔒 customer | Create a review |
 | PATCH | `/reviews/:id` | 🔒 customer | Update own review |
 | DELETE | `/reviews/:id` | 🔒 customer | Delete own review |
@@ -41,12 +43,12 @@ Lists reviews for product `:id`. **Only `approved` reviews are returned** — th
       "content": "Smooth and smoky.",
       "rating": 5,
       "user_id": 42,
-      "user_full_name": "",
+      "user_full_name": "Sara Ahmadi",
       "product_id": 7,
       "like_count": 3,
       "images": [],
       "dislike_count": 0,
-      "verified_purchase": false,
+      "verified_purchase": true,
       "status": "approved",
       "created_at": "2026-06-11T10:00:00Z"
     }
@@ -97,7 +99,7 @@ GET /products/:id/reviews/summary
 GET /reviews/:id
 ```
 
-**Response** `200 OK` — `ReviewResponse` (see shape above, wrapped in `data`).
+**Response** `200 OK` — approved `ReviewResponse` (see shape above, wrapped in `data`). Pending and rejected reviews are not publicly readable.
 
 **Errors:** `400 INVALID_PARAMS`, `404 NOT_FOUND`.
 
@@ -110,7 +112,7 @@ POST /reviews
 Authorization: Bearer <access_token>
 ```
 
-The author is taken from the access token. `verified_purchase` is determined server-side and is currently always `false` until an order-history check is wired in. New reviews start in `pending` status.
+The author is taken from the access token. The caller must have a delivered order containing the product; `verified_purchase` is determined server-side. New reviews start in `pending` status.
 
 **Request body** — `CreateReviewReq`:
 
@@ -132,7 +134,27 @@ The author is taken from the access token. `verified_purchase` is determined ser
 
 **Response** `201 Created` — `ReviewResponse`.
 
-**Errors:** `401 UNAUTHORIZED`, `422 VALIDATION_ERROR`, `404 NOT_FOUND` (product).
+**Errors:** `401 UNAUTHORIZED`, `403 ACCESS_DENIED` (no delivered purchase), `409 CONFLICT` (already reviewed), `422 VALIDATION_ERROR`.
+
+---
+
+## List my reviews
+
+```
+GET /reviews/mine
+Authorization: Bearer <access_token>
+```
+
+Returns `{ "data": [...] }` with the caller's non-deleted reviews and the related `product_id`, `product_slug`, `product_title`, optional `image_url`, `rating`, `content`, `status`, and `created_at`.
+
+## List products pending review
+
+```
+GET /reviews/pending
+Authorization: Bearer <access_token>
+```
+
+Returns `{ "data": [...] }` with products from delivered orders for which the caller has no non-deleted review. Each item includes product details, `order_id`, and optional `delivered_at`.
 
 ---
 
@@ -181,7 +203,8 @@ POST /reviews/:id/react
 Authorization: Bearer <access_token>
 ```
 
-Registers a like or dislike against a review.
+Registers or changes the caller's like/dislike vote against an approved review.
+Repeated identical votes are idempotent.
 
 **Request body**
 
@@ -242,7 +265,7 @@ Authorization: Bearer <access_token>
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `image_url` | string | ✓ | Image URL |
-| `alt_text` | string | | Alt text |
+| `alt_text` | string \| null | | Alt text, max 255 characters |
 | `sort_order` | int | | Display order |
 
 **Response** `201 Created` — `ReviewImage`.

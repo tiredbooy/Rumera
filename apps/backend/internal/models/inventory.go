@@ -17,6 +17,11 @@ const (
 type Inventory struct {
 	ID               int64      `db:"id"`
 	ProductVariantID int64      `db:"product_variant_id"`
+	ProductID        int64      `db:"product_id"`
+	ProductTitle     string     `db:"product_title"`
+	SKU              *string    `db:"sku"`
+	CategoryTitle    *string    `db:"category_title"`
+	UnitPrice        string     `db:"unit_price"`
 	StockOnHand      int        `db:"stock_on_hand"`
 	CommittedStock   int        `db:"committed_stock"`
 	ReorderPoint     int        `db:"reorder_point"`
@@ -49,6 +54,11 @@ type UpdateReorderReq struct {
 type InventoryResponse struct {
 	ID               int64      `json:"id"`
 	ProductVariantID int64      `json:"product_variant_id"`
+	ProductID        int64      `json:"product_id"`
+	ProductTitle     string     `json:"product_title"`
+	SKU              *string    `json:"sku,omitempty"`
+	CategoryTitle    *string    `json:"category_title,omitempty"`
+	UnitPrice        string     `json:"unit_price"`
 	StockOnHand      int        `json:"stock_on_hand"`
 	CommittedStock   int        `json:"committed_stock"`
 	AvailableStock   int        `json:"available_stock"` // stock_on_hand - committed_stock
@@ -70,7 +80,7 @@ type InventoryMovementResponse struct {
 
 type InventoryFilter struct {
 	BaseFilter
-	LowStock bool `query:"low_stock"` // stock_on_hand <= reorder_point
+	LowStock bool `query:"low_stock"` // available stock <= reorder_point
 }
 
 func (f *InventoryFilter) Defaults() {

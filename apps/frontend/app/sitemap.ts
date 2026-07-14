@@ -1,10 +1,10 @@
 import type { MetadataRoute } from "next"
 
 import { absoluteUrl } from "@/lib/site"
-import { listProducts } from "@/lib/catalog/products"
-import { listCategories } from "@/lib/catalog/categories"
-import { allRecipeSlugs } from "@/lib/recipes"
-import { listBlogPosts } from "@/lib/journal"
+import { listProducts } from "@/features/catalog/products/api/public"
+import { listCategories } from "@/features/catalog/categories/api"
+import { listRecipeSlugs } from "@/features/recipes/api/server"
+import { listJournalPosts } from "@/features/journal/api/server"
 
 /**
  * Programmatic sitemap served at /sitemap.xml. Covers every public, indexable
@@ -19,8 +19,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [catalogue, categories, recipeSlugs, journalPosts] = await Promise.all([
     listProducts({ limit: 100 }),
     listCategories(),
-    allRecipeSlugs(),
-    listBlogPosts(100),
+    listRecipeSlugs(),
+    listJournalPosts(100),
   ])
 
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -32,12 +32,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: absoluteUrl("/about"), lastModified: now, changeFrequency: "monthly", priority: 0.4 },
   ]
 
-  const categoryRoutes: MetadataRoute.Sitemap = categories.map((c) => ({
-    url: absoluteUrl(`/categories/${c.slug}`),
-    lastModified: now,
-    changeFrequency: "weekly",
-    priority: 0.7,
-  }))
+  const categoryRoutes: MetadataRoute.Sitemap = categories.flatMap((c) =>
+    c.slug
+      ? [{
+          url: absoluteUrl(`/categories/${c.slug}`),
+          lastModified: now,
+          changeFrequency: "weekly" as const,
+          priority: 0.7,
+        }]
+      : [],
+  )
 
   const productRoutes: MetadataRoute.Sitemap = catalogue.results.map((p) => ({
     url: absoluteUrl(`/products/${p.slug}`),

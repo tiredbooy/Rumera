@@ -7,7 +7,10 @@
  */
 import { siteConfig, absoluteUrl } from "@/lib/site"
 import {  type Product } from "@/lib/products"
-import type { ProductDetail, ProductListItem } from "@/lib/catalog/types"
+import type {
+  ProductDetail,
+  ProductListItem,
+} from "@/features/catalog/products/types"
 
 export function organizationLd() {
   return {

@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useSession } from "next-auth/react"
 
-import { useClaimReferral } from "@/lib/api/hooks"
+import { useClaimReferral } from "@/features/referral/hooks"
 
 const KEY = "rumera_ref"
 
@@ -38,7 +38,7 @@ export function ReferralTracker() {
     }
     if (!code) return
     claimed.current = true
-    claim.mutate(code, {
+    claim.mutate({ code }, {
       onSettled: () => {
         try {
           localStorage.removeItem(KEY)

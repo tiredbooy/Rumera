@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -23,19 +22,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useProfile, useUpdateProfile } from "@/lib/api/account-hooks";
+import { useProfile, useUpdateProfile } from "@/features/profile/hooks";
+import type { UpdateProfileInput } from "@/features/profile/types";
+import {
+  profileFormSchema,
+  type ProfileFormValues,
+} from "@/features/profile/validations";
 import { AccountSection } from "../../account/components/account-section";
-
-const profileSchema = z.object({
-  first_name: z.string().trim().min(2, "نام را وارد کنید"),
-  last_name: z.string().trim().min(2, "نام خانوادگی را وارد کنید"),
-  phone: z
-    .string()
-    .trim()
-    .regex(/^09\d{9}$/, "شمارهٔ موبایل معتبر نیست")
-    .or(z.literal("")),
-});
-type ProfileValues = z.infer<typeof profileSchema>;
 
 /** A small "coming soon" pill reused across the honest, not-yet-wired tabs. */
 function ComingSoonBadge() {
@@ -111,8 +104,8 @@ function ProfileTab({
     handleSubmit,
     reset,
     formState: { errors, isDirty },
-  } = useForm<ProfileValues>({
-    resolver: zodResolver(profileSchema),
+  } = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileFormSchema),
     defaultValues: { first_name: seed.first, last_name: seed.last, phone: "" },
   });
 
@@ -135,14 +128,15 @@ function ProfileTab({
       .join(" ") || defaultName;
   const initial = (displayName || email || "?").trim().charAt(0);
 
-  function onSubmit(values: ProfileValues) {
+  function onSubmit(values: ProfileFormValues) {
+    const input: UpdateProfileInput = {
+      first_name: values.first_name,
+      last_name: values.last_name,
+      // Preserve the existing null payload; Go currently treats it as omitted.
+      phone: values.phone || null,
+    };
     update.mutate(
-      {
-        first_name: values.first_name,
-        last_name: values.last_name,
-        // Empty string clears the phone (stored as NULL by the backend).
-        phone: values.phone || null,
-      },
+      input,
       {
         onSuccess: (next) => {
           toast.success("پروفایل به‌روزرسانی شد");

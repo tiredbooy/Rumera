@@ -12,7 +12,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useCreateAlert } from "@/lib/api/hooks"
+import { useCreateProductAlert } from "@/features/product-alerts/hooks"
+import type { ProductAlertType } from "@/features/product-alerts/types"
 import { ApiClientError } from "@/lib/api/store-client"
 
 /**
@@ -24,9 +25,9 @@ export function AlertButton({ productVariantId }: { productVariantId?: number })
   const { status } = useSession()
   const router = useRouter()
   const pathname = usePathname()
-  const create = useCreateAlert()
+  const create = useCreateProductAlert()
 
-  function subscribe(type: "restock" | "price_drop") {
+  function subscribe(type: ProductAlertType) {
     if (status !== "authenticated") {
       toast.info("برای دریافت اعلان ابتدا وارد شوید")
       router.push(`/login?callbackUrl=${encodeURIComponent(pathname)}`)

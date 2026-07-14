@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { SmartImage } from "@/components/smart-image"
-import type { HeroSlide } from "@/lib/home/hero"
+import type { PublicHeroSlide } from "@/features/hero-slides/types"
 
 const AUTOPLAY_MS = 6500
 
@@ -25,7 +25,7 @@ const AUTOPLAY_MS = 6500
  * Image spec (drop assets at the slide's image_url — see public/images/README):
  *   desktop  2400×1350  (16:9)   ·   mobile  1080×1350  (4:5)
  */
-export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
+export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
   const [emblaRef, embla] = useEmblaCarousel({
     loop: slides.length > 1,
     direction: "rtl",
@@ -130,7 +130,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   )
 }
 
-function HeroSlideView({ slide, priority }: { slide: HeroSlide; priority: boolean }) {
+function HeroSlideView({ slide, priority }: { slide: PublicHeroSlide; priority: boolean }) {
   // "dark" theme = dark image → light text; we render light text on a dark scrim
   // for both, since a readable scrim keeps any photography legible.
   return (

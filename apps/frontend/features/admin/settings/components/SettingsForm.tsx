@@ -4,7 +4,6 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { toast } from "sonner"
 import {
   Store,
@@ -26,66 +25,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
 import {
-  AdminApiError,
+  SettingsApiError,
   updateSiteSettings,
-  type SiteSettings,
-  type UpdateSiteSettingsInput,
-} from "@/lib/api/admin-client"
+} from "@/features/settings/api/client"
+import type {
+  SiteSettings,
+  UpdateSiteSettingsInput,
+} from "@/features/settings/types"
+import {
+  siteSettingsFormSchema,
+  type SiteSettingsFormValues,
+} from "@/features/settings/validations"
 
 // ── Validation ──────────────────────────────────────────────────────────────
 // Every field is a string in the form (freeThreshold is a numeric string),
 // coerced to the API shape on submit. The flat schema keys mirror the backend
 // json names so the 422 `error.fields` map onto the inputs 1:1 via setError.
 
-const emailish = z
-  .string()
-  .trim()
-  .refine((v) => v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), {
-    message: "ایمیل معتبر وارد کنید",
-  })
-
-const schema = z.object({
-  // store
-  name: z.string().trim().max(120, "حداکثر ۱۲۰ نویسه"),
-  tagline: z.string().trim().max(160, "حداکثر ۱۶۰ نویسه"),
-  logoUrl: z.string().trim().max(500, "حداکثر ۵۰۰ نویسه"),
-  description: z.string().max(2000, "حداکثر ۲۰۰۰ نویسه"),
-  // contact
-  supportEmail: emailish,
-  supportPhone: z.string().trim().max(40, "حداکثر ۴۰ نویسه"),
-  address: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
-  workingHours: z.string().trim().max(160, "حداکثر ۱۶۰ نویسه"),
-  // social
-  instagram: z.string().trim().max(300),
-  telegram: z.string().trim().max(300),
-  whatsapp: z.string().trim().max(300),
-  twitter: z.string().trim().max(300),
-  youtube: z.string().trim().max(300),
-  linkedin: z.string().trim().max(300),
-  // shipping
-  freeThreshold: z
-    .string()
-    .refine(
-      (v) =>
-        v.trim() === "" ||
-        (/^\d+$/.test(v.trim()) && Number.isInteger(Number(v)) && Number(v) >= 0),
-      { message: "عدد صحیح و نامنفی وارد کنید" }
-    ),
-  note: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
-  // seo
-  defaultTitle: z.string().trim().max(160, "حداکثر ۱۶۰ نویسه"),
-  defaultDescription: z.string().max(320, "حداکثر ۳۲۰ نویسه"),
-  ogImage: z.string().trim().max(500, "حداکثر ۵۰۰ نویسه"),
-  keywords: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
-  // maintenance
-  enabled: z.boolean(),
-  message: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
-})
-
-type FormValues = z.infer<typeof schema>
-
 /** Backend json field name → flat form field. Used to map 422 errors onto inputs. */
-const FIELD_KEYS = new Set<keyof FormValues>([
+const FIELD_KEYS = new Set<keyof SiteSettingsFormValues>([
   "name",
   "tagline",
   "logoUrl",
@@ -110,7 +68,7 @@ const FIELD_KEYS = new Set<keyof FormValues>([
   "message",
 ])
 
-function defaults(s: SiteSettings): FormValues {
+function defaults(s: SiteSettings): SiteSettingsFormValues {
   return {
     name: s.store.name ?? "",
     tagline: s.store.tagline ?? "",
@@ -138,7 +96,7 @@ function defaults(s: SiteSettings): FormValues {
 }
 
 /** Flat form values → the full wholesale-replace payload (every group, every field). */
-function toPayload(v: FormValues): UpdateSiteSettingsInput {
+function toPayload(v: SiteSettingsFormValues): UpdateSiteSettingsInput {
   return {
     store: {
       name: v.name.trim(),
@@ -249,8 +207,8 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
     watch,
     setError,
     formState: { errors, isSubmitting, isDirty },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  } = useForm<SiteSettingsFormValues>({
+    resolver: zodResolver(siteSettingsFormSchema),
     defaultValues: defaults(settings),
   })
 
@@ -262,11 +220,11 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
       : undefined
 
   function applyServerErrors(e: unknown) {
-    if (e instanceof AdminApiError) {
+    if (e instanceof SettingsApiError) {
       if (e.fields) {
         for (const [key, msgs] of Object.entries(e.fields)) {
-          if (FIELD_KEYS.has(key as keyof FormValues)) {
-            setError(key as keyof FormValues, { message: msgs[0] })
+          if (FIELD_KEYS.has(key as keyof SiteSettingsFormValues)) {
+            setError(key as keyof SiteSettingsFormValues, { message: msgs[0] })
           }
         }
       }
@@ -276,7 +234,7 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
     }
   }
 
-  async function onSubmit(v: FormValues) {
+  async function onSubmit(v: SiteSettingsFormValues) {
     try {
       const updated = await updateSiteSettings(toPayload(v))
       toast.success("تنظیمات سایت ذخیره شد.")

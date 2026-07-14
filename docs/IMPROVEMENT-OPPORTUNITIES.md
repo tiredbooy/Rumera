@@ -66,9 +66,9 @@ The recommended first slice (below) shipped right after this sweep:
 ### Epic 2 — Admin console is half-mock (operators act on fabricated data)
 
 **2.1 ⚑ Orders / inventory / reviews / analytics admin screens render `lib/admin/data.ts` mock data** · *FE quality + contract-drift + feature-gaps* · **HIGH** (corroborated by 3 auditors)
-- **Evidence:** `app/admin/orders/page.tsx` → `orders-table.tsx:4` (`adminOrders`); `app/admin/inventory/page.tsx:7` + `inventory-table.tsx:8`; `reviews-queue.tsx:9`; `app/admin/analytics/page.tsx:6` + `analytics-view.tsx:13` (`revenueSeries`/`topProducts`). Real backend endpoints exist and are unused: `routes.go:279-281` (orders), `:301-307` (inventory), `:337-348` (11 analytics endpoints). `admin-client.ts` has no order/inventory/analytics methods. The **customers** screen proves the migration pattern (`app/admin/customers/page.tsx:7` `serverApi`).
+- **Evidence:** At audit time, `app/admin/orders/page.tsx` → `orders-table.tsx:4` (`adminOrders`); `app/admin/inventory/page.tsx:7` + `inventory-table.tsx:8`; `reviews-queue.tsx:9`; `app/admin/analytics/page.tsx:6` + `analytics-view.tsx:13` (`revenueSeries`/`topProducts`) used mock data while real backend endpoints existed. The required migration pattern is resource-owned APIs under `features/`.
 - **Problem:** Operators see fabricated revenue, orders, stock, and an entirely fictional analytics board; decisions are made on invented numbers. The `1e2eb43` admin redesign was only half-migrated.
-- **Fix:** Add `admin-client` methods mirroring `listUsers` and server-prefetch real data (orders/inventory first — operational; analytics second). Delete the mock exports + the dead `lib/api/admin-hooks.ts`. · **L**
+- **Fix:** Add resource-owned API functions and server-prefetch real data (orders/inventory first — operational; analytics second). Delete the mock exports and retire shared admin hooks as each owner takes over. · **L**
 
 **2.2 ⚑ Admin order/customer/inventory/product actions fire fake `"(نمونه)"` success toasts** · *FE UX* · **HIGH**
 - **Evidence:** `order-actions.tsx:49,58,90` (refund/status "(نمونه)"), `customer-actions.tsx:55,79` (block/unblock), `inventory-table.tsx:53` (set-stock), `products-table.tsx:123,188` (duplicate/delete).

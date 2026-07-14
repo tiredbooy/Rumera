@@ -77,7 +77,7 @@ type CartSummary struct {
 }
 
 // SkippedCartItem reports a variant the bulk add couldn't honour.
-// Reason ∈ {"invalid","not_found","unavailable"}.
+// Reason ∈ {"invalid","not_found","unavailable","out_of_stock"}.
 type SkippedCartItem struct {
 	ProductVariantID int64  `json:"product_variant_id"`
 	Reason           string `json:"reason"`

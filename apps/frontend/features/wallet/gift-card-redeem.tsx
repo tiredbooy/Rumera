@@ -1,36 +1,42 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Loader2, Gift } from "lucide-react"
-import { toast } from "sonner"
+import * as React from "react";
+import { Loader2, Gift } from "lucide-react";
+import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { useRedeemGiftCard } from "@/lib/api/hooks"
-import { formatPrice } from "@/lib/products"
-import { ApiClientError } from "@/lib/api/store-client"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useRedeemGiftCard } from "@/features/gift-cards/hooks";
+import { formatPrice } from "@/lib/products";
+import { ApiClientError } from "@/lib/api/store-client";
 
 /** GiftCardRedeem — enter a gift-card code to top up the wallet. */
 export function GiftCardRedeem() {
-  const redeem = useRedeemGiftCard()
-  const [code, setCode] = React.useState("")
+  const redeem = useRedeemGiftCard();
+  const [code, setCode] = React.useState("");
 
   function submit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!code.trim()) return
-    redeem.mutate(code.trim(), {
-      onSuccess: (res) => {
-        setCode("")
-        toast.success(`${formatPrice(res.amount)} به کیف پول شما افزوده شد`)
+    e.preventDefault();
+    if (!code.trim()) return;
+    redeem.mutate(
+      { code: code.trim() },
+      {
+        onSuccess: (res) => {
+          setCode("");
+          toast.success(
+            `${formatPrice(Number(res.amount))} به کیف پول شما افزوده شد`,
+          );
+        },
+        onError: (e) =>
+          toast.error(
+            e instanceof ApiClientError &&
+              (e.code === "NOT_FOUND" || e.status === 404)
+              ? "کد نامعتبر است یا قبلاً استفاده شده"
+              : "استفاده از کارت هدیه ناموفق بود",
+          ),
       },
-      onError: (e) =>
-        toast.error(
-          e instanceof ApiClientError && (e.code === "NOT_FOUND" || e.status === 404)
-            ? "کد نامعتبر است یا قبلاً استفاده شده"
-            : "استفاده از کارت هدیه ناموفق بود"
-        ),
-    })
+    );
   }
 
   return (
@@ -55,12 +61,20 @@ export function GiftCardRedeem() {
             dir="ltr"
             className="h-11 min-w-0 flex-1 text-start tracking-widest"
           />
-          <Button type="submit" disabled={redeem.isPending || !code.trim()} className="h-11 cursor-pointer">
-            {redeem.isPending ? <Loader2 className="size-4 animate-spin" /> : <Gift className="size-4" />}
+          <Button
+            type="submit"
+            disabled={redeem.isPending || !code.trim()}
+            className="h-11 cursor-pointer"
+          >
+            {redeem.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Gift className="size-4" />
+            )}
             استفاده
           </Button>
         </div>
       </div>
     </form>
-  )
+  );
 }

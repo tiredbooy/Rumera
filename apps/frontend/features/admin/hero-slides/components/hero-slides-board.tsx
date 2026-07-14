@@ -33,12 +33,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
-  AdminApiError,
-  listHeroSlides,
+  HeroSlideApiError,
+  listAdminHeroSlides,
   updateHeroSlide,
   deleteHeroSlide,
-  type HeroSlide,
-} from "@/lib/api/admin-client"
+} from "@/features/hero-slides/api/client"
+import type { AdminHeroSlide } from "@/features/hero-slides/types"
 
 const heroKeys = {
   all: ["admin", "hero-slides"] as const,
@@ -64,13 +64,13 @@ function StatusPill({ active }: { active: boolean }) {
 
 export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
   const qc = useQueryClient()
-  const [pendingDelete, setPendingDelete] = React.useState<HeroSlide | null>(null)
+  const [pendingDelete, setPendingDelete] = React.useState<AdminHeroSlide | null>(null)
   // Tracks which slide id has an in-flight reorder so its buttons can disable.
   const [movingId, setMovingId] = React.useState<number | null>(null)
 
   const { data, isPending, isError, refetch, isFetching } = useQuery({
     queryKey: heroKeys.all,
-    queryFn: listHeroSlides,
+    queryFn: listAdminHeroSlides,
   })
 
   // Stable display order: by sort_order, then id (mirrors the public API).
@@ -87,7 +87,7 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
       qc.invalidateQueries({ queryKey: heroKeys.all })
     },
     onError: (e) => {
-      toast.error(e instanceof AdminApiError ? e.message : "حذف اسلاید ناموفق بود")
+      toast.error(e instanceof HeroSlideApiError ? e.message : "حذف اسلاید ناموفق بود")
     },
     onSettled: () => setPendingDelete(null),
   })
@@ -106,7 +106,7 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
       ])
       await qc.invalidateQueries({ queryKey: heroKeys.all })
     } catch (e) {
-      toast.error(e instanceof AdminApiError ? e.message : "جابه‌جایی ترتیب ناموفق بود")
+      toast.error(e instanceof HeroSlideApiError ? e.message : "جابه‌جایی ترتیب ناموفق بود")
     } finally {
       setMovingId(null)
     }

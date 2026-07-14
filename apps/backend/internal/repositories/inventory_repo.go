@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,6 +32,27 @@ type inventoryRepository struct {
 	db *pgxpool.Pool
 }
 
+const inventoryProjection = `
+	i.id,
+	i.product_variant_id,
+	pv.product_id,
+	p.title AS product_title,
+	pv.sku,
+	c.title AS category_title,
+	pv.price::text AS unit_price,
+	i.stock_on_hand,
+	i.committed_stock,
+	i.reorder_point,
+	i.reorder_quantity,
+	i.last_restock_at,
+	i.updated_at`
+
+const inventoryJoins = `
+	FROM inventory i
+	JOIN product_variants pv ON pv.id = i.product_variant_id
+	JOIN products p ON p.id = pv.product_id
+	LEFT JOIN categories c ON c.id = p.category_id`
+
 func NewInventoryRepository(db *pgxpool.Pool) InventoryRepository {
 	return &inventoryRepository{db: db}
 }
@@ -42,7 +62,7 @@ func (r *inventoryRepository) BeginTx(ctx context.Context) (pgx.Tx, error) {
 }
 
 func (r *inventoryRepository) GetByVariantID(ctx context.Context, variantID int64) (*models.Inventory, error) {
-	const q = `SELECT * FROM inventory WHERE product_variant_id = $1`
+	q := `SELECT ` + inventoryProjection + inventoryJoins + ` WHERE i.product_variant_id = $1`
 
 	rows, err := r.db.Query(ctx, q, variantID)
 	if err != nil {
@@ -64,16 +84,24 @@ func (r *inventoryRepository) GetAll(ctx context.Context, f models.InventoryFilt
 	args := pgx.NamedArgs{}
 
 	if f.LowStock {
-		where = append(where, "stock_on_hand <= reorder_point")
+		where = append(where, "i.stock_on_hand - i.committed_stock <= i.reorder_point")
+	}
+	if search := strings.TrimSpace(f.Search); search != "" {
+		where = append(where, "(p.title ILIKE @search OR pv.sku ILIKE @search)")
+		args["search"] = "%" + search + "%"
 	}
 
-	allowed := map[string]bool{
-		"updated_at":    true,
-		"stock_on_hand": true,
+	allowed := map[string]string{
+		"updated_at":      "i.updated_at",
+		"stock_on_hand":   "i.stock_on_hand",
+		"available_stock": "i.stock_on_hand - i.committed_stock",
+		"reorder_point":   "i.reorder_point",
+		"product_title":   "p.title",
+		"sku":             "pv.sku",
 	}
-	sortBy := "updated_at"
-	if allowed[f.SortBy] {
-		sortBy = f.SortBy
+	sortBy := allowed["updated_at"]
+	if column, ok := allowed[f.SortBy]; ok {
+		sortBy = column
 	}
 	order := "DESC"
 	if strings.ToUpper(f.OrderBy) == "ASC" {
@@ -83,13 +111,12 @@ func (r *inventoryRepository) GetAll(ctx context.Context, f models.InventoryFilt
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
 
-	q := fmt.Sprintf(`
-		SELECT *, COUNT(*) OVER() AS total_count
-		FROM inventory
+	q := fmt.Sprintf(`SELECT %s, COUNT(*) OVER() AS total_count
+		%s
 		WHERE %s
 		ORDER BY %s %s
 		LIMIT @limit OFFSET @offset`,
-		strings.Join(where, " AND "), sortBy, order,
+		inventoryProjection, inventoryJoins, strings.Join(where, " AND "), sortBy, order,
 	)
 
 	rows, err := r.db.Query(ctx, q, args)
@@ -107,6 +134,8 @@ func (r *inventoryRepository) GetAll(ctx context.Context, f models.InventoryFilt
 		var inv models.Inventory
 		if err := rows.Scan(
 			&inv.ID, &inv.ProductVariantID,
+			&inv.ProductID, &inv.ProductTitle,
+			&inv.SKU, &inv.CategoryTitle, &inv.UnitPrice,
 			&inv.StockOnHand, &inv.CommittedStock,
 			&inv.ReorderPoint, &inv.ReorderQuantity,
 			&inv.LastRestockAt, &inv.UpdatedAt,
@@ -124,11 +153,9 @@ func (r *inventoryRepository) GetAll(ctx context.Context, f models.InventoryFilt
 }
 
 func (r *inventoryRepository) GetLowStock(ctx context.Context) ([]*models.Inventory, error) {
-	const q = `
-		SELECT * FROM inventory
-		WHERE stock_on_hand <= reorder_point
-		  AND reorder_point > 0
-		ORDER BY stock_on_hand ASC`
+	q := `SELECT ` + inventoryProjection + inventoryJoins + `
+		WHERE i.stock_on_hand - i.committed_stock <= i.reorder_point
+		ORDER BY i.stock_on_hand - i.committed_stock ASC`
 
 	rows, err := r.db.Query(ctx, q)
 	if err != nil {
@@ -154,20 +181,25 @@ func (r *inventoryRepository) Adjust(ctx context.Context, tx pgx.Tx, variantID i
 	const updateQ = `
 		UPDATE inventory
 		SET stock_on_hand = stock_on_hand + @quantity,
+		    last_restock_at = CASE
+		        WHEN @movement_type = 'restock' THEN NOW()
+		        ELSE last_restock_at
+		    END,
 		    updated_at    = NOW()
 		WHERE product_variant_id = @variant_id`
 
 	updateArgs := pgx.NamedArgs{
-		"quantity":   req.Quantity,
-		"variant_id": variantID,
+		"quantity":      req.Quantity,
+		"movement_type": req.Type,
+		"variant_id":    variantID,
 	}
 
-	if req.Type == models.MovementTypeRestock {
-		updateArgs["last_restock_at"] = time.Now()
-	}
-
-	if _, err := tx.Exec(ctx, updateQ, updateArgs); err != nil {
+	result, err := tx.Exec(ctx, updateQ, updateArgs)
+	if err != nil {
 		return fmt.Errorf("inventoryRepository.Adjust update: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return models.ErrNotFound
 	}
 
 	return recordMovement(ctx, tx, variantID, req.Quantity, req.Type, orderID, req.Note)
@@ -265,24 +297,19 @@ func (r *inventoryRepository) UpdateReorder(ctx context.Context, variantID int64
 
 	q := fmt.Sprintf(`
 		UPDATE inventory SET %s
-		WHERE product_variant_id = @variant_id
-		RETURNING *`,
+		WHERE product_variant_id = @variant_id`,
 		strings.Join(sets, ", "),
 	)
 
-	rows, err := r.db.Query(ctx, q, args)
+	result, err := r.db.Exec(ctx, q, args)
 	if err != nil {
 		return nil, fmt.Errorf("inventoryRepository.UpdateReorder: %w", err)
 	}
-
-	inv, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Inventory])
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, models.ErrNotFound
-		}
-		return nil, fmt.Errorf("inventoryRepository.UpdateReorder scan: %w", err)
+	if result.RowsAffected() == 0 {
+		return nil, models.ErrNotFound
 	}
-	return &inv, nil
+
+	return r.GetByVariantID(ctx, variantID)
 }
 
 func recordMovement(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, movType models.MovementType, orderID *int64, note *string) error {

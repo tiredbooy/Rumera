@@ -82,8 +82,8 @@ func (p *UserRecommendationProfile) HasSignal() bool {
 
 type InteractionReq struct {
 	ProductID       int64           `json:"product_id"       validate:"required,min=1"`
-	InteractionType InteractionType `json:"interaction_type" validate:"required,oneof=view add_to_cart purchase wishlist review recipe_view search_click"`
-	Source          *string         `json:"source"`
+	InteractionType InteractionType `json:"interaction_type" validate:"required,oneof=view wishlist review recipe_view search_click"`
+	Source          *string         `json:"source" validate:"omitempty,max=40"`
 	Metadata        map[string]any  `json:"metadata"`
 }
 

@@ -6,7 +6,7 @@ import (
 	"github.com/tiredbooy/pkg/response"
 )
 
-// GetLoyaltyAccount — GET /loyalty
+// GetLoyaltyAccount serves GET /api/v1/loyalty.
 func (h *Handler) GetLoyaltyAccount(c *gin.Context) {
 	userID, ok := h.uid(c)
 	if !ok {
@@ -20,7 +20,7 @@ func (h *Handler) GetLoyaltyAccount(c *gin.Context) {
 	response.OK(c, acc)
 }
 
-// GetLoyaltyTransactions — GET /loyalty/transactions
+// GetLoyaltyTransactions serves GET /api/v1/loyalty/transactions.
 func (h *Handler) GetLoyaltyTransactions(c *gin.Context) {
 	userID, ok := h.uid(c)
 	if !ok {
@@ -34,13 +34,13 @@ func (h *Handler) GetLoyaltyTransactions(c *gin.Context) {
 	response.OK(c, txs)
 }
 
-// RedeemLoyaltyPoints — POST /loyalty/redeem
+// RedeemLoyaltyPoints serves POST /api/v1/loyalty/redeem.
 func (h *Handler) RedeemLoyaltyPoints(c *gin.Context) {
 	userID, ok := h.uid(c)
 	if !ok {
 		return
 	}
-	var req models.RedeemPointsReq
+	var req models.RedeemPointsRequest
 	if !h.bindJSON(c, &req) {
 		return
 	}

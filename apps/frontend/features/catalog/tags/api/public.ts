@@ -1,17 +1,18 @@
 import { apiFetch } from "@/lib/api/client";
-import { Tag, TagListParams } from "../types";
+import type { Paginated } from "@/lib/api/types";
+import { buildQueryString } from "@/lib/utils/api-helpers";
+import type { Tag, TagListQuery } from "../types";
 
-export async function fetchTags(params?: TagListParams): Promise<Tag[]> {
-  const query = params
-    ? `?${new URLSearchParams(params as Record<string, string>)}`
-    : "";
-  return apiFetch<Tag[]>(`/tags${query}`);
+export function listTags(
+  query: TagListQuery = {},
+): Promise<Paginated<Tag>> {
+  return apiFetch<Paginated<Tag>>(`/tags${buildQueryString(query)}`);
 }
 
-export async function fetchTag(id: number): Promise<Tag> {
+export function getTag(id: number): Promise<Tag> {
   return apiFetch<Tag>(`/tags/${id}`);
 }
 
-export async function fetchProductTags(productId: number): Promise<Tag[]> {
+export function getProductTags(productId: number): Promise<Tag[]> {
   return apiFetch<Tag[]>(`/products/${productId}/tags`);
 }

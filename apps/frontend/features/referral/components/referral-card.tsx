@@ -7,7 +7,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useReferral } from "@/lib/api/hooks"
+import { useReferral } from "@/features/referral/hooks"
 import { faNum } from "@/lib/products"
 
 /** ReferralCard — shows the customer's invite code, a shareable link, and stats. */

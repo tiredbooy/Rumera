@@ -1,26 +1,18 @@
-// types/brand.ts
-import { BaseFilter } from "@/lib/types/filters";
+import type { PaginationQuery } from "@/lib/api/types";
 
-// ─────────────────────────────────────────────
-// Core Brand
-// ─────────────────────────────────────────────
-
+/** Brand entity returned by public reads and admin mutations. */
 export interface Brand {
   id: number;
   title: string;
-  country?: string | null;
-  founded_year?: number | null;
-  image_url?: string | null;
-  description?: string | null;
-  created_at: string; // ISO timestamp
+  country?: string;
+  founded_year?: number;
+  image_url?: string;
+  description?: string;
+  created_at: string;
   updated_at: string;
 }
 
-// ─────────────────────────────────────────────
-// Request payloads
-// ─────────────────────────────────────────────
-
-export interface CreateBrandReq {
+export interface CreateBrandInput {
   title: string;
   country?: string | null;
   founded_year?: number | null;
@@ -28,7 +20,11 @@ export interface CreateBrandReq {
   description?: string | null;
 }
 
-export interface UpdateBrandReq {
+/**
+ * PATCH accepts null, but the current Go pointer model treats null like omission
+ * and therefore cannot clear an existing nullable value.
+ */
+export interface UpdateBrandInput {
   title?: string | null;
   country?: string | null;
   founded_year?: number | null;
@@ -36,11 +32,13 @@ export interface UpdateBrandReq {
   description?: string | null;
 }
 
-// ─────────────────────────────────────────────
-// Filters (extends BaseFilter)
-// ─────────────────────────────────────────────
+export type BrandSortField = "created_at" | "title" | "founded_year";
+export type BrandSortDirection = "asc" | "desc";
 
-export interface BrandFilter extends BaseFilter {
+export interface BrandListQuery extends PaginationQuery {
+  sortBy?: BrandSortField;
+  orderBy?: BrandSortDirection;
+  search?: string;
   country?: string;
   founded_from?: number;
   founded_to?: number;

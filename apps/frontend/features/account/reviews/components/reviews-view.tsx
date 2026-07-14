@@ -9,12 +9,11 @@ import {
   Trash2,
   MessageSquare,
   MessageSquarePlus,
-  PencilLine,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { faNum } from "@/lib/products";
-import { faDate } from "@/lib/catalog/labels";
+import { faDate } from "@/lib/utils/date";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,9 +33,11 @@ import {
   useMyReviews,
   usePendingReviews,
   useDeleteReview,
-  type MyReview,
-  type PendingReviewItem,
-} from "@/lib/api/account-hooks";
+} from "@/features/reviews/hooks";
+import type {
+  AccountReview,
+  PendingReview,
+} from "@/features/reviews/types";
 import { AccountSection } from "../../account/components/account-section";
 import { EmptyState } from "../../EmptyState";
 
@@ -79,7 +80,7 @@ export function ReviewsView() {
   const mine = useMyReviews();
   const pending = usePendingReviews();
   const del = useDeleteReview();
-  const [toDelete, setToDelete] = React.useState<MyReview | null>(null);
+  const [toDelete, setToDelete] = React.useState<AccountReview | null>(null);
 
   const myList = mine.data ?? [];
   const pendingList = pending.data ?? [];
@@ -116,7 +117,7 @@ export function ReviewsView() {
             />
           ) : (
             <div className="space-y-4">
-              {myList.map((r: MyReview) => {
+              {myList.map((r: AccountReview) => {
                 const status = REVIEW_STATUS_FA[r.status] ?? {
                   label: r.status,
                   variant: "secondary" as const,
@@ -153,16 +154,9 @@ export function ReviewsView() {
                         </span>
                       </div>
                       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                        {r.body}
+                        {r.content}
                       </p>
                       <div className="mt-3 flex items-center gap-1">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link
-                            href={productHref(r.product_slug, r.product_id)}
-                          >
-                            <PencilLine className="size-4" /> ویرایش
-                          </Link>
-                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -197,7 +191,7 @@ export function ReviewsView() {
             />
           ) : (
             <div className="space-y-4">
-              {pendingList.map((p: PendingReviewItem) => (
+              {pendingList.map((p: PendingReview) => (
                 <AccountSection
                   key={`${p.order_id}-${p.product_id}`}
                   bodyClassName="flex items-center gap-4"
@@ -249,7 +243,7 @@ export function ReviewsView() {
               className="bg-destructive text-white hover:bg-destructive/90"
               onClick={() => {
                 if (!toDelete) return;
-                del.mutate(toDelete.id, {
+                del.mutate({ id: toDelete.id, productId: toDelete.product_id }, {
                   onSuccess: () => toast.success("دیدگاه حذف شد"),
                   onError: () => toast.error("حذف ناموفق بود"),
                 });

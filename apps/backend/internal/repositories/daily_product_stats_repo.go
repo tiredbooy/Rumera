@@ -170,6 +170,9 @@ func (r *dailyProductStatsRepository) GetByProductAndDate(ctx context.Context, p
 
 	s := &models.DailyProductStats{}
 	if err := scanStats(r.db.QueryRow(ctx, query, productID, date), s); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, models.ErrNotFound
+		}
 		return nil, fmt.Errorf("getting daily product stats: %w", err)
 	}
 	return s, nil
@@ -189,7 +192,7 @@ func (r *dailyProductStatsRepository) GetRangeByProduct(ctx context.Context, fil
 	}
 	defer rows.Close()
 
-	var stats []*models.DailyProductStats
+	stats := make([]*models.DailyProductStats, 0)
 	for rows.Next() {
 		s := &models.DailyProductStats{}
 		if err := rows.Scan(
@@ -245,6 +248,9 @@ func (r *dailyProductStatsRepository) SummaryByProduct(ctx context.Context, filt
 		&s.AvgRating,
 	)
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, models.ErrNotFound
+		}
 		return nil, fmt.Errorf("getting product stats summary: %w", err)
 	}
 	return s, nil
@@ -277,7 +283,7 @@ func (r *dailyProductStatsRepository) topProducts(ctx context.Context, orderBy s
 	}
 	defer rows.Close()
 
-	var entries []*models.TopProductEntry
+	entries := make([]*models.TopProductEntry, 0)
 	for rows.Next() {
 		e := &models.TopProductEntry{}
 		if err := rows.Scan(&e.ProductID, &e.TotalRevenue, &e.TotalViews, &e.UnitsSold); err != nil {

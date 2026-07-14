@@ -6,8 +6,11 @@ import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useCreateAddress } from "@/lib/api/hooks"
-import type { Address } from "@/lib/catalog/types"
+import { useCreateAddress } from "@/features/addresses/api"
+import type {
+  Address,
+  CreateAddressInput,
+} from "@/features/addresses/types"
 
 /** Inline new-address form used inside checkout. Calls back with the created address. */
 export function AddAddressForm({
@@ -24,22 +27,20 @@ export function AddAddressForm({
     e.preventDefault()
     setError(null)
     const f = new FormData(e.currentTarget)
-    create.mutate(
-      {
-        title: String(f.get("title") ?? "") || undefined,
-        full_name: String(f.get("full_name") ?? ""),
-        phone_number: String(f.get("phone_number") ?? "") || undefined,
-        address_line1: String(f.get("address_line1") ?? ""),
-        city: String(f.get("city") ?? ""),
-        postal_code: String(f.get("postal_code") ?? ""),
-        country: "IR",
-        is_default: true,
-      },
-      {
-        onSuccess: (addr) => onCreated(addr),
-        onError: () => setError("ثبت آدرس ناموفق بود. ورودی‌ها را بررسی کنید."),
-      }
-    )
+    const input: CreateAddressInput = {
+      title: String(f.get("title") ?? "") || undefined,
+      full_name: String(f.get("full_name") ?? ""),
+      phone_number: String(f.get("phone_number") ?? "") || undefined,
+      address_line1: String(f.get("address_line1") ?? ""),
+      city: String(f.get("city") ?? ""),
+      postal_code: String(f.get("postal_code") ?? ""),
+      country: "IR",
+      is_default: true,
+    }
+    create.mutate(input, {
+      onSuccess: (addr) => onCreated(addr),
+      onError: () => setError("ثبت آدرس ناموفق بود. ورودی‌ها را بررسی کنید."),
+    })
   }
 
   return (

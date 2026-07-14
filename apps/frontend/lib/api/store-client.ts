@@ -3,6 +3,8 @@
  * Returns the backend's JSON body verbatim (callers pick `.data` or `.results`)
  * and throws a typed error from the `{ error }` envelope.
  */
+import type { ApiErrorEnvelope } from "./types"
+
 export class ApiClientError extends Error {
   constructor(
     public readonly status: number,
@@ -25,12 +27,13 @@ export async function storeRequest<T>(path: string, opts: RequestInit = {}): Pro
 
   if (res.status === 204) return undefined as T
 
-  const body = await res.json().catch(() => null)
+  const body: unknown = await res.json().catch(() => null)
   if (!res.ok) {
+    const error = (body as ApiErrorEnvelope | null)?.error
     throw new ApiClientError(
       res.status,
-      body?.error?.code ?? "UNKNOWN",
-      body?.error?.message ?? res.statusText
+      error?.code ?? "UNKNOWN",
+      error?.message ?? res.statusText
     )
   }
   return body as T

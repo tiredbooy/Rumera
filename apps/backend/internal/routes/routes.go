@@ -211,6 +211,8 @@ func registerCustomerRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.
 	c.POST("/recommendations/profile/recompute", h.RecomputeMyRecommendationProfile)
 
 	// Reviews
+	c.GET("/reviews/mine", h.MyReviews)
+	c.GET("/reviews/pending", h.PendingReviews)
 	c.POST("/reviews", h.CreateReview)
 	c.PATCH("/reviews/:id", h.UpdateReview)
 	c.DELETE("/reviews/:id", h.DeleteReview)

@@ -3,7 +3,7 @@ package models
 import "time"
 
 // AlertType enumerates the kinds of product alerts a customer can subscribe to.
-type AlertType = string
+type AlertType string
 
 const (
 	AlertRestock   AlertType = "restock"
@@ -15,37 +15,37 @@ type ProductAlert struct {
 	ID               int64      `db:"id"`
 	UserID           int64      `db:"user_id"`
 	ProductVariantID int64      `db:"product_variant_id"`
-	AlertType        string     `db:"alert_type"`
+	AlertType        AlertType  `db:"alert_type"`
 	TargetPrice      *float64   `db:"target_price"`
 	ReferencePrice   float64    `db:"reference_price"`
 	NotifiedAt       *time.Time `db:"notified_at"`
 	CreatedAt        time.Time  `db:"created_at"`
 }
 
-// CreateAlertReq is the payload for subscribing to an alert.
-type CreateAlertReq struct {
-	ProductVariantID int64    `json:"product_variant_id" validate:"required,min=1"`
-	AlertType        string   `json:"alert_type"         validate:"required,oneof=restock price_drop"`
-	TargetPrice      *float64 `json:"target_price"       validate:"omitempty,min=0"`
+// CreateProductAlertReq is the payload for subscribing to a product alert.
+type CreateProductAlertReq struct {
+	ProductVariantID int64     `json:"product_variant_id" validate:"required,min=1"`
+	AlertType        AlertType `json:"alert_type"         validate:"required,oneof=restock price_drop"`
+	TargetPrice      *float64  `json:"target_price"       validate:"omitempty,min=0"`
 }
 
-// AlertResponse is the customer-facing view of an alert.
-type AlertResponse struct {
+// ProductAlertResponse is the customer-facing view of a product alert.
+type ProductAlertResponse struct {
 	ID               int64      `json:"id"`
 	ProductVariantID int64      `json:"product_variant_id"`
-	AlertType        string     `json:"alert_type"`
-	TargetPrice      *float64   `json:"target_price,omitempty"`
-	NotifiedAt       *time.Time `json:"notified_at,omitempty"`
+	AlertType        AlertType  `json:"alert_type"`
+	TargetPrice      *float64   `json:"target_price"`
+	NotifiedAt       *time.Time `json:"notified_at"`
 	CreatedAt        time.Time  `json:"created_at"`
 }
 
 // PendingAlert is a satisfied alert row joined with everything the notifier
 // needs to send the email and link back to the product.
 type PendingAlert struct {
-	ID           int64   `db:"id"`
-	Email        string  `db:"email"`
-	AlertType    string  `db:"alert_type"`
-	ProductTitle string  `db:"product_title"`
-	ProductSlug  *string `db:"product_slug"`
-	CurrentPrice float64 `db:"current_price"`
+	ID           int64     `db:"id"`
+	Email        string    `db:"email"`
+	AlertType    AlertType `db:"alert_type"`
+	ProductTitle string    `db:"product_title"`
+	ProductSlug  *string   `db:"product_slug"`
+	CurrentPrice float64   `db:"current_price"`
 }
