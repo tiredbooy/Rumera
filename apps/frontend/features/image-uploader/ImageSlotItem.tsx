@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { OptimizedImage } from "@/components/admin/optimized-image";
+import { OptimizedImage } from "@/components/optimized-image";
 import { cn } from "@/lib/utils";
 import {
   AlertCircle,

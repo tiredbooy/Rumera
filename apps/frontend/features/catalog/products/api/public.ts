@@ -12,6 +12,8 @@ const PUBLIC_CACHE_OPTIONS: ApiFetchOptions = {
   next: { revalidate: 3600 },
 };
 
+const PRODUCT_LIST_OPTIONS: ApiFetchOptions = { cache: "no-store" };
+
 const emptyProductPage = (): Paginated<ProductListItem> => ({
   results: [],
   pagination: {
@@ -28,14 +30,14 @@ const emptyProductPage = (): Paginated<ProductListItem> => ({
 // Product list (public – active only)
 // ─────────────────────────────────────────────
 
-/** Error-safe public listing used by static storefront surfaces. */
+/** Error-safe public listing kept fresh because it includes live availability. */
 export async function listProducts(
   filter: PublicProductListQuery = {},
 ): Promise<Paginated<ProductListItem>> {
   try {
     return await publicRequest<Paginated<ProductListItem>>(
       `/products${buildQueryString(filter)}`,
-      PUBLIC_CACHE_OPTIONS,
+      PRODUCT_LIST_OPTIONS,
     );
   } catch {
     return emptyProductPage();

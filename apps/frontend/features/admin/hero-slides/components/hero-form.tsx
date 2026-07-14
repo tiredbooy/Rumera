@@ -4,7 +4,6 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { toast } from "sonner"
 import { ArrowLeft, Loader2, Sun, Moon } from "lucide-react"
 
@@ -15,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { SmartImage } from "@/components/smart-image"
-import { FlexibleImageInput } from "@/components/admin/flexible-image-input"
+import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input"
 import { cn } from "@/lib/utils"
 import {
   HeroSlideApiError,
@@ -26,39 +25,16 @@ import type {
   AdminHeroSlide,
   CreateHeroSlideInput,
 } from "@/features/hero-slides/types"
+import {
+  heroSlideFormSchema,
+  type HeroSlideFormValues,
+} from "@/features/hero-slides/validations"
 
 // ── Validation (mirrors HeroSlideReq; strings coerced to the API shape on submit) ─
 
-const schema = z.object({
-  title: z.string().trim().min(1, "عنوان اسلاید الزامی است").max(255, "حداکثر ۲۵۵ نویسه"),
-  eyebrow: z.string().trim().max(120, "حداکثر ۱۲۰ نویسه"),
-  subtitle: z.string(),
-  badge: z.string().trim().max(120, "حداکثر ۱۲۰ نویسه"),
-  image_url: z
-    .string()
-    .trim()
-    .min(1, "نشانی تصویر الزامی است")
-    .max(2048, "نشانی تصویر بسیار طولانی است"),
-  mobile_image_url: z.string().trim().max(2048, "نشانی تصویر بسیار طولانی است"),
-  image_alt: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
-  cta_label: z.string().trim().max(120, "حداکثر ۱۲۰ نویسه"),
-  cta_href: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
-  secondary_cta_label: z.string().trim().max(120, "حداکثر ۱۲۰ نویسه"),
-  secondary_cta_href: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
-  theme: z.enum(["light", "dark"]),
-  sort_order: z
-    .string()
-    .refine((v) => v.trim() === "" || (!Number.isNaN(Number(v)) && Number.isInteger(Number(v))), {
-      message: "عدد صحیح وارد کنید",
-    }),
-  is_active: z.boolean(),
-})
-
-type FormValues = z.infer<typeof schema>
-
 const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null)
 
-function defaults(slide?: AdminHeroSlide): FormValues {
+function defaults(slide?: AdminHeroSlide): HeroSlideFormValues {
   return {
     title: slide?.title ?? "",
     eyebrow: slide?.eyebrow ?? "",
@@ -78,7 +54,7 @@ function defaults(slide?: AdminHeroSlide): FormValues {
 }
 
 // Maps backend json keys → form field names so a 422 lands on the right input.
-const FIELD_MAP: Record<string, keyof FormValues> = {
+const FIELD_MAP: Record<string, keyof HeroSlideFormValues> = {
   title: "title",
   eyebrow: "eyebrow",
   subtitle: "subtitle",
@@ -152,6 +128,12 @@ export function HeroForm({
   submitLabel?: string
 }) {
   const router = useRouter()
+  const [uploadsInFlight, setUploadsInFlight] = React.useState(0)
+  const uploadBusy = uploadsInFlight > 0
+
+  function handleUploadingChange(uploading: boolean) {
+    setUploadsInFlight((count) => Math.max(0, count + (uploading ? 1 : -1)))
+  }
 
   const {
     register,
@@ -160,8 +142,8 @@ export function HeroForm({
     watch,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  } = useForm<HeroSlideFormValues>({
+    resolver: zodResolver(heroSlideFormSchema),
     defaultValues: defaults(slide),
   })
 
@@ -175,7 +157,7 @@ export function HeroForm({
   const secondaryCtaLabel = watch("secondary_cta_label")
   const imageAlt = watch("image_alt")
 
-  function toPayload(v: FormValues): CreateHeroSlideInput {
+  function toPayload(v: HeroSlideFormValues): CreateHeroSlideInput {
     return {
       title: v.title.trim(),
       eyebrow: strOrNull(v.eyebrow),
@@ -208,7 +190,7 @@ export function HeroForm({
     }
   }
 
-  async function onSubmit(v: FormValues) {
+  async function onSubmit(v: HeroSlideFormValues) {
     try {
       const payload = toPayload(v)
       if (mode === "create") {
@@ -264,12 +246,14 @@ export function HeroForm({
               name="image_url"
               render={({ field }) => (
                 <FlexibleImageInput
+                  id="image_url"
                   value={field.value}
                   onChange={field.onChange}
                   onBlur={field.onBlur}
                   folder="hero"
                   placeholder="/images/hero/slide-1.jpg یا بارگذاری فایل"
                   ariaInvalid={!!errors.image_url}
+                  onUploadingChange={handleUploadingChange}
                 />
               )}
             />
@@ -285,11 +269,13 @@ export function HeroForm({
               name="mobile_image_url"
               render={({ field }) => (
                 <FlexibleImageInput
+                  id="mobile_image_url"
                   value={field.value}
                   onChange={field.onChange}
                   onBlur={field.onBlur}
                   folder="hero"
                   placeholder="/images/hero/slide-1-mobile.jpg یا بارگذاری فایل"
+                  onUploadingChange={handleUploadingChange}
                 />
               )}
             />
@@ -478,15 +464,15 @@ export function HeroForm({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Button type="submit" size="lg" disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+            <Button type="submit" size="lg" disabled={isSubmitting || uploadBusy}>
+              {isSubmitting || uploadBusy ? <Loader2 className="size-4 animate-spin" /> : null}
               {submitLabel}
             </Button>
             <Button
               type="button"
               variant="outline"
               size="lg"
-              disabled={isSubmitting}
+              disabled={isSubmitting || uploadBusy}
               onClick={() => router.push("/admin/hero-slides")}
             >
               انصراف

@@ -1826,3 +1826,725 @@ append-only.
 
 - External `callbackUrl` validation is an existing security-hardening opportunity;
   it was not changed during this behavior-preserving relocation.
+
+## Task 042a - Move Category Tree Hook And Domain Files
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+### What Changed
+
+- Moved the client category-tree query hook from top-level `components` into the
+  catalog category domain.
+- Added an allowlisted public BFF category-tree read for the client hook and
+  retained its query key and five-minute client stale time without importing the
+  server-only category transport.
+- Removed the duplicate top-level raw fetch helper; the storefront header remains
+  server-fed by the canonical category API.
+
+### Verification
+
+- Scoped ESLint passed.
+- Full frontend typecheck passed.
+- Search found no stale top-level category helper imports.
+- `git diff --check` passed.
+- Cumulative Task Group 042 lint, test, build, viewport, and keyboard gates passed
+  after Task 042e.
+
+## Task 042b - Move Product Mega Menu
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+### What Changed
+
+- Moved the desktop product mega menu into catalog category ownership.
+- Added an always-present all-products route and an intentional empty-category
+  panel instead of removing desktop product navigation.
+- Guarded optional slugs, exposed each root-category destination in its active
+  panel, and removed the unsupported discount-sort destination.
+- Replaced raw category images with a reusable category thumbnail backed by
+  `SmartImage` and a monogram fallback.
+- Added outside-pointer dismissal, Escape focus restoration, reduced-motion
+  behavior, visible focus states, and larger interaction targets.
+- Added roving category tabs and collision-safe panel positioning within viewport
+  gutters.
+
+### Verification
+
+- Scoped ESLint passed with zero warnings.
+- Full frontend typecheck passed.
+- Stale import and unsupported menu-route searches passed.
+- `git diff --check` passed.
+- Cumulative Task Group 042 lint, test, build, viewport, and keyboard gates passed
+  after Task 042e.
+
+## Task 042c - Move Mobile Category Drawer
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+### What Changed
+
+- Moved the mobile drawer into the storefront navigation feature while retaining
+  category contracts, imagery, and URL construction in the category domain.
+- Added shared slug-safe category URL generation and reused it in desktop and
+  mobile navigation.
+- Preserved stack-based drill-down with explicit back and current-category links.
+- Added a truthful no-category/no-child state, persistent all-products access,
+  44px-or-larger controls, visible focus, and canonical image fallbacks.
+- Restored focus to the new level heading after drill-down/back navigation and
+  reserved physical RTL space for the sheet close control.
+
+### Verification
+
+- Scoped ESLint passed with zero warnings.
+- Full frontend typecheck passed.
+- Stale import and unsafe category-link searches passed.
+- `git diff --check` passed.
+- Cumulative Task Group 042 lint, test, build, viewport, and keyboard gates passed
+  after Task 042e.
+
+## Task 042d - Move Header Search
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+### What Changed
+
+- Moved the shared desktop/drawer search component into storefront navigation.
+- Preserved trimmed, URL-encoded navigation to the existing search route and the
+  drawer close callback.
+- Added a named query control, explicit form/control labels, visible keyboard
+  focus, and 44px submit/clear targets.
+- Returned focus to the input when clearing so the conditional clear control does
+  not strand keyboard focus.
+
+### Verification
+
+- Scoped ESLint passed with zero warnings.
+- Full frontend typecheck passed.
+- Search found no stale top-level header-search imports.
+- `git diff --check` passed.
+- Cumulative Task Group 042 lint, test, build, viewport, and keyboard gates passed
+  after Task 042e.
+
+## Task 042e - Move Header Actions And Site-Header Composition
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+### What Changed
+
+- Moved header actions, logo, static links, announcement, search, mobile drawer,
+  and site-header composition into `features/storefront/navigation`.
+- Converted `SiteHeader` back to a Server Component and isolated scroll state in
+  a small `HeaderChrome` client slot, following the installed Next.js 16
+  server/client interleaving guidance.
+- Centralized primary links, announcement copy, and product-menu promotion data.
+- Kept category contracts, URL construction, thumbnails, and desktop category
+  navigation in the catalog category domain.
+- Removed all obsolete top-level business-specific header/navigation components
+  and updated the storefront layout directly without compatibility shims.
+
+### Acceptance Verification For Task Group 042
+
+- Full `npm run typecheck` passed.
+- Full `npm run lint` passed with zero errors and 12 pre-existing warnings outside
+  Task Group 042.
+- `npm run test` passed; the project currently contains no test files.
+- Production `npm run build` passed.
+- Browser checks passed at 320, 375, 768, 1024, and 1440px with no horizontal
+  overflow or RTL title/close overlap.
+- Mobile open/drill/back/close, level focus, and search-clear focus passed.
+- Desktop outside-click, Escape restoration, roving tab/arrow flow, category
+  links, and empty-tree fallback passed.
+- Search found zero executable imports from removed top-level navigation modules.
+- Independent review found no remaining Task Group 042 defects.
+- `git diff --check` passed.
+
+## Task 043a - Move Add-To-Cart Button
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+### What Changed
+
+- Moved the real authenticated, variant-aware cart mutation into cart ownership.
+- Updated product detail, recipe detail, and journal detail consumers directly.
+- Deleted the unused synthetic-product toast button and the old product-domain
+  module without compatibility shims.
+- Added the missing unique cart-line migration and made cart add/update operations
+  enforce cumulative stock atomically at the repository boundary.
+
+### Verification
+
+- Scoped ESLint passed with zero warnings.
+- Full frontend typecheck passed.
+- Search found only cart-owned add-to-cart imports.
+- `git diff --check` passed.
+
+## Task 043b - Consolidate And Redesign The Canonical Product Card
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+### What Changed
+
+- Deleted the unused synthetic legacy card and kept one canonical list card.
+- Added backend `purchasable_variant_id` only when exactly one active, in-stock
+  variant can be selected deterministically; multi-variant products never guess a
+  variant.
+- Added explicit active/available variant counts so sold-out, multi-option, and
+  missing-slug products are represented truthfully.
+- Replaced generated bottle artwork with responsive real product media using the
+  canonical storage key, URL, alt text, transform pipeline, and branded fallback.
+- Moved the storage-aware optimized image out of admin-only ownership.
+- Added a larger luxe-minimal card, slug-safe links, truthful price/availability,
+  touch-visible controls, hover/focus overlays, real quick-add, and real wishlist
+  mutations with pending/error/auth states.
+- In-stock multi-variant cards route to option selection; sold-out products expose
+  a disabled unavailable action.
+
+### Verification
+
+- Product response JSON contract test passed.
+- Scoped backend model/repository tests passed.
+- Scoped ESLint passed with no new warnings.
+- Full frontend typecheck passed.
+- Legacy card and admin-only optimized-image searches passed.
+- `git diff --check` passed.
+
+## Task 043c - Move Age Gate To Compliance Domain
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved the browser-local age gate into compliance ownership and updated the sole
+  storefront-layout import directly.
+- Preserved local storage, custom-event synchronization, redirect, and body scroll
+  locking.
+- Corrected the stale `21+` comment to the rendered `18+` policy and added dialog
+  labeling, focus containment, background inertness, and non-dismissible modal
+  behavior.
+- Scoped ESLint, full typecheck, ownership search, and `git diff --check` passed.
+
+## Task 043d - Move Brand Marquee To Brand Ownership
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved the server-rendered marquee into the catalog brand domain and updated its
+  sole home-page consumer directly.
+- Preserved the compositor-only loop, duplicated-track accessibility suppression,
+  hover pause, and existing reduced-motion CSS.
+- Scoped ESLint, full typecheck, ownership search, and `git diff --check` passed.
+
+## Task 043e - Split Multi-Domain Admin Status Badges
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved account status and backend-supported role labels into customer ownership.
+- Added a product-owned published/draft badge instead of presenting product state
+  through a user-account component.
+- Updated all consumers and deleted the shared multi-domain admin badge module.
+- Scoped ESLint, full typecheck, ownership search, and `git diff --check` passed.
+
+## Task 043f - Move Variant Picker To Product Domain
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved the real two-step product/variant picker beside the admin product browser
+  API and updated its recipe-form consumer directly.
+- Preserved searchable product selection, edit labels, errors, retries, and query
+  caching while excluding inactive variants from new shoppable selections.
+- Scoped ESLint passed with no new warnings; full typecheck, ownership search, and
+  `git diff --check` passed.
+
+## Task 043g - Move Category Image Input
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Replaced the fabricated CDN upload with a category-owned wrapper around the real
+  authenticated upload flow.
+- Moved the reusable URL-or-upload field into admin upload ownership and updated
+  category, recipe, and hero consumers.
+- Fixed default MIME validation, field ID/blur wiring, and the category form's
+  stale slug-effect dependency.
+- Blocked category, recipe, and hero submission while their standalone upload is
+  in flight.
+- Added an explicit backend `categories` standalone-upload folder.
+- Scoped backend handler tests, scoped ESLint with no new warnings, full frontend
+  typecheck, stale mock/import searches, and `git diff --check` passed.
+
+## Task Group 043 - Acceptance Verification
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Full backend `go test ./...` passed.
+- Frontend typecheck and production build passed.
+- Frontend tests passed: 1 file, 5 safe-callback cases.
+- Full lint passed with zero errors and 11 unrelated existing warnings.
+
+## Task 046a - Thin Product-Create Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the exact product-create option loading, header, navigation, and form
+  composition into the server-only `product-editor-view.tsx` feature module.
+- Kept the products-write permission guard in the route and preserved parallel
+  option reads plus silent dependency failure-to-empty behavior.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046b - Thin Product-Edit Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Added `ProductEditView` to the server-only product editor module and reused its
+  shared failure-safe category, brand, and tag option loader.
+- Kept products-read permission and promised parameter resolution in the route;
+  preserved raw ID number conversion, 404 handling, errors, header, and form props.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046c - Thin Category-Create Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted category-create tree loading, header, navigation, and form composition
+  into the server-only `category-editor-view.tsx` feature module.
+- Kept products-write permission in the route and preserved tree failure-to-empty
+  behavior, exact copy, form mode, tree, and submit label.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046d - Thin Category-Edit Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Added `CategoryEditView` to the server-only category editor module and reused
+  its shared failure-safe category-tree loader.
+- Kept products-read permission and promised parameter resolution in the route;
+  preserved raw ID fetch behavior, 404 handling, header, and exact edit form props.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046e - Thin Brand-Edit Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted brand fetch, not-found handling, header, navigation, and form
+  composition into server-only `brand-edit-view.tsx`.
+- Kept products-write permission and promised parameter resolution in the route;
+  preserved raw string ID behavior, error propagation, copy, and form props.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046f - Thin Recipe-Create Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted recipe-create tag loading, header, navigation, and form composition
+  into the server-only `recipe-editor-view.tsx` feature module.
+- Kept recipes-write permission in the route and preserved public tag pagination,
+  failure-to-empty behavior, exact copy, form mode, tags, and submit label.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046g - Thin Recipe-Edit Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Added `RecipeEditView` to the server-only recipe editor module and reused its
+  shared failure-safe tag loader.
+- Kept recipes-read permission and promised parameter resolution in the route;
+  preserved admin detail hydration, raw ID behavior, 404 handling, and form output.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046h - Thin Settings Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the settings fetch, complete custom unavailable state, header, and
+  form composition into server-only `admin-settings-view.tsx`.
+- Kept settings-manage permission in the route and preserved catch-all fetch
+  failure handling, null handling, alert semantics, copy, and form props.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046i - Thin Customer-List Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted query parsing, Suspense composition, user fetch, failure and empty
+  states, table, and pagination into server-only `customers-view.tsx`.
+- Kept customers-read permission and promised search-parameter resolution in the
+  route; preserved coercion, Suspense key/fallback, output, and link behavior.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046j - Thin Customer-Detail Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the admin-user fetch, custom unavailable state, header, identity card,
+  and conditional edit action into server-only `customer-detail-view.tsx`.
+- Kept customers-read permission, promised params, and customers-write capability
+  computation in the route; preserved the active-user 404 distinction and output.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046k - Thin Customer-Edit Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the admin-user fetch, custom unavailable state, self detection,
+  header, and form composition into server-only `customer-edit-view.tsx`.
+- Kept customers-write permission, promised params, and target/current user ID
+  passing in the route; preserved role/status self-lock behavior and exact output.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046l - Thin Order-Detail Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted admin order fetch/404 handling, header, status/actions, invoice table,
+  totals, and summary into server-only `order-detail-view.tsx`.
+- Kept orders-read permission, promised params, positive integer validation, and
+  orders-write capability in the route; preserved the `OrderActions` client island.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 046m - Thin Roles Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted static role summaries, member counts, permission percentages, and the
+  complete access matrix into server-only `roles-view.tsx`.
+- Kept roles-manage permission in the route and preserved all existing sample
+  data, copy, ordering, styles, and table output for later backend alignment work.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task Group 046 - Acceptance Verification
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- All 13 scoped admin routes retain their page-level permission guards and only
+  route-owned params, search params, ID validation, and capability computations.
+- Ten feature-owned views are explicit Server Components; shared product, category,
+  and recipe loaders preserve existing failure behavior.
+- Customer unavailable states, order ID/404 behavior, headers, tables, forms,
+  Suspense boundaries, pagination, and client action islands are preserved.
+- Independent review found no blockers or major defects.
+- Frontend typecheck, 13 tests, production build, ownership searches, and
+  `git diff --check` passed.
+- Full lint passed with zero errors and 11 unrelated existing warnings.
+
+## Task 044a - Extract Settings Validation
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved the flat settings form schema and inferred value type into canonical
+  settings ownership.
+- Preserved every trim, refinement, Persian message, default, wholesale payload,
+  and backend field-error mapping.
+- Deleted the empty admin-owned validation placeholder.
+- Scoped ESLint passed with no new warnings; full typecheck, ownership search, and
+  `git diff --check` passed.
+
+## Task 044b - Extract Brand Validation
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved the brand form schema, inferred values, and shared current-year boundary
+  into catalog brand ownership.
+- Preserved URL matching, year refinement, Persian messages, defaults, and null
+  payload conversion.
+- Deleted the empty admin-owned validation placeholder.
+- Scoped ESLint passed with no new warnings; full typecheck and diff check passed.
+
+## Task 044c - Extract Customer Validation
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved the exact customer-edit schema and inferred values into customer ownership.
+- Preserved role/gender constraints, digit/date conversion, self-edit restrictions,
+  and backend field-error mapping.
+- Deleted the empty admin-owned validation placeholder.
+- Scoped ESLint, full typecheck, and ownership search passed.
+
+## Task 044d - Extract Recipe Validation
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved recipe, ingredient, and linked-product form schemas into recipe ownership.
+- Preserved integer refinements, rich-text checks, UI-only picker fields, inferred
+  nested form types, and complete replacement payload behavior.
+- Deleted the empty admin-owned validation placeholder.
+- Scoped ESLint passed with no new warnings; full typecheck, ownership search, and
+  `git diff --check` passed.
+
+## Task 044e - Extract Hero-Slide Validation
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved the exact hero-slide form schema and inferred values into hero-slide
+  ownership.
+- Preserved trim differences, string-integer refinement, omitted scheduling fields,
+  complete payload behavior, and backend field mapping.
+- Deleted the empty admin-owned validation placeholder.
+- Scoped ESLint passed with no new warnings; full typecheck and ownership search
+  passed.
+
+## Task 044f - Extract Category Validation
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved the exact category form schema and inferred values into catalog category
+  ownership.
+- Preserved unrestricted numeric strings, relative uploaded image paths, Persian
+  messages, defaults, and payload conversion behavior.
+- Deleted the empty admin-owned validation placeholder.
+- Scoped ESLint passed with no new warnings; full typecheck, ownership search, and
+  `git diff --check` passed.
+
+## Task 044g - Extract Address Validation
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved the exact account address form schema and exported value type into address
+  ownership.
+- Preserved Iran-specific phone/postal rules, required province, country injection,
+  defaults, and complete update payload behavior.
+- Deleted the empty account-owned validation placeholder.
+- Scoped ESLint, full typecheck, ownership search, and `git diff --check` passed.
+
+## Task 044h - Extract Profile Validation
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Moved the exact account-settings profile schema and inferred values into profile
+  ownership.
+- Preserved trimmed name requirements, optional phone semantics, null payload
+  conversion, and existing profile mutation behavior.
+- Deleted the empty account-settings validation placeholder.
+- Scoped ESLint, full typecheck, ownership search, and `git diff --check` passed.
+
+## Task Group 044 - Acceptance Verification
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- All eight active forms now import schemas from canonical business-domain
+  validation modules; no reviewed form defines its schema inline.
+- All eight empty wrong-owner admin/account validation placeholders were deleted.
+- Added eight focused extraction-contract tests, including task-start settings and
+  customer boundaries that intentionally differ from `HEAD`.
+- Frontend tests passed: 2 files, 13 tests.
+- Frontend typecheck and production build passed.
+- Full lint passed with zero errors and 11 unrelated existing warnings.
+- Full backend `go test ./...` passed.
+- Independent acceptance review found no production-code blockers or major defects;
+  its test-boundary recommendation was implemented and verified.
+- Ownership searches and `git diff --check` passed.
+
+## Task 045a - Thin Home Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the live async home composition into the feature-owned
+  `home-view.tsx` Server Component.
+- Kept `revalidate = 300` in the route and preserved concurrent API ownership
+  changes, rendering, ordering, conditional output, and existing client islands.
+- Scoped ESLint, full frontend typecheck, route-ownership/stale-import searches,
+  and `git diff --check` passed.
+
+## Task 045b - Thin Search Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the live search data orchestration and complete result/empty/idle
+  rendering into the storefront search-owned Server Component.
+- Kept metadata in the route and passed the promised `searchParams` contract
+  unchanged to the view, preserving request-time rendering and query behavior.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 045c - Thin Product-List Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the live product-list fetching, URL-state handling, JSON-LD,
+  pagination, and complete rendered composition into `product-list-view.tsx`.
+- Kept metadata in the route and forwarded the promised `searchParams` contract
+  unchanged, including current sorting fields and client sort island.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 045d - Thin Product-Detail Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the live product-detail lookup, `notFound`, transformations, JSON-LD,
+  reviews, recommendations, and rendered composition into the product-owned view.
+- Kept `revalidate`, `generateStaticParams`, and `generateMetadata` in the route;
+  forwarded the original promised params and preserved all client islands.
+- Scoped ESLint, full frontend typecheck, route-convention/ownership searches,
+  and `git diff --check` passed.
+
+## Task 045e - Thin Category-Index Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the live category directory orchestration, JSON-LD, and rendering
+  into `category-index-view.tsx`.
+- Moved the inline card into `category-directory-card.tsx` without changing its
+  rendered markup or the audited `src={null}` image fallback.
+- Kept metadata and `revalidate` in the route; scoped ESLint, full frontend
+  typecheck, ownership/fallback searches, and `git diff --check` passed.
+
+## Task 045f - Thin Category-Detail Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the live category lookup, `notFound`, product query, JSON-LD, and
+  rendered composition into `category-detail-view.tsx`.
+- Kept `revalidate`, static params, and metadata generation in the route and
+  forwarded the promised params contract unchanged.
+- Scoped ESLint, full frontend typecheck, route-convention/ownership searches,
+  and `git diff --check` passed.
+
+## Task 045g - Thin Recipe-List Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the live recipe URL parsing, fetching, spotlight, filters, JSON-LD,
+  cards, empty state, and pagination into `recipe-list-view.tsx`.
+- Kept metadata and `revalidate` in the route and forwarded the exact promised
+  search-parameter contract while preserving the filter client island.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 045h - Thin Recipe-Detail Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the live recipe lookup, `notFound`, structured data, content,
+  ingredient/shop/related composition into `recipe-detail-view.tsx`.
+- Moved the inline shoppable product card unchanged into its named recipe-owned
+  component, preserving image, price, unavailable, and add-to-cart behavior.
+- Kept revalidation, static params, and metadata generation in the route; scoped
+  ESLint, full typecheck, ownership searches, and `git diff --check` passed.
+
+## Task 045i - Thin Journal-List Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the live journal page parsing, fetching, featured-story selection,
+  JSON-LD, explorer, empty state, and pagination into `journal-list-view.tsx`.
+- Kept metadata and `revalidate` in the route and forwarded the existing promised
+  page parameter unchanged, preserving the explorer client island.
+- Scoped ESLint, full frontend typecheck, ownership/stale-import searches, and
+  `git diff --check` passed.
+
+## Task 045j - Thin Journal-Detail Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted the live journal lookup, `notFound`, product/related hydration,
+  BlogPosting JSON-LD, article body, share, shop, and read-next composition.
+- Moved the inline article product card unchanged into its journal-owned file,
+  preserving image, price, active-variant, add-to-cart, and link fallbacks.
+- Kept revalidation, static params, and metadata generation in the route; scoped
+  ESLint, full typecheck, ownership searches, and `git diff --check` passed.
+
+## Task 045k - Thin Checkout-Confirmation Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted order validation, authenticated lookup, 404-only translation,
+  delivery formatting, totals, and rendered confirmation into the orders view.
+- Kept the route awaiting the promised `id` and rendering the view; verified the
+  `getAccountOrder -> apiFetch` path still injects auth and defaults to no-store.
+- Scoped ESLint, full frontend typecheck, auth/cache/ownership searches, and
+  `git diff --check` passed.
+
+## Task 045l - Thin FAQ Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted all live FAQ types, groups, exact hard-coded copy, FAQ/breadcrumb
+  JSON-LD, grouped accordions, and support CTA into `faq-view.tsx`.
+- Kept metadata and daily `revalidate` in the route and preserved the existing
+  accordion client island and rendered ordering.
+- Scoped ESLint, full frontend typecheck, content/ownership searches, and
+  `git diff --check` passed.
+
+## Task 045m - Thin About Route
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- Extracted all live About constants, exact hard-coded copy, organization and
+  breadcrumb JSON-LD, image paths, sections, and CTAs into `about-view.tsx`.
+- Kept metadata and daily `revalidate` in the route and preserved the complete
+  rendered ordering and motion composition.
+- Scoped ESLint, full frontend typecheck, content/ownership searches, and
+  `git diff --check` passed.
+
+## Task Group 045 - Acceptance Verification
+
+**Status:** Complete
+**Date:** 2026-07-14
+
+- All 13 storefront routes retain only Next route conventions and minimal feature
+  view composition.
+- Metadata, revalidation, static params, dynamic metadata, promised route props,
+  JSON-LD, not-found behavior, cache boundaries, and client islands were preserved.
+- Independent review found no blockers or major defects; its canonical recently
+  viewed slug correction was implemented.
+- Frontend typecheck, tests, production build, ownership searches, and
+  `git diff --check` passed.
+- Full lint passed with zero errors and 11 unrelated existing warnings.

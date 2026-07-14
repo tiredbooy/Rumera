@@ -4,7 +4,6 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
 import { Loader2 } from "lucide-react"
@@ -32,23 +31,14 @@ import {
   createCategory,
   updateCategory,
 } from "@/features/admin/categories/client"
+import {
+  categoryFormSchema,
+  type CategoryFormValues,
+} from "@/features/catalog/categories/validations"
 import { CATEGORIES_QUERY_KEY } from "@/lib/admin/category-keys"
-import { ImageUrlInput } from "@/components/admin/ImageUrlInput"
+import { CategoryImageInput } from "./category-image-input"
 
 // ── Validation (all fields are strings; coerced to the API shape on submit) ────
-
-const schema = z.object({
-  title: z.string().trim().min(1, "نام دسته‌بندی الزامی است").max(255, "حداکثر ۲۵۵ نویسه"),
-  slug: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
-  parent_id: z.string(),
-  description: z.string(),
-  image_url: z.string().trim(),
-  is_featured: z.boolean(),
-  card_size: z.enum(["small", "large"]),
-  display_order: z.string().trim(),
-})
-
-type FormValues = z.infer<typeof schema>
 
 const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null)
 const numOrNull = (v?: string) => (v && v.trim() !== "" ? Number(v) : null)
@@ -64,7 +54,7 @@ function toSlug(value: string): string {
     .replace(/^-|-$/g, "")
 }
 
-function defaults(category?: Category): FormValues {
+function defaults(category?: Category): CategoryFormValues {
   return {
     title: category?.title ?? "",
     slug: category?.slug ?? "",
@@ -141,6 +131,7 @@ export function CategoryForm({
   // Tracks whether the user has hand-edited the slug, so auto-suggest stops
   // clobbering their input once they take over.
   const [slugTouched, setSlugTouched] = React.useState(mode === "edit")
+  const [imageUploading, setImageUploading] = React.useState(false)
 
   const {
     register,
@@ -150,8 +141,8 @@ export function CategoryForm({
     setValue,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  } = useForm<CategoryFormValues>({
+    resolver: zodResolver(categoryFormSchema),
     defaultValues: defaults(category),
   })
 
@@ -167,7 +158,7 @@ export function CategoryForm({
       const suggestion = toSlug(title)
       if (suggestion) setValue("slug", suggestion, { shouldValidate: false })
     }
-  }, [name, slugTouched, setValue])
+  }, [title, slugTouched, setValue])
 
   const parentOptions = React.useMemo(
     () => flattenForPicker(tree, category?.id),
@@ -178,7 +169,7 @@ export function CategoryForm({
     if (e instanceof CategoryApiError) {
       if (e.fields) {
         for (const [key, msgs] of Object.entries(e.fields)) {
-          setError(key as keyof FormValues, { message: msgs[0] })
+          setError(key as keyof CategoryFormValues, { message: msgs[0] })
         }
       }
       toast.error(e.message)
@@ -187,7 +178,7 @@ export function CategoryForm({
     }
   }
 
-  function toPayload(v: FormValues): CreateCategoryInput {
+  function toPayload(v: CategoryFormValues): CreateCategoryInput {
     return {
       title: v.title.trim(),
       slug: strOrNull(v.slug),
@@ -200,7 +191,7 @@ export function CategoryForm({
     }
   }
 
-  async function onSubmit(v: FormValues) {
+  async function onSubmit(v: CategoryFormValues) {
     try {
       if (mode === "create") {
         await createCategory(toPayload(v))
@@ -294,10 +285,12 @@ export function CategoryForm({
                   control={control}
                   name="image_url"
                   render={({ field }) => (
-                    <ImageUrlInput
+                    <CategoryImageInput
                       id="image_url"
                       value={field.value}
                       onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      onUploadingChange={setImageUploading}
                       error={errors.image_url?.message}
                     />
                   )}
@@ -405,15 +398,15 @@ export function CategoryForm({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Button type="submit" size="lg" disabled={isSubmitting} data-testid="category-submit">
-              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+            <Button type="submit" size="lg" disabled={isSubmitting || imageUploading} data-testid="category-submit">
+              {isSubmitting || imageUploading ? <Loader2 className="size-4 animate-spin" /> : null}
               {submitLabel}
             </Button>
             <Button
               type="button"
               variant="outline"
               size="lg"
-              disabled={isSubmitting}
+              disabled={isSubmitting || imageUploading}
               onClick={() => router.push("/admin/categories")}
             >
               انصراف

@@ -18,7 +18,7 @@ import {
   useRemoveWishlistItem,
 } from "@/features/wishlist/hooks"
 import { useRecordInteraction } from "@/features/recommendations/hooks"
-import { AddToCartButton } from "./add-to-cart-button"
+import { AddToCartButton } from "@/features/cart/components/add-to-cart-button"
 import { AlertButton } from "./alert-button"
 
 const variantLabel = (v: ProductVariant) =>

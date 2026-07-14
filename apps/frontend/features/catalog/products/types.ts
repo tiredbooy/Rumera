@@ -45,6 +45,10 @@ export interface ProductListItem {
   is_active: boolean;
   min_price: number; // cheapest variant
   max_price: number; // most expensive variant
+  active_variant_count: number;
+  available_variant_count: number;
+  /** Present only when exactly one active variant can be selected safely. */
+  purchasable_variant_id?: number;
 }
 
 // Full product detail — GET /products/:id

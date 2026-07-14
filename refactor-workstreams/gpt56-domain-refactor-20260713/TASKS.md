@@ -98,76 +98,13 @@ the deleted catch-all or adding re-export shims.
 
 ### Task Group 042 - Category And Storefront Navigation Components
 
-- [ ] **Task 042a - Move category tree hook and domain files**
-  - Depends: Tasks 029 and 039.
-- [ ] **Task 042b - Move product mega menu**
-  - Depends: Task 042a.
-- [ ] **Task 042c - Move mobile category drawer**
-  - Depends: Task 042b.
-- [ ] **Task 042d - Move header search**
-  - Depends: Task 042c.
-- [ ] **Task 042e - Move header actions and site-header composition**
-  - Depends: Task 042d.
-
 ### Task Group 043 - Remaining Top-Level Business Components
-
-- [ ] **Task 043a - Move add-to-cart button**
-- [ ] **Task 043b - Consolidate and move legacy product card**
-- [ ] **Task 043c - Move age gate to compliance domain**
-- [ ] **Task 043d - Move brand marquee to home/brand owner**
-- [ ] **Task 043e - Split multi-domain admin status badges**
-- [ ] **Task 043f - Move variant picker to product domain**
-- [ ] **Task 043g - Move category image input**
-  - Every subtask depends on Tasks 028-039 and its canonical domain. Keep
-    `/components/ui` and proven generic primitives only.
 
 ### Task Group 044 - Domain Validation Extraction
 
-- [ ] **Task 044a - Extract settings validation**
-- [ ] **Task 044b - Extract brand validation**
-- [ ] **Task 044c - Extract customer validation**
-- [ ] **Task 044d - Extract recipe validation**
-- [ ] **Task 044e - Extract hero-slide validation**
-- [ ] **Task 044f - Extract category validation**
-- [ ] **Task 044g - Extract address validation**
-- [ ] **Task 044h - Extract profile validation**
-  - Each subtask depends on that domain's canonical type/API work and must preserve
-    current validation behavior exactly.
-
 ### Task Group 045 - Thin Storefront Routes
 
-- [ ] **Task 045a - Thin home route**
-- [ ] **Task 045b - Thin search route**
-- [ ] **Task 045c - Thin product-list route**
-- [ ] **Task 045d - Thin product-detail route**
-- [ ] **Task 045e - Thin category-index route**
-- [ ] **Task 045f - Thin category-detail route**
-- [ ] **Task 045g - Thin recipe-list route**
-- [ ] **Task 045h - Thin recipe-detail route**
-- [ ] **Task 045i - Thin journal-list route**
-- [ ] **Task 045j - Thin journal-detail route**
-- [ ] **Task 045k - Thin checkout-confirmation route**
-- [ ] **Task 045l - Thin FAQ route**
-- [ ] **Task 045m - Thin About route**
-  - Each subtask depends on its canonical domain API plus Task 039 and preserves
-    metadata, rendered output, and behavior.
-
 ### Task Group 046 - Thin Admin Routes
-
-- [ ] **Task 046a - Thin product-create route**
-- [ ] **Task 046b - Thin product-edit route**
-- [ ] **Task 046c - Thin category-create route**
-- [ ] **Task 046d - Thin category-edit route**
-- [ ] **Task 046e - Thin brand-edit route**
-- [ ] **Task 046f - Thin recipe-create route**
-- [ ] **Task 046g - Thin recipe-edit route**
-- [ ] **Task 046h - Thin settings route**
-- [ ] **Task 046i - Thin customer-list route**
-- [ ] **Task 046j - Thin customer-detail route**
-- [ ] **Task 046k - Thin customer-edit route**
-- [ ] **Task 046l - Thin order-detail route**
-- [ ] **Task 046m - Thin roles route**
-  - Each subtask depends on its canonical domain API plus Tasks 038-039.
 
 ### Task Group 047 - Split Oversized Components
 
@@ -176,6 +113,9 @@ the deleted catch-all or adding re-export shims.
 - [ ] **Task 047c - Split `WalletView` responsibilities**
 - [ ] **Task 047d - Split `SettingsForm` responsibilities**
 - [ ] **Task 047e - Split hero-form responsibilities**
+  - Compose typed content, responsive-media, CTA, appearance, scheduling,
+    publication, ordering, and preview sections so new supported hero fields do
+    not require growing one monolithic component.
 - [ ] **Task 047f - Split customer-form responsibilities**
 - [ ] **Task 047g - Split subscriptions-view responsibilities**
 - [ ] **Task 047h - Split reviews-section responsibilities**
@@ -280,12 +220,151 @@ accessibility, responsive behavior, loading/error/empty states, and product feel
     recipe structured data against actual backend fields.
   - Depends: Tasks 045h and 048, 052-054.
 
-- [ ] **Task 057 - Add automated accessibility and interaction regression tests**
+## Phase F - Backend Surface Completion And Production Readiness
+
+The tasks below are new product behavior, not structural moves. Implement each
+capability end-to-end and expose only backend-supported behavior. Every admin page
+must use domain-owned contracts/APIs, real permission checks, loading/error/empty
+states, responsive layouts, and truthful mutation feedback.
+
+### Task Group 057 - Owner-Aware Local Media Pipeline
+
+Local filesystem storage is the required deployment for now. Do not introduce a
+CDN, S3, or other object-store dependency. Keep the storage abstraction so a
+future adapter remains possible without changing feature code.
+
+- [ ] **Task 057a - Organize local media by domain and stable owner**
+  - Store files under safe readable namespaces such as
+    `products/<stable-product-id>-<sanitized-slug>/...`,
+    `hero-slides/<slide-id>/...`, `recipes/<recipe-id>/...`, and
+    `journal/<article-id>/...`; never rely on mutable titles alone for identity.
+  - Persist storage keys and canonical public `/media/...` paths, protect against
+    traversal/collisions, preserve atomic writes, and define migration behavior
+    for already persisted flat UUID keys.
+- [ ] **Task 057b - Generalize the working image uploader**
+  - Reuse one uploader contract across products, hero slides, recipes, and journal
+    content with URL-or-local-file input, previews, progress, alt text, ordering,
+    primary/responsive roles, validation, and explicit ownership attachment.
+- [ ] **Task 057c - Make media lifecycle and cache behavior durable**
+  - Delete replaced/removed blobs and rendered derivatives, clean product-cascade
+    files, release cancelled standalone uploads, and provide a safe orphan
+    reconciliation job with an auditable dry run.
+  - Invalidate affected product/category/home/hero caches after writes and ensure
+    local development, Docker persistence, backup/restore, and multi-process
+    serving behavior are documented and verified.
+- [ ] **Task 057d - Harden and test local image processing**
+  - Correct multipart size overhead, enforce decoded pixel/dimension limits,
+    validate real file signatures, keep transform limits/cache keys deterministic,
+    and add upload/serve/replace/delete/rollback/path-safety integration tests.
+
+### Task Group 058 - Production Product And Variant Authoring
+
+Variant dimensions such as size, color, material, or pack are product option
+types/values. Inventory remains responsible for stock against the resulting SKU;
+it must not become the owner of merchandising attributes.
+
+- [ ] **Task 058a - Repair product admin read/update correctness**
+  - Add an admin-safe detail read for inactive products, exclude the current row
+    from slug/code uniqueness checks, persist submitted tags, and add focused
+    backend tests for create/edit/draft behavior.
+- [ ] **Task 058b - Correct and expose the product-option data model**
+  - Replace the independently unique variant-option columns with the correct
+    composite/invariant constraints, add option-type/value CRUD and replacement
+    APIs, and define deletion rules for options already used by variants.
+- [ ] **Task 058c - Hydrate and edit variant attributes**
+  - Return variant option values and variant-specific images in admin/product
+    detail projections, then add reusable size/color/material/custom option
+    selectors to each variant row with duplicate-combination and SKU validation.
+  - Keep stock quantities and movement history in inventory while linking each
+    generated option combination to its concrete variant ID/SKU.
+- [ ] **Task 058d - Make aggregate product persistence atomic and recoverable**
+  - Save product fields, tags, variant creates/updates/deletes, option assignments,
+    and image ownership through one transactional or explicitly resumable backend
+    workflow. Support intentional clearing of nullable fields and report precise
+    partial/validation failures rather than leaving half-created products.
+- [ ] **Task 058e - Polish and verify the complete product form**
+  - Improve progressive disclosure, variant tables, bulk option generation,
+    responsive editing, validation/focus behavior, unsaved-change protection, and
+    create/edit tests while retaining the established admin visual language.
+
+### Task Group 059 - Modular Hero Builder And Storefront Rendering
+
+- [ ] **Task 059a - Build the modular hero-slide editor**
+  - Use the section composition from Task 047e and shared uploader from Task 057b
+    for desktop/mobile media or external URLs, content, CTA pairs, theme,
+    scheduling, publication, order, and an accurate responsive preview.
+  - Keep the model extension-ready but do not invent an unbounded page-builder
+    schema that the backend and storefront cannot render.
+- [ ] **Task 059b - Complete hero persistence and publication semantics**
+  - Support intentional field clearing, validate CTA label/href pairs and safe URL
+    protocols, validate schedule ranges, add atomic reorder, and invalidate public
+    hero caches after every successful mutation.
+- [ ] **Task 059c - Render every supported hero field truthfully**
+  - Use mobile imagery at the appropriate breakpoint, apply light/dark theme to
+    text/overlays/controls, honor schedule/publication windows, keep one semantic
+    page heading, and verify focus, autoplay, reduced motion, and touch behavior.
+
+### Task Group 060 - Surface Existing Backend Capabilities In Admin
+
+- [ ] **Task 060a - Align admin authorization, users, roles, and permissions**
+  - Resolve the backend `admin`-only middleware versus frontend
+    `admin`/`manager`/`support` mismatch before exposing controls.
+  - Replace the static role matrix and fabricated member counts with a supported
+    backend contract, then make user creation, role/permission assignment, status
+    changes, and deletion real and auditable. Do not advertise roles the backend
+    cannot authorize.
+- [ ] **Task 060b - Add complete tag administration**
+  - Fix the required database slug versus omitted Go model/write contract first,
+    then add list/create/edit/delete UI and product-form integration.
+- [ ] **Task 060c - Add coupon administration**
+  - Wire the existing backend CRUD into searchable, paginated create/edit/archive
+    experiences with discount/value/date/applicability validation.
+- [ ] **Task 060d - Add shipping zone and method administration**
+  - Manage zones, methods, rates, weight/region rules, ordering, and activation
+    through the existing shipping backend without duplicating checkout contracts.
+- [ ] **Task 060e - Add payment operations and gift-card issuance**
+  - Add payment list/detail/transaction lookup and staff gift-card batch issuance
+    using the existing read/issue APIs. Do not invent unsupported payment mutations.
+- [ ] **Task 060f - Add journal and journal-category administration**
+  - Add article/category list, create, edit, publish, and delete flows using the
+    backend blog surface and the shared local media workflow from Task 057b.
+- [ ] **Task 060g - Complete inventory operations**
+  - Add per-variant movement history and reorder-threshold management alongside
+    the existing real stock adjustment flow.
+- [ ] **Task 060h - Finish truthful admin actions and analytics coverage**
+  - Wire or remove sample product duplicate/delete controls, expose supported user
+    and recipe deletion, and surface search/event/product analytics only after the
+    catalog numeric-ID versus analytics UUID mismatch is resolved.
+- [ ] **Task 060i - Integrate new modules into admin navigation and overview**
+  - Add permission-aware navigation, summary cards, actionable counts, and direct
+    routes for the completed modules without turning the dashboard into a second
+    owner of their domain logic.
+
+### Task Group 061 - Storefront Media, Catalogue, And Cache Consistency
+
+- [ ] **Task 061a - Standardize storefront media rendering**
+  - Define one responsive image policy for product cards, product detail,
+    categories, hero, recipes, journal, wishlist, and recommendations using stored
+    media metadata and deliberate per-domain fallbacks.
+- [ ] **Task 061b - Coordinate domain cache invalidation**
+  - Revalidate/tag the exact product detail, catalogue, category, home,
+    recommendation, and hero surfaces affected by admin product/media/content
+    writes so successful changes do not remain stale for arbitrary TTLs.
+- [ ] **Task 061c - Make catalogue links, sorting, price, and availability truthful**
+  - Remove unsupported `price`/`discount` sort controls or implement matching
+    backend queries, prevent missing-slug links, and distinguish no active variant
+    from a real zero price before enabling quick commerce actions.
+
+- [ ] **Task 062 - Add automated accessibility, interaction, and lifecycle regression tests**
   - Add axe checks and Playwright coverage for keyboard navigation, responsive
     overflow, checkout choices, validation errors, route error recovery, and the
     product/category/tag/journal/recipe storefront tasks in Group 056.
+  - Add focused API/component/integration coverage for the new admin modules,
+    variant option combinations, transactional product writes, media ownership and
+    cleanup, card quick actions, mega-menu focus behavior, and hero publication.
 
-- [ ] **Task 058 - Final architecture and UX acceptance audit**
+- [ ] **Task 063 - Final architecture, production-readiness, and UX acceptance audit**
   - Confirm top-level component purity, domain self-containment, dashboard
     presentation-only boundaries, thin routes, backend type parity, green build,
-    responsive behavior, keyboard flow, and no unresolved blockers.
+    responsive behavior, keyboard flow, local-media durability, cache freshness,
+    real admin capability coverage, and no unresolved blockers.

@@ -10,9 +10,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { SignInInput } from "@/features/auth/types"
+import { safeCallbackUrl } from "@/features/auth/redirects"
 
 export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter()
+  const returnTo = safeCallbackUrl(callbackUrl)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -34,7 +36,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
       setLoading(false)
       return
     }
-    router.push(callbackUrl)
+    router.push(returnTo)
     router.refresh()
   }
 
@@ -102,7 +104,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
       <p className="mt-6 text-center text-sm text-muted-foreground">
         حساب ندارید؟{" "}
         <Link
-          href="/register"
+          href={`/register?callbackUrl=${encodeURIComponent(returnTo)}`}
           className="rounded font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           ساخت حساب جدید

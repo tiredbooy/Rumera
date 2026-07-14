@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/input-otp"
 import { AuthClientError, requestOtp } from "@/features/auth/api/client"
 import type { RequestOtpInput, VerifyOtpInput } from "@/features/auth/types"
+import { safeCallbackUrl } from "@/features/auth/redirects"
 import { faNum } from "@/lib/products"
 
 const RESEND_SECONDS = 60
@@ -26,6 +27,7 @@ const RESEND_SECONDS = 60
  */
 export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter()
+  const returnTo = safeCallbackUrl(callbackUrl)
   const [step, setStep] = React.useState<"phone" | "code">("phone")
   const [phone, setPhone] = React.useState("")
   const [code, setCode] = React.useState("")
@@ -73,7 +75,7 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
       setLoading(false)
       return
     }
-    router.push(callbackUrl)
+    router.push(returnTo)
     router.refresh()
   }
 

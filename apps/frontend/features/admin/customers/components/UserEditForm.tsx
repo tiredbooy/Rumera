@@ -4,7 +4,6 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { useForm, Controller, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { toast } from "sonner"
 import { Loader2, ShieldAlert, Info } from "lucide-react"
 
@@ -31,6 +30,10 @@ import type {
   AdminUserUpdateInput,
   UserGender,
 } from "@/features/customers/types"
+import {
+  customerEditFormSchema,
+  type CustomerEditFormValues,
+} from "@/features/customers/validations"
 
 /** Roles accepted by the admin user update validator. */
 const ROLE_OPTIONS: AdminUserRole[] = ["customer", "vendor", "admin"]
@@ -45,29 +48,6 @@ const GENDER_OPTIONS: UserGender[] = ["male", "female", "other"]
 // ── Validation ────────────────────────────────────────────────────────────────
 // Everything is a string in the form; coerced to the partial-patch API shape on
 // submit. Keys mirror the backend json names so 422 field errors map 1:1.
-
-const schema = z.object({
-  first_name: z.string().trim().max(100, "حداکثر ۱۰۰ نویسه"),
-  last_name: z.string().trim().max(100, "حداکثر ۱۰۰ نویسه"),
-  phone: z
-    .string()
-    .trim()
-    .refine((v) => v === "" || /^[0-9۰-۹+\-\s]{7,20}$/.test(v), {
-      message: "شمارهٔ تلفن معتبر وارد کنید",
-    }),
-  national_code: z
-    .string()
-    .trim()
-    .refine((v) => v === "" || /^[0-9۰-۹]{10}$/.test(v), {
-      message: "کد ملی باید ۱۰ رقم باشد",
-    }),
-  birth_date: z.string(), // YYYY-MM-DD from <input type="date">, or ""
-  gender: z.union([z.literal(""), z.enum(["male", "female", "other"])]),
-  role: z.enum(["customer", "vendor", "admin"]),
-  is_active: z.boolean(),
-})
-
-type FormValues = z.infer<typeof schema>
 
 /** Western/Persian digits → ASCII; strips non-digits for storage. */
 function toAsciiDigits(v: string): string {
@@ -91,7 +71,7 @@ function dateInputToRfc3339(v: string): string | null {
 
 const strOrNull = (v: string) => (v.trim() === "" ? null : v.trim())
 
-function defaults(user: AdminUser): FormValues {
+function defaults(user: AdminUser): CustomerEditFormValues {
   return {
     first_name: user.first_name ?? "",
     last_name: user.last_name ?? "",
@@ -151,8 +131,8 @@ export function UserEditForm({
     reset,
     setError,
     formState: { errors, isSubmitting, isDirty },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  } = useForm<CustomerEditFormValues>({
+    resolver: zodResolver(customerEditFormSchema),
     defaultValues: defaults(user),
   })
 
@@ -170,7 +150,7 @@ export function UserEditForm({
         return
       }
       if (e.fields) {
-        const known = new Set<keyof FormValues>([
+        const known = new Set<keyof CustomerEditFormValues>([
           "first_name",
           "last_name",
           "phone",
@@ -181,8 +161,8 @@ export function UserEditForm({
           "is_active",
         ])
         for (const [key, msgs] of Object.entries(e.fields)) {
-          if (known.has(key as keyof FormValues)) {
-            setError(key as keyof FormValues, { message: msgs[0] })
+          if (known.has(key as keyof CustomerEditFormValues)) {
+            setError(key as keyof CustomerEditFormValues, { message: msgs[0] })
           }
         }
       }
@@ -192,7 +172,7 @@ export function UserEditForm({
     }
   }
 
-  async function onSubmit(v: FormValues) {
+  async function onSubmit(v: CustomerEditFormValues) {
     const input: AdminUserUpdateInput = {
       first_name: strOrNull(v.first_name),
       last_name: strOrNull(v.last_name),

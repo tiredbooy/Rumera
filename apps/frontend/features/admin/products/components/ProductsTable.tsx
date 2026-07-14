@@ -25,7 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { UserStatusBadge } from "@/components/admin/status-badge";
+import { ProductStatusBadge } from "./product-status-badge";
 import {
   DataTable,
   type Column,
@@ -82,7 +82,7 @@ export function ProductsTable({
       id: "status",
       header: "وضعیت",
       sortValue: (p) => (p.is_active ? "active" : "inactive"),
-      cell: (p) => <UserStatusBadge active={p.is_active} />,
+      cell: (p) => <ProductStatusBadge active={p.is_active} />,
     },
     {
       id: "actions",

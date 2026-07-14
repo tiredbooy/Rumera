@@ -3,9 +3,9 @@
  * age gate. Living in a route group means the dashboards (`/admin`, `/account`)
  * and auth pages render with their OWN chrome instead of inheriting this one.
  */
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader } from "@/features/storefront/navigation/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { AgeGate } from "@/components/age-gate";
+import { AgeGate } from "@/features/compliance/components/age-gate";
 import { ReferralTracker } from "@/features/referral/components/referral-tracker";
 import { getCategoryTree } from "@/features/catalog/categories/api";
 

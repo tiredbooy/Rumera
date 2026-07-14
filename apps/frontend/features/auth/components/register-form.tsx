@@ -14,9 +14,11 @@ import {
   registerAccount,
 } from "@/features/auth/api/client"
 import type { SignUpInput } from "@/features/auth/types"
+import { safeCallbackUrl } from "@/features/auth/redirects"
 
 export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter()
+  const returnTo = safeCallbackUrl(callbackUrl)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -39,10 +41,10 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
       // Account created → sign in immediately for a seamless first session.
       const signed = await signIn("credentials", { email, password, redirect: false })
       if (!signed || signed.error) {
-        router.push("/login")
+        router.push(`/login?callbackUrl=${encodeURIComponent(returnTo)}`)
         return
       }
-      router.push(callbackUrl)
+      router.push(returnTo)
       router.refresh()
     } catch (error) {
       setError(
@@ -137,7 +139,7 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
       <p className="mt-6 text-center text-sm text-muted-foreground">
         حساب دارید؟{" "}
         <Link
-          href="/login"
+          href={`/login?callbackUrl=${encodeURIComponent(returnTo)}`}
           className="rounded font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           ورود

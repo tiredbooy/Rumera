@@ -11,7 +11,7 @@ import { listAdminRecipes } from "@/features/recipes/api/client"
 import { formatDuration, difficultyFa } from "@/features/recipes/utils"
 import type { RecipeStatus } from "@/features/recipes/types"
 import { Button } from "@/components/ui/button"
-import { OptimizedImage } from "@/components/admin/optimized-image"
+import { OptimizedImage } from "@/components/optimized-image"
 
 /**
  * Live recipes board — the editorial grid for the recipes admin. Fetches the

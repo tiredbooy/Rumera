@@ -6,16 +6,19 @@ package models
 
 // ProductListItem — lightweight, used in paginated list
 type ProductListItem struct {
-	ID         int64                     `json:"id"`
-	Title      string                    `json:"title"`
-	Code       *string                   `json:"code,omitempty"`
-	Slug       *string                   `json:"slug,omitempty"`
-	Image      *ImageResponse            `json:"image_response"`
-	Brand      *string                   `json:"brand,omitempty"` // brand title, joined
-	Category *string                   `json:"category,omitempty"`
-	IsActive   bool                      `json:"is_active"`
-	MinPrice   float64                   `json:"min_price"` // cheapest variant
-	MaxPrice   float64                   `json:"max_price"` // most expensive variant
+	ID                    int64          `json:"id"`
+	Title                 string         `json:"title"`
+	Code                  *string        `json:"code,omitempty"`
+	Slug                  *string        `json:"slug,omitempty"`
+	Image                 *ImageResponse `json:"image_response"`
+	Brand                 *string        `json:"brand,omitempty"` // brand title, joined
+	Category              *string        `json:"category,omitempty"`
+	IsActive              bool           `json:"is_active"`
+	MinPrice              float64        `json:"min_price"` // cheapest active variant
+	MaxPrice              float64        `json:"max_price"` // most expensive active variant
+	ActiveVariantCount    int            `json:"active_variant_count"`
+	AvailableVariantCount int            `json:"available_variant_count"`
+	PurchasableVariantID  *int64         `json:"purchasable_variant_id,omitempty"`
 }
 
 // ProductDetail — full response for GET /products/:id

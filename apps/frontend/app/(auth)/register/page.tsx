@@ -1,4 +1,5 @@
 import { RegisterForm } from "@/features/auth/components/register-form"
+import { safeCallbackUrl } from "@/features/auth/redirects"
 
 export default async function RegisterPage({
   searchParams,
@@ -6,5 +7,5 @@ export default async function RegisterPage({
   searchParams: Promise<{ callbackUrl?: string }>
 }) {
   const { callbackUrl } = await searchParams
-  return <RegisterForm callbackUrl={callbackUrl || "/account"} />
+  return <RegisterForm callbackUrl={safeCallbackUrl(callbackUrl)} />
 }
