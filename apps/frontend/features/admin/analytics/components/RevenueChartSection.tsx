@@ -10,6 +10,8 @@ import {
 } from "@/features/analytics/utils";
 import type { DailyRevenueStats } from "@/features/analytics/types";
 
+import { AnalyticsErrorState } from "./AnalyticsErrorState";
+
 export async function RevenueChartSection() {
   let series: DailyRevenueStats[] = [];
   let failed = false;
@@ -38,9 +40,9 @@ export async function RevenueChartSection() {
       }
     >
       {failed ? (
-        <div className="flex h-64 items-center justify-center text-sm text-destructive">
+        <AnalyticsErrorState className="h-64">
           خطا در دریافت روند درآمد
-        </div>
+        </AnalyticsErrorState>
       ) : chartData.length > 0 ? (
         <RevenueAreaChart data={chartData} />
       ) : (

@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { AccountStatCard } from "./account-stat-card";
 import { SmartImage } from "@/components/smart-image";
+import { QueryStateRegion } from "@/components/query-state-region";
 import { useAddresses } from "@/features/addresses/api";
 import { useLoyalty } from "@/features/loyalty/hooks";
 import { useTasteProfile } from "@/features/taste/hooks";
@@ -56,8 +57,65 @@ const QUICK_ACTIONS = [
   { label: "سلیقهٔ من", href: "/account/taste", icon: Sparkles },
 ] as const;
 
-function KpiSkeleton() {
-  return <Skeleton className="h-[128px] rounded-2xl" />;
+function KpiSkeleton({ label }: { label: string }) {
+  return (
+    <QueryStateRegion state="loading" aria-label={label}>
+      <Skeleton className="h-[128px] rounded-2xl" />
+    </QueryStateRegion>
+  );
+}
+
+function KpiError({
+  label,
+  message,
+  onRetry,
+}: {
+  label: string;
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <QueryStateRegion
+      state="error"
+      className="border-hairline flex min-h-[128px] flex-col justify-between rounded-2xl bg-card p-5 ring-1 ring-foreground/5"
+    >
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <div>
+        <p className="text-sm text-muted-foreground">{message}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-1 cursor-pointer text-sm font-medium text-primary hover:underline"
+        >
+          تلاش دوباره
+        </button>
+      </div>
+    </QueryStateRegion>
+  );
+}
+
+function QueryError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <QueryStateRegion
+      state="error"
+      className="border-hairline rounded-2xl bg-card p-6 text-sm text-muted-foreground ring-1 ring-foreground/5"
+    >
+      {message}{" "}
+      <button
+        type="button"
+        onClick={onRetry}
+        className="cursor-pointer font-medium text-primary hover:underline"
+      >
+        تلاش دوباره
+      </button>
+    </QueryStateRegion>
+  );
 }
 
 export function AccountOverview() {
@@ -96,7 +154,13 @@ export function AccountOverview() {
       {/* KPI row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {orders.isLoading ? (
-          <KpiSkeleton />
+          <KpiSkeleton label="در حال دریافت سفارش‌های فعال" />
+        ) : orders.isError ? (
+          <KpiError
+            label="سفارش‌های فعال"
+            message="دریافت سفارش‌ها ناموفق بود."
+            onRetry={() => void orders.refetch()}
+          />
         ) : (
           <AccountStatCard
             label="سفارش‌های فعال"
@@ -108,7 +172,13 @@ export function AccountOverview() {
           />
         )}
         {wallet.isLoading ? (
-          <KpiSkeleton />
+          <KpiSkeleton label="در حال دریافت موجودی کیف پول" />
+        ) : wallet.isError ? (
+          <KpiError
+            label="موجودی کیف پول"
+            message="دریافت موجودی ناموفق بود."
+            onRetry={() => void wallet.refetch()}
+          />
         ) : (
           <AccountStatCard
             label="موجودی کیف پول"
@@ -119,7 +189,13 @@ export function AccountOverview() {
           />
         )}
         {loyalty.isLoading ? (
-          <KpiSkeleton />
+          <KpiSkeleton label="در حال دریافت امتیازهای باشگاه" />
+        ) : loyalty.isError ? (
+          <KpiError
+            label="امتیاز باشگاه"
+            message="دریافت امتیازها ناموفق بود."
+            onRetry={() => void loyalty.refetch()}
+          />
         ) : (
           <AccountStatCard
             label="امتیاز باشگاه"
@@ -135,7 +211,13 @@ export function AccountOverview() {
           />
         )}
         {addresses.isLoading ? (
-          <KpiSkeleton />
+          <KpiSkeleton label="در حال دریافت آدرس‌ها" />
+        ) : addresses.isError ? (
+          <KpiError
+            label="آدرس‌ها"
+            message="دریافت آدرس‌ها ناموفق بود."
+            onRetry={() => void addresses.refetch()}
+          />
         ) : (
           <AccountStatCard
             label="آدرس‌ها"
@@ -190,6 +272,14 @@ export function AccountOverview() {
           ) : null}
         </div>
       ) : null}
+      {taste.isError ? (
+        <div className="mt-6">
+          <QueryError
+            message="خطا در دریافت سلیقهٔ شما."
+            onRetry={() => void taste.refetch()}
+          />
+        </div>
+      ) : null}
 
       {/* Quick actions */}
       <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -223,13 +313,20 @@ export function AccountOverview() {
       </div>
       <div className="mt-4">
         {orders.isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <QueryStateRegion
+            state="loading"
+            aria-label="در حال دریافت سفارش‌های اخیر"
+            className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+          >
             <Skeleton className="h-44 rounded-2xl" />
             <Skeleton className="h-44 rounded-2xl" />
             <Skeleton className="h-44 rounded-2xl" />
-          </div>
+          </QueryStateRegion>
         ) : orders.isError ? (
-          <div className="border-hairline rounded-2xl bg-card p-6 text-sm text-muted-foreground ring-1 ring-foreground/5">
+          <QueryStateRegion
+            state="error"
+            className="border-hairline rounded-2xl bg-card p-6 text-sm text-muted-foreground ring-1 ring-foreground/5"
+          >
             خطا در دریافت سفارش‌ها.{" "}
             <button
               type="button"
@@ -238,7 +335,7 @@ export function AccountOverview() {
             >
               تلاش دوباره
             </button>
-          </div>
+          </QueryStateRegion>
         ) : recentOrders.length === 0 ? (
           <EmptyState
             icon={ShoppingBag}
@@ -257,7 +354,7 @@ export function AccountOverview() {
       </div>
 
       {/* Loyalty snapshot */}
-      {loyalty.data ? (
+      {loyalty.isSuccess && loyalty.data ? (
         <div className="mt-8">
           <AccountSection
             title="باشگاه مشتریان"
@@ -301,12 +398,28 @@ export function AccountOverview() {
 
       {/* Recommendations */}
       {recs.isLoading ? (
-        <div className="mt-8">
+        <QueryStateRegion
+          state="loading"
+          aria-label="در حال دریافت پیشنهادهای شخصی"
+          className="mt-8"
+        >
           <h2 className="font-serif text-2xl">بر اساس سلیقهٔ شما</h2>
           <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="aspect-4/5 rounded-2xl" />
             ))}
+          </div>
+        </QueryStateRegion>
+      ) : recs.isError ? (
+        <div className="mt-8">
+          <h2 className="flex items-center gap-2 font-serif text-2xl">
+            <Sparkles className="size-5 text-primary" /> بر اساس سلیقهٔ شما
+          </h2>
+          <div className="mt-4">
+            <QueryError
+              message="خطا در دریافت پیشنهادهای شخصی."
+              onRetry={() => void recs.refetch()}
+            />
           </div>
         </div>
       ) : recs.data && recs.data.length > 0 ? (

@@ -4,6 +4,7 @@ import type { FieldErrors, UseFormRegister } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { fieldErrorId } from "@/components/ui/field";
 import type { ProductFormValues } from "../../validations";
 
 export function VariantRow({
@@ -21,6 +22,8 @@ export function VariantRow({
 }) {
   const priceError = errors.variants?.[index]?.price?.message;
   const compareError = errors.variants?.[index]?.compare_at_price?.message;
+  const priceId = `variants.${index}.price`;
+  const compareId = `variants.${index}.compare_at_price`;
 
   return (
     <div
@@ -48,14 +51,15 @@ export function VariantRow({
           قیمت (تومان)
         </Label>
         <Input
-          id={`variants.${index}.price`}
+          id={priceId}
           type="number"
           dir="ltr"
           aria-invalid={!!priceError}
+          aria-describedby={priceError ? fieldErrorId(priceId) : undefined}
           {...register(`variants.${index}.price`)}
         />
         {priceError ? (
-          <p className="text-xs text-destructive">{priceError}</p>
+          <p id={fieldErrorId(priceId)} role="alert" className="text-xs text-destructive">{priceError}</p>
         ) : null}
       </div>
 
@@ -67,14 +71,15 @@ export function VariantRow({
           قیمت پیش از تخفیف
         </Label>
         <Input
-          id={`variants.${index}.compare_at_price`}
+          id={compareId}
           type="number"
           dir="ltr"
           aria-invalid={!!compareError}
+          aria-describedby={compareError ? fieldErrorId(compareId) : undefined}
           {...register(`variants.${index}.compare_at_price`)}
         />
         {compareError ? (
-          <p className="text-xs text-destructive">{compareError}</p>
+          <p id={fieldErrorId(compareId)} role="alert" className="text-xs text-destructive">{compareError}</p>
         ) : null}
       </div>
 

@@ -9,6 +9,7 @@ import { AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { focusFormControl } from "@/components/ui/field"
 import type { SignInInput } from "@/features/auth/types"
 import { safeCallbackUrl } from "@/features/auth/redirects"
 
@@ -20,6 +21,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    const formElement = e.currentTarget
     setError(null)
     setLoading(true)
     const form = new FormData(e.currentTarget)
@@ -34,6 +36,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
     if (!res || res.error) {
       setError("ایمیل یا گذرواژه نادرست است.")
       setLoading(false)
+      focusFormControl(formElement, "email")
       return
     }
     router.push(returnTo)
@@ -60,6 +63,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
             autoComplete="email"
             placeholder="you@example.com"
             aria-invalid={!!error}
+            aria-describedby={error ? "login-error" : undefined}
             className="h-11 text-start"
           />
         </div>
@@ -81,12 +85,14 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
             dir="ltr"
             autoComplete="current-password"
             aria-invalid={!!error}
+            aria-describedby={error ? "login-error" : undefined}
             className="h-11 text-start"
           />
         </div>
 
         {error ? (
           <p
+            id="login-error"
             role="alert"
             className="flex items-start gap-2 rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
           >

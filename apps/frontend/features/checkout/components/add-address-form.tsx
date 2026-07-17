@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { focusFormControl } from "@/components/ui/field"
 import { useCreateAddress } from "@/features/addresses/api"
 import type {
   Address,
@@ -16,15 +17,18 @@ import type {
 export function AddAddressForm({
   onCreated,
   onCancel,
+  isDefault = false,
 }: {
   onCreated: (address: Address) => void
   onCancel?: () => void
+  isDefault?: boolean
 }) {
   const create = useCreateAddress()
   const [error, setError] = React.useState<string | null>(null)
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    const formElement = e.currentTarget
     setError(null)
     const f = new FormData(e.currentTarget)
     const input: CreateAddressInput = {
@@ -35,11 +39,14 @@ export function AddAddressForm({
       city: String(f.get("city") ?? ""),
       postal_code: String(f.get("postal_code") ?? ""),
       country: "IR",
-      is_default: true,
+      is_default: isDefault,
     }
     create.mutate(input, {
       onSuccess: (addr) => onCreated(addr),
-      onError: () => setError("ثبت آدرس ناموفق بود. ورودی‌ها را بررسی کنید."),
+      onError: () => {
+        setError("ثبت آدرس ناموفق بود. ورودی‌ها را بررسی کنید.")
+        focusFormControl(formElement, "full_name")
+      },
     })
   }
 
@@ -47,26 +54,26 @@ export function AddAddressForm({
     <form onSubmit={onSubmit} className="grid gap-3 rounded-xl border border-dashed border-border p-4 sm:grid-cols-2">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="full_name">نام و نام خانوادگی</Label>
-        <Input id="full_name" name="full_name" required />
+        <Input id="full_name" name="full_name" required aria-invalid={!!error} aria-describedby={error ? "checkout-address-error" : undefined} />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="phone_number">شمارهٔ تماس</Label>
-        <Input id="phone_number" name="phone_number" dir="ltr" />
+        <Input id="phone_number" name="phone_number" dir="ltr" aria-describedby={error ? "checkout-address-error" : undefined} />
       </div>
       <div className="flex flex-col gap-1.5 sm:col-span-2">
         <Label htmlFor="address_line1">نشانی</Label>
-        <Input id="address_line1" name="address_line1" required />
+        <Input id="address_line1" name="address_line1" required aria-invalid={!!error} aria-describedby={error ? "checkout-address-error" : undefined} />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="city">شهر</Label>
-        <Input id="city" name="city" required />
+        <Input id="city" name="city" required aria-invalid={!!error} aria-describedby={error ? "checkout-address-error" : undefined} />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="postal_code">کد پستی</Label>
-        <Input id="postal_code" name="postal_code" dir="ltr" required />
+        <Input id="postal_code" name="postal_code" dir="ltr" required aria-invalid={!!error} aria-describedby={error ? "checkout-address-error" : undefined} />
       </div>
 
-      {error ? <p className="text-sm text-destructive sm:col-span-2">{error}</p> : null}
+      {error ? <p id="checkout-address-error" role="alert" className="text-sm text-destructive sm:col-span-2">{error}</p> : null}
 
       <div className="flex gap-2 sm:col-span-2">
         <Button type="submit" disabled={create.isPending}>

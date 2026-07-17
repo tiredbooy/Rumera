@@ -1,6 +1,7 @@
 "use client";
 
 import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input";
+import { fieldErrorId } from "@/components/ui/field";
 
 interface CategoryImageInputProps {
   id: string;
@@ -28,6 +29,7 @@ export function CategoryImageInput({
       onUploadingChange={onUploadingChange}
       folder="categories"
       ariaInvalid={Boolean(error)}
+      ariaDescribedBy={error ? fieldErrorId(id) : undefined}
       placeholder="نشانی تصویر یا بارگذاری فایل"
       previewClassName="max-w-md"
     />

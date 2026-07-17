@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ApiFetchOptions } from "@/lib/api/client";
+import { isApiNotFoundError } from "@/lib/api/error-semantics";
 import { publicRequest } from "@/lib/api/public";
 import type { Paginated } from "@/lib/api/types";
 import { buildQueryString } from "@/lib/utils/api-helpers";
@@ -14,49 +15,36 @@ const PUBLIC_CACHE_OPTIONS: ApiFetchOptions = {
 
 const PRODUCT_LIST_OPTIONS: ApiFetchOptions = { cache: "no-store" };
 
-const emptyProductPage = (): Paginated<ProductListItem> => ({
-  results: [],
-  pagination: {
-    page: 1,
-    limit: 0,
-    total_items: 0,
-    total_pages: 0,
-    has_next: false,
-    has_prev: false,
-  },
-});
-
 // ─────────────────────────────────────────────
 // Product list (public – active only)
 // ─────────────────────────────────────────────
 
-/** Error-safe public listing kept fresh because it includes live availability. */
+/** Public listing kept fresh because it includes live availability. */
 export async function listProducts(
   filter: PublicProductListQuery = {},
 ): Promise<Paginated<ProductListItem>> {
-  try {
-    return await publicRequest<Paginated<ProductListItem>>(
-      `/products${buildQueryString(filter)}`,
-      PRODUCT_LIST_OPTIONS,
-    );
-  } catch {
-    return emptyProductPage();
-  }
+  return publicRequest<Paginated<ProductListItem>>(
+    `/products${buildQueryString(filter)}`,
+    PRODUCT_LIST_OPTIONS,
+  );
 }
 
 // ─────────────────────────────────────────────
 // Product detail (cached per request)
 // ─────────────────────────────────────────────
 
-/** Error-safe, ISR-cached public detail lookup. */
-export async function getProductById(id: number): Promise<ProductDetail | null> {
+/** ISR-cached public detail lookup; only a typed 404 means missing. */
+export async function getProductById(
+  id: number,
+): Promise<ProductDetail | null> {
   try {
     return await publicRequest<ProductDetail>(
       `/products/${id}`,
       PUBLIC_CACHE_OPTIONS,
     );
-  } catch {
-    return null;
+  } catch (error) {
+    if (isApiNotFoundError(error)) return null;
+    throw error;
   }
 }
 
@@ -65,8 +53,7 @@ export async function getProductBySlug(
   slug: string,
 ): Promise<ProductDetail | null> {
   const page = await listProducts({ search: slug, limit: 5 });
-  const match =
-    page.results.find((product) => product.slug === slug) ?? page.results[0];
+  const match = page.results.find((product) => product.slug === slug);
   return match ? getProductById(match.id) : null;
 }
 

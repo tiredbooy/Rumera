@@ -12,6 +12,8 @@ import {
 } from "@/features/analytics/utils";
 import { StatCard } from "@/features/dashboard/components/stat-card";
 
+import { AnalyticsErrorState } from "./AnalyticsErrorState";
+
 export async function AnalyticsKpis({ range }: { range: RangeId }) {
   const [summaryResult, prevResult] = await Promise.allSettled([
     fetchRevenueSummary(windowFor(range)),
@@ -23,9 +25,9 @@ export async function AnalyticsKpis({ range }: { range: RangeId }) {
 
   if (!s) {
     return (
-      <p className="col-span-full py-6 text-center text-sm text-destructive">
+      <AnalyticsErrorState className="col-span-full py-6">
         خطا در دریافت آمار این بازه
-      </p>
+      </AnalyticsErrorState>
     );
   }
 

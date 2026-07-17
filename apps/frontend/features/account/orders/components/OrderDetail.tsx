@@ -2,12 +2,7 @@
 
 import Link from "next/link";
 import { toast } from "sonner";
-import {
-  Loader2,
-  XCircle,
-  RotateCcw,
-  MessageSquarePlus,
-} from "lucide-react";
+import { Loader2, XCircle, RotateCcw, MessageSquarePlus } from "lucide-react";
 
 import { faNum, formatPrice } from "@/lib/products";
 import {
@@ -20,25 +15,55 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SmartImage } from "@/components/smart-image";
+import { QueryStateRegion } from "@/components/query-state-region";
 import { useBulkAddCartItems } from "@/features/cart/api";
 import { useCancelOrder, useOrder } from "@/features/orders/hooks";
 import { AccountSection } from "../../account/components/account-section";
 import { OrderStatusStepper } from "./OrderStatusStepper";
 
 export function OrderDetail({ id }: { id: number }) {
-  const { data: order, isLoading, isError } = useOrder(id);
+  const { data: order, isLoading, isError, refetch } = useOrder(id);
   const cancel = useCancelOrder();
   const reorder = useBulkAddCartItems();
 
   if (isLoading) {
     return (
-      <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
+      <QueryStateRegion
+        state="loading"
+        aria-label="در حال دریافت اطلاعات سفارش"
+        className="grid gap-5 lg:grid-cols-[1.6fr_1fr]"
+      >
         <Skeleton className="h-96 rounded-2xl" />
         <Skeleton className="h-96 rounded-2xl" />
-      </div>
+      </QueryStateRegion>
     );
   }
-  if (isError || !order) {
+  if (isError) {
+    return (
+      <QueryStateRegion
+        state="error"
+        className="border-hairline rounded-2xl bg-card p-8 text-center ring-1 ring-foreground/5"
+      >
+        <p className="text-muted-foreground">
+          دریافت اطلاعات سفارش ناموفق بود.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void refetch()}
+          >
+            تلاش دوباره
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/account/orders">بازگشت به سفارش‌ها</Link>
+          </Button>
+        </div>
+      </QueryStateRegion>
+    );
+  }
+  if (!order) {
     return (
       <div className="border-hairline rounded-2xl bg-card p-8 text-center ring-1 ring-foreground/5">
         <p className="text-muted-foreground">سفارش یافت نشد.</p>
@@ -146,7 +171,6 @@ export function OrderDetail({ id }: { id: number }) {
             </div>
           </dl>
         </AccountSection>
-
       </div>
 
       {/* Side column: status + actions */}

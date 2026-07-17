@@ -1,0 +1,204 @@
+import { Check, Gift, Landmark, Loader2, Tag, Wallet } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import type { CouponValidation } from "@/features/coupons/types";
+import type { PaymentMethod } from "@/features/orders/types";
+import { formatPrice } from "@/lib/products";
+import {
+  CheckoutChoiceGroup,
+  CheckoutSection,
+  CheckoutSelectRow,
+} from "./checkout-step-presentation";
+
+const PAYMENTS: { value: PaymentMethod; label: string; icon: typeof Wallet }[] =
+  [
+    { value: "wallet", label: "کیف پول رومرا", icon: Wallet },
+    {
+      value: "bank_transfer",
+      label: "کارت به کارت / انتقال بانکی",
+      icon: Landmark,
+    },
+  ];
+
+export function CheckoutPaymentStep({
+  payment,
+  onPaymentChange,
+  couponCode,
+  onCouponCodeChange,
+  onApplyCoupon,
+  couponPending,
+  coupon,
+  couponError,
+  couponNotice,
+  isGift,
+  onGiftChange,
+  giftMessage,
+  onGiftMessageChange,
+  giftWrap,
+  onGiftWrapChange,
+  hidePrice,
+  onHidePriceChange,
+  deliveryDate,
+  onDeliveryDateChange,
+}: {
+  payment: PaymentMethod;
+  onPaymentChange: (payment: PaymentMethod) => void;
+  couponCode: string;
+  onCouponCodeChange: (code: string) => void;
+  onApplyCoupon: () => void;
+  couponPending: boolean;
+  coupon?: CouponValidation;
+  couponError?: string;
+  couponNotice?: string;
+  isGift: boolean;
+  onGiftChange: (isGift: boolean) => void;
+  giftMessage: string;
+  onGiftMessageChange: (message: string) => void;
+  giftWrap: boolean;
+  onGiftWrapChange: (giftWrap: boolean) => void;
+  hidePrice: boolean;
+  onHidePriceChange: (hidePrice: boolean) => void;
+  deliveryDate: string;
+  onDeliveryDateChange: (date: string) => void;
+}) {
+  const couponDescriptionIds = [
+    coupon?.is_valid ? "coupon-success" : undefined,
+    couponError ? "coupon-error" : undefined,
+    couponNotice ? "coupon-notice" : undefined,
+  ]
+    .filter(Boolean)
+    .join(" ") || undefined;
+
+  return (
+    <>
+      <CheckoutSection icon={Wallet} title="روش پرداخت">
+        <CheckoutChoiceGroup label="روش پرداخت">
+          {PAYMENTS.map((p) => (
+            <CheckoutSelectRow
+              key={p.value}
+              name="checkout-payment"
+              value={p.value}
+              selected={payment === p.value}
+              onClick={() => onPaymentChange(p.value)}
+            >
+              <span className="flex items-center gap-2 font-medium">
+                <p.icon className="size-4 text-muted-foreground" /> {p.label}
+              </span>
+            </CheckoutSelectRow>
+          ))}
+        </CheckoutChoiceGroup>
+      </CheckoutSection>
+
+      <CheckoutSection icon={Tag} title="کد تخفیف">
+        <div className="flex gap-2">
+          <Input
+            id="coupon-code"
+            value={couponCode}
+            onChange={(e) => onCouponCodeChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onApplyCoupon();
+              }
+            }}
+            placeholder="کد تخفیف را وارد کنید"
+            dir="ltr"
+            aria-label="کد تخفیف"
+            aria-invalid={!!couponError}
+            aria-describedby={couponDescriptionIds}
+            className="max-w-xs"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onApplyCoupon}
+            disabled={couponPending}
+          >
+            {couponPending ? <Loader2 className="animate-spin" /> : null} اعمال
+          </Button>
+        </div>
+        {coupon?.is_valid ? (
+          <p id="coupon-success" className="mt-2 inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
+            <Check className="size-4" /> تخفیف اعمال‌شده:{" "}
+            {formatPrice(coupon.discount_amount)}
+          </p>
+        ) : null}
+        {couponError ? (
+          <p id="coupon-error" role="alert" className="mt-2 text-sm text-destructive">
+            {couponError}
+          </p>
+        ) : null}
+        {couponNotice ? (
+          <p id="coupon-notice" role="status" className="mt-2 text-sm text-muted-foreground">
+            {couponNotice}
+          </p>
+        ) : null}
+      </CheckoutSection>
+
+      <CheckoutSection icon={Gift} title="ارسال به‌عنوان هدیه">
+        <label className="flex cursor-pointer items-center justify-between gap-3">
+          <span className="text-sm text-muted-foreground">
+            این سفارش یک هدیه است
+          </span>
+          <Switch
+            checked={isGift}
+            onCheckedChange={onGiftChange}
+            aria-label="حالت هدیه"
+          />
+        </label>
+
+        {isGift ? (
+          <div className="mt-5 flex flex-col gap-5 border-t border-border/60 pt-5">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="gift_message">پیام هدیه (اختیاری)</Label>
+              <Textarea
+                id="gift_message"
+                value={giftMessage}
+                onChange={(e) =>
+                  onGiftMessageChange(e.target.value.slice(0, 500))
+                }
+                placeholder="یادداشتی برای گیرنده بنویسید…"
+                rows={3}
+              />
+            </div>
+
+            <label className="flex cursor-pointer items-center gap-3">
+              <Checkbox
+                checked={giftWrap}
+                onCheckedChange={(v) => onGiftWrapChange(v === true)}
+              />
+              <span className="text-sm">بسته‌بندی هدیه</span>
+            </label>
+
+            <label className="flex cursor-pointer items-center gap-3">
+              <Checkbox
+                checked={hidePrice}
+                onCheckedChange={(v) => onHidePriceChange(v === true)}
+              />
+              <span className="text-sm">مخفی‌کردن قیمت در رسید بسته</span>
+            </label>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="delivery_date">
+                تاریخ ترجیحی تحویل (اختیاری)
+              </Label>
+              <Input
+                id="delivery_date"
+                type="date"
+                dir="ltr"
+                value={deliveryDate}
+                onChange={(e) => onDeliveryDateChange(e.target.value)}
+                className="max-w-xs"
+              />
+            </div>
+          </div>
+        ) : null}
+      </CheckoutSection>
+    </>
+  );
+}

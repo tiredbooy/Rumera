@@ -4,6 +4,8 @@ import { StatCard } from "@/features/dashboard/components/stat-card";
 import { fetchRevenueToday } from "@/features/analytics/api";
 import type { DailyRevenueStats } from "@/features/analytics/types";
 
+import { AnalyticsErrorState } from "./AnalyticsErrorState";
+
 export async function RevenueCards() {
   let today: DailyRevenueStats | null = null;
   let failed = false;
@@ -15,9 +17,9 @@ export async function RevenueCards() {
 
   if (failed) {
     return (
-      <p className="col-span-full py-6 text-center text-sm text-destructive">
+      <AnalyticsErrorState className="col-span-full py-6">
         خطا در دریافت آمار امروز
-      </p>
+      </AnalyticsErrorState>
     );
   }
 

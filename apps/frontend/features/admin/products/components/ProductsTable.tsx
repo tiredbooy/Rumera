@@ -89,39 +89,37 @@ export function ProductsTable({
       header: "",
       align: "end",
       cell: (p) => (
-        <span onClick={(e) => e.stopPropagation()} className="inline-flex">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="عملیات">
-                <MoreHorizontal className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link href={`/admin/products/${p.id}`}>
-                  <Pencil className="size-4" /> ویرایش
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!canWrite}
-                onSelect={() => toast.success(`«${p.title}» کپی شد (نمونه)`)}
-              >
-                <Copy className="size-4" /> تکثیر
-              </DropdownMenuItem>
-              {canWrite ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onSelect={() => setPendingDelete(p)}
-                  >
-                    <Trash2 className="size-4" /> حذف
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="عملیات">
+              <MoreHorizontal className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <Link href={`/admin/products/${p.id}`}>
+                <Pencil className="size-4" /> ویرایش
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!canWrite}
+              onSelect={() => toast.success(`«${p.title}» کپی شد (نمونه)`)}
+            >
+              <Copy className="size-4" /> تکثیر
+            </DropdownMenuItem>
+            {canWrite ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => setPendingDelete(p)}
+                >
+                  <Trash2 className="size-4" /> حذف
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
     },
   ];

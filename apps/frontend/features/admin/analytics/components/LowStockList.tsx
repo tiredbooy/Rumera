@@ -7,6 +7,8 @@ import { fetchLowStockInventory } from "@/features/inventory/api";
 import type { InventoryItem } from "@/features/inventory/types";
 import { getInventoryStatus } from "@/features/inventory/utils";
 
+import { AnalyticsErrorState } from "./AnalyticsErrorState";
+
 export async function LowStockList() {
   let rows: InventoryItem[] | null = null;
   let error = false;
@@ -36,9 +38,9 @@ export async function LowStockList() {
       </div>
       <div className="border-hairline divide-y divide-border/50 overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
         {error ? (
-          <p className="p-6 text-center text-sm text-destructive">
+          <AnalyticsErrorState className="p-6">
             خطا در دریافت موجودی
-          </p>
+          </AnalyticsErrorState>
         ) : rows === null || rows.length === 0 ? (
           <p className="p-6 text-center text-sm text-muted-foreground">
             موجودی همهٔ کالاها سالم است.

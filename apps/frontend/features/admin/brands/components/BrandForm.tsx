@@ -14,6 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  FieldControl,
+  fieldDescriptionId,
+  fieldErrorId,
+} from "@/components/ui/field";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -97,11 +102,13 @@ function Field({
   return (
     <div className={cn("flex flex-col gap-2", full && "sm:col-span-2")}>
       <Label htmlFor={id}>{label}</Label>
-      {children}
+      <FieldControl id={id} error={error} description={Boolean(hint && !error)}>
+        {children as React.ReactElement}
+      </FieldControl>
       {error ? (
-        <p className="text-xs text-destructive">{error}</p>
+        <p id={fieldErrorId(id)} role="alert" className="text-xs text-destructive">{error}</p>
       ) : hint ? (
-        <p className="text-xs text-muted-foreground">{hint}</p>
+        <p id={fieldDescriptionId(id)} className="text-xs text-muted-foreground">{hint}</p>
       ) : null}
     </div>
   );
@@ -193,9 +200,13 @@ export function BrandForm({
   function applyServerErrors(e: unknown) {
     if (e instanceof BrandApiError) {
       if (e.fields) {
-        for (const [key, msgs] of Object.entries(e.fields)) {
-          setError(key as keyof BrandFormValues, { message: msgs[0] });
-        }
+        Object.entries(e.fields).forEach(([key, msgs], index) => {
+          setError(
+            key as keyof BrandFormValues,
+            { message: msgs[0] },
+            { shouldFocus: index === 0 },
+          );
+        });
       }
       toast.error(e.message);
     } else {

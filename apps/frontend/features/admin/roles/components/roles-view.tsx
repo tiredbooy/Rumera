@@ -137,7 +137,14 @@ export function RolesView() {
                             : "bg-muted/50 text-muted-foreground/30 ring-border/50",
                         )}
                       >
-                        {granted ? <Check className="size-3.5" /> : "—"}
+                        {granted ? (
+                          <Check className="size-3.5" aria-hidden="true" />
+                        ) : (
+                          <span aria-hidden="true">—</span>
+                        )}
+                        <span className="sr-only">
+                          {granted ? "دسترسی دارد" : "دسترسی ندارد"}
+                        </span>
                       </span>
                     </TableCell>
                   );

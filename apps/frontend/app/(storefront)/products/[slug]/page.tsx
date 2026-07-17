@@ -5,12 +5,21 @@ import {
   getProductBySlug,
 } from "@/features/catalog/products/api/public";
 import { ProductDetailView } from "@/features/catalog/products/components/product-detail-view";
+import { getSafeApiErrorContext } from "@/lib/api/error-semantics";
 import { buildMetadata } from "@/lib/seo/metadata";
 
 export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  return (await allProductSlugs()).map((slug) => ({ slug }));
+  try {
+    return (await allProductSlugs()).map((slug) => ({ slug }));
+  } catch (error) {
+    console.error(
+      "generateStaticParams: failed to load product slugs",
+      getSafeApiErrorContext(error),
+    );
+    return [];
+  }
 }
 
 export async function generateMetadata({

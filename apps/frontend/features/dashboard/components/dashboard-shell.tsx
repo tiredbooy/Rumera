@@ -151,7 +151,11 @@ export function DashboardShell({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[78rem] flex-1 px-5 py-6 lg:px-8 lg:py-8">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-[78rem] flex-1 px-5 py-6 lg:px-8 lg:py-8"
+        >
           {children}
         </main>
       </div>

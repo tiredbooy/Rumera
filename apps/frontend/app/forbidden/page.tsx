@@ -14,7 +14,11 @@ export const metadata: Metadata = noindexMetadata("دسترسی غیرمجاز")
 
 export default function ForbiddenPage() {
   return (
-    <div className="cellar-glow flex min-h-dvh flex-col items-center justify-center px-5 py-12">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="cellar-glow flex min-h-dvh flex-col items-center justify-center px-5 py-12"
+    >
       <Link href="/" className="mb-8 flex items-center gap-2">
         <span className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
           <Wine className="size-5" />
@@ -55,6 +59,6 @@ export default function ForbiddenPage() {
         <ArrowLeft className="size-3.5" />
         بازگشت به فروشگاه
       </Link>
-    </div>
+    </main>
   )
 }

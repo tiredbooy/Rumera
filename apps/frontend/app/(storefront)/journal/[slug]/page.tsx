@@ -5,13 +5,22 @@ import {
   listJournalSlugs,
 } from "@/features/journal/api/server";
 import { JournalDetailView } from "@/features/journal/components/journal-detail-view";
+import { getSafeApiErrorContext } from "@/lib/api/error-semantics";
 import { buildMetadata } from "@/lib/seo/metadata";
 
 export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  const slugs = await listJournalSlugs();
-  return slugs.map((slug) => ({ slug }));
+  try {
+    const slugs = await listJournalSlugs();
+    return slugs.map((slug) => ({ slug }));
+  } catch (error) {
+    console.error(
+      "generateStaticParams: failed to load journal slugs",
+      getSafeApiErrorContext(error),
+    );
+    return [];
+  }
 }
 
 export async function generateMetadata({

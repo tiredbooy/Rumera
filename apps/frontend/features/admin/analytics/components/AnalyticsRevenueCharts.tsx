@@ -6,6 +6,7 @@ import {
 } from "@/features/analytics/utils";
 import type { DailyRevenueStats } from "@/features/analytics/types";
 import { ChartCard, RevenueAreaChart, OrdersBarChart } from "./Charts";
+import { AnalyticsErrorState } from "./AnalyticsErrorState";
 
 export async function AnalyticsRevenueCharts({ range }: { range: RangeId }) {
   let series: DailyRevenueStats[] = [];
@@ -26,7 +27,9 @@ export async function AnalyticsRevenueCharts({ range }: { range: RangeId }) {
     <div className="grid gap-6 lg:grid-cols-2">
       <ChartCard title="روند درآمد" description="تومان">
         {failed ? (
-          <AnalyticsState error>خطا در دریافت روند درآمد</AnalyticsState>
+          <AnalyticsErrorState className="h-64">
+            خطا در دریافت روند درآمد
+          </AnalyticsErrorState>
         ) : chartData.length === 0 ? (
           <AnalyticsState>داده‌ای برای این بازه ثبت نشده است.</AnalyticsState>
         ) : (
@@ -35,7 +38,9 @@ export async function AnalyticsRevenueCharts({ range }: { range: RangeId }) {
       </ChartCard>
       <ChartCard title="روند سفارش‌ها" description="تعداد سفارش">
         {failed ? (
-          <AnalyticsState error>خطا در دریافت روند سفارش‌ها</AnalyticsState>
+          <AnalyticsErrorState className="h-64">
+            خطا در دریافت روند سفارش‌ها
+          </AnalyticsErrorState>
         ) : chartData.length === 0 ? (
           <AnalyticsState>داده‌ای برای این بازه ثبت نشده است.</AnalyticsState>
         ) : (
@@ -48,15 +53,11 @@ export async function AnalyticsRevenueCharts({ range }: { range: RangeId }) {
 
 function AnalyticsState({
   children,
-  error = false,
 }: {
   children: React.ReactNode;
-  error?: boolean;
 }) {
   return (
-    <div
-      className={`flex h-64 items-center justify-center text-sm ${error ? "text-destructive" : "text-muted-foreground"}`}
-    >
+    <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
       {children}
     </div>
   );

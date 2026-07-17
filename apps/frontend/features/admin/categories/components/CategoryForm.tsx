@@ -14,6 +14,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import {
+  FieldControl,
+  fieldDescriptionId,
+  fieldErrorId,
+} from "@/components/ui/field"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -103,14 +108,20 @@ function Field({
   label: string
   error?: string
   hint?: string
-  children: React.ReactNode
+  children: React.ReactElement
 }) {
   return (
     <div className="flex flex-col gap-2">
       <Label htmlFor={id}>{label}</Label>
-      {children}
-      {hint && !error ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      <FieldControl id={id} error={error} description={Boolean(hint && !error)}>
+        {children as React.ReactElement}
+      </FieldControl>
+      {hint && !error ? (
+        <p id={fieldDescriptionId(id)} className="text-xs text-muted-foreground">{hint}</p>
+      ) : null}
+      {error ? (
+        <p id={fieldErrorId(id)} role="alert" className="text-xs text-destructive">{error}</p>
+      ) : null}
     </div>
   )
 }
@@ -168,9 +179,13 @@ export function CategoryForm({
   function applyServerErrors(e: unknown) {
     if (e instanceof CategoryApiError) {
       if (e.fields) {
-        for (const [key, msgs] of Object.entries(e.fields)) {
-          setError(key as keyof CategoryFormValues, { message: msgs[0] })
-        }
+        Object.entries(e.fields).forEach(([key, msgs], index) => {
+          setError(
+            key as keyof CategoryFormValues,
+            { message: msgs[0] },
+            { shouldFocus: index === 0 }
+          )
+        })
       }
       toast.error(e.message)
     } else {

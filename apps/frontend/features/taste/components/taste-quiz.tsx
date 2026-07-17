@@ -1,27 +1,37 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { Loader2, ArrowLeft, ArrowRight, Check, Sparkles, Wine, Wallet, HeartHandshake } from "lucide-react"
-import type { LucideIcon } from "lucide-react"
-import { toast } from "sonner"
+import * as React from "react";
+import Link from "next/link";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import {
+  Loader2,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Sparkles,
+  Wine,
+  Wallet,
+  HeartHandshake,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { toast } from "sonner";
 
-import { faNum, formatPrice } from "@/lib/products"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { useTasteProfile, useUpdateTasteProfile } from "../hooks"
-import { tasteProfileOptions } from "../options"
-import type { TasteCategory, UpdateTasteProfileInput } from "../types"
+import { faNum, formatPrice } from "@/lib/products";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { QueryStateRegion } from "@/components/query-state-region";
+import { useTasteProfile, useUpdateTasteProfile } from "../hooks";
+import { tasteProfileOptions } from "../options";
+import type { TasteCategory, UpdateTasteProfileInput } from "../types";
 
 const STEPS: { title: string; icon: LucideIcon }[] = [
   { title: "دسته‌بندی", icon: Wine },
   { title: "بودجه", icon: Wallet },
   { title: "ذائقه", icon: HeartHandshake },
-]
+];
 
 function toggle<T extends string>(list: T[], v: T): T[] {
-  return list.includes(v) ? list.filter((x) => x !== v) : [...list, v]
+  return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
 }
 
 function Chip({
@@ -29,9 +39,9 @@ function Chip({
   onClick,
   children,
 }: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
     <button
@@ -42,43 +52,43 @@ function Chip({
         "inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium ring-1 transition-colors duration-200",
         active
           ? "bg-primary text-primary-foreground ring-primary"
-          : "bg-secondary text-secondary-foreground ring-transparent hover:bg-accent"
+          : "bg-secondary text-secondary-foreground ring-transparent hover:bg-accent",
       )}
     >
       {active ? <Check className="size-3.5" /> : null}
       {children}
     </button>
-  )
+  );
 }
 
 export function TasteQuiz() {
-  const { data, isLoading } = useTasteProfile()
-  const update = useUpdateTasteProfile()
-  const reduceMotion = useReducedMotion()
+  const { data, isLoading, isError, refetch } = useTasteProfile();
+  const update = useUpdateTasteProfile();
+  const reduceMotion = useReducedMotion();
 
-  const [step, setStep] = React.useState(0)
+  const [step, setStep] = React.useState(0);
   // Direction drives the slide animation: +1 forward, -1 back.
-  const [dir, setDir] = React.useState(1)
-  const [cats, setCats] = React.useState<TasteCategory[]>([])
-  const [budget, setBudget] = React.useState<number | null>(null)
-  const [flavor, setFlavor] = React.useState<string[]>([])
-  const [occ, setOcc] = React.useState<string[]>([])
-  const [done, setDone] = React.useState(false)
+  const [dir, setDir] = React.useState(1);
+  const [cats, setCats] = React.useState<TasteCategory[]>([]);
+  const [budget, setBudget] = React.useState<number | null>(null);
+  const [flavor, setFlavor] = React.useState<string[]>([]);
+  const [occ, setOcc] = React.useState<string[]>([]);
+  const [done, setDone] = React.useState(false);
 
   // Prefill once the saved profile loads.
-  const hydrated = React.useRef(false)
+  const hydrated = React.useRef(false);
   React.useEffect(() => {
-    if (hydrated.current || !data) return
-    hydrated.current = true
-    setCats(data.categories ?? [])
-    setBudget(typeof data.budget_max === "number" ? data.budget_max : null)
-    setFlavor(data.flavor ?? [])
-    setOcc(data.occasions ?? [])
-  }, [data])
+    if (hydrated.current || !data) return;
+    hydrated.current = true;
+    setCats(data.categories ?? []);
+    setBudget(typeof data.budget_max === "number" ? data.budget_max : null);
+    setFlavor(data.flavor ?? []);
+    setOcc(data.occasions ?? []);
+  }, [data]);
 
   function go(next: number) {
-    setDir(next > step ? 1 : -1)
-    setStep(next)
+    setDir(next > step ? 1 : -1);
+    setStep(next);
   }
 
   function finish() {
@@ -87,28 +97,53 @@ export function TasteQuiz() {
       budget_max: budget ?? 0,
       flavor,
       occasions: occ,
-    }
+    };
     update.mutate(input, {
       onSuccess: () => {
-        setDone(true)
-        toast.success("سلیقهٔ شما ذخیره شد")
+        setDone(true);
+        toast.success("سلیقهٔ شما ذخیره شد");
       },
       onError: () => toast.error("ذخیره ناموفق بود"),
-    })
+    });
   }
 
   if (isLoading) {
     return (
-      <div className="border-hairline flex h-56 items-center justify-center rounded-3xl bg-card/60 ring-1 ring-foreground/5">
+      <QueryStateRegion
+        state="loading"
+        aria-label="در حال دریافت سلیقهٔ ذخیره‌شده"
+        className="border-hairline flex h-56 items-center justify-center rounded-3xl bg-card/60 ring-1 ring-foreground/5"
+      >
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    )
+      </QueryStateRegion>
+    );
+  }
+
+  if (isError) {
+    return (
+      <QueryStateRegion
+        state="error"
+        className="border-hairline flex min-h-56 flex-col items-center justify-center gap-3 rounded-3xl bg-card/60 p-6 text-center ring-1 ring-foreground/5"
+      >
+        <p className="text-sm text-muted-foreground">
+          دریافت سلیقهٔ ذخیره‌شده ناموفق بود.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void refetch()}
+        >
+          تلاش دوباره
+        </Button>
+      </QueryStateRegion>
+    );
   }
 
   if (done) {
     const topCategory = tasteProfileOptions.categories.find(
-      (option) => option.value === cats[0]
-    )
+      (option) => option.value === cats[0],
+    );
     return (
       <motion.div
         initial={reduceMotion ? false : { opacity: 0, y: 12 }}
@@ -138,19 +173,19 @@ export function TasteQuiz() {
             variant="outline"
             className="cursor-pointer"
             onClick={() => {
-              setDone(false)
-              go(0)
+              setDone(false);
+              go(0);
             }}
           >
             ویرایش سلیقه
           </Button>
         </div>
       </motion.div>
-    )
+    );
   }
 
-  const StepIcon = STEPS[step].icon
-  const stepEyebrow = `گام ${faNum(step + 1)} از ${faNum(STEPS.length)}`
+  const StepIcon = STEPS[step].icon;
+  const stepEyebrow = `گام ${faNum(step + 1)} از ${faNum(STEPS.length)}`;
 
   // Slide variants honour RTL: forward enters from the inline-start (left edge
   // visually in RTL) using a signed x offset multiplied by direction.
@@ -158,15 +193,18 @@ export function TasteQuiz() {
     enter: (d: number) => ({ opacity: 0, x: reduceMotion ? 0 : d * 28 }),
     center: { opacity: 1, x: 0 },
     exit: (d: number) => ({ opacity: 0, x: reduceMotion ? 0 : d * -28 }),
-  }
+  };
 
   return (
     <div className="border-hairline overflow-hidden rounded-3xl bg-card/60 p-6 ring-1 ring-foreground/5 sm:p-8">
       {/* Stepper */}
-      <ol className="mb-7 flex items-center gap-2" aria-label="مراحل سلیقه‌سنجی">
+      <ol
+        className="mb-7 flex items-center gap-2"
+        aria-label="مراحل سلیقه‌سنجی"
+      >
         {STEPS.map((s, i) => {
-          const Ico = s.icon
-          const reached = i <= step
+          const Ico = s.icon;
+          const reached = i <= step;
           return (
             <React.Fragment key={s.title}>
               <li className="flex items-center gap-2">
@@ -176,15 +214,19 @@ export function TasteQuiz() {
                     "flex size-9 items-center justify-center rounded-full text-xs font-semibold ring-1 transition-colors duration-300",
                     reached
                       ? "bg-primary text-primary-foreground ring-primary"
-                      : "bg-secondary text-muted-foreground ring-transparent"
+                      : "bg-secondary text-muted-foreground ring-transparent",
                   )}
                 >
-                  {i < step ? <Check className="size-4" /> : <Ico className="size-4" />}
+                  {i < step ? (
+                    <Check className="size-4" />
+                  ) : (
+                    <Ico className="size-4" />
+                  )}
                 </span>
                 <span
                   className={cn(
                     "hidden text-sm font-medium sm:inline",
-                    reached ? "text-foreground" : "text-muted-foreground"
+                    reached ? "text-foreground" : "text-muted-foreground",
                   )}
                 >
                   {s.title}
@@ -197,12 +239,15 @@ export function TasteQuiz() {
                     initial={false}
                     animate={{ scaleX: i < step ? 1 : 0 }}
                     style={{ transformOrigin: "right" }}
-                    transition={{ duration: reduceMotion ? 0 : 0.4, ease: "easeOut" }}
+                    transition={{
+                      duration: reduceMotion ? 0 : 0.4,
+                      ease: "easeOut",
+                    }}
                   />
                 </span>
               ) : null}
             </React.Fragment>
-          )
+          );
         })}
       </ol>
 
@@ -216,7 +261,10 @@ export function TasteQuiz() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: reduceMotion ? 0 : 0.4, ease: [0.22, 1, 0.36, 1] }}
+            transition={{
+              duration: reduceMotion ? 0 : 0.4,
+              ease: [0.22, 1, 0.36, 1],
+            }}
           >
             <p className="eyebrow mb-2">
               <StepIcon className="size-3.5" /> {stepEyebrow}
@@ -224,7 +272,9 @@ export function TasteQuiz() {
 
             {step === 0 ? (
               <>
-                <h2 className="font-serif text-2xl sm:text-3xl">چه چیزهایی را بیشتر می‌پسندید؟</h2>
+                <h2 className="font-serif text-2xl sm:text-3xl">
+                  چه چیزهایی را بیشتر می‌پسندید؟
+                </h2>
                 <p className="mt-2 text-base leading-relaxed text-muted-foreground">
                   یک یا چند دسته را انتخاب کنید.
                 </p>
@@ -244,7 +294,9 @@ export function TasteQuiz() {
 
             {step === 1 ? (
               <>
-                <h2 className="font-serif text-2xl sm:text-3xl">بودجهٔ معمول شما برای هر بطری؟</h2>
+                <h2 className="font-serif text-2xl sm:text-3xl">
+                  بودجهٔ معمول شما برای هر بطری؟
+                </h2>
                 <p className="mt-2 text-base leading-relaxed text-muted-foreground">
                   این به ما کمک می‌کند پیشنهادهای متناسب با بودجه‌تان بدهیم.
                 </p>
@@ -260,7 +312,9 @@ export function TasteQuiz() {
                   ))}
                 </div>
                 {budget && budget > 0 ? (
-                  <p className="mt-4 text-sm text-muted-foreground">سقف انتخابی: {formatPrice(budget)}</p>
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    سقف انتخابی: {formatPrice(budget)}
+                  </p>
                 ) : null}
               </>
             ) : null}
@@ -268,7 +322,9 @@ export function TasteQuiz() {
             {step === 2 ? (
               <div className="space-y-6">
                 <div>
-                  <h2 className="font-serif text-2xl sm:text-3xl">ذائقه و مناسبت</h2>
+                  <h2 className="font-serif text-2xl sm:text-3xl">
+                    ذائقه و مناسبت
+                  </h2>
                   <p className="mt-2 text-base leading-relaxed text-muted-foreground">
                     برای پیشنهادهای دقیق‌تر (اختیاری).
                   </p>
@@ -288,7 +344,9 @@ export function TasteQuiz() {
                   </div>
                 </div>
                 <div>
-                  <p className="mb-2.5 text-sm font-medium">بیشتر برای چه مناسبتی؟</p>
+                  <p className="mb-2.5 text-sm font-medium">
+                    بیشتر برای چه مناسبتی؟
+                  </p>
                   <div className="flex flex-wrap gap-2.5">
                     {tasteProfileOptions.occasions.map((o) => (
                       <Chip
@@ -326,12 +384,20 @@ export function TasteQuiz() {
             بعدی <ArrowLeft className="size-4" />
           </Button>
         ) : (
-          <Button onClick={finish} disabled={update.isPending} className="cursor-pointer">
-            {update.isPending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+          <Button
+            onClick={finish}
+            disabled={update.isPending}
+            className="cursor-pointer"
+          >
+            {update.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Check className="size-4" />
+            )}
             ذخیرهٔ سلیقه
           </Button>
         )}
       </div>
     </div>
-  )
+  );
 }

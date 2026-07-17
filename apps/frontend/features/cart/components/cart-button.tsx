@@ -3,9 +3,10 @@
 import * as React from "react"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
-import { ShoppingBag, ArrowLeft } from "lucide-react"
+import { ArrowLeft, Loader2, ShoppingBag } from "lucide-react"
 
 import { formatPrice, faNum } from "@/lib/products"
+import { QueryStateRegion } from "@/components/query-state-region"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -45,7 +46,16 @@ export function CartButton() {
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-5">
-          {authed ? (
+          {status === "loading" ? (
+            <QueryStateRegion
+              state="loading"
+              aria-label="در حال بررسی سبد خرید"
+              className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground"
+            >
+              <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+              در حال بررسی سبد خرید…
+            </QueryStateRegion>
+          ) : authed ? (
             <CartLines enabled={open} />
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-center">

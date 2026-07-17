@@ -1,6 +1,6 @@
 "use client";
 
-import { storeRequest } from "@/lib/api/store-client";
+import { ApiClientError, storeRequest } from "@/lib/api/store-client";
 import type { ApiSuccess, Paginated } from "@/lib/api/types";
 import { buildQueryString } from "@/lib/utils/api-helpers";
 
@@ -28,10 +28,14 @@ export function listAccountOrdersClient(
   );
 }
 
-export function getAccountOrderClient(id: number): Promise<Order> {
-  return storeRequest<ApiSuccess<Order>>(`orders/${id}`).then(
-    (body) => body.data,
-  );
+export async function getAccountOrderClient(id: number): Promise<Order | null> {
+  try {
+    const body = await storeRequest<ApiSuccess<Order>>(`orders/${id}`);
+    return body.data;
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 export function cancelAccountOrderClient(id: number): Promise<void> {

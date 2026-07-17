@@ -100,12 +100,21 @@ export function ReviewsQueue({
   if (reviewsQuery.isError) {
     return (
       <div
-        className="border-hairline rounded-2xl bg-card px-6 py-16 text-center text-sm text-destructive"
+        className="border-hairline flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-16 text-center text-sm text-destructive"
         role="alert"
+        aria-busy={reviewsQuery.isFetching}
       >
         <p>خطا در دریافت دیدگاه‌ها.</p>
-        <Button variant="outline" size="sm" onClick={() => reviewsQuery.refetch()}>
-          تلاش دوباره
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={reviewsQuery.isFetching}
+          onClick={() => void reviewsQuery.refetch()}
+        >
+          {reviewsQuery.isFetching ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : null}
+          {reviewsQuery.isFetching ? "در حال تلاش…" : "تلاش دوباره"}
         </Button>
       </div>
     );

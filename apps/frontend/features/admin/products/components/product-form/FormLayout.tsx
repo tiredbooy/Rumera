@@ -1,6 +1,11 @@
 "use client";
 
 import * as React from "react";
+import {
+  FieldControl,
+  fieldDescriptionId,
+  fieldErrorId,
+} from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -60,16 +65,18 @@ export function FormField({
       <div className="flex items-baseline justify-between gap-2">
         <Label htmlFor={id}>{label}</Label>
         {hint ? (
-          <span className="text-[11px] text-muted-foreground">{hint}</span>
+          <span id={fieldDescriptionId(id)} className="text-[11px] text-muted-foreground">{hint}</span>
         ) : null}
       </div>
-      {children}
+      <FieldControl id={id} error={error} description={Boolean(hint && !error)}>
+        {children as React.ReactElement}
+      </FieldControl>
       {error ? (
-        <p className="flex items-center gap-1 text-xs text-destructive">
+        <p id={fieldErrorId(id)} role="alert" className="flex items-center gap-1 text-xs text-destructive">
           <span className="inline-block size-1 rounded-full bg-destructive" />
           {error}
         </p>
-      ) : null}
+        ) : null}
     </div>
   );
 }

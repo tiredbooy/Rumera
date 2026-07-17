@@ -2,7 +2,7 @@ import "server-only";
 
 import { Suspense } from "react";
 import Link from "next/link";
-import { AlertCircle, Users } from "lucide-react";
+import { Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,10 +16,7 @@ import {
 import { listUsers } from "@/features/customers/api";
 import { UserRoleBadge } from "@/features/customers/components/user-role-badge";
 import { UserStatusBadge } from "@/features/customers/components/user-status-badge";
-import type { UserListItem } from "@/features/customers/types";
 import { PageHeader } from "@/features/dashboard/components/page-header";
-import { ApiError } from "@/lib/api/client";
-import type { Paginated } from "@/lib/api/types";
 import { faNum } from "@/lib/products";
 import { faDate } from "@/lib/utils/date";
 
@@ -50,10 +47,7 @@ export function CustomersView({
   searchParams: CustomersSearchParams;
 }) {
   const query = first(searchParams.q).trim();
-  const page = Math.max(
-    1,
-    Number.parseInt(first(searchParams.page), 10) || 1,
-  );
+  const page = Math.max(1, Number.parseInt(first(searchParams.page), 10) || 1);
 
   return (
     <>
@@ -70,35 +64,11 @@ export function CustomersView({
 }
 
 async function UsersTable({ query, page }: { query: string; page: number }) {
-  let data: Paginated<UserListItem> | null = null;
-  let failed = false;
-  try {
-    data = await listUsers({
-      page,
-      limit: PAGE_SIZE,
-      search: query || undefined,
-    });
-  } catch (error) {
-    if (error instanceof ApiError) failed = true;
-    else throw error;
-  }
-
-  if (failed || !data) {
-    return (
-      <div className="border-hairline flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-16 text-center ring-1 ring-foreground/[0.04]">
-        <span
-          className="flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive"
-          aria-hidden
-        >
-          <AlertCircle className="size-6" />
-        </span>
-        <p className="font-serif text-lg">بارگذاری کاربران ناموفق بود</p>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          در ارتباط با سرور خطایی رخ داد. لطفاً چند لحظه بعد دوباره تلاش کنید.
-        </p>
-      </div>
-    );
-  }
+  const data = await listUsers({
+    page,
+    limit: PAGE_SIZE,
+    search: query || undefined,
+  });
 
   const { results, pagination } = data;
 

@@ -63,6 +63,7 @@ export function VariantPicker({
   onChange,
   initialLabel,
   ariaLabelledBy,
+  ariaDescribedBy,
   invalid,
 }: {
   value: number | null
@@ -70,6 +71,7 @@ export function VariantPicker({
   /** Pre-resolved label for an existing selection (edit mode). */
   initialLabel?: VariantOption | null
   ariaLabelledBy?: string
+  ariaDescribedBy?: string
   invalid?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
@@ -128,6 +130,7 @@ export function VariantPicker({
           role="combobox"
           aria-expanded={open}
           aria-labelledby={ariaLabelledBy}
+          aria-describedby={ariaDescribedBy}
           aria-invalid={invalid || undefined}
           className={cn(
             "h-10 w-full justify-between gap-2 px-3 font-normal",

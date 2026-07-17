@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import {
   Search,
   ChevronUp,
@@ -81,7 +81,6 @@ export function DataTable<T>({
   toolbarExtra?: React.ReactNode
   emptyMessage?: string
 }) {
-  const router = useRouter()
   const [query, setQuery] = React.useState("")
   const [facets, setFacets] = React.useState<Record<string, string>>({})
   const [sort, setSort] = React.useState<SortState>(null)
@@ -136,6 +135,7 @@ export function DataTable<T>({
   }
 
   const hasToolbar = Boolean(searchText) || filters.length > 0 || toolbarExtra
+  const primaryColumnId = columns[0]?.id
 
   return (
     <div className="flex flex-col gap-3">
@@ -260,10 +260,9 @@ export function DataTable<T>({
                 return (
                   <TableRow
                     key={getRowKey(row)}
-                    onClick={href ? () => router.push(href) : undefined}
                     className={cn(
                       "border-border/40 transition-colors",
-                      href && "cursor-pointer"
+                      href && "hover:bg-muted/50"
                     )}
                   >
                     {columns.map((col) => {
@@ -273,9 +272,20 @@ export function DataTable<T>({
                           : col.align === "center"
                             ? "text-center"
                             : "text-start"
+                      const content = col.cell(row)
+                      const isPrimaryLink = href && col.id === primaryColumnId
                       return (
                         <TableCell key={col.id} className={cn(alignCls, col.className)}>
-                          {col.cell(row)}
+                          {isPrimaryLink ? (
+                            <Link
+                              href={href}
+                              className="-m-1 block rounded-md p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                            >
+                              {content}
+                            </Link>
+                          ) : (
+                            content
+                          )}
                         </TableCell>
                       )
                     })}

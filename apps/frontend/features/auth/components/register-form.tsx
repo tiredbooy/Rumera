@@ -9,6 +9,7 @@ import { AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { focusFormControl } from "@/components/ui/field"
 import {
   AuthClientError,
   registerAccount,
@@ -24,6 +25,7 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    const formElement = e.currentTarget
     setError(null)
     setLoading(true)
     const form = new FormData(e.currentTarget)
@@ -55,6 +57,7 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
           : "ارتباط با سرور برقرار نشد.",
       )
       setLoading(false)
+      focusFormControl(formElement, "email")
     }
   }
 
@@ -98,6 +101,7 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
             autoComplete="email"
             placeholder="you@example.com"
             aria-invalid={!!error}
+            aria-describedby={error ? "register-error" : undefined}
             className="h-11 text-start"
           />
         </div>
@@ -111,7 +115,7 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
             minLength={8}
             dir="ltr"
             autoComplete="new-password"
-            aria-describedby="password-hint"
+            aria-describedby={error ? "password-hint register-error" : "password-hint"}
             aria-invalid={!!error}
             className="h-11 text-start"
           />
@@ -122,6 +126,7 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
 
         {error ? (
           <p
+            id="register-error"
             role="alert"
             className="flex items-start gap-2 rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
           >

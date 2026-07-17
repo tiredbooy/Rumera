@@ -3,6 +3,8 @@ import { ChartCard, DonutChart, DonutLegend } from "./Charts";
 import { fetchRevenueToday } from "@/features/analytics/api";
 import type { DailyRevenueStats } from "@/features/analytics/types";
 
+import { AnalyticsErrorState } from "./AnalyticsErrorState";
+
 export async function OrderStatusSection() {
   let today: DailyRevenueStats | null = null;
   let failed = false;
@@ -15,9 +17,9 @@ export async function OrderStatusSection() {
   if (failed) {
     return (
       <ChartCard title="سفارش‌ها بر اساس وضعیت" description="—">
-        <div className="flex h-48 items-center justify-center text-sm text-destructive">
+        <AnalyticsErrorState className="h-48">
           خطا در دریافت اطلاعات
-        </div>
+        </AnalyticsErrorState>
       </ChartCard>
     );
   }

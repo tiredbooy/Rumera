@@ -8,6 +8,7 @@ import { AlertCircle, Loader2, Smartphone, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { focusFormControl } from "@/components/ui/field"
 import {
   InputOTP,
   InputOTPGroup,
@@ -41,8 +42,9 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
     return () => window.clearTimeout(id)
   }, [cooldown])
 
-  async function requestCode(e?: React.FormEvent) {
+  async function requestCode(e?: React.FormEvent<HTMLFormElement>) {
     e?.preventDefault()
+    const formElement = e?.currentTarget instanceof HTMLFormElement ? e.currentTarget : null
     setError(null)
     setLoading(true)
     try {
@@ -59,13 +61,15 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
             : "شماره موبایل نامعتبر است."
           : "ارتباط با سرور برقرار نشد.",
       )
+      if (formElement) focusFormControl(formElement, "phone")
     } finally {
       setLoading(false)
     }
   }
 
-  async function verify(e: React.FormEvent) {
+  async function verify(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    const formElement = e.currentTarget
     setError(null)
     setLoading(true)
     const input: VerifyOtpInput = { phone: phone.trim(), code: code.trim() }
@@ -73,6 +77,7 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
     if (!res || res.error) {
       setError("کد واردشده نادرست یا منقضی شده است.")
       setLoading(false)
+      focusFormControl(formElement, "code")
       return
     }
     router.push(returnTo)
@@ -112,15 +117,17 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             aria-invalid={!!error}
+            aria-describedby={error ? "phone-hint phone-error" : "phone-hint"}
             className="h-11 text-start"
           />
-          <p className="text-xs text-muted-foreground">
+          <p id="phone-hint" className="text-xs text-muted-foreground">
             کد تأیید به این شماره پیامک می‌شود.
           </p>
         </div>
 
         {error ? (
           <p
+            id="phone-error"
             role="alert"
             className="flex items-start gap-2 rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
           >
@@ -170,6 +177,7 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
           value={code}
           onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
           aria-invalid={!!error}
+          aria-describedby={error ? "code-error" : undefined}
           containerClassName="justify-center gap-2"
         >
           <InputOTPGroup className="gap-2">
@@ -185,6 +193,7 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
 
       {error ? (
         <p
+          id="code-error"
           role="alert"
           className="flex items-start gap-2 rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
         >

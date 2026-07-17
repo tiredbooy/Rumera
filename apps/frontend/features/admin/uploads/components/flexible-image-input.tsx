@@ -33,6 +33,7 @@ interface FlexibleImageInputProps {
   folder?: string;
   placeholder?: string;
   ariaInvalid?: boolean;
+  ariaDescribedBy?: string;
   disabled?: boolean;
   previewClassName?: string;
   /** Skip the built-in preview when the parent already renders one. */
@@ -50,6 +51,7 @@ export function FlexibleImageInput({
   folder,
   placeholder = "https://… یا بارگذاری فایل",
   ariaInvalid,
+  ariaDescribedBy,
   disabled,
   previewClassName,
   hidePreview,
@@ -59,6 +61,10 @@ export function FlexibleImageInput({
   const [progress, setProgress] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
   const acceptedTypes = accept ?? ACCEPT;
+  const uploadErrorId = `${id ?? "image"}-upload-error`;
+  const describedBy = [ariaDescribedBy, error ? uploadErrorId : undefined]
+    .filter(Boolean)
+    .join(" ") || undefined;
 
   async function handleFile(file: File) {
     setError(null);
@@ -94,6 +100,7 @@ export function FlexibleImageInput({
           placeholder={placeholder}
           inputMode="url"
           aria-invalid={ariaInvalid}
+          aria-describedby={describedBy}
           disabled={disabled || uploading}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
@@ -136,7 +143,11 @@ export function FlexibleImageInput({
         </div>
       ) : null}
 
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? (
+        <p id={uploadErrorId} role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
 
       {value && !hidePreview ? (
         <div

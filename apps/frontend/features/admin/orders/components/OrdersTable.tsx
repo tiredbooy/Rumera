@@ -108,10 +108,19 @@ export function OrdersTable() {
       <div
         className="border-hairline flex min-h-64 flex-col items-center justify-center gap-3 rounded-2xl bg-card text-center"
         role="alert"
+        aria-busy={isFetching}
       >
         <p className="text-sm text-destructive">خطا در دریافت سفارش‌ها.</p>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
-          تلاش دوباره
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isFetching}
+          onClick={() => void refetch()}
+        >
+          {isFetching ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : null}
+          {isFetching ? "در حال تلاش…" : "تلاش دوباره"}
         </Button>
       </div>
     );

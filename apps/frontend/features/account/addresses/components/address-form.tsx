@@ -10,6 +10,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import {
+  FieldControl,
+  fieldErrorId,
+  getFieldA11yProps,
+} from "@/components/ui/field"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -116,7 +121,14 @@ export function AddressForm({
             value={province || undefined}
             onValueChange={(v) => setValue("state_province", v, { shouldValidate: true })}
           >
-            <SelectTrigger id="state_province" className="w-full">
+            <SelectTrigger
+              id="state_province"
+              className="w-full"
+              {...getFieldA11yProps({
+                id: "state_province",
+                error: errors.state_province?.message,
+              })}
+            >
               <SelectValue placeholder="انتخاب استان" />
             </SelectTrigger>
             <SelectContent>
@@ -174,13 +186,17 @@ function Field({
   id: string
   label: string
   error?: string
-  children: React.ReactNode
+  children: React.ReactElement
 }) {
   return (
     <div className="flex flex-col gap-2">
       <Label htmlFor={id}>{label}</Label>
-      {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      <FieldControl id={id} error={error}>{children as React.ReactElement}</FieldControl>
+      {error ? (
+        <p id={fieldErrorId(id)} role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
     </div>
   )
 }

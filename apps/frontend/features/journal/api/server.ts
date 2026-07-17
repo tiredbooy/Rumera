@@ -1,7 +1,8 @@
 import "server-only"
 
+import { isApiNotFoundError } from "@/lib/api/error-semantics"
 import { publicRequest } from "@/lib/api/public"
-import type { Paginated, Pagination } from "@/lib/api/types"
+import type { Paginated } from "@/lib/api/types"
 
 import type {
   JournalCategory,
@@ -16,38 +17,23 @@ const PUBLIC_CACHE = {
   next: { revalidate: 3600 },
 }
 
-const EMPTY_PAGINATION: Pagination = {
-  page: 1,
-  limit: 20,
-  total_items: 0,
-  total_pages: 1,
-  has_next: false,
-  has_prev: false,
-}
-
-type PartialPaginated<T> = Partial<Paginated<T>>
-
-async function readPublicJournal<T>(path: string): Promise<T | null> {
-  try {
-    return await publicRequest<T>(path, PUBLIC_CACHE)
-  } catch {
-    return null
-  }
-}
-
 export async function listJournalPage(
-  options: Pick<JournalListQuery, "page" | "limit"> = {}
+  options: Pick<JournalListQuery, "page" | "limit"> = {},
 ): Promise<JournalPage> {
   const page = Math.max(1, options.page ?? 1)
   const limit = Math.min(100, Math.max(1, options.limit ?? 24))
-  const query = new URLSearchParams({ page: String(page), limit: String(limit) })
-  const result = await readPublicJournal<PartialPaginated<JournalListItem>>(
-    `/blogs?${query.toString()}`
+  const query = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  })
+  const result = await publicRequest<Paginated<JournalListItem>>(
+    `/blogs?${query.toString()}`,
+    PUBLIC_CACHE,
   )
 
   return {
-    posts: result?.results ?? [],
-    pagination: result?.pagination ?? { ...EMPTY_PAGINATION, page, limit },
+    posts: result.results,
+    pagination: result.pagination,
   }
 }
 
@@ -56,21 +42,26 @@ export async function listJournalPosts(limit = 24): Promise<JournalListItem[]> {
 }
 
 export async function getJournalPostBySlug(
-  slug: string
+  slug: string,
 ): Promise<JournalDetail | null> {
-  const post = await readPublicJournal<JournalDetail>(
-    `/blogs/${encodeURIComponent(slug)}`
-  )
-  return post?.id ? post : null
+  try {
+    return await publicRequest<JournalDetail>(
+      `/blogs/${encodeURIComponent(slug)}`,
+      PUBLIC_CACHE,
+    )
+  } catch (error) {
+    if (isApiNotFoundError(error)) return null
+    throw error
+  }
 }
 
 export async function listJournalCategories(): Promise<JournalCategory[]> {
-  return (await readPublicJournal<JournalCategory[]>("/blog-categories")) ?? []
+  return publicRequest<JournalCategory[]>("/blog-categories", PUBLIC_CACHE)
 }
 
 export async function listRelatedJournalPosts(
   excludeSlug: string,
-  limit = 3
+  limit = 3,
 ): Promise<JournalListItem[]> {
   const { posts } = await listJournalPage({ limit: limit + 4 })
   return posts.filter((post) => post.slug !== excludeSlug).slice(0, limit)

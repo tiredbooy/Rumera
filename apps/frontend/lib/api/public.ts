@@ -1,6 +1,8 @@
 import "server-only";
 
-import { API_BASE, ApiError, type ApiFetchOptions } from "./client";
+import { API_BASE } from "./base";
+import type { ApiFetchOptions } from "./client";
+import { ApiError } from "./errors";
 import type { ApiErrorEnvelope, ApiSuccess } from "./types";
 
 type PublicRequestOptions = Omit<ApiFetchOptions, "token">;

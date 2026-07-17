@@ -14,6 +14,8 @@ import {
 import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
 import { listAdminOrders } from "@/features/orders/api/admin";
 
+import { AnalyticsErrorState } from "./AnalyticsErrorState";
+
 export async function RecentOrdersTable() {
   let result = null;
   let error = false;
@@ -68,9 +70,11 @@ export async function RecentOrdersTable() {
               <TableRow className="hover:bg-transparent">
                 <TableCell
                   colSpan={4}
-                  className="h-32 text-center text-sm text-destructive"
+                  className="h-32"
                 >
-                  خطا در دریافت سفارش‌ها
+                  <AnalyticsErrorState>
+                    خطا در دریافت سفارش‌ها
+                  </AnalyticsErrorState>
                 </TableCell>
               </TableRow>
             ) : recentOrders.length === 0 ? (

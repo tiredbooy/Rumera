@@ -1,11 +1,90 @@
 "use client"
 
-import { useMemo } from "react"
+import {
+  cloneElement,
+  useMemo,
+  type AriaAttributes,
+  type ReactElement,
+} from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+
+type FieldControlAriaProps = Pick<
+  AriaAttributes,
+  "aria-describedby" | "aria-invalid"
+>
+
+function fieldDescriptionId(id: string) {
+  return `${id}-description`
+}
+
+function fieldErrorId(id: string) {
+  return `${id}-error`
+}
+
+function mergeDescriptionIds(...values: Array<string | undefined>) {
+  const ids = values.flatMap((value) => value?.split(/\s+/).filter(Boolean) ?? [])
+  return ids.length ? [...new Set(ids)].join(" ") : undefined
+}
+
+function getFieldA11yProps({
+  id,
+  error,
+  description,
+  describedBy,
+}: {
+  id: string
+  error?: unknown
+  description?: boolean
+  describedBy?: string
+}): FieldControlAriaProps {
+  return {
+    "aria-describedby": mergeDescriptionIds(
+      describedBy,
+      error
+        ? fieldErrorId(id)
+        : description
+          ? fieldDescriptionId(id)
+          : undefined
+    ),
+    "aria-invalid": error ? true : undefined,
+  }
+}
+
+function focusFormControl(form: HTMLFormElement, name: string) {
+  const control = form.elements.namedItem(name)
+  if (!(control instanceof HTMLElement)) return false
+  control.focus()
+  return true
+}
+
+function FieldControl({
+  id,
+  error,
+  description,
+  children,
+}: {
+  id: string
+  error?: unknown
+  description?: boolean
+  children: ReactElement
+}) {
+  const control = children as ReactElement<FieldControlAriaProps>
+  const a11y = getFieldA11yProps({
+    id,
+    error,
+    description,
+    describedBy: control.props["aria-describedby"],
+  })
+
+  return cloneElement(control, {
+    ...a11y,
+    "aria-invalid": a11y["aria-invalid"] ?? control.props["aria-invalid"],
+  })
+}
 
 function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
   return (
@@ -235,4 +314,9 @@ export {
   FieldSet,
   FieldContent,
   FieldTitle,
+  FieldControl,
+  fieldDescriptionId,
+  fieldErrorId,
+  getFieldA11yProps,
+  focusFormControl,
 }

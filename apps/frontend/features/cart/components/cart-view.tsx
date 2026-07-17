@@ -2,10 +2,20 @@
 
 import Link from "next/link"
 import { useSession } from "next-auth/react"
-import { ArrowLeft, LogIn, ShieldCheck, Truck, Tag, Lock } from "lucide-react"
+import {
+  ArrowLeft,
+  Loader2,
+  Lock,
+  LogIn,
+  RefreshCw,
+  ShieldCheck,
+  Tag,
+  Truck,
+} from "lucide-react"
 
 import { formatPrice, faNum } from "@/lib/products"
 import { Button } from "@/components/ui/button"
+import { QueryStateRegion } from "@/components/query-state-region"
 import { Separator } from "@/components/ui/separator"
 import { useCart } from "@/features/cart/api"
 import { CartLines } from "./cart-lines"
@@ -14,9 +24,23 @@ import { CartLines } from "./cart-lines"
 export function CartView() {
   const { status } = useSession()
   const authed = status === "authenticated"
-  const { data: cart } = useCart(authed)
+  const cartQuery = useCart(authed)
+  const cart = cartQuery.data
   const hasItems = !!cart && cart.items.length > 0
   const itemCount = cart?.summary.total_items ?? 0
+
+  if (status === "loading" || (authed && cartQuery.isPending)) {
+    return (
+      <QueryStateRegion
+        state="loading"
+        aria-label="در حال دریافت سبد خرید"
+        className="border-hairline mt-10 flex min-h-64 items-center justify-center gap-2 rounded-3xl bg-card/60 text-sm text-muted-foreground ring-1 ring-foreground/5"
+      >
+        <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+        در حال دریافت سبد خرید…
+      </QueryStateRegion>
+    )
+  }
 
   if (status === "unauthenticated") {
     return (
@@ -32,6 +56,30 @@ export function CartView() {
           <Link href="/login?callbackUrl=/cart">ورود به حساب</Link>
         </Button>
       </div>
+    )
+  }
+
+  if (cartQuery.isError && !cart) {
+    return (
+      <QueryStateRegion
+        state="error"
+        className="border-hairline mt-10 flex min-h-64 flex-col items-center justify-center rounded-3xl bg-card/60 px-6 text-center ring-1 ring-foreground/5"
+      >
+        <p className="font-medium">دریافت سبد خرید انجام نشد.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          اتصال خود را بررسی کنید و دوباره تلاش کنید.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-5"
+          disabled={cartQuery.isFetching}
+          onClick={() => void cartQuery.refetch()}
+        >
+          <RefreshCw className={cartQuery.isFetching ? "animate-spin" : undefined} />
+          تلاش دوباره
+        </Button>
+      </QueryStateRegion>
     )
   }
 

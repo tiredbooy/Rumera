@@ -58,7 +58,7 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
       a.sort_order - b.sort_order,
   );
 
-  // Surface the recommendation engine + reviews (all error-safe → empty on failure).
+  // Optional recommendation/review enrichments are error-safe; product detail is not.
   const [similar, fbtRaw, reviewSummary, reviewsPage] = await Promise.all([
     getSimilar(product.id, { limit: 8 }),
     getFrequentlyBoughtTogether(product.id, { limit: 4 }),

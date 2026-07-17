@@ -24,6 +24,21 @@ earlier unblocked task remains.
 - A dependency on a task group means every lettered task in that group must be
   complete unless the dependent task names a narrower dependency.
 
+## Parallel Agent Assignment
+
+The remaining backlog is split between Agent A and Agent B in
+`AGENT_ASSIGNMENTS.md`. During parallel work, agents use their own
+`IN_PROGRESS_A.md` / `IN_PROGRESS_B.md` and `FINISHED_A.md` / `FINISHED_B.md`
+files. Agent A is the tracker coordinator and is the only agent that edits this
+file or `AGENT_ASSIGNMENTS.md`.
+
+- **Agent A:** 049, 052, 053, 056a-c, 056f-i, 059a-c, 060c-e, 060g-i, 061c,
+  061e, 061g, 062, 063.
+- **Agent B:** 050, 051, 054, 055, 056d-e, 057a-d, 058a-e, 060a-b, 060f,
+  061a-b, 061d, 061f.
+- **Initial parallel wave:** Agent A owns Task 049; Agent B owns Task 050. No
+  later task may start until Agent A records the next disjoint wave.
+
 ## Contract And Naming Policy
 
 - Go response/request structs, JSON tags, handlers, mappers, and response
@@ -108,34 +123,16 @@ the deleted catch-all or adding re-export shims.
 
 ### Task Group 047 - Split Oversized Components
 
-- [ ] **Task 047a - Split `RecipeForm` responsibilities**
-- [ ] **Task 047b - Split `CheckoutFlow` responsibilities**
-- [ ] **Task 047c - Split `WalletView` responsibilities**
-- [ ] **Task 047d - Split `SettingsForm` responsibilities**
-- [ ] **Task 047e - Split hero-form responsibilities**
-  - Compose typed content, responsive-media, CTA, appearance, scheduling,
-    publication, ordering, and preview sections so new supported hero fields do
-    not require growing one monolithic component.
-- [ ] **Task 047f - Split customer-form responsibilities**
-- [ ] **Task 047g - Split subscriptions-view responsibilities**
-- [ ] **Task 047h - Split reviews-section responsibilities**
-  - Each subtask is limited to data orchestration plus presentation, or moving
-    existing helpers/schema. No behavior redesign.
-
 ## Phase E - Explicit Logic, UI, UX, And Accessibility Improvements
 
 These tasks intentionally change behavior and begin only after the structural
 refactor is green. Each requires focused interaction tests.
 
-- [ ] **Task 048 - Add route-level loading, error, not-found, and retry states**
-  - Cover root, storefront, account, checkout, and admin groups.
-  - Distinguish zero data, unresolved loading, and failed requests.
-
-- [ ] **Task 049 - Remove misleading sample-data fallbacks**
+- [x] **Task 049 - Remove misleading sample-data fallbacks**
   - Start with admin orders, analytics, inventory, reviews, and customer detail.
   - Render explicit unavailable/error states with retry where safe.
 
-- [ ] **Task 050 - Fix cart and checkout state logic**
+- [x] **Task 050 - Fix cart and checkout state logic**
   - Move render-time address state mutation out of render; expose persistent
     errors; prevent empty-cart flash while session/query state is unresolved.
 
@@ -143,7 +140,7 @@ refactor is green. Each requires focused interaction tests.
   - Centralize stable description/error IDs; connect controls with
     `aria-describedby`; move focus to the first invalid field.
 
-- [ ] **Task 052 - Add landmarks, skip navigation, and semantic interactions**
+- [x] **Task 052 - Add landmarks, skip navigation, and semantic interactions**
   - Add a consistent `main-content` target; convert clickable rows/choices to
     links, buttons, or radio groups; add text alternatives to permission icons.
 
@@ -355,10 +352,54 @@ it must not become the owner of merchandising attributes.
     backend queries, prevent missing-slug links, and distinguish no active variant
     from a real zero price before enabling quick commerce actions.
 
+### User-Requested Production Follow-Ups
+
+- [ ] **Task 061d - Fix local media URL resolution across frontend and backend origins**
+  - Keep persisted upload paths canonical and environment-independent, but resolve
+    backend-relative values such as `/media/recipes/<file>.webp` against the
+    configured media/API origin when local frontend and backend servers use
+    different origins.
+  - Use one resolver for upload previews and persisted product, category, hero,
+    recipe, and journal media; preserve already absolute URLs and prevent duplicate
+    origin or `/media` prefixes.
+  - Verify local development, same-origin production, and Docker rendering with
+    focused resolver and upload-to-render regression tests.
+
+- [ ] **Task 061e - Repair and polish the canonical product card**
+  - Give catalogue cards more usable width, reduce the image area slightly, and
+    keep the layout mobile-first without introducing horizontal overflow.
+  - Show backend-supported product tags when they can be added to the list
+    projection without per-card requests; do not fabricate tags or add an N+1
+    fetch path.
+  - Keep the complete formatted price and `تومان` unit visible at narrow widths,
+    with no `تو...` truncation or collision with actions, and verify the canonical
+    card wherever it is reused at 320/375, 768, 1024, and 1440px.
+
+- [ ] **Task 061f - Split the oversized Go seed command**
+  - Refactor the actual 1,044-line `apps/backend/cmd/seed/main.go` file (the
+    reported `cmd/see/main.go` path does not exist) into small responsibility-based
+    files or packages for orchestration, fixtures, domain seeders, and shared
+    helpers.
+  - Preserve seed order, idempotency, generated relationships, error propagation,
+    and command behavior; add focused tests around extracted deterministic logic
+    and run the complete Go verification gates.
+
+- [ ] **Task 061g - Strengthen the recipe-to-commerce journey**
+  - Connect each teachable ingredient to its supported product/variant, required
+    recipe quantity, availability, and useful alternative so readers can move from
+    learning the recipe to buying the correct ingredients without ambiguity.
+  - Improve the responsive shoppable section, individual and supported bulk-cart
+    actions, unavailable/substitution states, and truthful success/partial-failure
+    feedback while preserving the recipe as useful editorial content.
+  - Reuse the canonical product, cart, inventory, and media contracts; extend the
+    backend only where evidence shows the current recipe projection cannot support
+    the required connection, and cover the complete recipe-to-cart path.
+
 - [ ] **Task 062 - Add automated accessibility, interaction, and lifecycle regression tests**
   - Add axe checks and Playwright coverage for keyboard navigation, responsive
     overflow, checkout choices, validation errors, route error recovery, and the
-    product/category/tag/journal/recipe storefront tasks in Group 056.
+    product/category/tag/journal/recipe storefront tasks in Group 056 plus the
+    user-requested media, product-card, and recipe-commerce follow-ups.
   - Add focused API/component/integration coverage for the new admin modules,
     variant option combinations, transactional product writes, media ownership and
     cleanup, card quick actions, mega-menu focus behavior, and hero publication.
@@ -367,4 +408,6 @@ it must not become the owner of merchandising attributes.
   - Confirm top-level component purity, domain self-containment, dashboard
     presentation-only boundaries, thin routes, backend type parity, green build,
     responsive behavior, keyboard flow, local-media durability, cache freshness,
-    real admin capability coverage, and no unresolved blockers.
+    real admin capability coverage, maintainable seed-command composition, the
+    corrected product-card and recipe-commerce experience, and no unresolved
+    blockers.

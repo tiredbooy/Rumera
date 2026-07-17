@@ -16,29 +16,28 @@ field errors) propagate, and a recipe for adding a new endpoint.
 
 ## The big picture
 
-There are **four** request entry points, split by *where the code runs* and
-*which backend tier* it targets.
+There are **four** request entry points, split by _where the code runs_ and
+_which backend tier_ it targets.
 
 ```
                          browser (client components)            server (RSC / route handlers)
                          ─────────────────────────────          ─────────────────────────────
-  PUBLIC (no auth)       (auth forms POST to /api/public)        publicGet()  ── lib/catalog/*,
-                                                                              lib/recipes.ts,
-                                                                              lib/journal.ts
-  CUSTOMER (session)     storeRequest()  ── lib/api/store-client.ts          serverApi()  ── lib/api/client.ts
-                          ↳ via /api/store/* BFF proxy            ↳ injects bearer from session
+  PUBLIC (no auth)       (auth forms POST to /api/public)        feature domain API ── publicRequest()
+                                                                               ↳ lib/api/public.ts
+  CUSTOMER (session)     storeRequest()  ── lib/api/store-client.ts           apiFetch()  ── lib/api/client.ts
+                          ↳ via /api/store/* BFF proxy            ↳ explicit token or bearer from session
   STAFF (session+staff)  resource client ── features/<owner>/...             apiFetch()  (admin-tier paths)
                            ↳ via /api/admin/* BFF proxy                       ↳ server actions/API modules
 ```
 
-| Helper | File | Runs in | Reaches backend via | Unwraps |
-|---|---|---|---|---|
-| `apiFetch` / `serverApi` | `lib/api/client.ts` | **server only** (`import "server-only"`) | direct `fetch` to `${API_BASE}` | `{ data }` → `T` |
-| `storeRequest` | `lib/api/store-client.ts` | browser | `/api/store/*` BFF proxy | **nothing** — returns body verbatim |
-| Resource-owned admin client | `features/<owner>/.../client.ts` | browser | `/api/admin/*` BFF proxy | endpoint-specific, usually `{ data }` → `T` |
-| `publicGet` (local) | `lib/catalog/*`, `lib/recipes.ts`, `lib/journal.ts` | **server only** (ISR) | direct `fetch` to `${API_BASE}` | per-fetcher (see below) |
+| Helper                      | File                                                     | Runs in                                  | Reaches backend via             | Unwraps                                      |
+| --------------------------- | -------------------------------------------------------- | ---------------------------------------- | ------------------------------- | -------------------------------------------- |
+| `apiFetch`                  | `lib/api/client.ts`                                      | **server only** (`import "server-only"`) | direct `fetch` to `${API_BASE}` | `{ data }` → `T`                             |
+| `storeRequest`              | `lib/api/store-client.ts`                                | browser                                  | `/api/store/*` BFF proxy        | **nothing** — returns body verbatim          |
+| Resource-owned admin client | `features/<owner>/.../client.ts`                         | browser                                  | `/api/admin/*` BFF proxy        | endpoint-specific, usually `{ data }` → `T`  |
+| `publicRequest`             | `lib/api/public.ts`, called by feature-owned server APIs | **server only**                          | direct `fetch` to `${API_BASE}` | `{ data }` → `T`, otherwise returns the body |
 
-`API_BASE` is `${API_URL}/api/v1` (resolved in `lib/api/client.ts` from
+`API_BASE` is `${API_URL}/api/v1` (resolved in `lib/api/base.ts` from
 `API_URL` → `NEXT_PUBLIC_API_URL` → `http://localhost:8080`).
 
 ---
@@ -49,30 +48,38 @@ The backend returns one of three JSON shapes (see
 `apps/backend/docs/conventions.md`). **There is no single unwrap path** — the
 right one depends on the endpoint, and the helper you call reflects that choice.
 
-| Envelope | Example endpoint | How callers unwrap |
-|---|---|---|
-| `{ data: T }` — single resource | `GET /products/:id`, `POST /admin/categories` | Domain clients and server API modules unwrap `body?.data ?? body`. `storeRequest` callers do `.then(b => b.data)`. |
-| `{ results: T[], pagination }` — list | `GET /products`, `GET /admin/users`, `GET /wallet/transactions` | typed as `Paginated<T>` (`lib/catalog/types.ts`); callers keep the **whole** envelope. |
-| `{ error: { code, message, fields? } }` — failure | any 4xx/5xx | parsed into a typed error class (see *Error handling*). |
+| Envelope                                          | Example endpoint                                                | How callers unwrap                                                                                                 |
+| ------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `{ data: T }` — single resource                   | `GET /products/:id`, `POST /admin/categories`                   | Domain clients and server API modules unwrap `body?.data ?? body`. `storeRequest` callers do `.then(b => b.data)`. |
+| `{ results: T[], pagination }` — list             | `GET /products`, `GET /admin/users`, `GET /wallet/transactions` | typed as `Paginated<T>` (`lib/api/types.ts`); callers keep the **whole** envelope.                                 |
+| `{ error: { code, message, fields? } }` — failure | any 4xx/5xx                                                     | parsed into a typed error class (see _Error handling_).                                                            |
 
-> `Paginated<T>` (in `lib/catalog/types.ts`):
+> `Paginated<T>` (in `lib/api/types.ts`):
+>
 > ```ts
-> type Paginated<T> = { results: T[]; pagination: Pagination }
-> type Pagination = { page; limit; total_items; total_pages; has_next; has_prev }
+> type Paginated<T> = { results: T[]; pagination: Pagination };
+> type Pagination = {
+>   page;
+>   limit;
+>   total_items;
+>   total_pages;
+>   has_next;
+>   has_prev;
+> };
 > ```
 
 ### Why `storeRequest` does NOT unwrap
 
 Domain clients and server API modules collapse `{ data }` → `T` where their
 endpoint contract requires it. `storeRequest` deliberately returns the **raw body** because the store endpoints are a mix of
-`{ data }` *and* `{ results, pagination }`, and the caller knows which it is:
+`{ data }` _and_ `{ results, pagination }`, and the caller knows which it is:
 
 ```ts
 // single resource → caller picks .data
-storeRequest<{ data: Cart }>("cart").then(b => b.data)
+storeRequest<{ data: Cart }>("cart").then((b) => b.data);
 
 // paginated list → caller keeps the envelope
-storeRequest<Paginated<OrderListItem>>(`orders${buildQuery(params)}`)
+storeRequest<Paginated<OrderListItem>>(`orders${buildQuery(params)}`);
 ```
 
 This is why the hooks in `lib/api/hooks.ts` are littered with `.then(b => b.data)`
@@ -86,15 +93,15 @@ There is no global admin browser client. Each resource owns the smallest client
 or server API module needed by its UI, so adding one endpoint cannot expand a
 catch-all dependency. Current examples include:
 
-| Resource | Owner | Browser transport |
-|---|---|---|
-| **Products and product images** | `features/admin/products/` | product client plus server actions |
-| **Categories and brands** | `features/admin/categories/`, `features/admin/brands/` | resource clients for interactive forms |
-| **Recipes** | `features/recipes/api/` | recipe client |
-| **Customers** | `features/customers/` | customer client |
-| **Site settings** | `features/settings/api/` | settings client |
-| **Hero slides** | `features/hero-slides/api/` | hero-slide client |
-| **Standalone uploads** | `features/admin/uploads/` | upload client |
+| Resource                        | Owner                                                  | Browser transport                      |
+| ------------------------------- | ------------------------------------------------------ | -------------------------------------- |
+| **Products and product images** | `features/admin/products/`                             | product client plus server actions     |
+| **Categories and brands**       | `features/admin/categories/`, `features/admin/brands/` | resource clients for interactive forms |
+| **Recipes**                     | `features/recipes/api/`                                | recipe client                          |
+| **Customers**                   | `features/customers/`                                  | customer client                        |
+| **Site settings**               | `features/settings/api/`                               | settings client                        |
+| **Hero slides**                 | `features/hero-slides/api/`                            | hero-slide client                      |
+| **Standalone uploads**          | `features/admin/uploads/`                              | upload client                          |
 
 The path passed by a resource client is still the backend path after `/api/v1`.
 Admin-namespaced calls therefore retain the literal `admin/` segment and hit a
@@ -156,7 +163,7 @@ stays consistent. Cart mutations seed the cache with the returned `Cart` to
 avoid a refetch round-trip; wishlist add/remove are optimistic with rollback.
 
 > Several `account-hooks.ts` query fns carry `// TODO(api):` comments — the
-> *call shape* is built but the exact backend route/response is unconfirmed
+> _call shape_ is built but the exact backend route/response is unconfirmed
 > (`reviews/mine`, `reviews/pending`, `addresses/:id/default`,
 > `recommendations`). Treat those as not-yet-verified.
 
@@ -166,65 +173,72 @@ avoid a refetch round-trip; wishlist add/remove are optimistic with rollback.
 
 ---
 
-## `serverApi` / `apiFetch` — server-side authenticated reads
+## `apiFetch` — server-side API requests
 
-`lib/api/client.ts`, `import "server-only"`. Used by RSC / route handlers that
-need the customer's or admin's data without threading the token by hand:
+`lib/api/client.ts`, `import "server-only"`. `apiFetch<T>(path, opts?)` accepts
+standard `RequestInit` options plus an optional `{ token?: string }`. Use it from
+Server Components, route handlers, server actions, and server API modules:
 
 ```ts
-export async function serverApi<T>(path, opts = {}): Promise<T> {
-  const session = await auth()
-  return apiFetch<T>(path, { ...opts, token: session?.accessToken })
-}
+import { apiFetch } from "@/lib/api/client";
+
+const order = await apiFetch<Order>(`/orders/${id}`);
+const updatedOrder = await apiFetch<Order>(`/orders/${id}`, {
+  method: "PATCH",
+  body: JSON.stringify(input),
+});
 ```
 
-`apiFetch` unwraps `{ data } ?? body`, throws **`ApiError(status, code, message)`**
-on `!res.ok`, and defaults to `cache: "no-store"` (dashboard data is per-user)
-unless the caller opts into caching.
+`apiFetch` sends `${API_BASE}${path}` directly. An explicit `opts.token` takes
+precedence; otherwise it calls `auth()` and uses `session.accessToken` when one
+is available. It unwraps `{ data } ?? body`, throws
+**`ApiError(status, code, message)`** on `!res.ok`, and defaults to
+`cache: "no-store"` unless the caller opts into caching.
 
 ---
 
-## Public server-side fetchers (`lib/catalog/*`, `lib/recipes.ts`, `lib/journal.ts`)
+## Public server-side APIs (`publicRequest` + feature owners)
 
-These are **unauthenticated, server-only, ISR-cached** and **error-safe**: each
-file defines its own local `publicGet` that `try/catch`es and returns `null`, and
-the public fetcher then falls back to an empty/sane value. This is intentional —
-`next build` and page rendering must never hard-fail when the backend is down.
+Unauthenticated server reads are owned by their feature domains and share
+`publicRequest()` from `lib/api/public.ts`. That transport calls `${API_BASE}`
+directly, unwraps `{ data }` when present, and throws `ApiError(status, code,
+message)` for non-2xx responses. Native fetch failures also propagate.
 
-```ts
-async function publicGet<T>(path): Promise<T | null> {
-  try {
-    const res = await fetch(`${BASE}${path}`, { next: { revalidate: REVALIDATE } })
-    if (!res.ok) return null
-    return (await res.json()) as T
-  } catch { return null }
-}
-```
+Primary storefront reads preserve the difference between a successful empty
+response and an upstream failure. Lists, trees, featured/related collections,
+and slug-discovery reads return genuine empty pages/arrays but throw on network,
+5xx, and other failed responses. Direct product, recipe, and journal detail
+reads map only a typed `ApiError` 404 to `null`; every other failure throws to
+the nearest route boundary. Product/category lookups that resolve through a
+successful list return `null` only when no exact slug matches.
 
-Revalidation windows differ by domain: catalogue/recipes/journal `3600s`,
-recommendations `1800s`, reviews `600s`.
+Optional PDP enrichments are deliberately different: recommendation helpers and
+the product review list/summary catch failures and return empty/null fallbacks so
+the primary product detail can still render. Their fallback does not make the
+product detail read itself error-safe.
 
-**Watch the envelope per fetcher** — they are not uniform, and the code unwraps
-accordingly:
+Caching remains domain-specific: product lists are `no-store` because they carry
+live availability; cached product details, categories, recipes, and journal reads
+use `3600s`; recommendations use `1800s`; product reviews use `600s`.
 
-| Fetcher | File | Reads | Notes |
-|---|---|---|---|
-| `listProducts`, `getFeatured`, `allProductSlugs` | `lib/catalog/products.ts` | `{ results, pagination }` | returns `Paginated<T>` / arrays |
-| `getProductById` | `lib/catalog/products.ts` | `{ data }` | detail keyed by **numeric id** |
-| `getProductBySlug` | `lib/catalog/products.ts` | — | searches list for slug, then hydrates by id (no slug detail route) |
-| `listCategories`, `getCategoryBySlug` | `lib/catalog/categories.ts` | `{ results }` | flat list (`limit=100`) |
-| `categoryTree` | `lib/catalog/categories.ts` | `{ data }` | nested tree |
-| `getReviewSummary`, `listReviews` | `lib/catalog/reviews.ts` | `{ data }` / `{ results, pagination }` | summary is `{ data }`, list is paginated top-level |
-| `getTrending`, `getSimilar`, `getFrequentlyBoughtTogether` | `lib/catalog/recommendations.ts` | `{ data }` | items use `product_id` (not `id`) + `min/max_price` |
-| `listRecipes` | `lib/recipes.ts` | `{ results, pagination }` | |
-| `getRecipeBySlug` | `lib/recipes.ts` | **top-level** `RecipeDetail` | NOT wrapped in `{ data }` — guarded by `body?.id` |
-| `getFeaturedRecipes`, `getRelatedRecipes`, `allRecipeSlugs` | `lib/recipes.ts` | `{ data }` *or* bare array | tolerates both (`Array.isArray(body) ? body : body.data`) |
-| `listBlogs`/`listBlogPosts`, `getBlogBySlug`, `getBlogCategories`, `getRelatedBlogs`, `allBlogSlugs` | `lib/journal.ts` | `{ results, pagination }` (list), `{ data }` (detail/categories) | published-only |
+| Reads                                                                             | Feature owner                             | Error semantics                                         |
+| --------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------- |
+| `listProducts`, `getProductById`, `getProductBySlug`, `allProductSlugs`           | `features/catalog/products/api/public.ts` | primary; exact slug matching, typed 404 detail null     |
+| `listCategories`, `getCategoryBySlug`, `getCategoryTree`, `getFeaturedCategories` | `features/catalog/categories/api.ts`      | primary; successful exact miss null, failed list throws |
+| recipe lists/detail/featured/related/static slugs                                 | `features/recipes/api/server.ts`          | primary; typed 404 detail null                          |
+| journal pages/detail/categories/related/static slugs                              | `features/journal/api/server.ts`          | primary; typed 404 detail null                          |
+| product review list/summary                                                       | `features/reviews/api.ts`                 | optional PDP enrichment; error-safe fallback            |
+| trending/similar/frequently-bought-together                                       | `features/recommendations/api.ts`         | optional enrichment; error-safe fallback                |
 
-> `lib/products.ts` is **not** a fetcher — it is a static in-repo demo catalogue
-> (`products: Product[]`) plus the `faNum()` / `formatPrice()` display helpers.
-> Don't confuse it with `lib/catalog/products.ts`. `endpoints.ts` is a central
-> map of backend path strings; `query-keys.ts` holds React Query key factories.
+Only each dynamic product/category/recipe/journal route's
+`generateStaticParams()` slug discovery is fail-soft: it logs sanitized context
+and returns `[]`. This protects parameter enumeration, not the complete build.
+Static storefront pages/layouts and the sitemap still require live API data or a
+populated cache, so `next build` is not guaranteed with every API offline.
+
+> `lib/products.ts` is **not** a fetcher — it is static sample/display data plus
+> the `faNum()` / `formatPrice()` helpers. `endpoints.ts` maps backend path
+> strings; `query-keys.ts` holds React Query key factories.
 
 ---
 
@@ -234,13 +248,15 @@ Shared transports and resource clients expose typed errors carrying
 `(status, code, message)` parsed from the `{ error: { code, message } }`
 envelope:
 
-| Class | Thrown by | Extra |
-|---|---|---|
-| `ApiError` | `apiFetch` / `serverApi` (`lib/api/client.ts`) | — |
-| `ApiClientError` | `storeRequest` (`lib/api/store-client.ts`) | — |
-| Resource errors such as `CategoryApiError`, `RecipeApiError`, and `UploadApiError` | Matching resource-owned browser client | validation-aware clients carry **`fields?: Record<string, string[]>`** |
+| Class                                                                              | Thrown by                                                                  | Extra                                                                  |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `ApiError`                                                                         | `apiFetch` (`lib/api/client.ts`) and `publicRequest` (`lib/api/public.ts`) | —                                                                      |
+| `ApiClientError`                                                                   | `storeRequest` (`lib/api/store-client.ts`)                                 | —                                                                      |
+| Resource errors such as `CategoryApiError`, `RecipeApiError`, and `UploadApiError` | Matching resource-owned browser client                                     | validation-aware clients carry **`fields?: Record<string, string[]>`** |
 
-Public `publicGet` fetchers do **not** throw — they swallow and fall back.
+`publicRequest` throws `ApiError` on non-2xx responses. Primary public domain APIs
+propagate failures except for typed detail 404s; only explicitly optional
+recommendation/review enrichments use broad empty/null fallbacks.
 
 ### 422 field errors → react-hook-form
 
@@ -255,12 +271,12 @@ function applyServerErrors(e: unknown) {
   if (e instanceof CategoryApiError) {
     if (e.fields) {
       for (const [key, msgs] of Object.entries(e.fields)) {
-        setError(key as keyof FormValues, { message: msgs[0] })  // first message wins
+        setError(key as keyof FormValues, { message: msgs[0] }); // first message wins
       }
     }
-    toast.error(e.message)        // also surface the top-level message
+    toast.error(e.message); // also surface the top-level message
   } else {
-    toast.error("خطای غیرمنتظره رخ داد")  // unknown → generic toast
+    toast.error("خطای غیرمنتظره رخ داد"); // unknown → generic toast
   }
 }
 ```
@@ -280,9 +296,16 @@ Worked example: add admin CRUD for a hypothetical `collections` resource.
 response/request structs exactly — same field names:
 
 ```ts
-export type Collection = { id: number; title: string; slug: string; is_active: boolean }
-export type CreateCollectionInput = { title: string; slug?: string | null }
-export type UpdateCollectionInput = Partial<CreateCollectionInput> & { is_active?: boolean }
+export type Collection = {
+  id: number;
+  title: string;
+  slug: string;
+  is_active: boolean;
+};
+export type CreateCollectionInput = { title: string; slug?: string | null };
+export type UpdateCollectionInput = Partial<CreateCollectionInput> & {
+  is_active?: boolean;
+};
 ```
 
 **2. Add a collection-owned client** in `features/collections/api/client.ts`.
@@ -291,27 +314,31 @@ segment for write paths:
 
 ```ts
 export function listCollections() {
-  return collectionRequest<Paginated<Collection>>("admin/collections")
+  return collectionRequest<Paginated<Collection>>("admin/collections");
 }
 export function createCollection(input: CreateCollectionInput) {
   return collectionRequest<Collection>("admin/collections", {
-    method: "POST", body: JSON.stringify(input),
-  })
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 export function updateCollection(id: number, input: UpdateCollectionInput) {
   return collectionRequest<Collection>(`admin/collections/${id}`, {
-    method: "PATCH", body: JSON.stringify(input),
-  })
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 export function deleteCollection(id: number) {
-  return collectionRequest<void>(`admin/collections/${id}`, { method: "DELETE" })
+  return collectionRequest<void>(`admin/collections/${id}`, {
+    method: "DELETE",
+  });
 }
 ```
 
 **3. Allowlist the first path segment** in the proxy. The admin proxy
 (`app/api/admin/[...path]/route.ts`) checks `ALLOW.has(segments[0])`. Since the
 backend path is `admin/collections`, the first segment is already `admin` —
-**already allowed**. You only touch `ALLOW` when introducing a *new top-level*
+**already allowed**. You only touch `ALLOW` when introducing a _new top-level_
 segment (e.g. a public read at `collections/...`). For customer endpoints, add
 the first segment to `ALLOW` in `app/api/store/[...path]/route.ts`.
 
@@ -320,11 +347,12 @@ key from `query-keys.ts` and invalidating it on mutation:
 
 ```ts
 export function useCreateCollection() {
-  const qc = useQueryClient()
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateCollectionInput) => createCollection(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "collections"] }),
-  })
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["admin", "collections"] }),
+  });
 }
 ```
 
@@ -332,14 +360,15 @@ export function useCreateCollection() {
 `e.fields`, and call `setError` (see the snippet above). Make sure the input
 field names match the backend's JSON keys so they line up.
 
-### For a public (server-side, ISR) read instead
+### For a public server read instead
 
-Add the fetcher to `lib/catalog/` (or a top-level `lib/*.ts`) with its own
-error-safe `publicGet` + empty fallback, choose a `REVALIDATE` window, and
-**unwrap to match the actual envelope** the backend returns (`{ data }` vs
-`{ results, pagination }` vs top-level). Add a `Paginated<T>` type if it's a
-list. No proxy/allowlist change is needed — these fetchers call the backend
-directly server-side.
+Add the read to the owning feature's server API and call `publicRequest()` with
+the appropriate cache policy. Keep successful empty lists unchanged and let
+failed primary reads throw; for a direct detail read, map only a typed 404 to
+`null`. Add a `Paginated<T>` type from `lib/api/types.ts` if it is a list. No
+proxy/allowlist change is needed because these APIs call the backend directly
+server-side. If a dynamic route needs slug discovery, keep its fail-soft catch
+inside that route's `generateStaticParams()` only.
 
 ---
 
@@ -347,8 +376,8 @@ directly server-side.
 
 ```
 Need data on the SERVER (RSC / route handler)?
-  ├─ public, cacheable (catalogue/recipes/journal)  → a publicGet fetcher in lib/catalog | lib/recipes.ts | lib/journal.ts
-  └─ per-user / authenticated                        → serverApi() from lib/api/client.ts
+  ├─ public storefront data                         → feature-owned server API → publicRequest()
+  └─ per-user / authenticated                        → apiFetch() from lib/api/client.ts
 
 Need data in the BROWSER (client component)?
   ├─ customer/checkout resource                      → a hook in lib/api/hooks.ts | account-hooks.ts (→ storeRequest)

@@ -1,0 +1,276 @@
+"use client";
+
+import { ImageIcon, Loader2 } from "lucide-react";
+import { Controller, type Control, type FieldErrors } from "react-hook-form";
+
+import { OptimizedImage } from "@/components/optimized-image";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { fieldErrorId } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input";
+import type { Tag } from "@/features/catalog/tags/types";
+import type { RecipeStatus } from "@/features/recipes/types";
+import type { RecipeFormValues } from "@/features/recipes/validations";
+import { cn } from "@/lib/utils";
+import { Field } from "./FormLayout";
+
+const statusFa: Record<RecipeStatus, string> = {
+  draft: "پیش‌نویس",
+  published: "منتشرشده",
+  archived: "بایگانی‌شده",
+};
+
+function ImageCard({
+  control,
+  errors,
+  title,
+  imageUrl,
+  onUploadingChange,
+}: {
+  control: Control<RecipeFormValues>;
+  errors: FieldErrors<RecipeFormValues>;
+  title: string;
+  imageUrl: string;
+  onUploadingChange: (uploading: boolean) => void;
+}) {
+  return (
+    <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
+      <h2 className="eyebrow mb-3">
+        <ImageIcon className="size-3.5" aria-hidden />
+        تصویر شاخص
+      </h2>
+      <span className="relative mb-3 flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-xl bg-muted ring-1 ring-foreground/[0.04]">
+        <OptimizedImage
+          src={imageUrl || null}
+          alt={title || "تصویر دستور"}
+          width={480}
+          className="h-full w-full"
+        />
+      </span>
+      <Label htmlFor="image_url" className="sr-only">
+        نشانی تصویر
+      </Label>
+      <Controller
+        control={control}
+        name="image_url"
+        render={({ field }) => (
+          <FlexibleImageInput
+            id="image_url"
+            value={field.value}
+            onChange={field.onChange}
+            onBlur={field.onBlur}
+            folder="recipes"
+            placeholder="https://… یا بارگذاری فایل"
+            ariaInvalid={!!errors.image_url}
+            ariaDescribedBy={
+              errors.image_url ? fieldErrorId("image_url") : undefined
+            }
+            hidePreview
+            onUploadingChange={onUploadingChange}
+          />
+        )}
+      />
+      {errors.image_url ? (
+        <p id={fieldErrorId("image_url")} role="alert" className="mt-1.5 text-xs text-destructive">
+          {errors.image_url.message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function PublicationCard({ control }: { control: Control<RecipeFormValues> }) {
+  return (
+    <div className="border-hairline flex flex-col gap-4 rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
+      <Field id="status" label="وضعیت انتشار">
+        <Controller
+          control={control}
+          name="status"
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger id="status" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(statusFa) as RecipeStatus[]).map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {statusFa[s]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
+      </Field>
+
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <Label htmlFor="is_featured">دستور ویژه</Label>
+          <p className="text-xs text-muted-foreground">
+            در بخش‌های منتخب سایت نمایش داده می‌شود.
+          </p>
+        </div>
+        <Controller
+          control={control}
+          name="is_featured"
+          render={({ field }) => (
+            <Switch
+              id="is_featured"
+              checked={field.value}
+              onCheckedChange={field.onChange}
+              aria-label="دستور ویژه"
+            />
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
+function TagsCard({
+  control,
+  tags,
+}: {
+  control: Control<RecipeFormValues>;
+  tags: Tag[];
+}) {
+  if (tags.length === 0) return null;
+
+  return (
+    <div className="border-hairline flex flex-col gap-2.5 rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
+      <Label>برچسب‌ها</Label>
+      <Controller
+        control={control}
+        name="tag_ids"
+        render={({ field }) => (
+          <div className="flex flex-wrap gap-2">
+            {tags.map((t) => {
+              const active = field.value.includes(t.id);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() =>
+                    field.onChange(
+                      active
+                        ? field.value.filter((id) => id !== t.id)
+                        : [...field.value, t.id],
+                    )
+                  }
+                  className={cn(
+                    "min-h-9 cursor-pointer rounded-full border px-3 text-sm transition-colors",
+                    "focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none",
+                    active
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t.title}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
+function FormActions({
+  status,
+  submitLabel,
+  isSubmitting,
+  imageUploading,
+  onCancel,
+}: {
+  status: RecipeStatus;
+  submitLabel: string;
+  isSubmitting: boolean;
+  imageUploading: boolean;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Button type="submit" size="lg" disabled={isSubmitting || imageUploading}>
+        {isSubmitting || imageUploading ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : null}
+        {submitLabel}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        disabled={isSubmitting || imageUploading}
+        onClick={onCancel}
+      >
+        انصراف
+      </Button>
+      <p className="px-1 text-center text-xs text-muted-foreground">
+        {status === "published"
+          ? "این دستور پس از ذخیره منتشر می‌شود."
+          : status === "archived"
+            ? "این دستور بایگانی و از سایت پنهان می‌شود."
+            : "این دستور به‌صورت پیش‌نویس ذخیره می‌شود."}
+      </p>
+    </div>
+  );
+}
+
+export function RecipeSidebar({
+  control,
+  errors,
+  tags,
+  title,
+  imageUrl,
+  status,
+  submitLabel,
+  isSubmitting,
+  imageUploading,
+  onUploadingChange,
+  onCancel,
+}: {
+  control: Control<RecipeFormValues>;
+  errors: FieldErrors<RecipeFormValues>;
+  tags: Tag[];
+  title: string;
+  imageUrl: string;
+  status: RecipeStatus;
+  submitLabel: string;
+  isSubmitting: boolean;
+  imageUploading: boolean;
+  onUploadingChange: (uploading: boolean) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <aside className="flex flex-col gap-6">
+      <div className="lg:sticky lg:top-20 lg:flex lg:flex-col lg:gap-6">
+        <ImageCard
+          control={control}
+          errors={errors}
+          title={title}
+          imageUrl={imageUrl}
+          onUploadingChange={onUploadingChange}
+        />
+        <PublicationCard control={control} />
+        <TagsCard control={control} tags={tags} />
+        <FormActions
+          status={status}
+          submitLabel={submitLabel}
+          isSubmitting={isSubmitting}
+          imageUploading={imageUploading}
+          onCancel={onCancel}
+        />
+      </div>
+    </aside>
+  );
+}

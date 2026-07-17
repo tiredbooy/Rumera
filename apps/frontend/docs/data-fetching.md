@@ -11,15 +11,15 @@ code matches the existing patterns and shares the same cache keys.
 There are two distinct fetch layers, and which one you use is decided by **who
 is reading the data** — not by convenience.
 
-| Layer | Used by | Helper | Talks to | Auth |
-|-------|---------|--------|----------|------|
-| **Public / server** | Server Components (catalogue, PDP, blog) | `lib/catalog/*` (`listProducts`, `getProductById`, …) | `${API_URL}/api/v1/*` directly | none (public) |
-| **Authenticated / client** | Client Components + React Query | `storeRequest()` → `/api/store/*` BFF | the BFF proxy, which adds the bearer token | next-auth session |
+| Layer                      | Used by                                              | Helper                                          | Talks to                                   | Auth              |
+| -------------------------- | ---------------------------------------------------- | ----------------------------------------------- | ------------------------------------------ | ----------------- |
+| **Public / server**        | Server Components (catalogue, PDP, recipes, journal) | Feature-owned server APIs via `publicRequest()` | `${API_URL}/api/v1/*` directly             | none (public)     |
+| **Authenticated / client** | Client Components + React Query                      | `storeRequest()` → `/api/store/*` BFF           | the BFF proxy, which adds the bearer token | next-auth session |
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ Server Component (RSC)                                           │
-│   await listProducts({ ... })  ──►  fetch  ──►  /api/v1/products │  (ISR, public)
+│   await listProducts({ ... })  ──► publicRequest ──► /api/v1/... │  (public)
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
@@ -44,31 +44,74 @@ route.
 
 ---
 
-## Server-side fetching (catalogue, RSC)
+## Server-side fetching (storefront RSCs)
 
-Public catalogue reads live in `lib/catalog/products.ts` (and siblings
-`categories.ts`, `reviews.ts`, `recommendations.ts`). They run **on the server**
-inside RSCs and are **ISR-cached** and **error-safe** — on any network/HTTP
-failure they return an empty page or `null` so `next build` and page rendering
-never hard-fail when the backend is down.
+Public reads live with their domains and call `publicRequest()` from
+`lib/api/public.ts`:
+
+| Domain     | Server API                                | Primary reads                                                                     |
+| ---------- | ----------------------------------------- | --------------------------------------------------------------------------------- |
+| Products   | `features/catalog/products/api/public.ts` | `listProducts`, `getProductById`, `getProductBySlug`, `allProductSlugs`           |
+| Categories | `features/catalog/categories/api.ts`      | `listCategories`, `getCategoryBySlug`, `getCategoryTree`, `getFeaturedCategories` |
+| Recipes    | `features/recipes/api/server.ts`          | lists, featured/related reads, slug detail, sitemap slugs                         |
+| Journal    | `features/journal/api/server.ts`          | page/category/related reads, slug detail, static slugs                            |
+
+`publicRequest()` unwraps a `{ data }` success envelope when present and throws
+`ApiError(status, code, message)` for every non-2xx response. Native fetch
+failures also propagate. The domain APIs preserve that distinction:
+
+- A successful list may truthfully return an empty `results` page or `[]`.
+  List, tree, featured, related, and slug-discovery failures are not converted
+  into empty success values.
+- A detail read returns `null` only when the thrown value is an `ApiError` with
+  status `404`. Network errors, 5xx responses, and every non-404 error rethrow.
+- `getProductBySlug()` hydrates only an exact slug match from the search
+  projection; a fuzzy first result is never treated as the requested product.
+- `getCategoryBySlug()` returns `null` when a successful category list has no
+  exact match, but a failed category list still throws.
 
 ```ts
-// lib/catalog/products.ts
-const REVALIDATE = 3600 // 1h ISR
-
-async function publicGet<T>(path: string): Promise<T | null> {
+// features/recipes/api/server.ts
+export async function getRecipeBySlug(
+  slug: string,
+): Promise<RecipeDetail | null> {
   try {
-    const res = await fetch(`${BASE}${path}`, { next: { revalidate: REVALIDATE } })
-    if (!res.ok) return null
-    return (await res.json()) as T
-  } catch {
-    return null
+    return await publicRequest<RecipeDetail>(
+      `/recipes/${encodeURIComponent(slug)}`,
+      PUBLIC_CACHE,
+    );
+  } catch (error) {
+    if (isApiNotFoundError(error)) return null;
+    throw error;
   }
 }
+```
 
-export async function listProducts(params: ProductListParams = {}): Promise<Paginated<ProductListItem>> {
-  const page = await publicGet<Paginated<ProductListItem>>(`/products${buildQuery(params)}`)
-  return page ?? emptyPage<ProductListItem>() // never throws
+Caching remains read-specific. Product lists use `cache: "no-store"` because
+they include live availability. Product detail, categories, recipes, and journal
+reads use a one-hour revalidation window unless their API says otherwise.
+
+Runtime pages and `generateMetadata()` do not catch operational read failures;
+those errors activate the nearest App Router `error.tsx`. Detail views call
+`notFound()` only after a typed 404 becomes `null`, activating `not-found.tsx`.
+Build-time slug discovery is the deliberate exception: each dynamic route
+contains its own fail-soft `generateStaticParams()` so failed parameter
+enumeration logs sanitized context and returns `[]`. This protects only those
+dynamic slug reads; static storefront pages/layouts and the sitemap still need
+live API data or a populated cache, so a fully API-offline `next build` is not
+guaranteed.
+
+```tsx
+export async function generateStaticParams() {
+  try {
+    return (await listRecipeSlugs()).map((slug) => ({ slug }));
+  } catch (error) {
+    console.error(
+      "generateStaticParams: failed to load recipe slugs",
+      getSafeApiErrorContext(error), // status/code or error name; no message/URL
+    );
+    return [];
+  }
 }
 ```
 
@@ -76,14 +119,25 @@ A page consumes these directly — no React Query, no client hydration:
 
 ```tsx
 // app/(storefront)/products/page.tsx  (Server Component)
-export default async function ProductsPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const sp = await searchParams                      // async in Next 16
-  const page = Math.max(1, Number(sp.page) || 1)
+export default async function ProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SP>;
+}) {
+  const sp = await searchParams; // async in Next 16
+  const page = Math.max(1, Number(sp.page) || 1);
 
-  const [data, categories] = await Promise.all([     // fetch in parallel
-    listProducts({ page, limit: 12, search, sortBy: sp.sortBy, orderBy: sp.orderBy }),
+  const [data, categories] = await Promise.all([
+    // fetch in parallel
+    listProducts({
+      page,
+      limit: 12,
+      search,
+      sortBy: sp.sortBy,
+      orderBy: sp.orderBy,
+    }),
     listCategories(),
-  ])
+  ]);
   // ...render results + pagination links built with buildQuery(...)
 }
 ```
@@ -108,19 +162,19 @@ const [queryClient] = React.useState(
     new QueryClient({
       defaultOptions: {
         queries: {
-          staleTime: 60 * 1000,        // 1 minute — data is "fresh" for 60s
+          staleTime: 60 * 1000, // 1 minute — data is "fresh" for 60s
           refetchOnWindowFocus: false, // no surprise refetches on tab focus
         },
       },
-    })
-)
+    }),
+);
 ```
 
-| Setting | Value | Effect |
-|---------|-------|--------|
-| `staleTime` | `60_000` | Queries are fresh for 60s; no refetch on remount within that window. |
-| `gcTime` | default (5 min) | Not overridden — TanStack's default applies. |
-| `refetchOnWindowFocus` | `false` | Deliberate — avoids re-fetching the cart/wallet every time the tab regains focus. |
+| Setting                | Value           | Effect                                                                            |
+| ---------------------- | --------------- | --------------------------------------------------------------------------------- |
+| `staleTime`            | `60_000`        | Queries are fresh for 60s; no refetch on remount within that window.              |
+| `gcTime`               | default (5 min) | Not overridden — TanStack's default applies.                                      |
+| `refetchOnWindowFocus` | `false`         | Deliberate — avoids re-fetching the cart/wallet every time the tab regains focus. |
 
 Provider order in `app/providers.tsx`:
 `SessionProvider` → `QueryClientProvider` → `NuqsAdapter` → `DirectionProvider`
@@ -129,17 +183,18 @@ relies on the session.
 
 > **There is no `HydrationBoundary` / `dehydrate` / `prefetchQuery` in this
 > codebase.** Server-prefetched-then-hydrated React Query is **not** a pattern
-> here — server data comes from `lib/catalog/*` rendered directly in RSCs, and
-> client data is fetched on mount via hooks. If you introduce dehydration, you'd
-> be establishing a new pattern; prefer the existing split first.
+> here — public server data comes from the feature-owned domain APIs rendered
+> directly in RSCs, and client data is fetched on mount via hooks. If you
+> introduce dehydration, you'd be establishing a new pattern; prefer the
+> existing split first.
 
 ### Hook files
 
-| File | Scope | Path it hits |
-|------|-------|-------------|
-| `lib/api/hooks.ts` | Cart, orders, addresses (list/create), wishlist, coupons, shipping, loyalty, subscriptions, gift cards, referrals, taste, alerts, personalised recs | `/api/store/*` |
-| `lib/api/account-hooks.ts` | Wallet, address mutations (update/delete/set-default), the customer's own reviews, profile (`auth/me`), recommendations | `/api/store/*` |
-| `lib/api/admin-hooks.ts` | Admin tables (orders, customers, inventory, reviews, recipes) + real product/image hooks | mock today; `/api/admin/*` for products/images |
+| File                       | Scope                                                                                                                                               | Path it hits                                   |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `lib/api/hooks.ts`         | Cart, orders, addresses (list/create), wishlist, coupons, shipping, loyalty, subscriptions, gift cards, referrals, taste, alerts, personalised recs | `/api/store/*`                                 |
+| `lib/api/account-hooks.ts` | Wallet, address mutations (update/delete/set-default), the customer's own reviews, profile (`auth/me`), recommendations                             | `/api/store/*`                                 |
+| `lib/api/admin-hooks.ts`   | Admin tables (orders, customers, inventory, reviews, recipes) + real product/image hooks                                                            | mock today; `/api/admin/*` for products/images |
 
 `account-hooks.ts` intentionally **does not duplicate** hooks that already live
 in `hooks.ts` — pages import each hook from its owning file so cache keys stay
@@ -163,10 +218,10 @@ The canonical query hook: a key from the factory, a `queryFn` that calls
 // lib/api/hooks.ts
 export function useCart(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.cart,                                       // ["cart"]
+    queryKey: queryKeys.cart, // ["cart"]
     queryFn: () => storeRequest<{ data: Cart }>("cart").then((b) => b.data),
     enabled,
-  })
+  });
 }
 ```
 
@@ -176,18 +231,23 @@ export function useCart(enabled = true) {
 message)` on non-2xx and returns `undefined` on `204`.
 
 Backend envelopes (see `apps/backend/docs/conventions.md`):
+
 - Single/action: `{ data: ... }` → unwrap with `.then(b => b.data)`.
 - Paginated: `{ results, pagination }` → return whole `Paginated<T>` and read
   `.results` in the component.
 
 ```ts
 // Paginated query — return the whole envelope
-export function useOrders(params: { page?: number; status?: string } = {}, enabled = true) {
+export function useOrders(
+  params: { page?: number; status?: string } = {},
+  enabled = true,
+) {
   return useQuery({
     queryKey: queryKeys.orders.list(params),
-    queryFn: () => storeRequest<Paginated<OrderListItem>>(`orders${buildQuery(params)}`),
+    queryFn: () =>
+      storeRequest<Paginated<OrderListItem>>(`orders${buildQuery(params)}`),
     enabled,
-  })
+  });
 }
 ```
 
@@ -207,13 +267,17 @@ export const queryKeys = {
     list: (params) => ["products", "list", params ?? {}],
     detail: (slug) => ["products", "detail", slug],
   },
-  orders: { all: ["orders"], list: (p) => ["orders", "list", p ?? {}], detail: (id) => ["orders", "detail", id] },
+  orders: {
+    all: ["orders"],
+    list: (p) => ["orders", "list", p ?? {}],
+    detail: (id) => ["orders", "detail", id],
+  },
   cart: ["cart"],
   wishlist: ["wishlist"],
   wallet: ["wallet"],
   addresses: ["addresses"],
   // ...
-}
+};
 ```
 
 Some hooks still use **inline** keys for resources not in the factory
@@ -238,13 +302,15 @@ the UI updates with zero extra round-trips:
 ```ts
 // lib/api/hooks.ts
 export function useAddCartItem() {
-  const qc = useQueryClient()
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars) =>
-      storeRequest<{ data: Cart }>("cart/items", { method: "POST", body: JSON.stringify(vars) })
-        .then((b) => b.data),
-    onSuccess: (cart) => qc.setQueryData(queryKeys.cart, cart),   // seed, don't invalidate
-  })
+      storeRequest<{ data: Cart }>("cart/items", {
+        method: "POST",
+        body: JSON.stringify(vars),
+      }).then((b) => b.data),
+    onSuccess: (cart) => qc.setQueryData(queryKeys.cart, cart), // seed, don't invalidate
+  });
 }
 ```
 
@@ -258,13 +324,15 @@ query refetch:
 
 ```ts
 export function useCreateAddress() {
-  const qc = useQueryClient()
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: AddressInput) =>
-      storeRequest<{ data: Address }>("addresses", { method: "POST", body: JSON.stringify(input) })
-        .then((b) => b.data),
+      storeRequest<{ data: Address }>("addresses", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }).then((b) => b.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.addresses }),
-  })
+  });
 }
 ```
 
@@ -281,7 +349,7 @@ The wishlist heart flips **instantly** using the full `onMutate` → `onError` �
 
 ```ts
 export function useAddWishlistItem() {
-  const qc = useQueryClient()
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (productVariantId: number) =>
       storeRequest<{ data: { wishlist_id: number } }>("wishlist/items", {
@@ -290,29 +358,33 @@ export function useAddWishlistItem() {
       }),
 
     onMutate: async (variantId) => {
-      await qc.cancelQueries({ queryKey: queryKeys.wishlist })          // 1. stop in-flight refetches
-      const prev = qc.getQueryData<Wishlist>(queryKeys.wishlist)        // 2. snapshot for rollback
+      await qc.cancelQueries({ queryKey: queryKeys.wishlist }); // 1. stop in-flight refetches
+      const prev = qc.getQueryData<Wishlist>(queryKeys.wishlist); // 2. snapshot for rollback
       if (prev && !prev.items.some((i) => i.variant_id === variantId)) {
-        const optimistic = { id: -variantId, /* …negative sentinel… */ }
-        qc.setQueryData<Wishlist>(queryKeys.wishlist, {                 // 3. write optimistic state
-          ...prev, items: [optimistic, ...prev.items], total: prev.total + 1,
-        })
+        const optimistic = { id: -variantId /* …negative sentinel… */ };
+        qc.setQueryData<Wishlist>(queryKeys.wishlist, {
+          // 3. write optimistic state
+          ...prev,
+          items: [optimistic, ...prev.items],
+          total: prev.total + 1,
+        });
       }
-      qc.setQueryData(["wishlist", "has", variantId], true)            // flip the per-variant flag too
-      return { prev }                                                   // 4. pass snapshot to onError
+      qc.setQueryData(["wishlist", "has", variantId], true); // flip the per-variant flag too
+      return { prev }; // 4. pass snapshot to onError
     },
 
     onError: (_e, variantId, ctx) => {
-      if (ctx?.prev) qc.setQueryData(queryKeys.wishlist, ctx.prev)      // 5. roll back
-      qc.setQueryData(["wishlist", "has", variantId], false)
+      if (ctx?.prev) qc.setQueryData(queryKeys.wishlist, ctx.prev); // 5. roll back
+      qc.setQueryData(["wishlist", "has", variantId], false);
     },
 
     onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.wishlist }), // 6. reconcile with server
-  })
+  });
 }
 ```
 
 Key details that make it correct:
+
 - The optimistic row uses a **negative sentinel id** (`-variantId`) so it's
   obviously a placeholder and gets replaced when `onSettled` invalidation
   refetches the real row.
@@ -359,25 +431,32 @@ fetches a generous window once (`FETCH_LIMIT = 100`) and then filters/pages
 
 ```tsx
 // components/account/wallet-view.tsx
-import { useQueryState, useQueryStates, parseAsStringEnum, parseAsString, parseAsInteger } from "nuqs"
+import {
+  useQueryState,
+  useQueryStates,
+  parseAsStringEnum,
+  parseAsString,
+  parseAsInteger,
+} from "nuqs";
 
 // single value with a typed default → ?dir=credit
 const [direction, setDirection] = useQueryState(
   "dir",
   parseAsStringEnum(["all", "credit", "debit"]).withDefault("all"),
-)
+);
 
 // grouped values → ?from=…&to=…
 const [{ from, to }, setRange] = useQueryStates({
   from: parseAsString.withDefault(""),
-  to:   parseAsString.withDefault(""),
-})
+  to: parseAsString.withDefault(""),
+});
 
 // numeric pagination → ?page=2
-const [page, setPage] = useQueryState("page", parseAsInteger.withDefault(1))
+const [page, setPage] = useQueryState("page", parseAsInteger.withDefault(1));
 ```
 
 Conventions seen in the code:
+
 - Always pair a parser with `.withDefault(...)` so values are non-nullable.
 - When a **filter** changes, reset the page: `setDirection(v); setPage(1)`.
 - Clamp the page against the current result size and self-correct in an effect
@@ -397,7 +476,7 @@ Conventions seen in the code:
 repeats array keys (`ids=1&ids=2`), and prefixes `?` only when non-empty.
 
 ```ts
-buildQuery({ page: 2, search: "", sortBy: "price" }) // "?page=2&sortBy=price"
+buildQuery({ page: 2, search: "", sortBy: "price" }); // "?page=2&sortBy=price"
 ```
 
 Use it everywhere instead of hand-building query strings.
@@ -414,17 +493,34 @@ messages are Persian. The reference is `components/account/address-form.tsx`.
 // components/account/address-form.tsx
 const schema = z.object({
   full_name: z.string().trim().min(2, "نام گیرنده را وارد کنید"),
-  phone_number: z.string().trim().regex(/^09\d{9}$/, "شمارهٔ موبایل معتبر نیست"),
-  postal_code: z.string().trim().regex(/^\d{10}$/, "کد پستی باید ۱۰ رقم باشد"),
+  phone_number: z
+    .string()
+    .trim()
+    .regex(/^09\d{9}$/, "شمارهٔ موبایل معتبر نیست"),
+  postal_code: z
+    .string()
+    .trim()
+    .regex(/^\d{10}$/, "کد پستی باید ۱۰ رقم باشد"),
   // ...
-})
-export type AddressFormValues = z.infer<typeof schema>  // type derived from schema
+});
+export type AddressFormValues = z.infer<typeof schema>; // type derived from schema
 
-const { register, handleSubmit, setValue, control, formState: { errors } } =
-  useForm<AddressFormValues>({ resolver: zodResolver(schema), defaultValues: { /* … */ } })
+const {
+  register,
+  handleSubmit,
+  setValue,
+  control,
+  formState: { errors },
+} = useForm<AddressFormValues>({
+  resolver: zodResolver(schema),
+  defaultValues: {
+    /* … */
+  },
+});
 ```
 
 Patterns to follow:
+
 - **Inputs:** spread `{...register("field")}`; show `errors.field?.message`.
 - **Non-native controls** (shadcn `Select`, `Switch`): they don't emit DOM
   events RHF can register, so drive them with `useWatch({ control, name })` to
@@ -439,16 +535,36 @@ Patterns to follow:
 
 ## Loading, empty & error states
 
-Every client query surface renders the three branches explicitly — there is no
-global spinner. The convention (see `account-overview.tsx`, `wallet-view.tsx`,
-`addresses-view.tsx`):
+Server-rendered routes keep four states separate:
 
-| State | Render |
-|-------|--------|
-| `isLoading` | `<Skeleton>` placeholders shaped like the real content |
-| `isError` | inline message + a **"تلاش دوباره"** button calling `query.refetch()` |
-| empty (`data.length === 0`) | `<EmptyState>` / `<Placeholder>` with an icon + CTA |
-| success | the real content |
+| State                                 | Server route behavior                                                                                 |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| unresolved read/navigation            | nearest `loading.tsx` renders its route skeleton/state                                                |
+| typed missing detail (`ApiError` 404) | domain API returns `null`; the detail view calls `notFound()` and the nearest `not-found.tsx` renders |
+| failed read (network, 5xx, non-404)   | error rethrows into the nearest `error.tsx`, whose retry action reruns the route                      |
+| successful zero data                  | the page renders its domain-specific empty state; it is neither an error nor not-found                |
+
+> **Next 16.2.6 streaming constraint:** once `loading.tsx` (or another Suspense
+> fallback) starts the response stream, a later `notFound()` cannot change the
+> committed status. The not-found UI may therefore arrive with HTTP `200 OK`;
+> Next.js injects `<meta name="robots" content="noindex">`. This is expected
+> streamed behavior.
+
+Do not catch a primary, related, or featured server read merely to keep rendering
+with empty data: that presents an outage as a valid empty catalogue. The only
+fail-soft primary-read catch is each dynamic route's slug discovery inside
+`generateStaticParams()`; runtime page and metadata reads must still throw, and
+other static routes/layouts may still require the API during a build.
+
+Client-query surfaces render their own branches explicitly. The convention (see
+`account-overview.tsx`, `wallet-view.tsx`, `addresses-view.tsx`):
+
+| State                       | Render                                                                |
+| --------------------------- | --------------------------------------------------------------------- |
+| `isLoading`                 | `<Skeleton>` placeholders shaped like the real content                |
+| `isError`                   | inline message + a **"تلاش دوباره"** button calling `query.refetch()` |
+| empty (`data.length === 0`) | `<EmptyState>` / `<Placeholder>` with an icon + CTA                   |
+| success                     | the real content                                                      |
 
 Gate dependent queries with `enabled` (most hooks accept an `enabled = true`
 arg, e.g. `useHasWishlistItem(variantId, enabled)` is `enabled && !!variantId`)
@@ -463,11 +579,13 @@ so they don't fire before their inputs exist.
 from anywhere client-side:
 
 ```tsx
-import { toast } from "sonner"
+import { toast } from "sonner";
 
-toast.success("آدرس به‌روزرسانی شد")
-toast.error("به‌روزرسانی ناموفق بود")
-toast.success("به سبد خرید افزوده شد", { description: `${name} — ${formatPrice(price)}` })
+toast.success("آدرس به‌روزرسانی شد");
+toast.error("به‌روزرسانی ناموفق بود");
+toast.success("به سبد خرید افزوده شد", {
+  description: `${name} — ${formatPrice(price)}`,
+});
 ```
 
 Convention: fire toasts from the mutation's **per-call** `onSuccess`/`onError`
@@ -490,5 +608,10 @@ different messaging. Messages are Persian and `dir="rtl"`.
 6. In the component, render loading/error/empty/success branches and fire
    sonner toasts from per-call `onSuccess`/`onError`.
 
-For a **public** read instead, add an error-safe fetcher to `lib/catalog/*` and
-call it directly in a Server Component (no hook, no hydration).
+For a **public** read instead, add it to the owning feature's server API and call
+`publicRequest()` directly from a Server Component (no hook, no hydration).
+Return successful empty lists unchanged, map only a typed detail 404 to `null`,
+and let all operational failures reach the route error boundary. If the read is
+used for dynamic slug discovery, keep the fail-soft catch inside that route's
+`generateStaticParams()` only; it does not make the rest of the build
+API-independent.

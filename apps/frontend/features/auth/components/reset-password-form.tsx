@@ -8,6 +8,7 @@ import { AlertCircle, Loader2, ShieldX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { focusFormControl } from "@/components/ui/field"
 import { resetPassword } from "@/features/auth/api/client"
 
 export function ResetPasswordForm({ token }: { token: string }) {
@@ -17,11 +18,13 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    const formElement = e.currentTarget
     setError(null)
     const form = new FormData(e.currentTarget)
     const password = String(form.get("password") ?? "")
     if (password !== String(form.get("confirm") ?? "")) {
       setError("گذرواژه‌ها یکسان نیستند.")
+      focusFormControl(formElement, "confirm")
       return
     }
     setLoading(true)
@@ -30,6 +33,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
     } catch {
       setError("لینک بازیابی نامعتبر یا منقضی شده است.")
       setLoading(false)
+      focusFormControl(formElement, "password")
       return
     }
     router.push("/login")
@@ -72,6 +76,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
             dir="ltr"
             autoComplete="new-password"
             aria-invalid={!!error}
+            aria-describedby={error ? "reset-password-error" : undefined}
             className="h-11 text-start"
           />
         </div>
@@ -86,12 +91,14 @@ export function ResetPasswordForm({ token }: { token: string }) {
             dir="ltr"
             autoComplete="new-password"
             aria-invalid={!!error}
+            aria-describedby={error ? "reset-password-error" : undefined}
             className="h-11 text-start"
           />
         </div>
 
         {error ? (
           <p
+            id="reset-password-error"
             role="alert"
             className="flex items-start gap-2 rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
           >

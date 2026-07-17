@@ -9,9 +9,9 @@ import { listJournalPosts } from "@/features/journal/api/server"
 /**
  * Programmatic sitemap served at /sitemap.xml. Covers every public, indexable
  * route — static pages, the live catalogue, category landings, recipes and the
- * journal — so search engines and AI crawlers can discover all of it. Catalogue
- * fetchers are error-safe, so this still renders (sans products) if the API is
- * down.
+ * journal — so search engines and AI crawlers can discover all of it. These are
+ * primary reads, so failures propagate rather than publishing an incomplete
+ * sitemap.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date()

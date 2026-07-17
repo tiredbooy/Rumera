@@ -2090,6 +2090,155 @@ append-only.
 - Frontend tests passed: 1 file, 5 safe-callback cases.
 - Full lint passed with zero errors and 11 unrelated existing warnings.
 
+## Task 048 - Add Route-Level Loading, Error, Not-Found, And Retry States
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Added localized loading, error, not-found, and `unstable_retry` states for the
+  root, storefront, account, checkout, and admin route segments, plus a focused
+  journal-detail skeleton and a failure-independent terminal global fallback.
+- Made primary public reads truthful: list failures propagate, typed detail 404s
+  become missing data, non-404 failures rethrow, and static-param discovery fails
+  softly with sanitized build logs.
+- Added explicit loading/error/retry states to the touched account queries and
+  mapped missing account orders to the successful not-found branch while retaining
+  cached wallet data after failed background refetches.
+- Documented Next 16.2.6 streamed soft-404 and same-segment layout-boundary
+  constraints, and corrected all active API guidance to the real `apiFetch` API.
+- Extracted one shared `ApiError` identity, added jsdom interaction coverage for
+  rendered retry controls and ARIA state regions, and tested real public/account
+  transport error classification.
+- Independent acceptance review found no blockers. Frontend tests passed (5 files,
+  37 tests), typecheck/typegen passed, lint passed with zero errors and 11 existing
+  warnings, focused backend tests passed, production build rendered all 23 static
+  pages against a deterministic empty API contract, and `git diff --check` passed.
+
+## Task 047a - Split `RecipeForm` Responsibilities
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Reduced `RecipeForm.tsx` from 891 to 223 lines while retaining form state,
+  defaults, watches, upload coordination, payload construction, API errors,
+  mutations, toasts, and navigation in the orchestration owner.
+- Extracted cohesive general, content, specification, ingredient, shoppable
+  product, SEO, image, publication, tag, and action presentation components under
+  recipe-form ownership with no schema, API, markup, or behavior redesign.
+- Scoped ESLint passed with zero errors and the existing React Hook Form compiler
+  warning; frontend typecheck, eight validation tests, and `git diff --check`
+  passed.
+
+## Task 047b - Split `CheckoutFlow` Responsibilities
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Reduced `checkout-flow.tsx` from 641 to 302 lines while retaining all checkout
+  hooks, state, calculations, validation, mutations, payload construction, error
+  handling, redirects, and wizard navigation in the orchestration owner.
+- Extracted the progress stepper, four step presentations, shared rows, and sticky
+  order summary without changing copy, classes, coupon/gift semantics, submit
+  paths, or the render-time address synchronization reserved for Task 050.
+- Scoped ESLint, frontend typecheck, and `git diff --check` passed.
+
+## Task 047c - Split `WalletView` Responsibilities
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Reduced `wallet-view.tsx` from 575 to 173 lines while retaining wallet hooks,
+  URL-backed filters, date/direction filtering, monthly summaries, pagination,
+  clamping, query synchronization, and refetch orchestration in the owner.
+- Extracted balance/month overview and transaction filter/table/pager presentation,
+  preserving the read-only top-up state, data test IDs, copy, classes, and all
+  loading/error/empty behavior.
+- Scoped ESLint, frontend typecheck, and `git diff --check` passed.
+
+## Task 047d - Split `SettingsForm` Responsibilities
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Reduced `SettingsForm.tsx` from 509 to 250 lines while retaining form state,
+  complete defaults/payload mapping, server-error handling, mutation/reset,
+  previews, dirty state, and router orchestration in the owner.
+- Extracted shared form layout and six typed tab sections without changing fields,
+  IDs, validation, tab order, maintenance warnings, classes, or the responsive tab
+  behavior reserved for Task 054.
+- Scoped ESLint passed with zero errors and the existing React Hook Form compiler
+  warning; frontend typecheck, eight validation tests, and `git diff --check`
+  passed.
+
+## Task 047e - Split Hero-Form Responsibilities
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Reduced `hero-form.tsx` from 485 to 204 lines while retaining mode/defaults,
+  concurrent upload tracking, watches, payload mapping, server errors, mutations,
+  toasts, and navigation in the owner.
+- Extracted typed content, responsive-media, CTA, appearance/publication/ordering,
+  layout, and live-preview components without adding scheduling fields or changing
+  existing uploader, preview, theme, publication, submit, or cancel behavior.
+- Scoped ESLint passed with zero errors and the existing React Hook Form compiler
+  warning; frontend typecheck, eight validation tests, and `git diff --check`
+  passed.
+
+## Task 047f - Split Customer-Form Responsibilities
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Reduced `UserEditForm.tsx` from 455 to 186 lines while retaining localized
+  conversion, defaults, form watches, payload mapping, API errors, mutations,
+  reset, toasts, and router orchestration in the owner.
+- Extracted profile, access/RBAC, identity-summary, and action presentation while
+  preserving supported roles, field contracts, warnings, and the critical rule
+  that self-edits omit role and active-status fields.
+- Scoped ESLint, frontend typecheck, eight validation tests, and `git diff --check`
+  passed.
+
+## Task 047g - Split Subscriptions-View Responsibilities
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Reduced `subscriptions-view.tsx` from 446 to 116 lines while retaining all
+  subscription/address hooks, cadence and confirmation state, status sorting,
+  mutations, row-busy state, and feedback in the owner.
+- Extracted bounded create, list-state, card, display-helper, and controlled
+  confirmation-dialog modules; the largest presentation file is 247 lines.
+- Preserved supported actions, address rendering, cadence/status ordering, copy,
+  classes, and row-local mutation behavior.
+- Scoped ESLint, frontend typecheck, the backend subscription model test, and
+  `git diff --check` passed.
+
+## Task 047h - Split Reviews-Section Responsibilities
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Reduced `reviews-section.tsx` from 443 to 162 lines while retaining session,
+  filtering, pagination, pending-review merge, transitions, optimistic reactions,
+  rollback, and guest/auth orchestration in the owner.
+- Extracted bounded summary, display, list, card, and write-dialog components while
+  preserving required-title validation, pending visibility, and 403/409 mutation
+  error distinctions.
+- Scoped ESLint, frontend typecheck, backend review service tests, and
+  `git diff --check` passed.
+
+## Task Group 047 - Acceptance Verification
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Split all eight oversized owners into domain-local orchestration and bounded
+  presentation modules without adding compatibility barrels or behavior changes.
+- Full frontend typecheck, 13 tests, production build, and `git diff --check`
+  passed.
+- Full lint passed with zero errors and 11 existing unrelated warnings.
+
 ## Task 046a - Thin Product-Create Route
 
 **Status:** Complete

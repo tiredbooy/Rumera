@@ -21,20 +21,20 @@ Routes live under [`app/`](../app). The top level is organised into **route
 groups** — parenthesised folders that group routes under a shared layout
 **without adding anything to the URL**:
 
-| Folder | URL prefix | Layout / chrome | Access |
-|--------|-----------|-----------------|--------|
-| `app/(storefront)/` | *(none)* — `/`, `/products`, `/cart`, … | [`(storefront)/layout.tsx`](../app/(storefront)/layout.tsx): header + footer + age gate | Public |
-| `app/(auth)/` | *(none)* — `/login`, `/register`, `/forgot-password`, … | [`(auth)/layout.tsx`](../app/(auth)/layout.tsx): centred minimal shell, `noindex` | Public |
-| `app/(account)/` | `/account/...` | [`(account)/account/layout.tsx`](../app/(account)/account/layout.tsx): `AccountShell`, `force-dynamic`, `noindex` | Signed-in customers |
-| `app/admin/` | `/admin/...` | [`admin/layout.tsx`](../app/admin/layout.tsx): `DashboardShell`, `force-dynamic`, `noindex` | Staff only |
-| `app/api/` | `/api/...` | *(route handlers, no layout)* | Mixed (see §4) |
+| Folder              | URL prefix                                              | Layout / chrome                                                                                                     | Access              |
+| ------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `app/(storefront)/` | _(none)_ — `/`, `/products`, `/cart`, …                 | [`(storefront)/layout.tsx`](<../app/(storefront)/layout.tsx>): header + footer + age gate                           | Public              |
+| `app/(auth)/`       | _(none)_ — `/login`, `/register`, `/forgot-password`, … | [`(auth)/layout.tsx`](<../app/(auth)/layout.tsx>): centred minimal shell, `noindex`                                 | Public              |
+| `app/(account)/`    | `/account/...`                                          | [`(account)/account/layout.tsx`](<../app/(account)/account/layout.tsx>): `AccountShell`, `force-dynamic`, `noindex` | Signed-in customers |
+| `app/admin/`        | `/admin/...`                                            | [`admin/layout.tsx`](../app/admin/layout.tsx): `DashboardShell`, `force-dynamic`, `noindex`                         | Staff only          |
+| `app/api/`          | `/api/...`                                              | _(route handlers, no layout)_                                                                                       | Mixed (see §4)      |
 
 **Key consequence of "no URL segment":** the login page file is
 `app/(auth)/login/page.tsx`, but its canonical path is **`/login`**. This is
 called out explicitly in [`lib/auth/auth.config.ts`](../lib/auth/auth.config.ts)
 (the `pages.signIn` route) and must be kept in lock-step with `middleware.ts`,
 `robots.ts`, and in-app links. `admin` is a **plain folder** (not a group), so it
-*does* contribute the `/admin` segment.
+_does_ contribute the `/admin` segment.
 
 ```
 app/
@@ -62,6 +62,11 @@ The root [`app/layout.tsx`](../app/layout.tsx) is the only place that sets
 Markazi Text → `--font-serif`, Geist Mono → `--font-mono`), defines global
 `metadata`/`viewport`, and wraps everything in `<Providers>` plus the `<Toaster>`.
 
+**Next 16.2.6 boundary hierarchy:** a segment's `error.tsx` and `loading.tsx`
+sit inside, and therefore do not wrap, that segment's own `layout.tsx`. Layout
+errors bubble to the nearest parent `error.tsx`; root-layout errors are handled
+by `app/global-error.tsx`, and same-segment loading UI cannot cover layout work.
+
 ---
 
 ## 2. Server vs. client component split
@@ -69,10 +74,11 @@ Markazi Text → `--font-serif`, Geist Mono → `--font-mono`), defines global
 Everything is a **Server Component by default**. The `"use client"` boundary is
 drawn deliberately and as low in the tree as possible:
 
-- **Server Components (default):** page/layout files, server guards, and all
-  data-fetching helpers in `lib/` that import `"server-only"`. They run on the
-  Next server, can `await` the backend directly, and never ship to the browser.
-  Example: [`app/(storefront)/products/[slug]/page.tsx`](../app/(storefront)/products/[slug]/page.tsx)
+- **Server Components (default):** page/layout files, server guards, and the
+  feature-owned server APIs backed by `lib/api/public.ts` or `lib/api/client.ts`.
+  They run on the Next server, can `await` the backend directly, and never ship
+  to the browser.
+  Example: [`app/(storefront)/products/[slug]/page.tsx`](<../app/(storefront)/products/[slug]/page.tsx>)
   is an `async` server component that fetches the product, reviews and
   recommendations server-side and emits JSON-LD.
 
@@ -92,21 +98,22 @@ so those surfaces stay live and personalised without server caching.
 ```
             SERVER (Next.js runtime)            │   CLIENT (browser)
   ──────────────────────────────────────────────┼────────────────────────────
-  page.tsx (async)  ──fetch──►  lib/catalog/* ──┼─► hydrated HTML
-   │                            (server-only,    │      │
-   │                             ISR-cached)      │      ▼
+  page.tsx (async) ─► feature server API ───────┼─► hydrated HTML
+   │                    │ publicRequest          │      │
+   │                    ▼                        │      ▼
    └─ renders <ClientIsland/> ───────────────────┼─► "use client" island
                                                   │      │ React Query
                                                   │      ▼
                                                   │   fetch /api/store/* (BFF) ─► §4
 ```
 
-There are two distinct fetch helpers, and they must not be confused:
+The transport depends on the caller and authentication tier:
 
-| Helper | Runs | Target | Auth |
-|--------|------|--------|------|
-| `serverApi` / `apiFetch` ([`lib/api/client.ts`](../lib/api/client.ts)) | Server only (`import "server-only"`) | `${API_URL}/api/v1` directly | bearer token pulled from session |
-| `storeRequest` ([`lib/api/store-client.ts`](../lib/api/store-client.ts)), domain-owned browser clients (for example [`features/admin/uploads/client.ts`](../features/admin/uploads/client.ts)) | Browser | same-origin `/api/store/*`, `/api/admin/*` | handled by the BFF proxy |
+| Helper                                                                                                                                                                                         | Runs                                 | Target                                     | Auth                                               |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------ | -------------------------------------------------- |
+| `publicRequest` ([`lib/api/public.ts`](../lib/api/public.ts)), called by feature-owned public APIs                                                                                             | Server only                          | `${API_URL}/api/v1` directly               | none                                               |
+| `apiFetch` ([`lib/api/client.ts`](../lib/api/client.ts))                                                                                                                                       | Server only (`import "server-only"`) | `${API_URL}/api/v1` directly               | explicit token or bearer token pulled from session |
+| `storeRequest` ([`lib/api/store-client.ts`](../lib/api/store-client.ts)), domain-owned browser clients (for example [`features/admin/uploads/client.ts`](../features/admin/uploads/client.ts)) | Browser                              | same-origin `/api/store/*`, `/api/admin/*` | handled by the BFF proxy                           |
 
 The relevant client unwraps the backend's `{ data }` success envelope and throws
 a typed server, store, or domain error built from the
@@ -121,10 +128,11 @@ Two distinct paths reach the Go backend, depending on whether the data is fetche
 during the server render or in the browser:
 
 ```
-A) Server render (public, cacheable catalogue data)
+A) Server render (public storefront data)
    Browser ─► Next server: page.tsx (async)
-                 └─► lib/catalog/* → fetch ${API_URL}/api/v1/...  (ISR, no token)
-                       └─► Go backend
+                 └─► features/<domain>/api/* → publicRequest()
+                       └─► fetch ${API_URL}/api/v1/...  (no token)
+                              └─► Go backend
    Result: HTML streamed to the browser.
 
 B) Browser interaction (per-user / authenticated data)
@@ -138,7 +146,7 @@ B) Browser interaction (per-user / authenticated data)
 ```
 
 **Why the BFF exists** (documented in each proxy's header comment): in production
-the Go API is bound to **loopback behind a reverse proxy** and is *not* reachable
+the Go API is bound to **loopback behind a reverse proxy** and is _not_ reachable
 from the browser, and `NEXT_PUBLIC_API_URL` is not inlined into the client
 bundle. Routing browser traffic through the same-origin `/api/*` handlers means:
 
@@ -162,23 +170,23 @@ There are **four** route-handler families under `app/api/`. All non-auth ones us
 the Next.js 16 catch-all signature with **async `params`**:
 
 ```ts
-type Ctx = { params: Promise<{ path: string[] }> }
+type Ctx = { params: Promise<{ path: string[] }> };
 export async function GET(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path)   // params is awaited
+  return handle(req, (await ctx.params).path); // params is awaited
 }
 ```
 
-| Route | File | Auth | Allowlist (first segment unless noted) |
-|-------|------|------|----------------------------------------|
-| `/api/store/*` | [`store/[...path]/route.ts`](../app/api/store/[...path]/route.ts) | next-auth session, token forwarded | `cart`, `orders`, `addresses`, `coupons`, `shipping`, `wallet`, `wishlist`, `reviews`, `alerts`, `auth`, `loyalty`, `referrals`, `gift-cards`, `subscriptions`, `recommendations` |
-| `/api/admin/*` | [`admin/[...path]/route.ts`](../app/api/admin/[...path]/route.ts) | requires **staff** (`isStaff`) + token | `admin`, `products`, `categories`, `brands`, `tags`, `hero-slides` |
-| `/api/public/*` | [`public/[...path]/route.ts`](../app/api/public/[...path]/route.ts) | **none** (unauth forms) | exact paths: `auth/register`, `auth/password/forgot`, `auth/password/reset`, `auth/password/validate`, `auth/otp/request` |
-| `/api/auth/*` | [`auth/[...nextauth]/route.ts`](../app/api/auth/[...nextauth]/route.ts) | next-auth internals | sign-in / callback / session / CSRF (handled by next-auth) |
+| Route           | File                                                                    | Auth                                   | Allowlist (first segment unless noted)                                                                                                                                            |
+| --------------- | ----------------------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/store/*`  | [`store/[...path]/route.ts`](../app/api/store/[...path]/route.ts)       | next-auth session, token forwarded     | `cart`, `orders`, `addresses`, `coupons`, `shipping`, `wallet`, `wishlist`, `reviews`, `alerts`, `auth`, `loyalty`, `referrals`, `gift-cards`, `subscriptions`, `recommendations` |
+| `/api/admin/*`  | [`admin/[...path]/route.ts`](../app/api/admin/[...path]/route.ts)       | requires **staff** (`isStaff`) + token | `admin`, `products`, `categories`, `brands`, `tags`, `hero-slides`                                                                                                                |
+| `/api/public/*` | [`public/[...path]/route.ts`](../app/api/public/[...path]/route.ts)     | **none** (unauth forms)                | exact paths: `auth/register`, `auth/password/forgot`, `auth/password/reset`, `auth/password/validate`, `auth/otp/request`                                                         |
+| `/api/auth/*`   | [`auth/[...nextauth]/route.ts`](../app/api/auth/[...nextauth]/route.ts) | next-auth internals                    | sign-in / callback / session / CSRF (handled by next-auth)                                                                                                                        |
 
 Notes that are easy to get wrong:
 
 - The proxied path is **relative to `/api/v1`**, so admin-namespaced endpoints
-  carry a *doubled* `admin/` segment — e.g. creating a product is
+  carry a _doubled_ `admin/` segment — e.g. creating a product is
   a domain API call to `/api/admin/admin/products` →
   `${API}/api/v1/admin/products`.
 - `/api/admin` preserves **`multipart/form-data` bodies verbatim** (boundary
@@ -208,15 +216,15 @@ Responsibilities:
 
 The `config.matcher` excludes Next internals, `/api/auth`, and static assets.
 
-**Defense in depth:** middleware is intentionally *not* the authority. The
+**Defense in depth:** middleware is intentionally _not_ the authority. The
 authoritative checks happen server-side in the layouts via the guards in
 [`lib/auth/session.ts`](../lib/auth/session.ts):
 
-| Guard | Used by | On failure |
-|-------|---------|-----------|
-| `requireUser()` | `(account)` layout | redirect `/login?callbackUrl=…` |
-| `requireStaff()` | `admin` layout | redirect `/login` or `/forbidden` |
-| `requirePermission(p)` | per-feature admin pages | redirect `/forbidden` |
+| Guard                  | Used by                 | On failure                        |
+| ---------------------- | ----------------------- | --------------------------------- |
+| `requireUser()`        | `(account)` layout      | redirect `/login?callbackUrl=…`   |
+| `requireStaff()`       | `admin` layout          | redirect `/login` or `/forbidden` |
+| `requirePermission(p)` | per-feature admin pages | redirect `/forbidden`             |
 
 Each guard `redirect()`s on failure (which throws, so control never returns) and
 returns a **narrowed, non-null** session on success.
@@ -245,11 +253,11 @@ mounted once by the root layout. The nesting order matters:
   carries `suppressHydrationWarning` because the class is set client-side.
 - **Query client** — created once via `useState(() => new QueryClient(...))` so it
   survives re-renders. Defaults: `staleTime: 60_000`, `refetchOnWindowFocus:
-  false`.
+false`.
 - **Session** — `SessionProvider` exposes `useSession()` to client code;
   `SessionGuard` ([`features/auth/components/session-guard.tsx`](../features/auth/components/session-guard.tsx))
   watches for `session.error === "RefreshAccessTokenError"` and, only on that
-  *terminal* refresh failure, calls `signOut({ callbackUrl: "/login" })`.
+  _terminal_ refresh failure, calls `signOut({ callbackUrl: "/login" })`.
 
 ### Token lifecycle
 
@@ -263,7 +271,7 @@ Auth is next-auth v5 with the standard **split-config** pattern:
   access/refresh pair and **silently rotates** via `POST /auth/refresh` ~60s before
   the access token expires.
 
-If the access token expires *mid-request*, the BFF proxies (`/api/store`,
+If the access token expires _mid-request_, the BFF proxies (`/api/store`,
 `/api/admin`) perform **one** silent refresh + retry using the server-only
 refresh token (read straight from the encrypted JWT cookie via `getToken`, so it
 never reaches the browser). If that refresh fails, the original 401 is returned
@@ -275,26 +283,37 @@ and the client-side `SessionGuard` signs the user out.
 
 ### `lib/` — non-UI logic, organised by concern
 
-| Path | What lives here |
-|------|-----------------|
-| `lib/api/` | Shared API plumbing: `client.ts` (server `apiFetch`), `store-client.ts` (customer browser BFF), shared envelope types, query helpers, and remaining shared hooks |
-| `lib/auth/` | `auth.ts`, `auth.config.ts`, `session.ts` (server guards), `types.ts` (next-auth module augmentation) |
-| `lib/rbac/` | `roles.ts` (Role→Permission map, `isStaff`, `permissionsForRole`), `permissions.ts` (`PERMISSIONS` catalogue), `can.ts` (`can`/`hasAny`/`hasAll`), `nav.ts` (permission-filtered sidebar) |
-| `lib/catalog/` | Public, ISR-cached, **error-safe** server fetchers + types: `products.ts`, `categories.ts`, `reviews.ts`, `recommendations.ts`, `labels.ts`, `types.ts` |
-| `lib/seo/` | `metadata.ts` (`buildMetadata` / `noindexMetadata`), `jsonld.ts` (structured-data builders) |
-| `lib/home/`, `lib/journal/`, `lib/admin/` | Section-specific server data helpers |
-| `lib/` (root) | `site.ts` (`siteConfig`, `absoluteUrl`), `utils.ts` (`cn`), `products.ts` (`faNum`, `categoryFa`, sample data), `recipes.ts`, `journal.ts`, `recently-viewed.ts` |
+| Path                                      | What lives here                                                                                                                                                                                 |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/api/`                                | Shared API plumbing: `public.ts` (`publicRequest`), `client.ts` (server `apiFetch`), `store-client.ts` (customer browser BFF), shared envelope types, query helpers, and remaining shared hooks |
+| `lib/auth/`                               | `auth.ts`, `auth.config.ts`, `session.ts` (server guards), `types.ts` (next-auth module augmentation)                                                                                           |
+| `lib/rbac/`                               | `roles.ts` (Role→Permission map, `isStaff`, `permissionsForRole`), `permissions.ts` (`PERMISSIONS` catalogue), `can.ts` (`can`/`hasAny`/`hasAll`), `nav.ts` (permission-filtered sidebar)       |
+| `lib/seo/`                                | `metadata.ts` (`buildMetadata` / `noindexMetadata`), `jsonld.ts` (structured-data builders)                                                                                                     |
+| `lib/home/`, `lib/journal/`, `lib/admin/` | Section-specific server data helpers                                                                                                                                                            |
+| `lib/` (root)                             | `site.ts` (`siteConfig`, `absoluteUrl`), `utils.ts` (`cn`), `products.ts` (`faNum`, `categoryFa`, sample data), `recipes.ts`, `journal.ts`, `recently-viewed.ts`                                |
 
 Admin browser clients live with their resource under `features/` rather than in
 `lib/api/`; standalone image uploads, for example, are owned by
 `features/admin/uploads/`.
 
-**Cache vs. no-cache contract:** public catalogue fetchers
-(`lib/catalog/*.ts`) use `next: { revalidate: 3600 }` (ISR) and swallow errors
-(returning `null`/`[]`) so the storefront never hard-fails when the API blips —
-e.g. `(storefront)/layout.tsx` falls back to a curated sample category set when
-`listCategories()` comes back empty. Authenticated/per-user fetches default to
+Public server APIs are also feature-owned: products/categories under
+`features/catalog/`, plus recipes, journal, reviews, and recommendations under
+their matching domains. They call `publicRequest()` and choose caching per read:
+the live product list is `no-store`; cached product detail, categories, recipes,
+and journal reads generally revalidate at `3600s`.
+
+**Success vs. failure contract:** successful primary lists may be genuinely
+empty, but network/5xx/non-404 failures throw into the nearest route boundary.
+Direct product, recipe, and journal details return `null` only for a typed
+`ApiError` 404. Optional PDP recommendation and review enrichments remain
+intentionally error-safe and may fall back to empty/null without changing the
+primary product-detail semantics. Authenticated/per-user fetches default to
 `cache: "no-store"`.
+
+Only slug discovery in each dynamic product/category/recipe/journal route's
+`generateStaticParams()` is fail-soft and returns `[]`. That does not make a
+complete API-offline `next build` safe: static storefront pages/layouts and the
+sitemap still need live API data or a populated cache.
 
 ### `components/` — UI, grouped by surface
 
@@ -319,10 +338,10 @@ as React Query hooks under `lib/api/`, not in `hooks/`.
 - **Async dynamic APIs.** `params` and `searchParams` are `Promise`s — always
   `await` them. Pattern seen throughout, e.g.
   `const { slug } = await params` in
-  [`products/[slug]/page.tsx`](../app/(storefront)/products/[slug]/page.tsx) and
+  [`products/[slug]/page.tsx`](<../app/(storefront)/products/[slug]/page.tsx>) and
   `(await ctx.params).path` in every BFF route handler.
 - **Route groups add no URL segment** — `(storefront)`, `(auth)`, `(account)`
-  shape layout/grouping only; the URL comes from the *non-parenthesised* folders
+  shape layout/grouping only; the URL comes from the _non-parenthesised_ folders
   (so login is `/login`, account pages are `/account/...`).
 - **Turbopack** powers dev and build (`next dev` / `next build`; see
   [`README.md`](../README.md)).

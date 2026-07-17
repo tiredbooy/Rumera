@@ -5,14 +5,23 @@ import {
   listCategories,
 } from "@/features/catalog/categories/api";
 import { CategoryDetailView } from "@/features/catalog/categories/components/category-detail-view";
+import { getSafeApiErrorContext } from "@/lib/api/error-semantics";
 import { buildMetadata } from "@/lib/seo/metadata";
 
 export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  return (await listCategories()).flatMap((c) =>
-    c.slug ? [{ category: c.slug }] : [],
-  );
+  try {
+    return (await listCategories()).flatMap((c) =>
+      c.slug ? [{ category: c.slug }] : [],
+    );
+  } catch (error) {
+    console.error(
+      "generateStaticParams: failed to load category slugs",
+      getSafeApiErrorContext(error),
+    );
+    return [];
+  }
 }
 
 export async function generateMetadata({

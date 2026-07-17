@@ -1,24 +1,12 @@
 // lib/api/client.ts
 import "server-only";
 import { auth } from "@/lib/auth/auth";
+import { API_BASE } from "./base";
+import { ApiError } from "./errors";
 import type { ApiErrorEnvelope, ApiSuccess } from "./types";
 
-const API =
-  process.env.API_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:8080";
-export const API_BASE = `${API.replace(/\/$/, "")}/api/v1`;
-
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ApiError";
-  }
-}
+export { API_BASE } from "./base";
+export { ApiError } from "./errors";
 
 export type ApiFetchOptions = RequestInit & { token?: string };
 

@@ -29,17 +29,17 @@ All three live under `app/api/<tier>/[...path]/route.ts` and forward to
 tier prefix; in Next.js 16 `ctx.params` is **async** and must be awaited:
 
 ```ts
-type Ctx = { params: Promise<{ path: string[] }> }
+type Ctx = { params: Promise<{ path: string[] }> };
 export async function GET(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path)
+  return handle(req, (await ctx.params).path);
 }
 ```
 
-| Proxy | File | Auth | Allowlist style | Forwards to |
-|---|---|---|---|---|
-| **public** | `app/api/public/[...path]/route.ts` | none | exact full paths | unauthenticated auth forms |
-| **store** | `app/api/store/[...path]/route.ts` | session bearer + refresh | first segment | per-user / checkout resources |
-| **admin** | `app/api/admin/[...path]/route.ts` | session bearer + refresh + **staff check** | first segment | admin console + catalogue reads |
+| Proxy      | File                                | Auth                                       | Allowlist style  | Forwards to                     |
+| ---------- | ----------------------------------- | ------------------------------------------ | ---------------- | ------------------------------- |
+| **public** | `app/api/public/[...path]/route.ts` | none                                       | exact full paths | unauthenticated auth forms      |
+| **store**  | `app/api/store/[...path]/route.ts`  | session bearer + refresh                   | first segment    | per-user / checkout resources   |
+| **admin**  | `app/api/admin/[...path]/route.ts`  | session bearer + refresh + **staff check** | first segment    | admin console + catalogue reads |
 
 Every proxy:
 
@@ -63,7 +63,7 @@ const ALLOW = new Set([
   "auth/password/reset",
   "auth/password/validate",
   "auth/otp/request",
-])
+]);
 ```
 
 It attaches **no token** and only forwards a body for non-`GET`/`HEAD` methods.
@@ -84,10 +84,22 @@ Authenticated, for per-user resources. Allowlist is by **first segment**:
 
 ```ts
 const ALLOW = new Set([
-  "cart", "orders", "addresses", "coupons", "shipping", "wallet",
-  "wishlist", "reviews", "alerts", "auth", "loyalty", "referrals",
-  "gift-cards", "subscriptions", "recommendations",
-])
+  "cart",
+  "orders",
+  "addresses",
+  "coupons",
+  "shipping",
+  "wallet",
+  "wishlist",
+  "reviews",
+  "alerts",
+  "auth",
+  "loyalty",
+  "referrals",
+  "gift-cards",
+  "subscriptions",
+  "recommendations",
+]);
 ```
 
 `auth` is allowlisted only so the **self-service profile** routes
@@ -103,7 +115,14 @@ Authenticated **and staff-gated**. Two guards keep it from being an open proxy:
 
 1. **Path** — first segment must be on the allowlist:
    ```ts
-   const ALLOW = new Set(["admin", "products", "categories", "brands", "tags", "hero-slides"])
+   const ALLOW = new Set([
+     "admin",
+     "products",
+     "categories",
+     "brands",
+     "tags",
+     "hero-slides",
+   ]);
    ```
    The `admin` entry covers staff-namespaced endpoints; the others are read-only
    catalogue lookups the admin forms need.
@@ -127,10 +146,10 @@ bodies byte-for-byte (boundary intact) so product image uploads pass through:
 
 ```ts
 if (isMultipart) {
-  body = Buffer.from(await req.arrayBuffer())
-  forwardHeaders["Content-Type"] = contentType   // keep the original boundary
+  body = Buffer.from(await req.arrayBuffer());
+  forwardHeaders["Content-Type"] = contentType; // keep the original boundary
 } else {
-  body = await req.text()                         // JSON path
+  body = await req.text(); // JSON path
 }
 ```
 
@@ -173,9 +192,13 @@ Key points:
   encrypted JWT directly with `getToken()` from `next-auth/jwt`:
 
   ```ts
-  const secureCookie = req.nextUrl.protocol === "https:"
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET, secureCookie })
-  return token?.refreshToken as string | undefined
+  const secureCookie = req.nextUrl.protocol === "https:";
+  const token = await getToken({
+    req,
+    secret: process.env.AUTH_SECRET,
+    secureCookie,
+  });
+  return token?.refreshToken as string | undefined;
   ```
 
   `secureCookie` is derived from the request protocol so the right cookie name is
@@ -185,9 +208,9 @@ Key points:
   backend down) the proxy returns the **original 401** untouched. It does **not**
   write a new session cookie — that 401 is the signal that flows to the client.
 
-- This proxy-level refresh is a **safety net** for tokens that expire *during* a
+- This proxy-level refresh is a **safety net** for tokens that expire _during_ a
   request. The primary refresh path is in the JWT callback (`rotate()`), which
-  refreshes proactively *before* expiry (see next section).
+  refreshes proactively _before_ expiry (see next section).
 
 ---
 
@@ -196,13 +219,13 @@ Key points:
 Auth uses the standard next-auth v5 **split-config** pattern so the middleware
 can run on the **Edge runtime** (no Node-only code):
 
-| File | Runtime | Contents |
-|---|---|---|
-| `lib/auth/auth.config.ts` | Edge + Node | `pages`, `session` strategy, the `session()` callback, no providers |
-| `lib/auth/auth.ts` | Node only | Credentials providers (fetch the backend), the `jwt()` callback + `rotate()`, exports `handlers`/`auth`/`signIn`/`signOut` |
-| `lib/auth/session.ts` | Node (server-only) | server guards: `requireUser`, `requireStaff`, `requirePermission` |
-| `lib/auth/types.ts` | — | module augmentation for the extra JWT/Session fields |
-| `app/api/auth/[...nextauth]/route.ts` | Node | re-exports `handlers` as `GET`/`POST` for `/api/auth/*` |
+| File                                  | Runtime            | Contents                                                                                                                   |
+| ------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `lib/auth/auth.config.ts`             | Edge + Node        | `pages`, `session` strategy, the `session()` callback, no providers                                                        |
+| `lib/auth/auth.ts`                    | Node only          | Credentials providers (fetch the backend), the `jwt()` callback + `rotate()`, exports `handlers`/`auth`/`signIn`/`signOut` |
+| `lib/auth/session.ts`                 | Node (server-only) | server guards: `requireUser`, `requireStaff`, `requirePermission`                                                          |
+| `lib/auth/types.ts`                   | —                  | module augmentation for the extra JWT/Session fields                                                                       |
+| `app/api/auth/[...nextauth]/route.ts` | Node               | re-exports `handlers` as `GET`/`POST` for `/api/auth/*`                                                                    |
 
 ### Providers
 
@@ -236,7 +259,7 @@ and `exp`, and clears any prior error. **If the refresh itself fails**, it does
 not throw — it stamps the token with an error marker and returns it:
 
 ```ts
-return { ...token, error: "RefreshAccessTokenError" }
+return { ...token, error: "RefreshAccessTokenError" };
 ```
 
 ### Session shape
@@ -246,11 +269,11 @@ Augmented by `lib/auth/types.ts`:
 
 ```ts
 interface Session {
-  role: Role                 // from the token (backend access JWT), defaults "customer"
-  permissions: Permission[]  // DERIVED from role via permissionsForRole()
-  accessToken?: string       // for the BFF proxies / serverApi — NOT the refresh token
-  error?: "RefreshAccessTokenError"
-  user: { id?: string } & DefaultSession["user"]
+  role: Role; // from the token (backend access JWT), defaults "customer"
+  permissions: Permission[]; // DERIVED from role via permissionsForRole()
+  accessToken?: string; // for the BFF proxies / apiFetch — NOT the refresh token
+  error?: "RefreshAccessTokenError";
+  user: { id?: string } & DefaultSession["user"];
 }
 ```
 
@@ -269,10 +292,10 @@ the refresh token** — only `accessToken`.
 
 There are **two layers** of refresh and they fail differently:
 
-| Layer | When | On failure |
-|---|---|---|
-| JWT callback `rotate()` | proactively, before/at expiry | stamps `token.error = "RefreshAccessTokenError"` |
-| BFF proxy (store/admin) | reactively, on a `401` mid-request | returns the original `401` |
+| Layer                   | When                               | On failure                                       |
+| ----------------------- | ---------------------------------- | ------------------------------------------------ |
+| JWT callback `rotate()` | proactively, before/at expiry      | stamps `token.error = "RefreshAccessTokenError"` |
+| BFF proxy (store/admin) | reactively, on a `401` mid-request | returns the original `401`                       |
 
 When `rotate()` fails, the error is projected onto `session.error`. The
 client-side **`SessionGuard`** (`features/auth/components/session-guard.tsx`) watches the
@@ -281,10 +304,10 @@ session via `useSession()` and reacts **only** to that terminal state:
 ```tsx
 React.useEffect(() => {
   if (session?.error === "RefreshAccessTokenError" && !signingOut.current) {
-    signingOut.current = true
-    void signOut({ callbackUrl: "/login" })
+    signingOut.current = true;
+    void signOut({ callbackUrl: "/login" });
   }
-}, [session?.error])
+}, [session?.error]);
 ```
 
 It is mounted once under `SessionProvider` in `app/providers.tsx` and renders
