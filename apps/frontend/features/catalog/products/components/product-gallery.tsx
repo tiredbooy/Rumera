@@ -69,7 +69,7 @@ export function ProductGallery({
   return (
     <div className="flex flex-col gap-4">
       <div
-        className="cellar-glow border-hairline shadow-e2 group/frame relative flex aspect-square items-center justify-center overflow-hidden rounded-[2rem] ring-1 ring-foreground/10"
+        className="cellar-glow border-hairline shadow-e2 group/frame relative flex aspect-square items-center justify-center overflow-hidden rounded-[2rem] outline-none ring-1 ring-foreground/10 focus-visible:ring-3 focus-visible:ring-primary/60 focus-visible:ring-offset-2"
         role={count > 1 ? "group" : undefined}
         aria-roledescription={count > 1 ? "گالری تصاویر" : undefined}
         aria-label={count > 1 ? title : undefined}
@@ -122,7 +122,7 @@ export function ProductGallery({
               type="button"
               onClick={() => go(active + 1)}
               aria-label="تصویر قبلی"
-              className="absolute end-4 top-1/2 flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/70 text-foreground opacity-0 ring-1 ring-foreground/10 backdrop-blur-sm transition-opacity duration-200 hover:bg-background focus-visible:opacity-100 group-hover/frame:opacity-100 motion-reduce:transition-none"
+              className="absolute end-4 top-1/2 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/70 text-foreground opacity-0 outline-none ring-1 ring-foreground/10 backdrop-blur-sm transition-opacity duration-200 hover:bg-background focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-primary/60 group-hover/frame:opacity-100 motion-reduce:transition-none"
             >
               <ChevronRight className="size-5" />
             </button>
@@ -130,7 +130,7 @@ export function ProductGallery({
               type="button"
               onClick={() => go(active - 1)}
               aria-label="تصویر بعدی"
-              className="absolute start-4 top-1/2 flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/70 text-foreground opacity-0 ring-1 ring-foreground/10 backdrop-blur-sm transition-opacity duration-200 hover:bg-background focus-visible:opacity-100 group-hover/frame:opacity-100 motion-reduce:transition-none"
+              className="absolute start-4 top-1/2 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/70 text-foreground opacity-0 outline-none ring-1 ring-foreground/10 backdrop-blur-sm transition-opacity duration-200 hover:bg-background focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-primary/60 group-hover/frame:opacity-100 motion-reduce:transition-none"
             >
               <ChevronLeft className="size-5" />
             </button>

@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/models"
@@ -36,12 +38,12 @@ func (h *Handler) GetShippingZone(c *gin.Context) {
 	if !ok {
 		return
 	}
-	zone, err := h.Shipping.GetZoneByID(c.Request.Context(), id)
+	detail, err := h.Shipping.GetZoneDetail(c.Request.Context(), id)
 	if err != nil {
 		response.HandleError(c, err)
 		return
 	}
-	response.OK(c, toShippingZoneResponse(zone))
+	response.OK(c, toShippingZoneDetailResponse(detail))
 }
 
 // CreateShippingZone — POST /admin/shipping/zones
@@ -125,24 +127,29 @@ func (h *Handler) GetShippingMethod(c *gin.Context) {
 	response.OK(c, toShippingMethodResponse(method))
 }
 
-// AvailableShippingMethods — GET /shipping/available?region=US&weight=2.5
+// AvailableShippingMethods — GET /shipping/available?region=US&weight=2.5&subtotal=100
 func (h *Handler) AvailableShippingMethods(c *gin.Context) {
-	region := c.Query("region")
+	region := strings.TrimSpace(c.Query("region"))
 	if region == "" {
 		response.Error(c, response.ErrInvalidQuery)
 		return
 	}
 	weight, err := strconv.ParseFloat(c.DefaultQuery("weight", "0"), 64)
-	if err != nil || weight < 0 {
+	if err != nil || weight < 0 || math.IsNaN(weight) || math.IsInf(weight, 0) {
 		response.Error(c, response.ErrInvalidQuery)
 		return
 	}
-	methods, err := h.Shipping.GetAvailableForCheckout(c.Request.Context(), region, weight)
+	subtotal, err := strconv.ParseFloat(c.DefaultQuery("subtotal", "0"), 64)
+	if err != nil || subtotal < 0 || math.IsNaN(subtotal) || math.IsInf(subtotal, 0) {
+		response.Error(c, response.ErrInvalidQuery)
+		return
+	}
+	quotes, err := h.Shipping.GetAvailableForCheckout(c.Request.Context(), region, weight, subtotal)
 	if err != nil {
 		response.HandleError(c, err)
 		return
 	}
-	response.OK(c, toShippingMethodResponses(methods))
+	response.OK(c, toShippingMethodQuoteResponses(quotes))
 }
 
 // CreateShippingMethod — POST /admin/shipping/zones/:id/methods
@@ -206,9 +213,16 @@ func toShippingZoneResponse(z *models.ShippingZone) models.ShippingZoneResponse 
 	}
 }
 
+func toShippingZoneDetailResponse(detail *models.ShippingZoneDetail) models.ShippingZoneResponse {
+	zone := toShippingZoneResponse(detail.Zone)
+	zone.Methods = toShippingMethodResponses(detail.Methods)
+	return zone
+}
+
 func toShippingMethodResponse(m *models.ShippingMethod) models.ShippingMethodResponse {
 	return models.ShippingMethodResponse{
 		ID:              m.ID,
+		ShippingZoneID:  m.ShippingZoneID,
 		Name:            m.Name,
 		Carrier:         m.Carrier,
 		Description:     m.Description,
@@ -226,6 +240,15 @@ func toShippingMethodResponses(ms []*models.ShippingMethod) []models.ShippingMet
 	out := make([]models.ShippingMethodResponse, len(ms))
 	for i, m := range ms {
 		out[i] = toShippingMethodResponse(m)
+	}
+	return out
+}
+
+func toShippingMethodQuoteResponses(quotes []*models.ShippingMethodQuote) []models.ShippingMethodResponse {
+	out := make([]models.ShippingMethodResponse, len(quotes))
+	for i, quote := range quotes {
+		out[i] = toShippingMethodResponse(quote.Method)
+		out[i].EstimatedCost = quote.EstimatedCost
 	}
 	return out
 }

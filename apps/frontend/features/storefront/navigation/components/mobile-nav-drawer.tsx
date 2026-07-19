@@ -75,7 +75,7 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
       <SheetContent
         side="right"
         aria-describedby={undefined}
-        className="flex w-[min(90vw,360px)] flex-col overflow-y-auto p-0"
+        className="flex max-h-dvh flex-col overflow-x-hidden overflow-y-auto overscroll-contain p-0 [padding-bottom:env(safe-area-inset-bottom)] [padding-left:env(safe-area-inset-left)] [padding-right:env(safe-area-inset-right)] [padding-top:env(safe-area-inset-top)] data-[side=right]:h-dvh data-[side=right]:w-full data-[side=right]:max-w-[360px] data-[side=right]:sm:max-w-[360px]"
       >
         <SheetHeader className="border-b border-border/50 p-4 pr-16 pb-3">
           <SheetTitle className="flex items-center gap-2 font-serif text-2xl">
@@ -115,7 +115,7 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
 
         <nav
           aria-label="دسته‌بندی محصولات"
-          className="flex flex-1 flex-col px-4 pb-6"
+          className="flex min-w-0 flex-1 flex-col px-4 pb-6"
         >
           <div className="mb-1 mt-3 flex min-h-11 items-center gap-2">
             {activeCategory ? (
@@ -222,10 +222,10 @@ function CurrentCategoryLink({
       <Link
         href={href}
         onClick={onNavigate}
-        className="mb-1 flex min-h-11 items-center justify-between rounded-xl px-3 text-sm font-semibold text-primary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+        className="mb-1 flex min-h-11 min-w-0 items-center justify-between gap-2 rounded-xl px-3 text-sm font-semibold text-primary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
       >
-        مشاهدهٔ همهٔ «{category.title}»
-        <ArrowLeft className="size-4" />
+        <span className="min-w-0 truncate">مشاهدهٔ همهٔ «{category.title}»</span>
+        <ArrowLeft className="size-4 shrink-0" />
       </Link>
     </SheetClose>
   );
@@ -243,7 +243,7 @@ function CategoryDrawerRow({
   const hasChildren = Boolean(category.children?.length);
   const href = getCategoryHref(category);
   const className =
-    "group/category flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-xl px-2 text-start text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring";
+    "group/category flex min-h-12 min-w-0 w-full cursor-pointer items-center gap-3 rounded-xl px-2 text-start text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring";
   const content = (
     <>
       <CategoryThumbnail category={category} size="sm" />

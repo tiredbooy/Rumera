@@ -163,18 +163,20 @@ export function CartView() {
       </div>
 
       {hasItems ? (
-        <div className="border-hairline fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 bg-background/90 px-5 py-3 backdrop-blur-xl ring-1 ring-foreground/10 lg:hidden">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground">مبلغ تقریبی</p>
-            <p className="truncate font-serif text-lg text-foil tabular-nums">
-              {formatPrice(cart?.summary.subtotal ?? 0)}
-            </p>
+        <div className="border-hairline fixed inset-x-0 bottom-0 z-30 bg-background/90 px-4 py-3 backdrop-blur-xl ring-1 ring-foreground/10 [padding-bottom:calc(env(safe-area-inset-bottom)+0.75rem)] sm:px-5 lg:hidden">
+          <div className="mx-auto flex max-w-7xl items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground">مبلغ تقریبی</p>
+              <p className="truncate font-serif text-lg text-foil tabular-nums">
+                {formatPrice(cart?.summary.subtotal ?? 0)}
+              </p>
+            </div>
+            <Button asChild size="lg" className="h-12 flex-1">
+              <Link href="/checkout">
+                <Lock className="size-4" /> تسویه
+              </Link>
+            </Button>
           </div>
-          <Button asChild size="lg" className="h-12 flex-1">
-            <Link href="/checkout">
-              <Lock className="size-4" /> تسویه
-            </Link>
-          </Button>
         </div>
       ) : null}
     </div>

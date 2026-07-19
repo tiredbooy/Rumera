@@ -1,0 +1,11 @@
+import "server-only";
+
+import { redirect } from "next/navigation";
+
+import { requireStaff } from "@/lib/auth/session";
+
+export async function requireTagAdmin(callbackUrl = "/admin/tags") {
+  const session = await requireStaff(callbackUrl);
+  if (session.role !== "admin") redirect("/forbidden");
+  return session;
+}

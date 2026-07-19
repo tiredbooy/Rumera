@@ -43,7 +43,8 @@ export interface UpdateCartItemInput {
 export type SkippedCartItemReason =
   | "invalid"
   | "not_found"
-  | "unavailable";
+  | "unavailable"
+  | "out_of_stock";
 
 export interface SkippedCartItem {
   product_variant_id: number;

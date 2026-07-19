@@ -1,13 +1,10 @@
 import type { PaginationQuery } from "@/lib/api/types";
 
-export type ShippingRateType =
-  | "flat_rate"
-  | "per_kg"
-  | "percentage"
-  | "free";
+export type ShippingRateType = "flat_rate" | "per_kg" | "percentage" | "free";
 
 export interface ShippingMethod {
   id: number;
+  shipping_zone_id?: number;
   name: string;
   carrier?: string;
   description?: string;
@@ -38,10 +35,10 @@ export interface CreateShippingZoneInput {
 }
 
 export interface UpdateShippingZoneInput {
-  name?: string | null;
+  name?: string;
   description?: string | null;
-  region_codes?: string[] | null;
-  is_active?: boolean | null;
+  region_codes?: string[];
+  is_active?: boolean;
 }
 
 export interface CreateShippingMethodInput {
@@ -58,16 +55,16 @@ export interface CreateShippingMethodInput {
 }
 
 export interface UpdateShippingMethodInput {
-  name?: string | null;
+  name?: string;
   carrier?: string | null;
   description?: string | null;
-  rate_type?: ShippingRateType | null;
-  base_rate?: number | null;
+  rate_type?: ShippingRateType;
+  base_rate?: number;
   free_above_amount?: number | null;
   min_delivery_days?: number | null;
   max_delivery_days?: number | null;
   max_weight_kg?: number | null;
-  is_active?: boolean | null;
+  is_active?: boolean;
 }
 
 export type ShippingSortDirection = "asc" | "desc";
@@ -92,4 +89,5 @@ export interface ShippingMethodListQuery extends PaginationQuery {
 export interface AvailableShippingMethodsQuery {
   region: string;
   weight?: number;
+  subtotal?: number;
 }

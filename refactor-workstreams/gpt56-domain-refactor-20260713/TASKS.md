@@ -12,7 +12,7 @@ earlier unblocked task remains.
 
 ## Coordination Protocol
 
-- This unique workstream directory prevents tracker conflicts between agents.
+- This unique workstream directory prevents tracker conflicts with other work.
 - Application files remain shared. Run `git status --short` and re-read scoped
   files immediately before every edit.
 - Do not edit files claimed by another active workstream.
@@ -24,20 +24,16 @@ earlier unblocked task remains.
 - A dependency on a task group means every lettered task in that group must be
   complete unless the dependent task names a narrower dependency.
 
-## Parallel Agent Assignment
+## Remaining Cross-Task Gates
 
-The remaining backlog is split between Agent A and Agent B in
-`AGENT_ASSIGNMENTS.md`. During parallel work, agents use their own
-`IN_PROGRESS_A.md` / `IN_PROGRESS_B.md` and `FINISHED_A.md` / `FINISHED_B.md`
-files. Agent A is the tracker coordinator and is the only agent that edits this
-file or `AGENT_ASSIGNMENTS.md`.
-
-- **Agent A:** 049, 052, 053, 056a-c, 056f-i, 059a-c, 060c-e, 060g-i, 061c,
-  061e, 061g, 062, 063.
-- **Agent B:** 050, 051, 054, 055, 056d-e, 057a-d, 058a-e, 060a-b, 060f,
-  061a-b, 061d, 061f.
-- **Initial parallel wave:** Agent A owns Task 049; Agent B owns Task 050. No
-  later task may start until Agent A records the next disjoint wave.
+- Complete Task Groups 057 and 058 plus Tasks 061a and 061d before dependent
+  product, hero, journal, recipe, card, or media-surface work.
+- Complete Task 060f before the final journal storefront pass if it changes shared
+  journal types or APIs.
+- Complete Tasks 060j and 060k before Task 063.
+- Start Task 062 only after every earlier implementation task is complete.
+- Start Task 063 only after Task 062 and all prior completion records are verified
+  in `FINISHED.md`.
 
 ## Contract And Naming Policy
 
@@ -136,7 +132,7 @@ refactor is green. Each requires focused interaction tests.
   - Move render-time address state mutation out of render; expose persistent
     errors; prevent empty-cart flash while session/query state is unresolved.
 
-- [ ] **Task 051 - Make forms programmatically accessible**
+- [x] **Task 051 - Make forms programmatically accessible**
   - Centralize stable description/error IDs; connect controls with
     `aria-describedby`; move focus to the first invalid field.
 
@@ -144,15 +140,15 @@ refactor is green. Each requires focused interaction tests.
   - Add a consistent `main-content` target; convert clickable rows/choices to
     links, buttons, or radio groups; add text alternatives to permission icons.
 
-- [ ] **Task 053 - Enforce keyboard and touch interaction quality**
+- [x] **Task 053 - Enforce keyboard and touch interaction quality**
   - Add keyboard image reordering, inactive-carousel focus management, visible
     focus, and 44x44px effective touch targets.
 
-- [ ] **Task 054 - Correct responsive failures**
+- [x] **Task 054 - Correct responsive failures**
   - Fix narrow OTP layout, product variant rows, settings tabs, mobile drawer,
     cart safe-area padding, and any verified horizontal overflow.
 
-- [ ] **Task 055 - Make async and bulk actions truthful**
+- [x] **Task 055 - Make async and bulk actions truthful**
   - Await wishlist bulk operations, report partial failures, disable pending
     controls, and provide row-level status where applicable.
 
@@ -182,7 +178,7 @@ accessibility, responsive behavior, loading/error/empty states, and product feel
     focus behavior, metadata, and structured data.
   - Depends: Tasks 045f and 048, 052-054.
 
-- [ ] **Task 056d - Define the tag storefront URL and data contract**
+- [x] **Task 056d - Define the tag storefront URL and data contract**
   - The current repository has no tag storefront route, backend tags have no
     `slug`, and product-by-tag support must be verified before implementation.
   - Decide an ID/title URL strategy and required backend query/endpoint from
@@ -194,7 +190,7 @@ accessibility, responsive behavior, loading/error/empty states, and product feel
     Task 056d establishes a supported URL and product-query contract.
   - Include loading/error/empty states, pagination, metadata, responsive layout,
     keyboard flow, and tests without fabricating a slug.
-  - Depends: Tasks 039, 048, 052-054, and 056d.
+  - Depends: Tasks 039, 048, 052-054, 056d, and 060b.
 
 - [ ] **Task 056f - Improve the journal-list storefront**
   - Verify featured-story logic, pagination, empty/error states, card semantics,
@@ -310,13 +306,13 @@ it must not become the owner of merchandising attributes.
     backend contract, then make user creation, role/permission assignment, status
     changes, and deletion real and auditable. Do not advertise roles the backend
     cannot authorize.
-- [ ] **Task 060b - Add complete tag administration**
+- [x] **Task 060b - Add complete tag administration**
   - Fix the required database slug versus omitted Go model/write contract first,
     then add list/create/edit/delete UI and product-form integration.
-- [ ] **Task 060c - Add coupon administration**
+- [x] **Task 060c - Add coupon administration**
   - Wire the existing backend CRUD into searchable, paginated create/edit/archive
     experiences with discount/value/date/applicability validation.
-- [ ] **Task 060d - Add shipping zone and method administration**
+- [x] **Task 060d - Add shipping zone and method administration**
   - Manage zones, methods, rates, weight/region rules, ordering, and activation
     through the existing shipping backend without duplicating checkout contracts.
 - [ ] **Task 060e - Add payment operations and gift-card issuance**
@@ -336,6 +332,24 @@ it must not become the owner of merchandising attributes.
   - Add permission-aware navigation, summary cards, actionable counts, and direct
     routes for the completed modules without turning the dashboard into a second
     owner of their domain logic.
+- [ ] **Task 060j - Harden coupon redemption and operational contracts**
+  - Enforce product/category applicability during authoritative order creation,
+    reload and validate the coupon definition after taking its redemption lock,
+    and normalize submitted codes consistently with preview validation.
+  - Preserve order and redemption history by replacing destructive admin deletion
+    with deactivation, return truthful usage/exhaustion data in admin lists, verify
+    referenced applicability IDs, and restore field-level PATCH validation errors.
+- [ ] **Task 060k - Make shipping selection and pricing authoritative end to end**
+  - Resolve the delivery region from the selected address and the package weight
+    from authoritative cart/product data instead of checkout constants.
+  - Reject inactive, out-of-region, and overweight methods during order creation,
+    and calculate flat, per-kilogram, percentage, threshold-free, and free rates
+    through one shared shipping policy so the preview and persisted order agree.
+  - Pass the required quote inputs through the existing shipping hook without
+    duplicating checkout-owned state, make the guaranteed method-zone ownership
+    field required after migrating checkout fixtures, and cover quote/order drift
+    and tampering.
+  - Depends: Tasks 050 and 060d.
 
 ### Task Group 061 - Storefront Media, Catalogue, And Cache Consistency
 
@@ -402,7 +416,8 @@ it must not become the owner of merchandising attributes.
     user-requested media, product-card, and recipe-commerce follow-ups.
   - Add focused API/component/integration coverage for the new admin modules,
     variant option combinations, transactional product writes, media ownership and
-    cleanup, card quick actions, mega-menu focus behavior, and hero publication.
+    cleanup, authoritative shipping quotes, card quick actions, mega-menu focus
+    behavior, and hero publication.
 
 - [ ] **Task 063 - Final architecture, production-readiness, and UX acceptance audit**
   - Confirm top-level component purity, domain self-containment, dashboard

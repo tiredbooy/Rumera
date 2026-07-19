@@ -3,7 +3,10 @@ package services
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 
+	"github.com/shopspring/decimal"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/pkg/apperr"
@@ -13,6 +16,10 @@ type ShippingService struct {
 	zoneRepo   repositories.ShippingZoneRepository
 	methodRepo repositories.ShippingMethodRepository
 }
+
+const (
+	shippingDetailPerPage = 100
+)
 
 func NewShippingService(
 	zoneRepo repositories.ShippingZoneRepository,
@@ -27,10 +34,7 @@ func NewShippingService(
 // ── Zone ─────────────────────────────────────────────────────────────────────
 
 func (s *ShippingService) CreateZone(ctx context.Context, req models.CreateShippingZoneReq) (*models.ShippingZone, error) {
-	if req.Name == "" {
-		return nil, apperr.ErrInvalidRequest
-	}
-	if len(req.RegionCodes) == 0 {
+	if err := normalizeCreateShippingZone(&req); err != nil {
 		return nil, apperr.ErrInvalidRequest
 	}
 
@@ -58,6 +62,36 @@ func (s *ShippingService) GetZoneByID(ctx context.Context, id int64) (*models.Sh
 	return zone, nil
 }
 
+func (s *ShippingService) GetZoneDetail(ctx context.Context, id int64) (*models.ShippingZoneDetail, error) {
+	zone, err := s.GetZoneByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	methods := make([]*models.ShippingMethod, 0)
+	filter := models.ShippingMethodFilter{BaseFilter: models.BaseFilter{
+		PaginationParams: models.PaginationParams{Page: 1, Limit: shippingDetailPerPage},
+		SortBy:           "name",
+		OrderBy:          "asc",
+	}}
+	for {
+		page, total, err := s.methodRepo.GetByZoneID(ctx, id, filter)
+		if err != nil {
+			return nil, apperr.ErrInternal
+		}
+		methods = append(methods, page...)
+		if int64(len(methods)) >= total {
+			break
+		}
+		if len(page) == 0 {
+			return nil, apperr.ErrInternal
+		}
+		filter.Page++
+	}
+
+	return &models.ShippingZoneDetail{Zone: zone, Methods: methods}, nil
+}
+
 func (s *ShippingService) GetAllZones(ctx context.Context, filter models.ShippingZoneFilter) ([]*models.ShippingZone, int64, error) {
 	if filter.Limit <= 0 {
 		return nil, 0, apperr.ErrInvalidRequest
@@ -75,10 +109,7 @@ func (s *ShippingService) UpdateZone(ctx context.Context, id int64, req models.U
 	if id <= 0 {
 		return nil, apperr.ErrInvalidRequest
 	}
-	if req.Name != nil && *req.Name == "" {
-		return nil, apperr.ErrInvalidRequest
-	}
-	if req.RegionCodes != nil && len(req.RegionCodes) == 0 {
+	if err := normalizeUpdateShippingZone(&req); err != nil {
 		return nil, apperr.ErrInvalidRequest
 	}
 
@@ -115,8 +146,8 @@ func (s *ShippingService) CreateMethod(ctx context.Context, zoneID int64, req mo
 	if zoneID <= 0 {
 		return nil, apperr.ErrInvalidRequest
 	}
-	if err := validateCreateShippingMethodReq(req); err != nil {
-		return nil, err
+	if err := normalizeCreateShippingMethod(&req); err != nil {
+		return nil, apperr.ErrInvalidRequest
 	}
 
 	// Zone must exist before attaching a method to it
@@ -129,6 +160,9 @@ func (s *ShippingService) CreateMethod(ctx context.Context, zoneID int64, req mo
 
 	method, err := s.methodRepo.Create(ctx, zoneID, req)
 	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
 		return nil, apperr.ErrInternal
 	}
 
@@ -158,6 +192,9 @@ func (s *ShippingService) GetMethodsByZoneID(ctx context.Context, zoneID int64, 
 	if filter.Limit <= 0 {
 		return nil, 0, apperr.ErrInvalidRequest
 	}
+	if filter.RateType != nil && !validShippingRateType(*filter.RateType) {
+		return nil, 0, apperr.ErrInvalidRequest
+	}
 
 	if _, err := s.zoneRepo.GetByID(ctx, zoneID); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
@@ -178,10 +215,15 @@ func (s *ShippingService) UpdateMethod(ctx context.Context, id int64, req models
 	if id <= 0 {
 		return nil, apperr.ErrInvalidRequest
 	}
-	if req.Name != nil && *req.Name == "" {
-		return nil, apperr.ErrInvalidRequest
+
+	current, err := s.methodRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.ErrInternal
 	}
-	if req.BaseRate != nil && *req.BaseRate < 0 {
+	if err := normalizeUpdateShippingMethod(&req, current); err != nil {
 		return nil, apperr.ErrInvalidRequest
 	}
 
@@ -214,15 +256,14 @@ func (s *ShippingService) DeleteMethod(ctx context.Context, id int64) error {
 
 // ── Checkout ──────────────────────────────────────────────────────────────────
 
-// GetAvailableForCheckout is the key cross-repo method that justifies
-// combining both repos into one service. Given a buyer's region code
-// and order weight, it resolves all valid zones then collects every
-// available shipping method across them — ready to show the buyer.
-func (s *ShippingService) GetAvailableForCheckout(ctx context.Context, regionCode string, weightKg float64) ([]*models.ShippingMethod, error) {
+// GetAvailableForCheckout resolves active zones and returns a deterministic,
+// calculated quote for each method that accepts the submitted order weight.
+func (s *ShippingService) GetAvailableForCheckout(ctx context.Context, regionCode string, weightKg, subtotal float64) ([]*models.ShippingMethodQuote, error) {
+	regionCode = strings.ToUpper(strings.TrimSpace(regionCode))
 	if regionCode == "" {
 		return nil, apperr.ErrInvalidRequest
 	}
-	if weightKg < 0 {
+	if !finiteNonNegative(weightKg) || !finiteNonNegative(subtotal) {
 		return nil, apperr.ErrInvalidRequest
 	}
 
@@ -231,34 +272,53 @@ func (s *ShippingService) GetAvailableForCheckout(ctx context.Context, regionCod
 		return nil, apperr.ErrInternal
 	}
 	if len(zones) == 0 {
-		return []*models.ShippingMethod{}, nil
+		return []*models.ShippingMethodQuote{}, nil
 	}
 
-	var all []*models.ShippingMethod
+	quotes := make([]*models.ShippingMethodQuote, 0)
 	for _, zone := range zones {
 		methods, err := s.methodRepo.GetAvailable(ctx, zone.ID, weightKg)
 		if err != nil {
 			return nil, apperr.ErrInternal
 		}
-		all = append(all, methods...)
-	}
-
-	return all, nil
-}
-
-// ── private validators ────────────────────────────────────────────────────────
-
-func validateCreateShippingMethodReq(req models.CreateShippingMethodReq) error {
-	if req.Name == "" {
-		return apperr.ErrInvalidRequest
-	}
-	if req.BaseRate < 0 {
-		return apperr.ErrInvalidRequest
-	}
-	if req.MinDeliveryDays != nil && req.MaxDeliveryDays != nil {
-		if *req.MinDeliveryDays > *req.MaxDeliveryDays {
-			return apperr.ErrInvalidRequest
+		for _, method := range methods {
+			quotes = append(quotes, &models.ShippingMethodQuote{
+				Method:        method,
+				EstimatedCost: calculateShippingCost(method, weightKg, subtotal),
+			})
 		}
 	}
-	return nil
+
+	sort.SliceStable(quotes, func(i, j int) bool {
+		if quotes[i].EstimatedCost != quotes[j].EstimatedCost {
+			return quotes[i].EstimatedCost < quotes[j].EstimatedCost
+		}
+		if quotes[i].Method.Name != quotes[j].Method.Name {
+			return quotes[i].Method.Name < quotes[j].Method.Name
+		}
+		return quotes[i].Method.ID < quotes[j].Method.ID
+	})
+	return quotes, nil
+}
+
+func calculateShippingCost(method *models.ShippingMethod, weightKg, subtotal float64) float64 {
+	if method.FreeAboveAmount != nil && subtotal >= *method.FreeAboveAmount {
+		return 0
+	}
+
+	base := decimal.NewFromFloat(method.BaseRate)
+	var cost decimal.Decimal
+	switch method.RateType {
+	case models.ShippingRateFlat:
+		cost = base
+	case models.ShippingRatePerKg:
+		cost = base.Mul(decimal.NewFromFloat(weightKg))
+	case models.ShippingRatePercentage:
+		cost = decimal.NewFromFloat(subtotal).Mul(base).Div(decimal.NewFromInt(100))
+	case models.ShippingRateFree:
+		return 0
+	default:
+		return 0
+	}
+	return cost.Round(2).InexactFloat64()
 }

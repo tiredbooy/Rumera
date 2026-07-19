@@ -3,6 +3,7 @@ import type { PaginationQuery } from "@/lib/api/types";
 export interface Tag {
   id: number;
   title: string;
+  slug: string;
   description?: string;
   created_at: string;
   updated_at: string;
@@ -16,20 +17,22 @@ export interface ProductTag {
 
 export interface CreateTagInput {
   title: string;
+  slug?: string;
   description?: string | null;
 }
 
 export interface UpdateTagInput {
-  title?: string | null;
+  title?: string;
+  slug?: string;
   description?: string | null;
 }
 
-// Used by AttachProductTags / SyncProductTags / DetachProductTags
+/** Replaces a product's complete tag assignment set. */
 export interface ProductTagsInput {
   tag_ids: number[];
 }
 
-export type TagSortField = "created_at" | "title";
+export type TagSortField = "created_at" | "updated_at" | "title" | "slug";
 export type TagSortDirection = "asc" | "desc";
 
 export interface TagListQuery extends PaginationQuery {

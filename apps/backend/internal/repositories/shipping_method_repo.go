@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
 )
@@ -28,6 +29,11 @@ type ShippingMethodRepository interface {
 type shippingMethodRepository struct {
 	db *pgxpool.Pool
 }
+
+const shippingMethodColumns = `
+	id, shipping_zone_id, name, carrier, description, rate_type, base_rate,
+	free_above_amount, min_delivery_days, max_delivery_days, max_weight_kg,
+	is_active, created_at, updated_at`
 
 func NewShippingMethodRepository(db *pgxpool.Pool) ShippingMethodRepository {
 	return &shippingMethodRepository{db: db}
@@ -55,7 +61,7 @@ func (r *shippingMethodRepository) Create(ctx context.Context, zoneID int64, req
 			@min_delivery_days, @max_delivery_days,
 			@max_weight_kg, @is_active
 		)
-		RETURNING *`
+		RETURNING ` + shippingMethodColumns
 
 	args := pgx.NamedArgs{
 		"zone_id":           zoneID,
@@ -71,16 +77,14 @@ func (r *shippingMethodRepository) Create(ctx context.Context, zoneID int64, req
 		"is_active":         isActive,
 	}
 
-	rows, err := r.db.Query(ctx, q, args)
+	method, err := scanShippingMethod(r.db.QueryRow(ctx, q, args))
 	if err != nil {
+		if isShippingForeignKeyViolation(err) {
+			return nil, models.ErrNotFound
+		}
 		return nil, fmt.Errorf("shippingMethodRepository.Create: %w", err)
 	}
-
-	method, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.ShippingMethod])
-	if err != nil {
-		return nil, fmt.Errorf("shippingMethodRepository.Create scan: %w", err)
-	}
-	return &method, nil
+	return method, nil
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -88,21 +92,16 @@ func (r *shippingMethodRepository) Create(ctx context.Context, zoneID int64, req
 // ─────────────────────────────────────────────────────────────
 
 func (r *shippingMethodRepository) GetByID(ctx context.Context, id int64) (*models.ShippingMethod, error) {
-	const q = `SELECT * FROM shipping_methods WHERE id = $1`
+	q := `SELECT ` + shippingMethodColumns + ` FROM shipping_methods WHERE id = $1`
 
-	rows, err := r.db.Query(ctx, q, id)
-	if err != nil {
-		return nil, fmt.Errorf("shippingMethodRepository.GetByID: %w", err)
-	}
-
-	method, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.ShippingMethod])
+	method, err := scanShippingMethod(r.db.QueryRow(ctx, q, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrNotFound
 		}
-		return nil, fmt.Errorf("shippingMethodRepository.GetByID scan: %w", err)
+		return nil, fmt.Errorf("shippingMethodRepository.GetByID: %w", err)
 	}
-	return &method, nil
+	return method, nil
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -140,16 +139,23 @@ func (r *shippingMethodRepository) GetByZoneID(ctx context.Context, zoneID int64
 		order = "ASC"
 	}
 
+	whereSQL := strings.Join(where, " AND ")
+	countQ := `SELECT COUNT(*) FROM shipping_methods WHERE ` + whereSQL
+	var total int64
+	if err := r.db.QueryRow(ctx, countQ, args).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("shippingMethodRepository.GetByZoneID count: %w", err)
+	}
+
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
 
 	q := fmt.Sprintf(`
-		SELECT *, COUNT(*) OVER() AS total_count
+		SELECT %s
 		FROM shipping_methods
 		WHERE %s
-		ORDER BY %s %s
+		ORDER BY %s %s, id %s
 		LIMIT @limit OFFSET @offset`,
-		strings.Join(where, " AND "), sortBy, order,
+		shippingMethodColumns, whereSQL, sortBy, order, order,
 	)
 
 	rows, err := r.db.Query(ctx, q, args)
@@ -158,25 +164,14 @@ func (r *shippingMethodRepository) GetByZoneID(ctx context.Context, zoneID int64
 	}
 	defer rows.Close()
 
-	var (
-		methods []*models.ShippingMethod
-		total   int64
-	)
+	methods := make([]*models.ShippingMethod, 0, f.Limit)
 
 	for rows.Next() {
-		var m models.ShippingMethod
-		if err := rows.Scan(
-			&m.ID, &m.ShippingZoneID,
-			&m.Name, &m.Carrier, &m.Description,
-			&m.RateType, &m.BaseRate, &m.FreeAboveAmount,
-			&m.MinDeliveryDays, &m.MaxDeliveryDays,
-			&m.MaxWeightKg, &m.IsActive,
-			&m.CreatedAt, &m.UpdatedAt,
-			&total,
-		); err != nil {
+		method, err := scanShippingMethod(rows)
+		if err != nil {
 			return nil, 0, fmt.Errorf("shippingMethodRepository.GetByZoneID scan: %w", err)
 		}
-		methods = append(methods, &m)
+		methods = append(methods, method)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("shippingMethodRepository.GetByZoneID rows: %w", err)
@@ -194,11 +189,11 @@ func (r *shippingMethodRepository) GetByZoneID(ctx context.Context, zoneID int64
 
 func (r *shippingMethodRepository) GetAvailable(ctx context.Context, zoneID int64, weightKg float64) ([]*models.ShippingMethod, error) {
 	const q = `
-		SELECT * FROM shipping_methods
+		SELECT ` + shippingMethodColumns + ` FROM shipping_methods
 		WHERE shipping_zone_id = $1
 		  AND is_active = true
 		  AND (max_weight_kg IS NULL OR max_weight_kg >= $2)
-		ORDER BY base_rate ASC`
+		ORDER BY base_rate ASC, name ASC, id ASC`
 
 	rows, err := r.db.Query(ctx, q, zoneID, weightKg)
 	if err != nil {
@@ -206,14 +201,16 @@ func (r *shippingMethodRepository) GetAvailable(ctx context.Context, zoneID int6
 	}
 	defer rows.Close()
 
-	methods, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.ShippingMethod])
-	if err != nil {
-		return nil, fmt.Errorf("shippingMethodRepository.GetAvailable scan: %w", err)
+	result := make([]*models.ShippingMethod, 0)
+	for rows.Next() {
+		method, err := scanShippingMethod(rows)
+		if err != nil {
+			return nil, fmt.Errorf("shippingMethodRepository.GetAvailable scan: %w", err)
+		}
+		result = append(result, method)
 	}
-
-	result := make([]*models.ShippingMethod, len(methods))
-	for i := range methods {
-		result[i] = &methods[i]
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("shippingMethodRepository.GetAvailable rows: %w", err)
 	}
 	return result, nil
 }
@@ -226,45 +223,45 @@ func (r *shippingMethodRepository) Update(ctx context.Context, id int64, req mod
 	sets := []string{}
 	args := pgx.NamedArgs{"id": id}
 
-	if req.Name != nil {
+	if req.Name.Set {
 		sets = append(sets, "name = @name")
-		args["name"] = *req.Name
+		args["name"] = nullableShippingValue(req.Name.Value)
 	}
-	if req.Carrier != nil {
+	if req.Carrier.Set {
 		sets = append(sets, "carrier = @carrier")
-		args["carrier"] = *req.Carrier
+		args["carrier"] = nullableShippingValue(req.Carrier.Value)
 	}
-	if req.Description != nil {
+	if req.Description.Set {
 		sets = append(sets, "description = @description")
-		args["description"] = *req.Description
+		args["description"] = nullableShippingValue(req.Description.Value)
 	}
-	if req.RateType != nil {
+	if req.RateType.Set {
 		sets = append(sets, "rate_type = @rate_type")
-		args["rate_type"] = *req.RateType
+		args["rate_type"] = nullableShippingValue(req.RateType.Value)
 	}
-	if req.BaseRate != nil {
+	if req.BaseRate.Set {
 		sets = append(sets, "base_rate = @base_rate")
-		args["base_rate"] = *req.BaseRate
+		args["base_rate"] = nullableShippingValue(req.BaseRate.Value)
 	}
-	if req.FreeAboveAmount != nil {
+	if req.FreeAboveAmount.Set {
 		sets = append(sets, "free_above_amount = @free_above_amount")
-		args["free_above_amount"] = *req.FreeAboveAmount
+		args["free_above_amount"] = nullableShippingValue(req.FreeAboveAmount.Value)
 	}
-	if req.MinDeliveryDays != nil {
+	if req.MinDeliveryDays.Set {
 		sets = append(sets, "min_delivery_days = @min_delivery_days")
-		args["min_delivery_days"] = *req.MinDeliveryDays
+		args["min_delivery_days"] = nullableShippingValue(req.MinDeliveryDays.Value)
 	}
-	if req.MaxDeliveryDays != nil {
+	if req.MaxDeliveryDays.Set {
 		sets = append(sets, "max_delivery_days = @max_delivery_days")
-		args["max_delivery_days"] = *req.MaxDeliveryDays
+		args["max_delivery_days"] = nullableShippingValue(req.MaxDeliveryDays.Value)
 	}
-	if req.MaxWeightKg != nil {
+	if req.MaxWeightKg.Set {
 		sets = append(sets, "max_weight_kg = @max_weight_kg")
-		args["max_weight_kg"] = *req.MaxWeightKg
+		args["max_weight_kg"] = nullableShippingValue(req.MaxWeightKg.Value)
 	}
-	if req.IsActive != nil {
+	if req.IsActive.Set {
 		sets = append(sets, "is_active = @is_active")
-		args["is_active"] = *req.IsActive
+		args["is_active"] = nullableShippingValue(req.IsActive.Value)
 	}
 
 	if len(sets) == 0 {
@@ -274,23 +271,19 @@ func (r *shippingMethodRepository) Update(ctx context.Context, id int64, req mod
 	q := fmt.Sprintf(`
 		UPDATE shipping_methods SET %s
 		WHERE id = @id
-		RETURNING *`,
+		RETURNING %s`,
 		strings.Join(sets, ", "),
+		shippingMethodColumns,
 	)
 
-	rows, err := r.db.Query(ctx, q, args)
-	if err != nil {
-		return nil, fmt.Errorf("shippingMethodRepository.Update: %w", err)
-	}
-
-	method, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.ShippingMethod])
+	method, err := scanShippingMethod(r.db.QueryRow(ctx, q, args))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrNotFound
 		}
-		return nil, fmt.Errorf("shippingMethodRepository.Update scan: %w", err)
+		return nil, fmt.Errorf("shippingMethodRepository.Update: %w", err)
 	}
-	return &method, nil
+	return method, nil
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -308,4 +301,32 @@ func (r *shippingMethodRepository) Delete(ctx context.Context, id int64) error {
 		return models.ErrNotFound
 	}
 	return nil
+}
+
+func scanShippingMethod(row pgx.Row) (*models.ShippingMethod, error) {
+	var method models.ShippingMethod
+	if err := row.Scan(
+		&method.ID,
+		&method.ShippingZoneID,
+		&method.Name,
+		&method.Carrier,
+		&method.Description,
+		&method.RateType,
+		&method.BaseRate,
+		&method.FreeAboveAmount,
+		&method.MinDeliveryDays,
+		&method.MaxDeliveryDays,
+		&method.MaxWeightKg,
+		&method.IsActive,
+		&method.CreatedAt,
+		&method.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	return &method, nil
+}
+
+func isShippingForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }

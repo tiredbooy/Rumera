@@ -1,9 +1,6 @@
 import type { PaginationQuery } from "@/lib/api/types";
 
-export type DiscountType =
-  | "percentage"
-  | "fixed_amount"
-  | "free_shipping";
+export type DiscountType = "percentage" | "fixed_amount" | "free_shipping";
 
 export interface CouponApplicability {
   category_ids?: number[];
@@ -43,17 +40,17 @@ export interface CreateCouponInput {
   expires_at?: string | null;
 }
 
-/** JSON null and omission both decode to nil pointers in the current PATCH DTO. */
+/** Nullable fields use explicit JSON null to clear persisted limits/restrictions. */
 export interface UpdateCouponInput {
   description?: string | null;
-  discount_value?: number | null;
+  discount_value?: number;
   max_discount_amount?: number | null;
-  min_order_amount?: number | null;
+  min_order_amount?: number;
   max_uses?: number | null;
-  max_uses_per_user?: number | null;
+  max_uses_per_user?: number;
   applicable_to?: CouponApplicability | null;
-  is_active?: boolean | null;
-  starts_at?: string | null;
+  is_active?: boolean;
+  starts_at?: string;
   expires_at?: string | null;
 }
 

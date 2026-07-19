@@ -81,40 +81,50 @@ export function ImageSlotItem({
   return (
     <li
       draggable={!uploading && !isPending}
+      aria-posinset={index + 1}
+      aria-setsize={total}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
       className={cn(
-        "flex items-center gap-3 rounded-2xl border border-border/60 bg-card p-2 transition-shadow",
+        "grid grid-cols-[auto_3.5rem_minmax(0,1fr)] items-center gap-3 rounded-2xl border border-border/60 bg-card p-2 transition-shadow sm:flex",
         isPrimary && "ring-1 ring-primary/40",
         isDragging && "opacity-50",
       )}
     >
       <div className="flex flex-col items-center gap-0.5">
-        <button
+        <Button
           type="button"
-          aria-label="جابه‌جایی به بالا"
+          variant="ghost"
+          size="icon-sm"
+          data-image-reorder={slot.localId}
+          data-reorder-direction="up"
+          aria-label={`انتقال تصویر ${index + 1} از ${total} به بالا`}
           disabled={index === 0 || uploading || isPending}
           onClick={onMoveUp}
-          className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+          className="rounded-md text-muted-foreground hover:text-foreground disabled:opacity-30"
         >
           <ChevronUp className="size-3.5" />
-        </button>
+        </Button>
         <span
           aria-hidden
           className="cursor-grab text-muted-foreground active:cursor-grabbing"
         >
           <GripVertical className="size-4" />
         </span>
-        <button
+        <Button
           type="button"
-          aria-label="جابه‌جایی به پایین"
+          variant="ghost"
+          size="icon-sm"
+          data-image-reorder={slot.localId}
+          data-reorder-direction="down"
+          aria-label={`انتقال تصویر ${index + 1} از ${total} به پایین`}
           disabled={index === total - 1 || uploading || isPending}
           onClick={onMoveDown}
-          className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+          className="rounded-md text-muted-foreground hover:text-foreground disabled:opacity-30"
         >
           <ChevronDown className="size-3.5" />
-        </button>
+        </Button>
       </div>
 
       <span className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-muted">
@@ -153,13 +163,13 @@ export function ImageSlotItem({
         ) : null}
       </div>
 
-      <div className="flex items-center gap-0.5">
+      <div className="col-span-3 flex items-center justify-end gap-0.5 sm:col-auto sm:justify-start">
         {errored && canRetry && (
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label="تلاش دوباره"
+            aria-label={`تلاش دوباره برای تصویر ${index + 1}`}
             disabled={isPending}
             onClick={onRetry}
           >
@@ -170,7 +180,11 @@ export function ImageSlotItem({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={isPrimary ? "تصویر اصلی" : "تنظیم به‌عنوان تصویر اصلی"}
+          aria-label={
+            isPrimary
+              ? `تصویر ${index + 1} اصلی است`
+              : `تنظیم تصویر ${index + 1} به‌عنوان تصویر اصلی`
+          }
           aria-pressed={isPrimary}
           disabled={uploading || errored || isPending}
           onClick={onMakePrimary}
@@ -183,7 +197,7 @@ export function ImageSlotItem({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="حذف تصویر"
+          aria-label={`حذف تصویر ${index + 1}`}
           disabled={uploading || isPending}
           onClick={onRemove}
         >

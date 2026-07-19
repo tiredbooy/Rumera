@@ -2,14 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { useTransition } from "react";
 
 import type { ProductDetail } from "@/features/catalog/products/types";
 import type { Brand } from "@/features/catalog/brands/types";
-import type { Tag } from "@/features/catalog/tags/types";
+import { syncProductTags } from "@/features/admin/tags/api";
 
 import {
   createProduct,
@@ -92,23 +92,21 @@ export function ProductForm({
   product,
   categories,
   brands,
-  tags,
 }: {
   mode: "create" | "edit";
   product?: ProductDetail;
   categories: Category[];
   brands: Brand[];
-  tags: Tag[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [saveError, setSaveError] = React.useState<string | null>(null);
   const uploaderRef = React.useRef<ImageUploaderHandle>(null);
 
   const {
     register,
     handleSubmit,
     control,
-    watch,
     formState: { errors },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
@@ -120,9 +118,9 @@ export function ProductForm({
     name: "variants",
   });
 
-  const title = watch("title");
-  const brandId = watch("brand_id");
-  const isActive = watch("is_active");
+  const title = useWatch({ control, name: "title" });
+  const brandId = useWatch({ control, name: "brand_id" });
+  const isActive = useWatch({ control, name: "is_active" });
   const brandName = brands.find((b) => String(b.id) === brandId)?.title;
 
   const primaryImage =
@@ -130,15 +128,33 @@ export function ProductForm({
 
   function applyServerErrors(e: unknown) {
     const message = e instanceof Error ? e.message : "خطای غیرمنتظره رخ داد";
+    setSaveError(message);
     toast.error(message);
   }
 
-  async function onSubmit(v: ProductFormValues) {
+  function onSubmit(
+    v: ProductFormValues,
+    uploader: ImageUploaderHandle | null,
+  ) {
     startTransition(async () => {
+      setSaveError(null);
       try {
         if (mode === "create") {
-          // ✅ Use the imported server action (no "Action" suffix)
           const created = await createProduct(toCreatePayload(v));
+
+          try {
+            await syncProductTags(created.id, { tag_ids: v.tag_ids });
+          } catch (error) {
+            const detail = error instanceof Error ? `: ${error.message}` : "";
+            const message =
+              "محصول ایجاد شد، اما برچسب‌ها ذخیره نشدند و گونه‌ها و تصاویر هنوز ذخیره نشده‌اند" +
+              detail;
+            setSaveError(message);
+            toast.error(message);
+            router.push(`/admin/products/${created.id}`);
+            router.refresh();
+            return;
+          }
 
           // Create variants one-by-one
           for (const vr of v.variants) {
@@ -151,7 +167,7 @@ export function ProductForm({
           }
 
           try {
-            await uploaderRef.current?.flush(created.id);
+            await uploader?.flush(created.id);
           } catch (error) {
             toast.error(
               error instanceof Error
@@ -171,6 +187,15 @@ export function ProductForm({
         if (!product) return;
 
         await updateProduct(product.id, toUpdatePayload(v));
+        try {
+          await syncProductTags(product.id, { tag_ids: v.tag_ids });
+        } catch (error) {
+          const detail = error instanceof Error ? `: ${error.message}` : "";
+          throw new Error(
+            "اطلاعات پایهٔ محصول ذخیره شد، اما برچسب‌ها، گونه‌ها و تصاویر ذخیره نشدند" +
+              detail,
+          );
+        }
 
         // Reconcile variants: delete removed, update existing, create new
         const original = product.variants ?? [];
@@ -197,7 +222,7 @@ export function ProductForm({
             });
         }
 
-        await uploaderRef.current?.flush(product.id);
+        await uploader?.flush(product.id);
         toast.success("تغییرات ذخیره شد");
         router.refresh();
       } catch (e) {
@@ -206,8 +231,17 @@ export function ProductForm({
     });
   }
 
+  function onFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    const uploader = uploaderRef.current;
+    void handleSubmit((values) => onSubmit(values, uploader))(event);
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col">
+    <form
+      onSubmit={onFormSubmit}
+      aria-busy={isPending || undefined}
+      className="flex flex-col"
+    >
       <FormHeaderBar
         mode={mode}
         title={title}
@@ -215,6 +249,15 @@ export function ProductForm({
         isSubmitting={isPending}
         onCancel={() => router.push("/admin/products")}
       />
+
+      {saveError ? (
+        <p
+          role="alert"
+          className="mb-6 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive ring-1 ring-destructive/20"
+        >
+          {saveError}
+        </p>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="flex flex-col gap-6">
@@ -245,7 +288,8 @@ export function ProductForm({
             register={register}
             control={control}
             errors={errors}
-            tags={tags}
+            initialTags={product?.tags}
+            disabled={isPending}
           />
         </div>
 

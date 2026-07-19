@@ -16,6 +16,9 @@ import StorefrontError from "../app/(storefront)/error";
 import JournalDetailLoading from "../app/(storefront)/journal/[slug]/loading";
 import StorefrontLoading from "../app/(storefront)/loading";
 import StorefrontNotFound from "../app/(storefront)/not-found";
+import TagsError from "../app/(storefront)/tags/error";
+import TagsLoading from "../app/(storefront)/tags/loading";
+import TagsNotFound from "../app/(storefront)/tags/not-found";
 import AdminError from "../app/admin/error";
 import AdminLoading from "../app/admin/loading";
 import AdminNotFound from "../app/admin/not-found";
@@ -43,6 +46,11 @@ const notFoundCases = [
     Component: CheckoutNotFound,
     hrefs: ["/cart", "/products"],
   },
+  {
+    name: "tags",
+    Component: TagsNotFound,
+    hrefs: ["/tags", "/products"],
+  },
   { name: "admin", Component: AdminNotFound, hrefs: ["/admin", "/"] },
 ];
 
@@ -51,6 +59,7 @@ const errorCases = [
   { name: "storefront", Component: StorefrontError },
   { name: "account", Component: AccountError },
   { name: "checkout", Component: CheckoutError },
+  { name: "tags", Component: TagsError },
   { name: "admin", Component: AdminError },
 ];
 
@@ -60,6 +69,7 @@ const loadingCases = [
   { name: "journal detail", Component: JournalDetailLoading },
   { name: "account", Component: AccountLoading },
   { name: "checkout", Component: CheckoutLoading },
+  { name: "tags", Component: TagsLoading },
   { name: "admin", Component: AdminLoading },
 ];
 

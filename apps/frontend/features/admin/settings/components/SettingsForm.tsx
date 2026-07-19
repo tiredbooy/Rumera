@@ -206,9 +206,13 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
       data-testid="settings-form"
     >
       <Tabs defaultValue="store">
-        <TabsList>
+        <TabsList aria-label="بخش‌های تنظیمات" className="w-full">
           {TABS.map(({ value, label, icon: Icon }) => (
-            <TabsTrigger key={value} value={value} className="cursor-pointer">
+            <TabsTrigger
+              key={value}
+              value={value}
+              className="shrink-0 cursor-pointer px-3"
+            >
               <Icon className="size-4" /> {label}
             </TabsTrigger>
           ))}
@@ -231,7 +235,7 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
         />
       </Tabs>
 
-      <div className="mt-6 flex max-w-2xl items-center gap-3">
+      <div className="mt-6 flex max-w-2xl flex-wrap items-center gap-3">
         <Button
           type="submit"
           size="lg"

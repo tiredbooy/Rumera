@@ -161,7 +161,7 @@ export function FlexibleImageInput({
             type="button"
             onClick={() => onChange("")}
             aria-label="حذف تصویر"
-            className="absolute end-2 top-2 flex size-7 items-center justify-center rounded-lg bg-background/80 text-foreground ring-1 ring-foreground/10 backdrop-blur-md transition-colors hover:bg-background"
+            className="absolute end-2 top-2 flex size-11 cursor-pointer items-center justify-center rounded-xl bg-background/80 text-foreground outline-none ring-1 ring-foreground/10 backdrop-blur-md transition-colors hover:bg-background focus-visible:ring-3 focus-visible:ring-primary/60"
           >
             <X className="size-4" />
           </button>

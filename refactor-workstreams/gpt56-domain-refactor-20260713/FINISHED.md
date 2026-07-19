@@ -2697,3 +2697,152 @@ append-only.
 - Frontend typecheck, tests, production build, ownership searches, and
   `git diff --check` passed.
 - Full lint passed with zero errors and 11 unrelated existing warnings.
+
+## Parallel Wave Completion Archive
+
+The temporary parallel trackers used after Task 048 were consolidated here on
+2026-07-19. Records remain in execution order; normal single-task tracking resumes
+in `TASKS.md`, `IN_PROGRESS.md`, and this file.
+
+## Task 049 - Remove Misleading Sample-Data Fallbacks
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Confirmed the earlier migration removed mock order, analytics, inventory,
+  review, and customer-detail data from the assigned surfaces.
+- Added retryable, announced error states to analytics widgets and made order and
+  review retries expose pending state without plausible fallback data.
+- Focused tests, the then-current full Vitest suite, scoped/full lint, TypeScript,
+  and diff checks passed. The build compiled and typechecked before static
+  generation reached an unavailable local API.
+
+## Task 050 - Fix Cart And Checkout State Logic
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Prevented unresolved session/cart state from flashing empty or logged-out UI.
+- Replaced render-time address mutation with derived selection, retained cached
+  data during refresh failures, and exposed persistent retryable errors.
+- Invalidated stale coupon/free-shipping state after code or subtotal changes and
+  required the selected shipping method to remain in live query data.
+- Focused tests, the then-current full Vitest suite, lint, TypeScript, and diff
+  checks passed; static generation stopped only on unrelated local API access.
+
+## Task 052 - Add Landmarks, Skip Navigation, And Semantic Interactions
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Added a global skip link and consistent focusable `main-content` targets.
+- Replaced clickable table rows with real links, converted checkout choices into
+  named native radio groups, and added text alternatives to permission cells.
+- Focused tests, full tests, lint, TypeScript, and diff checks passed; the build
+  compiled and typechecked before unrelated API-dependent static generation.
+
+## Task 051 - Make Forms Programmatically Accessible
+
+**Status:** Complete
+**Date:** 2026-07-15
+
+- Added one field-control contract for stable description/error IDs,
+  `aria-describedby`, and `aria-invalid` state across auth, account, checkout,
+  and admin forms.
+- Connected dynamic errors to their controls, focused the first affected field,
+  and completed the named checkout-payment radio-group handoff.
+- Focused/full tests, lint, TypeScript, and diff checks passed; the remaining build
+  stop was the known unrelated local API dependency.
+
+## Task 053 - Enforce Keyboard And Touch Interaction Quality
+
+**Status:** Complete
+**Date:** 2026-07-18
+
+- Standardized shared Button targets to 44x44px for coarse pointers.
+- Added keyboard image ordering with focus restoration, removed inactive carousel
+  slides from focus/accessibility trees, and strengthened gallery/upload controls.
+- Focused/full tests, lint, TypeScript, and diff checks passed. Browser-matrix
+  coverage for RTL scrolling and native `inert` remains in Task 062.
+
+## Task 054 - Correct Responsive Failures
+
+**Status:** Complete
+**Date:** 2026-07-18
+
+- Corrected narrow OTP, variant-row, settings-tab, mobile-drawer, and cart
+  safe-area behavior without desktop regressions.
+- Focused/full tests, TypeScript, lint, and diff checks passed. Live Chrome checks
+  confirmed OTP containment at 320, 375, 768, 1024, and 1440px.
+
+## Task 055 - Make Async And Bulk Actions Truthful
+
+**Status:** Complete
+**Date:** 2026-07-18
+
+- Replaced unawaited wishlist cart loops with the existing bulk mutation and
+  distinguished complete, partial, skipped, and rejected outcomes.
+- Added row-level pending/result states, persistent feedback, exact skip reasons,
+  and conflicting-control locking.
+- Focused/full tests, lint, TypeScript, and diff checks passed; the build stop was
+  the known unrelated local API dependency.
+
+## Task 060c - Add Coupon Administration
+
+**Status:** Complete
+**Date:** 2026-07-18
+
+- Replaced fragile coupon scans with explicit columns, truthful pagination, atomic
+  code conflicts, optimistic updates, nullable PATCH semantics, and database-bound
+  cross-field validation.
+- Added admin-only searchable/paginated create, edit, and reversible deactivation
+  flows with accessible forms, selective payloads, stale-cache invalidation, and
+  focused API/component/service/repository coverage.
+- Frontend tests, TypeScript, lint/format checks, backend unit/race/vet checks,
+  PostgreSQL integration tests, and diff checks passed.
+- Added Task 060j for authoritative applicability, redemption locking, usage data,
+  reference validation, deactivation semantics, and field-level PATCH errors.
+
+## Task 056d - Define The Tag Storefront URL And Data Contract
+
+**Status:** Complete
+**Date:** 2026-07-18
+
+- Chose numeric `/tags/[id]`; tag titles remain response data rather than URL keys.
+- Verified product results use the existing `GET /products?tag_id=<id>` contract
+  from frontend query serialization through backend filtering.
+- Recorded the then-blocking required database slug versus omitted model/write
+  contract; Task 060b subsequently resolved that blocker.
+
+## Task 060d - Add Shipping Zone And Method Administration
+
+**Status:** Complete
+**Date:** 2026-07-19
+
+- Repaired shipping repository scans, deterministic ordering, pagination totals,
+  nullable PATCH clearing, FK handling, normalization, and rate/rule validation.
+- Added admin-only zone/method CRUD, search, filters, sorting, pagination recovery,
+  activation controls, responsive views, accessible forms, truthful feedback, and
+  targeted cache invalidation.
+- Frontend focused/full tests, TypeScript, scoped lint/format, backend unit/race/vet,
+  fresh PostgreSQL integration, and diff checks passed.
+- Added Task 060k for authoritative checkout region/weight inputs, method
+  eligibility, shared quote/order pricing, and final method-zone type parity.
+
+## Task 060b - Add Complete Tag Administration
+
+**Status:** Complete
+**Date:** 2026-07-19
+
+- Restored required tag slug parity across model/request/repository/public/frontend
+  contracts with deterministic Unicode-aware derivation, uniqueness handling,
+  nullable PATCH semantics, and stable pagination.
+- Added an idempotent compatibility migration for historical databases and
+  admin-only searchable/paginated create, edit, and delete flows.
+- Completed product-form tag pagination and synchronization while preserving
+  hydrated assignments and truthfully reporting partial saves.
+- Backend unit/race/vet, PostgreSQL migration/CRUD/integration, frontend focused/full
+  tests, TypeScript, lint/format, authorization review, and diff checks passed.
+- Task 056e's tag-contract dependency is resolved; normal `TASKS.md` ordering now
+  governs when it can be claimed. Tasks 058a and 058d retain final product-write
+  tag persistence and aggregate atomicity.

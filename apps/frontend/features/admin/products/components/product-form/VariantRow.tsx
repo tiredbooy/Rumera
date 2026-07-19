@@ -28,13 +28,13 @@ export function VariantRow({
   return (
     <div
       key={fieldId}
-      className="group grid grid-cols-[auto_1fr_1fr_1fr_auto] items-end gap-3 rounded-xl border border-border/60 bg-muted/20 p-3 transition-colors hover:border-border"
+      className="group grid min-w-0 grid-cols-1 items-end gap-3 rounded-xl border border-border/60 bg-muted/20 p-3 transition-colors hover:border-border sm:grid-cols-2 xl:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
     >
-      <span className="mb-2.5 hidden text-muted-foreground/50 sm:inline-flex">
+      <span className="mb-2.5 hidden text-muted-foreground/50 xl:inline-flex">
         <GripVertical className="size-4" />
       </span>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 xl:col-span-1">
         <Label htmlFor={`variants.${index}.sku`} className="text-xs">
           SKU
         </Label>
@@ -46,7 +46,7 @@ export function VariantRow({
         />
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex min-w-0 flex-col gap-1.5">
         <Label htmlFor={`variants.${index}.price`} className="text-xs">
           قیمت (تومان)
         </Label>
@@ -63,7 +63,7 @@ export function VariantRow({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex min-w-0 flex-col gap-1.5">
         <Label
           htmlFor={`variants.${index}.compare_at_price`}
           className="text-xs"
@@ -88,7 +88,7 @@ export function VariantRow({
         variant="ghost"
         size="icon"
         aria-label="حذف تنوع"
-        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+        className="justify-self-end text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:col-span-2 xl:col-span-1"
         onClick={onRemove}
       >
         <Trash2 className="size-4" />

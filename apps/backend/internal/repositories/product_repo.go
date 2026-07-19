@@ -245,6 +245,15 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 	if strings.ToUpper(f.OrderBy) == "ASC" {
 		order = "ASC"
 	}
+	whereSQL := strings.Join(where, " AND ")
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM products p WHERE %s`, whereSQL)
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, args).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("productRepository.GetAll count: %w", err)
+	}
+	if total == 0 || int64(f.Offset()) >= total {
+		return []*models.ProductListItem{}, total, nil
+	}
 
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
@@ -261,8 +270,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		COALESCE(pr.active_variant_count, 0) AS active_variant_count,
 		COALESCE(pr.available_variant_count, 0) AS available_variant_count,
 		pr.purchasable_variant_id,
-        img.id AS image_id, img.image_url, img.storage_key, img.alt_text, img.width, img.height,
-        COUNT(*) OVER() AS total_count
+		img.id AS image_id, img.image_url, img.storage_key, img.alt_text, img.width, img.height
     FROM products p
     LEFT JOIN brands b ON b.id = p.brand_id
     LEFT JOIN categories c ON c.id = p.category_id
@@ -288,10 +296,10 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
         ORDER BY pi.is_primary DESC, pi.sort_order ASC
         LIMIT 1	
     ) img ON TRUE
-    WHERE %s
-    ORDER BY %s %s
-    LIMIT @limit OFFSET @offset`,
-		strings.Join(where, " AND "), sortBy, order,
+	    WHERE %s
+	    ORDER BY %s %s, p.id %s
+	    LIMIT @limit OFFSET @offset`,
+		whereSQL, sortBy, order, order,
 	)
 
 	rows, err := r.db.Query(ctx, q, args)
@@ -300,10 +308,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 	}
 	defer rows.Close()
 
-	var (
-		items []*models.ProductListItem
-		total int64
-	)
+	var items []*models.ProductListItem
 
 	for rows.Next() {
 		var it models.ProductListItem
@@ -323,7 +328,6 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 			&it.ActiveVariantCount, &it.AvailableVariantCount,
 			&it.PurchasableVariantID,
 			&imgID, &imgURL, &imgStorageKey, &imgAltText, &imgWidth, &imgHeight,
-			&total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("productRepository.GetAll scan: %w", err)
 		}

@@ -8,9 +8,12 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
 )
+
+const tagColumns = `id, title, slug, description, created_at, updated_at`
 
 // ─────────────────────────────────────────────────────────────
 // Interface
@@ -22,7 +25,8 @@ type TagRepository interface {
 	GetAll(ctx context.Context, filter models.TagFilter) ([]*models.Tag, int64, error)
 	Update(ctx context.Context, id int64, req models.UpdateTagReq) (*models.Tag, error)
 	Delete(ctx context.Context, id int64) error
-	ExistsByTitle(ctx context.Context, title string) (bool, error)
+	ExistsByTitle(ctx context.Context, title string, excludeID int64) (bool, error)
+	ExistsBySlug(ctx context.Context, slug string, excludeID int64) (bool, error)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -43,25 +47,24 @@ func NewTagRepository(db *pgxpool.Pool) TagRepository {
 
 func (r *tagRepository) Create(ctx context.Context, req models.CreateTagReq) (*models.Tag, error) {
 	const q = `
-		INSERT INTO tags (title, description)
-		VALUES (@title, @description)
-		RETURNING *`
+		INSERT INTO tags (title, slug, description)
+		VALUES (@title, @slug, @description)
+		RETURNING ` + tagColumns
 
 	args := pgx.NamedArgs{
 		"title":       req.Title,
+		"slug":        req.Slug,
 		"description": req.Description,
 	}
 
-	rows, err := r.db.Query(ctx, q, args)
+	tag, err := scanTag(r.db.QueryRow(ctx, q, args))
 	if err != nil {
-		return nil, fmt.Errorf("tagRepository.Create: %w", err)
-	}
-
-	tag, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Tag])
-	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, models.ErrConflict
+		}
 		return nil, fmt.Errorf("tagRepository.Create scan: %w", err)
 	}
-	return &tag, nil
+	return tag, nil
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -69,21 +72,16 @@ func (r *tagRepository) Create(ctx context.Context, req models.CreateTagReq) (*m
 // ─────────────────────────────────────────────────────────────
 
 func (r *tagRepository) GetByID(ctx context.Context, id int64) (*models.Tag, error) {
-	const q = `SELECT * FROM tags WHERE id = $1`
+	const q = `SELECT ` + tagColumns + ` FROM tags WHERE id = $1`
 
-	rows, err := r.db.Query(ctx, q, id)
-	if err != nil {
-		return nil, fmt.Errorf("tagRepository.GetByID: %w", err)
-	}
-
-	tag, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Tag])
+	tag, err := scanTag(r.db.QueryRow(ctx, q, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("tagRepository.GetByID scan: %w", err)
 	}
-	return &tag, nil
+	return tag, nil
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -95,13 +93,15 @@ func (r *tagRepository) GetAll(ctx context.Context, f models.TagFilter) ([]*mode
 	args := pgx.NamedArgs{}
 
 	if f.Search != "" {
-		where = append(where, "title ILIKE @search")
+		where = append(where, "(title ILIKE @search OR slug ILIKE @search OR description ILIKE @search)")
 		args["search"] = "%" + f.Search + "%"
 	}
 
 	allowed := map[string]bool{
 		"created_at": true,
+		"updated_at": true,
 		"title":      true,
+		"slug":       true,
 	}
 	sortBy := "created_at"
 	if allowed[f.SortBy] {
@@ -112,16 +112,25 @@ func (r *tagRepository) GetAll(ctx context.Context, f models.TagFilter) ([]*mode
 		order = "ASC"
 	}
 
+	whereSQL := strings.Join(where, " AND ")
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM tags WHERE %s`, whereSQL)
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, args).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("tagRepository.GetAll count: %w", err)
+	}
+	if total == 0 || int64(f.Offset()) >= total {
+		return []*models.Tag{}, total, nil
+	}
+
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
-
 	q := fmt.Sprintf(`
-		SELECT *, COUNT(*) OVER() AS total_count
+		SELECT %s
 		FROM tags
 		WHERE %s
-		ORDER BY %s %s
+		ORDER BY %s %s, id %s
 		LIMIT @limit OFFSET @offset`,
-		strings.Join(where, " AND "), sortBy, order,
+		tagColumns, whereSQL, sortBy, order, order,
 	)
 
 	rows, err := r.db.Query(ctx, q, args)
@@ -130,21 +139,14 @@ func (r *tagRepository) GetAll(ctx context.Context, f models.TagFilter) ([]*mode
 	}
 	defer rows.Close()
 
-	var (
-		tags  []*models.Tag
-		total int64
-	)
+	tags := make([]*models.Tag, 0, f.Limit)
 
 	for rows.Next() {
-		var t models.Tag
-		if err := rows.Scan(
-			&t.ID, &t.Title, &t.Description,
-			&t.CreatedAt, &t.UpdatedAt,
-			&total,
-		); err != nil {
+		tag, err := scanTag(rows)
+		if err != nil {
 			return nil, 0, fmt.Errorf("tagRepository.GetAll scan: %w", err)
 		}
-		tags = append(tags, &t)
+		tags = append(tags, tag)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("tagRepository.GetAll rows: %w", err)
@@ -165,9 +167,13 @@ func (r *tagRepository) Update(ctx context.Context, id int64, req models.UpdateT
 		sets = append(sets, "title = @title")
 		args["title"] = *req.Title
 	}
-	if req.Description != nil {
+	if req.Slug != nil {
+		sets = append(sets, "slug = @slug")
+		args["slug"] = *req.Slug
+	}
+	if req.Description.Set {
 		sets = append(sets, "description = @description")
-		args["description"] = *req.Description
+		args["description"] = req.Description.Value
 	}
 
 	if len(sets) == 0 {
@@ -177,23 +183,22 @@ func (r *tagRepository) Update(ctx context.Context, id int64, req models.UpdateT
 	q := fmt.Sprintf(`
 		UPDATE tags SET %s
 		WHERE id = @id
-		RETURNING *`,
+		RETURNING %s`,
 		strings.Join(sets, ", "),
+		tagColumns,
 	)
 
-	rows, err := r.db.Query(ctx, q, args)
-	if err != nil {
-		return nil, fmt.Errorf("tagRepository.Update: %w", err)
-	}
-
-	tag, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Tag])
+	tag, err := scanTag(r.db.QueryRow(ctx, q, args))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrNotFound
 		}
+		if isUniqueViolation(err) {
+			return nil, models.ErrConflict
+		}
 		return nil, fmt.Errorf("tagRepository.Update scan: %w", err)
 	}
-	return &tag, nil
+	return tag, nil
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -214,15 +219,49 @@ func (r *tagRepository) Delete(ctx context.Context, id int64) error {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ExistsByTitle
+// Existence checks exclude the row being edited so unchanged unique values are valid.
 // ─────────────────────────────────────────────────────────────
 
-func (r *tagRepository) ExistsByTitle(ctx context.Context, title string) (bool, error) {
-	const q = `SELECT EXISTS(SELECT 1 FROM tags WHERE title = $1)`
+func (r *tagRepository) ExistsByTitle(ctx context.Context, title string, excludeID int64) (bool, error) {
+	const q = `SELECT EXISTS(SELECT 1 FROM tags WHERE title = $1 AND ($2 = 0 OR id <> $2))`
 
 	var exists bool
-	if err := r.db.QueryRow(ctx, q, title).Scan(&exists); err != nil {
+	if err := r.db.QueryRow(ctx, q, title, excludeID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("tagRepository.ExistsByTitle: %w", err)
 	}
 	return exists, nil
+}
+
+func (r *tagRepository) ExistsBySlug(ctx context.Context, slug string, excludeID int64) (bool, error) {
+	const q = `SELECT EXISTS(SELECT 1 FROM tags WHERE slug = $1 AND ($2 = 0 OR id <> $2))`
+
+	var exists bool
+	if err := r.db.QueryRow(ctx, q, slug, excludeID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("tagRepository.ExistsBySlug: %w", err)
+	}
+	return exists, nil
+}
+
+type tagScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanTag(row tagScanner) (*models.Tag, error) {
+	var tag models.Tag
+	if err := row.Scan(
+		&tag.ID,
+		&tag.Title,
+		&tag.Slug,
+		&tag.Description,
+		&tag.CreatedAt,
+		&tag.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	return &tag, nil
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

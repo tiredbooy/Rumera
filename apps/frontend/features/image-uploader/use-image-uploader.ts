@@ -480,6 +480,7 @@ export function useImageUploader({
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved);
       replaceSlots(() => next);
+      announce(`تصویر به جایگاه ${to + 1} از ${next.length} منتقل شد.`);
       if (!live) return true;
 
       const ids = next
@@ -508,16 +509,16 @@ export function useImageUploader({
 
   const moveUp = React.useCallback(
     (index: number) => {
-      if (move(index, index - 1)) announce("ترتیب تصویر تغییر کرد.");
+      move(index, index - 1);
     },
-    [announce, move],
+    [move],
   );
 
   const moveDown = React.useCallback(
     (index: number) => {
-      if (move(index, index + 1)) announce("ترتیب تصویر تغییر کرد.");
+      move(index, index + 1);
     },
-    [announce, move],
+    [move],
   );
 
   const retryUpload = React.useCallback(

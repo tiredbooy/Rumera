@@ -3,7 +3,6 @@ package models
 
 import "time"
 
-
 type ShippingRateType string
 
 const (
@@ -40,6 +39,16 @@ type ShippingMethod struct {
 	UpdatedAt       time.Time        `db:"updated_at"`
 }
 
+type ShippingZoneDetail struct {
+	Zone    *ShippingZone
+	Methods []*ShippingMethod
+}
+
+type ShippingMethodQuote struct {
+	Method        *ShippingMethod
+	EstimatedCost float64
+}
+
 type CreateShippingZoneReq struct {
 	Name        string   `json:"name"         validate:"required,max=100"`
 	Description *string  `json:"description"`
@@ -48,10 +57,10 @@ type CreateShippingZoneReq struct {
 }
 
 type UpdateShippingZoneReq struct {
-	Name        *string  `json:"name"         validate:"omitempty,max=100"`
-	Description *string  `json:"description"`
-	RegionCodes []string `json:"region_codes" validate:"omitempty,min=1"`
-	IsActive    *bool    `json:"is_active"`
+	Name        NullablePatch[string]   `json:"name"`
+	Description NullablePatch[string]   `json:"description"`
+	RegionCodes NullablePatch[[]string] `json:"region_codes"`
+	IsActive    NullablePatch[bool]     `json:"is_active"`
 }
 
 type CreateShippingMethodReq struct {
@@ -68,18 +77,17 @@ type CreateShippingMethodReq struct {
 }
 
 type UpdateShippingMethodReq struct {
-	Name            *string           `json:"name"              validate:"omitempty,max=100"`
-	Carrier         *string           `json:"carrier"           validate:"omitempty,max=100"`
-	Description     *string           `json:"description"`
-	RateType        *ShippingRateType `json:"rate_type"         validate:"omitempty,oneof=flat_rate per_kg percentage free"`
-	BaseRate        *float64          `json:"base_rate"         validate:"omitempty,min=0"`
-	FreeAboveAmount *float64          `json:"free_above_amount" validate:"omitempty,gt=0"`
-	MinDeliveryDays *int16            `json:"min_delivery_days" validate:"omitempty,min=0"`
-	MaxDeliveryDays *int16            `json:"max_delivery_days" validate:"omitempty,min=0"`
-	MaxWeightKg     *float64          `json:"max_weight_kg"     validate:"omitempty,gt=0"`
-	IsActive        *bool             `json:"is_active"`
+	Name            NullablePatch[string]           `json:"name"`
+	Carrier         NullablePatch[string]           `json:"carrier"`
+	Description     NullablePatch[string]           `json:"description"`
+	RateType        NullablePatch[ShippingRateType] `json:"rate_type"`
+	BaseRate        NullablePatch[float64]          `json:"base_rate"`
+	FreeAboveAmount NullablePatch[float64]          `json:"free_above_amount"`
+	MinDeliveryDays NullablePatch[int16]            `json:"min_delivery_days"`
+	MaxDeliveryDays NullablePatch[int16]            `json:"max_delivery_days"`
+	MaxWeightKg     NullablePatch[float64]          `json:"max_weight_kg"`
+	IsActive        NullablePatch[bool]             `json:"is_active"`
 }
-
 
 type ShippingZoneResponse struct {
 	ID          int64                    `json:"id"`
@@ -92,6 +100,7 @@ type ShippingZoneResponse struct {
 
 type ShippingMethodResponse struct {
 	ID              int64            `json:"id"`
+	ShippingZoneID  int64            `json:"shipping_zone_id"`
 	Name            string           `json:"name"`
 	Carrier         *string          `json:"carrier,omitempty"`
 	Description     *string          `json:"description,omitempty"`
@@ -105,8 +114,6 @@ type ShippingMethodResponse struct {
 	// Calculated at request time by the service based on order
 	EstimatedCost float64 `json:"estimated_cost"`
 }
-
-
 
 type ShippingZoneFilter struct {
 	BaseFilter

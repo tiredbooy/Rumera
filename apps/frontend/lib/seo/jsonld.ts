@@ -5,12 +5,12 @@
  *
  * Builders return plain objects; render them with <JsonLd /> (components/json-ld).
  */
-import { siteConfig, absoluteUrl } from "@/lib/site"
-import {  type Product } from "@/lib/products"
+import { siteConfig, absoluteUrl } from "@/lib/site";
+import { type Product } from "@/lib/products";
 import type {
   ProductDetail,
   ProductListItem,
-} from "@/features/catalog/products/types"
+} from "@/features/catalog/products/types";
 
 export function organizationLd() {
   return {
@@ -21,7 +21,7 @@ export function organizationLd() {
     description: siteConfig.description,
     logo: absoluteUrl("/icon"),
     sameAs: Object.values(siteConfig.socials),
-  }
+  };
 }
 
 export function websiteLd() {
@@ -39,7 +39,7 @@ export function websiteLd() {
       },
       "query-input": "required name=search_term_string",
     },
-  }
+  };
 }
 
 export function productLd(p: Product) {
@@ -62,7 +62,7 @@ export function productLd(p: Product) {
       availability: "https://schema.org/InStock",
       url: absoluteUrl(`/products/${p.slug}`),
     },
-  }
+  };
 }
 
 /** Product JSON-LD from a live API `ProductDetail`. Pass `rating` (from the
@@ -72,16 +72,16 @@ export function productDetailLd(
   p: ProductDetail,
   rating?: { value: number; count: number },
   reviews?: {
-    rating: number
-    title?: string
-    content?: string
-    author?: string
-    created_at: string
-  }[]
+    rating: number;
+    title?: string;
+    content?: string;
+    author?: string;
+    created_at: string;
+  }[],
 ) {
-  const prices = (p.variants ?? []).map((v) => v.price).filter((n) => n > 0)
-  const low = prices.length ? Math.min(...prices) : undefined
-  const high = prices.length ? Math.max(...prices) : undefined
+  const prices = (p.variants ?? []).map((v) => v.price).filter((n) => n > 0);
+  const low = prices.length ? Math.min(...prices) : undefined;
+  const high = prices.length ? Math.max(...prices) : undefined;
   return {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -105,8 +105,14 @@ export function productDetailLd(
       ? {
           review: reviews.slice(0, 8).map((r) => ({
             "@type": "Review",
-            reviewRating: { "@type": "Rating", ratingValue: r.rating, bestRating: 5 },
-            ...(r.author ? { author: { "@type": "Person", name: r.author } } : {}),
+            reviewRating: {
+              "@type": "Rating",
+              ratingValue: r.rating,
+              bestRating: 5,
+            },
+            ...(r.author
+              ? { author: { "@type": "Person", name: r.author } }
+              : {}),
             ...(r.title ? { name: r.title } : {}),
             ...(r.content ? { reviewBody: r.content } : {}),
             datePublished: r.created_at,
@@ -125,22 +131,26 @@ export function productDetailLd(
             url: absoluteUrl(`/products/${p.slug}`),
           }
         : undefined,
-  }
+  };
 }
 
 /** ItemList JSON-LD from live `ProductListItem`s (listing pages). */
-export function productListLd(name: string, items: ProductListItem[]) {
+export function productListLd(
+  name: string,
+  items: ProductListItem[],
+  startPosition = 1,
+) {
   return {
     "@context": "https://schema.org",
     "@type": "ItemList",
     name,
     itemListElement: items.map((p, i) => ({
       "@type": "ListItem",
-      position: i + 1,
+      position: startPosition + i,
       name: p.title,
       url: absoluteUrl(`/products/${p.slug}`),
     })),
-  }
+  };
 }
 
 export function breadcrumbLd(items: { name: string; path: string }[]) {
@@ -153,7 +163,7 @@ export function breadcrumbLd(items: { name: string; path: string }[]) {
       name: item.name,
       item: absoluteUrl(item.path),
     })),
-  }
+  };
 }
 
 export function itemListLd(name: string, products: Product[]) {
@@ -166,7 +176,7 @@ export function itemListLd(name: string, products: Product[]) {
       position: i + 1,
       item: productLd(p),
     })),
-  }
+  };
 }
 
 export function faqLd(items: { question: string; answer: string }[]) {
@@ -178,16 +188,16 @@ export function faqLd(items: { question: string; answer: string }[]) {
       name: item.question,
       acceptedAnswer: { "@type": "Answer", text: item.answer },
     })),
-  }
+  };
 }
 
 export function recipeLd(recipe: {
-  name: string
-  description: string
-  slug: string
-  ingredients: string[]
-  steps: string[]
-  totalTime?: string
+  name: string;
+  description: string;
+  slug: string;
+  ingredients: string[];
+  steps: string[];
+  totalTime?: string;
 }) {
   return {
     "@context": "https://schema.org",
@@ -203,5 +213,5 @@ export function recipeLd(recipe: {
       position: i + 1,
       text,
     })),
-  }
+  };
 }

@@ -1,4 +1,4 @@
-import Link from "next/link"
+import Link from "next/link";
 import {
   Wine,
   Send,
@@ -10,10 +10,10 @@ import {
   BadgeCheck,
   Phone,
   Mail,
-} from "lucide-react"
+} from "lucide-react";
 
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const columns: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -21,6 +21,7 @@ const columns: { title: string; links: { label: string; href: string }[] }[] = [
     links: [
       { label: "همهٔ محصولات", href: "/products" },
       { label: "دسته‌بندی‌ها", href: "/categories" },
+      { label: "برچسب‌ها", href: "/tags" },
       { label: "پیشنهادهای ویژه", href: "/products?sort=discount" },
       { label: "تازه‌ رسیده‌ها", href: "/products?sort=new" },
     ],
@@ -43,20 +44,20 @@ const columns: { title: string; links: { label: string; href: string }[] }[] = [
       { label: "تماس با ما", href: "/contact" },
     ],
   },
-]
+];
 
 const socials: { Icon: typeof Camera; label: string; href: string }[] = [
   { Icon: Camera, label: "اینستاگرام", href: "#" },
   { Icon: AtSign, label: "تردز", href: "#" },
   { Icon: Send, label: "تلگرام", href: "#" },
   { Icon: Rss, label: "خوراک خبری", href: "#" },
-]
+];
 
 const trust = [
   { Icon: ShieldCheck, label: "پرداخت امن" },
   { Icon: BadgeCheck, label: "ضمانت اصالت" },
   { Icon: Truck, label: "ارسال سریع" },
-]
+];
 
 export function SiteFooter() {
   return (
@@ -185,5 +186,5 @@ export function SiteFooter() {
         </div>
       </div>
     </footer>
-  )
+  );
 }

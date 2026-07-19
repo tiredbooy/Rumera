@@ -33,6 +33,9 @@ export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
   })
   const [selected, setSelected] = React.useState(0)
   const [paused, setPaused] = React.useState(false)
+  const dotScrollerRef = React.useRef<HTMLDivElement>(null)
+  const dotRefs = React.useRef<(HTMLButtonElement | null)[]>([])
+  const initialSelectionRef = React.useRef(true)
 
   const onSelect = React.useCallback(() => {
     if (embla) setSelected(embla.selectedScrollSnap())
@@ -49,6 +52,26 @@ export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
       embla.off("reInit", onSelect)
     }
   }, [embla, onSelect])
+
+  React.useEffect(() => {
+    if (initialSelectionRef.current) {
+      initialSelectionRef.current = false
+      return
+    }
+    const scroller = dotScrollerRef.current
+    const dot = dotRefs.current[selected]
+    if (!scroller || !dot) return
+
+    const scrollerRect = scroller.getBoundingClientRect()
+    const dotRect = dot.getBoundingClientRect()
+    const delta =
+      dotRect.left < scrollerRect.left
+        ? dotRect.left - scrollerRect.left
+        : dotRect.right > scrollerRect.right
+          ? dotRect.right - scrollerRect.right
+          : 0
+    if (delta !== 0) scroller.scrollBy?.({ left: delta })
+  }, [selected])
 
   // Lightweight autoplay — honours reduced-motion and pauses on interaction.
   React.useEffect(() => {
@@ -74,7 +97,14 @@ export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
       <div className="overflow-hidden" ref={emblaRef}>
         <div className="flex">
           {slides.map((slide, i) => (
-            <HeroSlideView key={slide.id} slide={slide} priority={i === 0} />
+            <HeroSlideView
+              key={slide.id}
+              slide={slide}
+              priority={i === 0}
+              active={i === selected}
+              position={i + 1}
+              total={slides.length}
+            />
           ))}
         </div>
       </div>
@@ -84,19 +114,32 @@ export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
         <>
           <div className="container-px pointer-events-none absolute inset-x-0 bottom-6 z-20 mx-auto flex max-w-7xl items-center justify-between">
             {/* Dots */}
-            <div className="pointer-events-auto flex items-center gap-2">
+            <div
+              ref={dotScrollerRef}
+              role="group"
+              aria-label="انتخاب اسلاید"
+              className="pointer-events-auto flex min-w-0 max-w-full items-center overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
               {slides.map((slide, i) => (
                 <button
                   key={slide.id}
+                  ref={(node) => {
+                    dotRefs.current[i] = node
+                  }}
                   type="button"
                   onClick={() => embla?.scrollTo(i)}
-                  aria-label={`اسلاید ${i + 1}`}
+                  aria-label={`نمایش اسلاید ${i + 1}: ${slide.title}`}
                   aria-current={i === selected}
-                  className={cn(
-                    "h-1.5 rounded-full bg-white/50 transition-all duration-300 hover:bg-white/80",
-                    i === selected ? "w-8 bg-white" : "w-1.5"
-                  )}
-                />
+                  className="group flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full outline-none focus-visible:bg-black/40 focus-visible:ring-3 focus-visible:ring-white/90"
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "h-1.5 rounded-full bg-white/50 transition-all duration-300 group-hover:bg-white/80 motion-reduce:transition-none",
+                      i === selected ? "w-8 bg-white" : "w-1.5"
+                    )}
+                  />
+                </button>
               ))}
             </div>
 
@@ -104,21 +147,21 @@ export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
             <div className="pointer-events-auto hidden items-center gap-2 sm:flex">
               <Button
                 type="button"
-                size="icon-sm"
+                size="icon"
                 variant="outline"
                 onClick={() => embla?.scrollPrev()}
                 aria-label="اسلاید قبلی"
-                className="rounded-full border-white/30 bg-black/20 text-white backdrop-blur-md hover:bg-black/40 hover:text-white"
+                className="size-11 rounded-full border-white/30 bg-black/20 text-white backdrop-blur-md hover:bg-black/40 hover:text-white focus-visible:border-white focus-visible:ring-white/80"
               >
                 <ChevronRight />
               </Button>
               <Button
                 type="button"
-                size="icon-sm"
+                size="icon"
                 variant="outline"
                 onClick={() => embla?.scrollNext()}
                 aria-label="اسلاید بعدی"
-                className="rounded-full border-white/30 bg-black/20 text-white backdrop-blur-md hover:bg-black/40 hover:text-white"
+                className="size-11 rounded-full border-white/30 bg-black/20 text-white backdrop-blur-md hover:bg-black/40 hover:text-white focus-visible:border-white focus-visible:ring-white/80"
               >
                 <ChevronLeft />
               </Button>
@@ -130,11 +173,30 @@ export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
   )
 }
 
-function HeroSlideView({ slide, priority }: { slide: PublicHeroSlide; priority: boolean }) {
+function HeroSlideView({
+  slide,
+  priority,
+  active,
+  position,
+  total,
+}: {
+  slide: PublicHeroSlide
+  priority: boolean
+  active: boolean
+  position: number
+  total: number
+}) {
   // "dark" theme = dark image → light text; we render light text on a dark scrim
   // for both, since a readable scrim keeps any photography legible.
   return (
-    <div className="relative min-w-0 shrink-0 grow-0 basis-full">
+    <div
+      role="group"
+      aria-roledescription="اسلاید"
+      aria-label={`${position} از ${total}: ${slide.title}`}
+      aria-hidden={active ? undefined : true}
+      inert={active ? undefined : true}
+      className="relative min-w-0 shrink-0 grow-0 basis-full"
+    >
       <div className="relative h-[78vh] max-h-[760px] min-h-[460px] w-full">
         <SmartImage
           src={slide.image_url}

@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
+	"unicode"
 
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
@@ -18,20 +20,30 @@ func NewTagService(tagRepo repositories.TagRepository) *TagService {
 }
 
 func (s *TagService) Create(ctx context.Context, req models.CreateTagReq) (*models.Tag, error) {
+	req.Title = strings.TrimSpace(req.Title)
 	if req.Title == "" {
 		return nil, apperr.ErrInvalidRequest
 	}
-
-	exists, err := s.tagRepo.ExistsByTitle(ctx, req.Title)
-	if err != nil {
-		return nil, apperr.ErrInternal
+	if req.Slug == "" {
+		req.Slug = normalizeTagSlug(req.Title)
+	} else {
+		req.Slug = normalizeTagSlug(req.Slug)
 	}
-	if exists {
+	if req.Slug == "" {
+		return nil, apperr.ErrInvalidRequest
+	}
+
+	if conflict, err := s.hasConflict(ctx, req.Title, req.Slug, 0); err != nil {
+		return nil, err
+	} else if conflict {
 		return nil, apperr.ErrConflict
 	}
 
 	tag, err := s.tagRepo.Create(ctx, req)
 	if err != nil {
+		if errors.Is(err, models.ErrConflict) {
+			return nil, apperr.ErrConflict
+		}
 		return nil, apperr.ErrInternal
 	}
 
@@ -71,25 +83,57 @@ func (s *TagService) Update(ctx context.Context, id int64, req models.UpdateTagR
 	if id <= 0 {
 		return nil, apperr.ErrInvalidRequest
 	}
+	current, err := s.tagRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
 
-	// If title is being changed, guard against duplicates
 	if req.Title != nil {
-		if *req.Title == "" {
+		title := strings.TrimSpace(*req.Title)
+		if title == "" {
 			return nil, apperr.ErrInvalidRequest
 		}
-		exists, err := s.tagRepo.ExistsByTitle(ctx, *req.Title)
-		if err != nil {
-			return nil, apperr.ErrInternal
+		req.Title = &title
+		if title != current.Title {
+			exists, err := s.tagRepo.ExistsByTitle(ctx, title, id)
+			if err != nil {
+				return nil, apperr.ErrInternal
+			}
+			if exists {
+				return nil, apperr.ErrConflict
+			}
 		}
-		if exists {
-			return nil, apperr.ErrConflict
+	}
+	if req.Slug != nil {
+		slug := normalizeTagSlug(*req.Slug)
+		if slug == "" {
+			return nil, apperr.ErrInvalidRequest
 		}
+		req.Slug = &slug
+		if slug != current.Slug {
+			exists, err := s.tagRepo.ExistsBySlug(ctx, slug, id)
+			if err != nil {
+				return nil, apperr.ErrInternal
+			}
+			if exists {
+				return nil, apperr.ErrConflict
+			}
+		}
+	}
+	if req.Title == nil && req.Slug == nil && !req.Description.Set {
+		return current, nil
 	}
 
 	tag, err := s.tagRepo.Update(ctx, id, req)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return nil, apperr.ErrNotFound
+		}
+		if errors.Is(err, models.ErrConflict) {
+			return nil, apperr.ErrConflict
 		}
 		return nil, apperr.ErrInternal
 	}
@@ -111,4 +155,41 @@ func (s *TagService) Delete(ctx context.Context, id int64) error {
 	}
 
 	return nil
+}
+
+func (s *TagService) hasConflict(ctx context.Context, title, slug string, excludeID int64) (bool, error) {
+	titleExists, err := s.tagRepo.ExistsByTitle(ctx, title, excludeID)
+	if err != nil {
+		return false, apperr.ErrInternal
+	}
+	if titleExists {
+		return true, nil
+	}
+
+	slugExists, err := s.tagRepo.ExistsBySlug(ctx, slug, excludeID)
+	if err != nil {
+		return false, apperr.ErrInternal
+	}
+	return slugExists, nil
+}
+
+// normalizeTagSlug keeps Unicode letters and digits so Persian titles can
+// produce valid, stable slugs without inventing an unrelated ASCII identifier.
+func normalizeTagSlug(value string) string {
+	var slug strings.Builder
+	separator := false
+	for _, r := range strings.ToLower(strings.TrimSpace(value)) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if separator && slug.Len() > 0 {
+				slug.WriteByte('-')
+			}
+			slug.WriteRune(r)
+			separator = false
+			continue
+		}
+		if slug.Len() > 0 {
+			separator = true
+		}
+	}
+	return slug.String()
 }

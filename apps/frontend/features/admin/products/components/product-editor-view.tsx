@@ -12,7 +12,6 @@ import type { Paginated } from "@/lib/api/types";
 import type { Brand } from "@/features/catalog/brands/types";
 import type { Category } from "@/features/catalog/categories/types";
 import type { ProductDetail } from "@/features/catalog/products/types";
-import type { Tag } from "@/features/catalog/tags/types";
 
 import { ProductForm } from "./ProductForm";
 
@@ -25,17 +24,16 @@ async function fetchList<T>(path: string): Promise<T[]> {
 }
 
 async function loadProductOptions() {
-  const [categories, brands, tags] = await Promise.all([
+  const [categories, brands] = await Promise.all([
     fetchList<Category>("/categories?limit=200"),
     fetchList<Brand>("/brands?limit=200"),
-    fetchList<Tag>("/tags?limit=200"),
   ]);
 
-  return { categories, brands, tags };
+  return { categories, brands };
 }
 
 export async function ProductCreateView() {
-  const { categories, brands, tags } = await loadProductOptions();
+  const { categories, brands } = await loadProductOptions();
 
   return (
     <>
@@ -50,12 +48,7 @@ export async function ProductCreateView() {
           </Button>
         }
       />
-      <ProductForm
-        mode="create"
-        categories={categories}
-        brands={brands}
-        tags={tags}
-      />
+      <ProductForm mode="create" categories={categories} brands={brands} />
     </>
   );
 }
@@ -69,7 +62,7 @@ export async function ProductEditView({ id }: { id: string }) {
     throw error;
   }
 
-  const { categories, brands, tags } = await loadProductOptions();
+  const { categories, brands } = await loadProductOptions();
 
   return (
     <>
@@ -89,7 +82,6 @@ export async function ProductEditView({ id }: { id: string }) {
         product={product}
         categories={categories}
         brands={brands}
-        tags={tags}
       />
     </>
   );

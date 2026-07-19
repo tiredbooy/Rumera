@@ -32,11 +32,44 @@ export function ImageSlotList({
   onMoveDown,
 }: ImageSlotListProps) {
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
+  const [focusVersion, requestFocus] = React.useReducer(
+    (version: number) => version + 1,
+    0,
+  );
+  const listRef = React.useRef<HTMLUListElement>(null);
+  const focusRequestRef = React.useRef<{
+    localId: string;
+    direction: "up" | "down";
+  } | null>(null);
+
+  React.useLayoutEffect(() => {
+    const request = focusRequestRef.current;
+    if (!request) return;
+
+    const controls = listRef.current?.querySelectorAll<HTMLButtonElement>(
+      "[data-image-reorder]",
+    );
+    const itemControls = Array.from(controls ?? []).filter(
+      (candidate) => candidate.dataset.imageReorder === request.localId,
+    );
+    const control =
+      itemControls.find(
+        (candidate) =>
+          candidate.dataset.reorderDirection === request.direction &&
+          !candidate.disabled,
+      ) ?? itemControls.find((candidate) => !candidate.disabled);
+    if (!control) {
+      if (!isPending) focusRequestRef.current = null;
+      return;
+    }
+    control.focus();
+    focusRequestRef.current = null;
+  }, [focusVersion, isPending, slots]);
 
   if (slots.length === 0) return null;
 
   return (
-    <ul className="flex flex-col gap-2">
+    <ul ref={listRef} aria-label="تصاویر محصول" className="flex flex-col gap-2">
       {slots.map((slot, i) => {
         const isPrimary =
           slot.kind === "uploaded" ? slot.image.is_primary : slot.isPrimary;
@@ -55,8 +88,22 @@ export function ImageSlotList({
             onMakePrimary={() => onMakePrimary(slot)}
             onRemove={() => onRemove(slot)}
             onRetry={() => slot.kind === "staged" && onRetry(slot)}
-            onMoveUp={() => onMoveUp(i)}
-            onMoveDown={() => onMoveDown(i)}
+            onMoveUp={() => {
+              focusRequestRef.current = {
+                localId: slot.localId,
+                direction: "down",
+              };
+              onMoveUp(i);
+              requestFocus();
+            }}
+            onMoveDown={() => {
+              focusRequestRef.current = {
+                localId: slot.localId,
+                direction: "up",
+              };
+              onMoveDown(i);
+              requestFocus();
+            }}
             onDragStart={() => setDragIndex(i)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => {

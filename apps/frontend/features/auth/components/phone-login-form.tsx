@@ -20,6 +20,7 @@ import { safeCallbackUrl } from "@/features/auth/redirects"
 import { faNum } from "@/lib/products"
 
 const RESEND_SECONDS = 60
+const OTP_LENGTH = 6
 
 /**
  * PhoneLoginForm — SMS OTP login in two steps: enter phone → enter the 6-digit
@@ -168,25 +169,28 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
         <InputOTP
           id="code"
           name="code"
-          maxLength={6}
+          maxLength={OTP_LENGTH}
           autoComplete="one-time-code"
           pattern="[0-9]*"
           inputMode="numeric"
           required
           dir="ltr"
           value={code}
-          onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
+          onChange={(value) =>
+            setCode(value.replace(/\D/g, "").slice(0, OTP_LENGTH))
+          }
           aria-invalid={!!error}
           aria-describedby={error ? "code-error" : undefined}
-          containerClassName="justify-center gap-2"
+          containerClassName="w-full min-w-0 justify-center"
         >
-          <InputOTPGroup className="gap-2">
-            <InputOTPSlot index={0} className="size-12 rounded-2xl border text-lg" />
-            <InputOTPSlot index={1} className="size-12 rounded-2xl border text-lg" />
-            <InputOTPSlot index={2} className="size-12 rounded-2xl border text-lg" />
-            <InputOTPSlot index={3} className="size-12 rounded-2xl border text-lg" />
-            <InputOTPSlot index={4} className="size-12 rounded-2xl border text-lg" />
-            <InputOTPSlot index={5} className="size-12 rounded-2xl border text-lg" />
+          <InputOTPGroup className="grid w-full max-w-[328px] grid-cols-6 justify-items-center gap-1 sm:gap-2">
+            {Array.from({ length: OTP_LENGTH }, (_, index) => (
+              <InputOTPSlot
+                key={index}
+                index={index}
+                className="aspect-square h-auto w-full min-w-0 max-w-12 rounded-xl border text-base sm:rounded-2xl sm:text-lg"
+              />
+            ))}
           </InputOTPGroup>
         </InputOTP>
       </div>

@@ -4,11 +4,120 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
 )
+
+func TestCouponRepository_CRUDAndNullableUpdates(t *testing.T) {
+	requireDB(t)
+	resetTables(t, "coupons")
+	ctx := context.Background()
+	repo := repositories.NewCouponRepository(testPool)
+	description := "launch offer"
+	maxDiscount := 25.0
+	maxUses := 10
+	expires := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Microsecond)
+	active := true
+
+	created, err := repo.Create(ctx, models.CreateCouponReq{
+		Code:              "CRUDTEST",
+		Description:       &description,
+		DiscountType:      models.DiscountTypePercentage,
+		DiscountValue:     20,
+		MaxDiscountAmount: &maxDiscount,
+		MaxUses:           &maxUses,
+		MaxUsesPerUser:    2,
+		ApplicableTo:      &models.ApplicableTo{ProductIDs: []int64{1, 2}},
+		IsActive:          &active,
+		ExpiresAt:         &expires,
+	})
+	if err != nil {
+		t.Fatalf("create coupon: %v", err)
+	}
+
+	byID, err := repo.GetByID(ctx, created.ID)
+	if err != nil || byID.Code != "CRUDTEST" {
+		t.Fatalf("get by id = %+v, %v", byID, err)
+	}
+	byCode, err := repo.GetByCode(ctx, "CRUDTEST")
+	if err != nil || byCode.ID != created.ID {
+		t.Fatalf("get by code = %+v, %v", byCode, err)
+	}
+
+	filter := models.CouponFilter{BaseFilter: models.BaseFilter{
+		PaginationParams: models.PaginationParams{Page: 1, Limit: 20},
+		SortBy:           "created_at",
+		OrderBy:          "desc",
+	}}
+	rows, total, err := repo.GetAll(ctx, filter)
+	if err != nil {
+		t.Fatalf("list coupons: %v", err)
+	}
+	if total != 1 || len(rows) != 1 || rows[0].ID != created.ID {
+		t.Fatalf("list = %+v, total %d; want created coupon", rows, total)
+	}
+	if rows[0].ApplicableTo == nil || len(rows[0].ApplicableTo.ProductIDs) != 2 {
+		t.Fatalf("listed applicability = %+v; want two products", rows[0].ApplicableTo)
+	}
+	if _, err := repo.Create(ctx, models.CreateCouponReq{
+		Code:           "CRUDTEST",
+		DiscountType:   models.DiscountTypePercentage,
+		DiscountValue:  10,
+		MaxUsesPerUser: 1,
+	}); !errors.Is(err, models.ErrConflict) {
+		t.Fatalf("duplicate create error = %v; want ErrConflict", err)
+	}
+
+	firstDescription := "first edit"
+	firstUpdate := models.UpdateCouponReq{
+		Description:       models.NullablePatch[string]{Set: true, Value: &firstDescription},
+		ExpectedUpdatedAt: created.UpdatedAt,
+	}
+	time.Sleep(time.Millisecond)
+	if _, err := repo.Update(ctx, created.ID, firstUpdate); err != nil {
+		t.Fatalf("first optimistic update: %v", err)
+	}
+	staleDescription := "stale edit"
+	staleUpdate := models.UpdateCouponReq{
+		Description:       models.NullablePatch[string]{Set: true, Value: &staleDescription},
+		ExpectedUpdatedAt: created.UpdatedAt,
+	}
+	if _, err := repo.Update(ctx, created.ID, staleUpdate); !errors.Is(err, models.ErrConflict) {
+		t.Fatalf("stale update error = %v; want ErrConflict", err)
+	}
+
+	filter = models.CouponFilter{BaseFilter: models.BaseFilter{
+		PaginationParams: models.PaginationParams{Page: 99, Limit: 1},
+		SortBy:           "created_at",
+		OrderBy:          "desc",
+	}}
+	rows, total, err = repo.GetAll(ctx, filter)
+	if err != nil {
+		t.Fatalf("list coupons: %v", err)
+	}
+	if total != 1 || len(rows) != 0 {
+		t.Fatalf("out-of-range list = %d rows, total %d; want 0 rows, total 1", len(rows), total)
+	}
+
+	update := models.UpdateCouponReq{}
+	update.Description.Set = true
+	update.MaxDiscountAmount.Set = true
+	update.MaxUses.Set = true
+	update.ApplicableTo.Set = true
+	update.ExpiresAt.Set = true
+	updated, err := repo.Update(ctx, created.ID, update)
+	if err != nil {
+		t.Fatalf("clear nullable fields: %v", err)
+	}
+	if updated.Description != nil || updated.MaxDiscountAmount != nil || updated.MaxUses != nil || updated.ApplicableTo != nil || updated.ExpiresAt != nil {
+		t.Fatalf("nullable fields were not cleared: %+v", updated)
+	}
+}
 
 // TestCouponUsageLimit_HoldsUnderConcurrency proves the Epic-E TOCTOU fix: two
 // orders redeeming a single-use coupon at the same time must not both succeed.

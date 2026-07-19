@@ -44,6 +44,11 @@ type couponRepository struct {
 	db *pgxpool.Pool
 }
 
+const couponColumns = `
+	id, code, description, discount_type, discount_value,
+	max_discount_amount, min_order_amount, max_uses, max_uses_per_user,
+	applicable_to, is_active, starts_at, expires_at, created_at, updated_at`
+
 func NewCouponRepository(db *pgxpool.Pool) CouponRepository {
 	return &couponRepository{db: db}
 }
@@ -75,7 +80,8 @@ func (r *couponRepository) Create(ctx context.Context, req models.CreateCouponRe
 			@max_uses, @max_uses_per_user, @applicable_to,
 			@is_active, @starts_at, @expires_at
 		)
-		RETURNING *`
+		ON CONFLICT (code) DO NOTHING
+		RETURNING ` + couponColumns
 
 	args := pgx.NamedArgs{
 		"code":                req.Code,
@@ -92,23 +98,20 @@ func (r *couponRepository) Create(ctx context.Context, req models.CreateCouponRe
 		"expires_at":          req.ExpiresAt,
 	}
 
-	rows, err := r.db.Query(ctx, q, args)
+	coupon, err := scanCoupon(r.db.QueryRow(ctx, q, args))
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrConflict
+		}
 		return nil, fmt.Errorf("couponRepository.Create: %w", err)
 	}
-
-	return scanCoupon(rows)
+	return coupon, nil
 }
 
 func (r *couponRepository) GetByID(ctx context.Context, id int64) (*models.Coupon, error) {
-	const q = `SELECT * FROM coupons WHERE id = $1`
+	q := `SELECT ` + couponColumns + ` FROM coupons WHERE id = $1`
 
-	rows, err := r.db.Query(ctx, q, id)
-	if err != nil {
-		return nil, fmt.Errorf("couponRepository.GetByID: %w", err)
-	}
-
-	coupon, err := scanCoupon(rows)
+	coupon, err := scanCoupon(r.db.QueryRow(ctx, q, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrNotFound
@@ -119,14 +122,9 @@ func (r *couponRepository) GetByID(ctx context.Context, id int64) (*models.Coupo
 }
 
 func (r *couponRepository) GetByCode(ctx context.Context, code string) (*models.Coupon, error) {
-	const q = `SELECT * FROM coupons WHERE code = $1`
+	q := `SELECT ` + couponColumns + ` FROM coupons WHERE code = $1`
 
-	rows, err := r.db.Query(ctx, q, code)
-	if err != nil {
-		return nil, fmt.Errorf("couponRepository.GetByCode: %w", err)
-	}
-
-	coupon, err := scanCoupon(rows)
+	coupon, err := scanCoupon(r.db.QueryRow(ctx, q, code))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrNotFound
@@ -173,17 +171,25 @@ func (r *couponRepository) GetAll(ctx context.Context, f models.CouponFilter) ([
 		order = "ASC"
 	}
 
-	args["limit"] = f.Limit
-	args["offset"] = f.Offset()
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM coupons WHERE %s`, strings.Join(where, " AND "))
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, args).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("couponRepository.GetAll count: %w", err)
+	}
+	if total == 0 {
+		return []*models.Coupon{}, 0, nil
+	}
 
 	q := fmt.Sprintf(`
-		SELECT *, COUNT(*) OVER() AS total_count
+		SELECT %s
 		FROM coupons
 		WHERE %s
 		ORDER BY %s %s
 		LIMIT @limit OFFSET @offset`,
-		strings.Join(where, " AND "), sortBy, order,
+		couponColumns, strings.Join(where, " AND "), sortBy, order,
 	)
+	args["limit"] = f.Limit
+	args["offset"] = f.Offset()
 
 	rows, err := r.db.Query(ctx, q, args)
 	if err != nil {
@@ -191,17 +197,13 @@ func (r *couponRepository) GetAll(ctx context.Context, f models.CouponFilter) ([
 	}
 	defer rows.Close()
 
-	var (
-		coupons []*models.Coupon
-		total   int64
-	)
+	coupons := make([]*models.Coupon, 0, f.Limit)
 
 	for rows.Next() {
-		coupon, t, err := scanCouponRow(rows)
+		coupon, err := scanCoupon(rows)
 		if err != nil {
 			return nil, 0, fmt.Errorf("couponRepository.GetAll scan: %w", err)
 		}
-		total = t
 		coupons = append(coupons, coupon)
 	}
 	if err := rows.Err(); err != nil {
@@ -215,70 +217,77 @@ func (r *couponRepository) Update(ctx context.Context, id int64, req models.Upda
 	sets := []string{}
 	args := pgx.NamedArgs{"id": id}
 
-	if req.Description != nil {
+	if req.Description.Set {
 		sets = append(sets, "description = @description")
-		args["description"] = *req.Description
+		args["description"] = nullableArg(req.Description.Value)
 	}
-	if req.DiscountValue != nil {
+	if req.DiscountValue.Set {
 		sets = append(sets, "discount_value = @discount_value")
-		args["discount_value"] = *req.DiscountValue
+		args["discount_value"] = nullableArg(req.DiscountValue.Value)
 	}
-	if req.MaxDiscountAmount != nil {
+	if req.MaxDiscountAmount.Set {
 		sets = append(sets, "max_discount_amount = @max_discount_amount")
-		args["max_discount_amount"] = *req.MaxDiscountAmount
+		args["max_discount_amount"] = nullableArg(req.MaxDiscountAmount.Value)
 	}
-	if req.MinOrderAmount != nil {
+	if req.MinOrderAmount.Set {
 		sets = append(sets, "min_order_amount = @min_order_amount")
-		args["min_order_amount"] = *req.MinOrderAmount
+		args["min_order_amount"] = nullableArg(req.MinOrderAmount.Value)
 	}
-	if req.MaxUses != nil {
+	if req.MaxUses.Set {
 		sets = append(sets, "max_uses = @max_uses")
-		args["max_uses"] = *req.MaxUses
+		args["max_uses"] = nullableArg(req.MaxUses.Value)
 	}
-	if req.MaxUsesPerUser != nil {
+	if req.MaxUsesPerUser.Set {
 		sets = append(sets, "max_uses_per_user = @max_uses_per_user")
-		args["max_uses_per_user"] = *req.MaxUsesPerUser
+		args["max_uses_per_user"] = nullableArg(req.MaxUsesPerUser.Value)
 	}
-	if req.ApplicableTo != nil {
-		applicableTo, err := marshalApplicableTo(req.ApplicableTo)
-		if err != nil {
-			return nil, fmt.Errorf("couponRepository.Update marshal: %w", err)
+	if req.ApplicableTo.Set {
+		var applicableTo []byte
+		if req.ApplicableTo.Value != nil {
+			var err error
+			applicableTo, err = marshalApplicableTo(req.ApplicableTo.Value)
+			if err != nil {
+				return nil, fmt.Errorf("couponRepository.Update marshal: %w", err)
+			}
 		}
 		sets = append(sets, "applicable_to = @applicable_to")
 		args["applicable_to"] = applicableTo
 	}
-	if req.IsActive != nil {
+	if req.IsActive.Set {
 		sets = append(sets, "is_active = @is_active")
-		args["is_active"] = *req.IsActive
+		args["is_active"] = nullableArg(req.IsActive.Value)
 	}
-	if req.StartsAt != nil {
+	if req.StartsAt.Set {
 		sets = append(sets, "starts_at = @starts_at")
-		args["starts_at"] = *req.StartsAt
+		args["starts_at"] = nullableArg(req.StartsAt.Value)
 	}
-	if req.ExpiresAt != nil {
+	if req.ExpiresAt.Set {
 		sets = append(sets, "expires_at = @expires_at")
-		args["expires_at"] = *req.ExpiresAt
+		args["expires_at"] = nullableArg(req.ExpiresAt.Value)
 	}
 
 	if len(sets) == 0 {
 		return r.GetByID(ctx, id)
 	}
+	where := "id = @id"
+	if !req.ExpectedUpdatedAt.IsZero() {
+		where += " AND updated_at = @expected_updated_at"
+		args["expected_updated_at"] = req.ExpectedUpdatedAt
+	}
 
 	q := fmt.Sprintf(`
 		UPDATE coupons SET %s
-		WHERE id = @id
-		RETURNING *`,
-		strings.Join(sets, ", "),
+		WHERE %s
+		RETURNING %s`,
+		strings.Join(sets, ", "), where, couponColumns,
 	)
 
-	rows, err := r.db.Query(ctx, q, args)
-	if err != nil {
-		return nil, fmt.Errorf("couponRepository.Update: %w", err)
-	}
-
-	coupon, err := scanCoupon(rows)
+	coupon, err := scanCoupon(r.db.QueryRow(ctx, q, args))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if !req.ExpectedUpdatedAt.IsZero() {
+				return nil, models.ErrConflict
+			}
 			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("couponRepository.Update: %w", err)
@@ -357,61 +366,37 @@ func (r *couponRepository) ExistsByCode(ctx context.Context, code string) (bool,
 	return exists, nil
 }
 
-func scanCoupon(rows pgx.Rows) (*models.Coupon, error) {
-	coupon, _, err := scanCouponRow(rows)
-	return coupon, err
+type rowScanner interface {
+	Scan(dest ...any) error
 }
 
-func scanCouponRow(rows pgx.Rows) (*models.Coupon, int64, error) {
-	// We scan applicable_to as raw []byte then unmarshal separately
+func scanCoupon(row rowScanner) (*models.Coupon, error) {
 	var (
 		coupon        models.Coupon
 		applicableRaw []byte
-		total         int64
 	)
 
-	hasTotalCount := len(rows.FieldDescriptions()) > 14
-
-	var scanErr error
-	if hasTotalCount {
-		scanErr = rows.Scan(
-			&coupon.ID, &coupon.Code, &coupon.Description,
-			&coupon.DiscountType, &coupon.DiscountValue,
-			&coupon.MaxDiscountAmount, &coupon.MinOrderAmount,
-			&coupon.MaxUses, &coupon.MaxUsesPerUser,
-			&applicableRaw,
-			&coupon.IsActive, &coupon.StartsAt, &coupon.ExpiresAt,
-			&coupon.CreatedAt, &coupon.UpdatedAt,
-			&total,
-		)
-	} else {
-		if !rows.Next() {
-			return nil, 0, pgx.ErrNoRows
-		}
-		scanErr = rows.Scan(
-			&coupon.ID, &coupon.Code, &coupon.Description,
-			&coupon.DiscountType, &coupon.DiscountValue,
-			&coupon.MaxDiscountAmount, &coupon.MinOrderAmount,
-			&coupon.MaxUses, &coupon.MaxUsesPerUser,
-			&applicableRaw,
-			&coupon.IsActive, &coupon.StartsAt, &coupon.ExpiresAt,
-			&coupon.CreatedAt, &coupon.UpdatedAt,
-		)
-	}
-
-	if scanErr != nil {
-		return nil, 0, scanErr
+	if err := row.Scan(
+		&coupon.ID, &coupon.Code, &coupon.Description,
+		&coupon.DiscountType, &coupon.DiscountValue,
+		&coupon.MaxDiscountAmount, &coupon.MinOrderAmount,
+		&coupon.MaxUses, &coupon.MaxUsesPerUser,
+		&applicableRaw,
+		&coupon.IsActive, &coupon.StartsAt, &coupon.ExpiresAt,
+		&coupon.CreatedAt, &coupon.UpdatedAt,
+	); err != nil {
+		return nil, err
 	}
 
 	if applicableRaw != nil {
 		var applicable models.ApplicableTo
 		if err := json.Unmarshal(applicableRaw, &applicable); err != nil {
-			return nil, 0, fmt.Errorf("scanCouponRow unmarshal applicable_to: %w", err)
+			return nil, fmt.Errorf("scanCoupon unmarshal applicable_to: %w", err)
 		}
 		coupon.ApplicableTo = &applicable
 	}
 
-	return &coupon, total, nil
+	return &coupon, nil
 }
 
 func marshalApplicableTo(a *models.ApplicableTo) ([]byte, error) {
@@ -419,4 +404,11 @@ func marshalApplicableTo(a *models.ApplicableTo) ([]byte, error) {
 		return nil, nil
 	}
 	return json.Marshal(a)
+}
+
+func nullableArg[T any](value *T) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }

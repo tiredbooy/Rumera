@@ -77,4 +77,34 @@ describe("cart query states", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("cart-lines")).not.toBeInTheDocument();
   });
+
+  it("keeps the mobile checkout bar above the device safe area", () => {
+    mocks.useSession.mockReturnValue({ status: "authenticated" });
+    mocks.useCart.mockReturnValue({
+      data: {
+        id: 1,
+        items: [{}],
+        summary: {
+          total_items: 1,
+          unique_items: 1,
+          subtotal: 1_250_000,
+          discount_total: 0,
+        },
+      },
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    render(<CartView />);
+
+    const checkoutLink = screen.getByRole("link", { name: "تسویه" });
+    const stickyBar = checkoutLink.parentElement?.parentElement;
+
+    expect(stickyBar?.className).toContain(
+      "[padding-bottom:calc(env(safe-area-inset-bottom)+0.75rem)]",
+    );
+    expect(checkoutLink.parentElement).toHaveClass("max-w-7xl");
+  });
 });
