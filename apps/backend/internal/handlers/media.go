@@ -24,27 +24,8 @@ func (h *Handler) UploadProductImage(c *gin.Context) {
 		return
 	}
 
-	// Bound the request body so a huge upload can't exhaust memory; the +1 lets
-	// us detect "exactly at the limit vs. over".
-	maxBytes := h.Media.MaxUploadBytes()
-	if maxBytes > 0 {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes+1)
-	}
-
-	file, _, err := c.Request.FormFile("file")
-	if err != nil {
-		response.Error(c, response.ErrInvalidRequest)
-		return
-	}
-	defer file.Close()
-
-	var reader io.Reader = file
-	if maxBytes > 0 {
-		reader = io.LimitReader(file, maxBytes+1)
-	}
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		response.Error(c, response.ErrFileTooLarge)
+	data, ok := h.readImageUpload(c)
+	if !ok {
 		return
 	}
 
@@ -55,6 +36,32 @@ func (h *Handler) UploadProductImage(c *gin.Context) {
 	isPrimary, _ := strconv.ParseBool(c.PostForm("is_primary"))
 
 	img, err := h.Media.Upload(c.Request.Context(), productID, data, altText, isPrimary)
+	if err != nil {
+		h.handleMediaError(c, err)
+		return
+	}
+	response.Created(c, mappers.ToImageResponse(img))
+}
+
+type productImageURLReq struct {
+	ImageURL  string  `json:"image_url" validate:"required,max=2048"`
+	AltText   *string `json:"alt_text" validate:"omitempty,max=255"`
+	IsPrimary bool    `json:"is_primary"`
+}
+
+// AddProductImageURL — POST /admin/products/:id/images/url.
+func (h *Handler) AddProductImageURL(c *gin.Context) {
+	productID, ok := h.paramInt64(c, "id")
+	if !ok {
+		return
+	}
+	var req productImageURLReq
+	if !h.bindJSON(c, &req) {
+		return
+	}
+	img, err := h.Media.AddProductImageURL(
+		c.Request.Context(), productID, req.ImageURL, req.AltText, req.IsPrimary,
+	)
 	if err != nil {
 		h.handleMediaError(c, err)
 		return
@@ -177,25 +184,8 @@ var uploadFolders = map[string]bool{
 // its public URL for the caller to persist on the owning entity. Unlike the
 // product image pipeline it records no database row.
 func (h *Handler) UploadImage(c *gin.Context) {
-	maxBytes := h.Media.MaxUploadBytes()
-	if maxBytes > 0 {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes+1)
-	}
-
-	file, _, err := c.Request.FormFile("file")
-	if err != nil {
-		response.Error(c, response.ErrInvalidRequest)
-		return
-	}
-	defer file.Close()
-
-	var reader io.Reader = file
-	if maxBytes > 0 {
-		reader = io.LimitReader(file, maxBytes+1)
-	}
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		response.Error(c, response.ErrFileTooLarge)
+	data, ok := h.readImageUpload(c)
+	if !ok {
 		return
 	}
 
@@ -210,6 +200,52 @@ func (h *Handler) UploadImage(c *gin.Context) {
 		return
 	}
 	response.Created(c, res)
+}
+
+// UploadOwnerImage — POST /admin/uploads/:ownerType/:ownerID/:role.
+func (h *Handler) UploadOwnerImage(c *gin.Context) {
+	ownerID, ok := h.paramInt64(c, "ownerID")
+	if !ok {
+		return
+	}
+	data, ok := h.readImageUpload(c)
+	if !ok {
+		return
+	}
+	res, err := h.Media.UploadOwnerImage(
+		c.Request.Context(), c.Param("ownerType"), ownerID, c.Param("role"), data,
+	)
+	if err != nil {
+		h.handleMediaError(c, err)
+		return
+	}
+	response.Created(c, res)
+}
+
+func (h *Handler) readImageUpload(c *gin.Context) ([]byte, bool) {
+	// Preserve the existing request limit here. Task 057d owns multipart-overhead
+	// correction and decoded image limits.
+	maxBytes := h.Media.MaxUploadBytes()
+	if maxBytes > 0 {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes+1)
+	}
+	file, _, err := c.Request.FormFile("file")
+	if err != nil {
+		response.Error(c, response.ErrInvalidRequest)
+		return nil, false
+	}
+	defer func() { _ = file.Close() }()
+
+	var reader io.Reader = file
+	if maxBytes > 0 {
+		reader = io.LimitReader(file, maxBytes+1)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		response.Error(c, response.ErrFileTooLarge)
+		return nil, false
+	}
+	return data, true
 }
 
 // ── Public: on-the-fly transform ────────────────────────────────────────────
@@ -314,6 +350,8 @@ func (h *Handler) handleMediaError(c *gin.Context, err error) {
 		response.Error(c, response.ErrFileTooLarge)
 	case errors.Is(err, services.ErrUnsupportedImage):
 		response.Error(c, response.ErrInvalidFileType)
+	case errors.Is(err, services.ErrInvalidMediaOwner):
+		response.Error(c, response.ErrInvalidParams)
 	default:
 		h.handleError(c, err)
 	}

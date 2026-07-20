@@ -3,6 +3,7 @@
 import type { ApiFieldErrors } from "@/lib/api/types";
 import type {
   UploadedImage,
+  OwnerMediaTarget,
   UploadImageErrorEnvelope,
   UploadImageOptions,
   UploadImageSuccessEnvelope,
@@ -33,9 +34,9 @@ function parseUploadEnvelope(responseText: string): UploadImageEnvelope | null {
   }
 }
 
-/** Uploads a standalone image through the authenticated admin BFF. */
-export function uploadImage(
+function upload(
   file: File,
+  path: string,
   options: UploadImageOptions = {},
   onProgress?: UploadProgressCallback,
 ): Promise<UploadedImage> {
@@ -45,7 +46,7 @@ export function uploadImage(
     if (options.folder) form.append("folder", options.folder);
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/admin/admin/uploads");
+    xhr.open("POST", path);
 
     const rejectAborted = () =>
       reject(new UploadApiError(0, "ABORTED", "بارگذاری لغو شد"));
@@ -101,4 +102,30 @@ export function uploadImage(
 
     xhr.send(form);
   });
+}
+
+/** Uploads a legacy ownerless image through the authenticated admin BFF. */
+export function uploadImage(
+  file: File,
+  options: UploadImageOptions = {},
+  onProgress?: UploadProgressCallback,
+): Promise<UploadedImage> {
+  return upload(file, "/api/admin/admin/uploads", options, onProgress);
+}
+
+/** Uploads and atomically attaches a file to an existing content owner slot. */
+export function uploadOwnerImage(
+  file: File,
+  target: OwnerMediaTarget & { ownerId: number },
+  onProgress?: UploadProgressCallback,
+  signal?: AbortSignal,
+): Promise<UploadedImage> {
+  const ownerType = encodeURIComponent(target.ownerType);
+  const role = encodeURIComponent(target.role);
+  return upload(
+    file,
+    `/api/admin/admin/uploads/${ownerType}/${target.ownerId}/${role}`,
+    { signal },
+    onProgress,
+  );
 }

@@ -17,6 +17,7 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | [Coupons](./coupons.md) | Validate (🔒) + admin coupon management (🛡️) |
 | [Webhooks](./webhooks.md) | Signature-verified payment gateway callbacks |
 | [Products](./products.md) | Catalogue products, tags, images, variants |
+| [Media](./media.md) | Public media delivery and admin upload contracts |
 | [Variants](./variants.md) | Product variants and their options/images |
 | [Categories](./categories.md) | Category tree |
 | [Brands](./brands.md) | Brands |
@@ -116,6 +117,9 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | POST·PATCH·DELETE | `/admin/products` … | 🛡️ |
 | POST/PUT/DELETE | `/admin/products/:id/tags` | 🛡️ |
 | POST | `/admin/products/:id/variants` | 🛡️ |
+| POST | `/admin/products/:id/images/url` | 🛡️ |
+| POST | `/admin/uploads` | 🛡️ |
+| POST | `/admin/uploads/:ownerType/:ownerID/:role` | 🛡️ |
 | PATCH·DELETE | `/admin/variants/:id` | 🛡️ |
 | POST | `/admin/variants/:id/options` | 🛡️ |
 | POST·PATCH·DELETE | `/admin/categories` … | 🛡️ |

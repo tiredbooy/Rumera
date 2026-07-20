@@ -14,7 +14,7 @@ type HeroSlide struct {
 	Subtitle *string `json:"subtitle"`
 	Badge    *string `json:"badge"`
 
-	ImageURL       string  `json:"image_url"`
+	ImageURL       *string `json:"image_url"`
 	MobileImageURL *string `json:"mobile_image_url"`
 	ImageAlt       *string `json:"image_alt"`
 
@@ -42,7 +42,7 @@ type HeroSlideReq struct {
 	Subtitle *string `json:"subtitle"`
 	Badge    *string `json:"badge" validate:"omitempty,max=120"`
 
-	ImageURL       string  `json:"image_url" validate:"required,max=2048"`
+	ImageURL       *string `json:"image_url" validate:"omitempty,max=2048"`
 	MobileImageURL *string `json:"mobile_image_url" validate:"omitempty,max=2048"`
 	ImageAlt       *string `json:"image_alt" validate:"omitempty,max=255"`
 
@@ -110,9 +110,24 @@ type PublicHeroSlideResponse struct {
 // AdminHeroSlideResponse is the complete projection used by admin list, detail,
 // create, and update responses.
 type AdminHeroSlideResponse struct {
-	PublicHeroSlideResponse
+	ID       int64   `json:"id"`
+	Eyebrow  *string `json:"eyebrow"`
+	Title    string  `json:"title"`
+	Subtitle *string `json:"subtitle"`
+	Badge    *string `json:"badge"`
 
-	IsActive bool `json:"is_active"`
+	ImageURL       *string `json:"image_url"`
+	MobileImageURL *string `json:"mobile_image_url"`
+	ImageAlt       *string `json:"image_alt"`
+
+	CTALabel          *string `json:"cta_label"`
+	CTAHref           *string `json:"cta_href"`
+	SecondaryCTALabel *string `json:"secondary_cta_label"`
+	SecondaryCTAHref  *string `json:"secondary_cta_href"`
+
+	Theme     string `json:"theme"`
+	SortOrder int    `json:"sort_order"`
+	IsActive  bool   `json:"is_active"`
 
 	StartsAt *time.Time `json:"starts_at"`
 	EndsAt   *time.Time `json:"ends_at"`

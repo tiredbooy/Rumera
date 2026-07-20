@@ -1,7 +1,9 @@
 "use client";
 
 import { Sparkles } from "lucide-react";
-import type { FieldErrors, UseFormRegister } from "react-hook-form";
+import { Controller } from "react-hook-form";
+import type { Control, FieldErrors, UseFormRegister } from "react-hook-form";
+import type { Ref } from "react";
 
 import {
   Accordion,
@@ -11,15 +13,23 @@ import {
 } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input";
+import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
 import type { RecipeFormValues } from "@/features/recipes/validations";
 import { Field } from "./FormLayout";
 
 export function SeoSection({
   register,
+  control,
   errors,
+  ownerId,
+  mediaRef,
 }: {
   register: UseFormRegister<RecipeFormValues>;
+  control: Control<RecipeFormValues>;
   errors: FieldErrors<RecipeFormValues>;
+  ownerId?: number | null;
+  mediaRef: Ref<FlexibleImageInputHandle>;
 }) {
   return (
     <Accordion
@@ -54,6 +64,29 @@ export function SeoSection({
                 id="meta_description"
                 rows={2}
                 {...register("meta_description")}
+              />
+            </Field>
+            <Field
+              id="og_image_url"
+              label="تصویر اشتراک‌گذاری"
+              error={errors.og_image_url?.message}
+              full
+            >
+              <Controller
+                control={control}
+                name="og_image_url"
+                render={({ field }) => (
+                  <FlexibleImageInput
+                    ref={mediaRef}
+                    id="og_image_url"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    owner={{ ownerType: "recipes", ownerId, role: "og" }}
+                    placeholder="https://… یا بارگذاری فایل"
+                    ariaInvalid={!!errors.og_image_url}
+                  />
+                )}
               />
             </Field>
           </div>

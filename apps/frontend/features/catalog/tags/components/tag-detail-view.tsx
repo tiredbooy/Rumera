@@ -46,11 +46,7 @@ export async function TagDetailView({
     orderBy: "desc",
   });
   const basePath = `/tags/${id}`;
-  if (
-    data.results.length === 0 &&
-    data.pagination.total_items > 0 &&
-    page > data.pagination.total_pages
-  ) {
+  if (page > data.pagination.total_pages) {
     redirect(tagPageHref(basePath, data.pagination.total_pages));
   }
   const structuredProducts = data.results.filter((product) => product.slug);

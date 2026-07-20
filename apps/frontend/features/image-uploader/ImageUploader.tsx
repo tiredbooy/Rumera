@@ -1,6 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { Link2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ImageDropzone } from "./ImageDropzone";
 import { ImageSlotList } from "./ImageSlotList";
 import { useImageUploader } from "./use-image-uploader";
@@ -17,6 +20,7 @@ export const ImageUploader = React.forwardRef<
     limitMessage,
     announcement,
     addFiles,
+    addURL,
     removeSlot,
     makePrimary,
     setAlt,
@@ -28,6 +32,7 @@ export const ImageUploader = React.forwardRef<
     flush,
     hasStaged,
   } = useImageUploader({ productId, initialImages, maxImages });
+  const [imageURL, setImageURL] = React.useState("");
 
   React.useImperativeHandle(ref, () => ({ hasStaged, flush }), [
     hasStaged,
@@ -42,6 +47,34 @@ export const ImageUploader = React.forwardRef<
         maxImages={maxImages}
         disabled={isPending}
       />
+
+      <div className="flex items-center gap-2">
+        <Input
+          dir="ltr"
+          inputMode="url"
+          value={imageURL}
+          disabled={isPending}
+          aria-label="نشانی تصویر محصول"
+          placeholder="https://images.example/product.webp"
+          onChange={(event) => setImageURL(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            if (addURL(imageURL)) setImageURL("");
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isPending || imageURL.trim() === ""}
+          onClick={() => {
+            if (addURL(imageURL)) setImageURL("");
+          }}
+        >
+          <Link2 className="size-4" aria-hidden />
+          افزودن نشانی
+        </Button>
+      </div>
 
       {limitMessage && (
         <p role="alert" className="text-xs text-destructive">

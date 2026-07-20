@@ -70,7 +70,7 @@ coordinated agents tracked in `AGENT-TASKS.md`.
 |-----|---------|---------|
 | `MEDIA_ROOT` | `/data/media` | originals root |
 | `MEDIA_CACHE_DIR` | `/data/media-cache` | rendered cache |
-| `MEDIA_PUBLIC_BASE_URL` | `` (same origin) | base for transform URLs |
+| Persisted media URL | `/media/<key>` | canonical, environment-independent path |
 | `MEDIA_MAX_UPLOAD_MB` | `15` | reject larger uploads |
 | `MEDIA_ALLOWED_FORMATS` | `avif,webp,jpeg,png` | allowed `f` values |
 | `MEDIA_DEFAULT_QUALITY` | `80` | when `q` omitted |

@@ -185,7 +185,7 @@ accessibility, responsive behavior, loading/error/empty states, and product feel
     evidence; record an explicit blocker if backend support is absent.
   - Depends: Tasks 012 and 030b.
 
-- [ ] **Task 056e - Implement the tag storefront**
+- [x] **Task 056e - Implement the tag storefront**
   - Add the agreed tag index/detail route and tag-domain composition only after
     Task 056d establishes a supported URL and product-query contract.
   - Include loading/error/empty states, pagination, metadata, responsive layout,
@@ -226,7 +226,7 @@ Local filesystem storage is the required deployment for now. Do not introduce a
 CDN, S3, or other object-store dependency. Keep the storage abstraction so a
 future adapter remains possible without changing feature code.
 
-- [ ] **Task 057a - Organize local media by domain and stable owner**
+- [x] **Task 057a - Organize local media by domain and stable owner**
   - Store files under safe readable namespaces such as
     `products/<stable-product-id>-<sanitized-slug>/...`,
     `hero-slides/<slide-id>/...`, `recipes/<recipe-id>/...`, and

@@ -137,6 +137,17 @@ describe("tag storefront composition", () => {
     expect(mocks.listTags).not.toHaveBeenCalled();
   });
 
+  it("canonicalizes an out-of-range empty directory page", async () => {
+    mocks.listTags.mockResolvedValue({
+      results: [],
+      pagination: pagination(9, 0, 1),
+    });
+
+    await expect(
+      TagIndexView({ searchParams: Promise.resolve({ page: "9" }) }),
+    ).rejects.toThrow("redirect:/tags");
+  });
+
   it("filters products by numeric tag and keeps pagination semantics accurate", async () => {
     mocks.listProducts.mockResolvedValue({
       results: [product],
@@ -176,6 +187,20 @@ describe("tag storefront composition", () => {
     ).rejects.toThrow("redirect:/tags/7?page=3");
   });
 
+  it("canonicalizes an out-of-range page for a tag with no products", async () => {
+    mocks.listProducts.mockResolvedValue({
+      results: [],
+      pagination: pagination(4, 0, 1, 12),
+    });
+
+    await expect(
+      TagDetailView({
+        params: Promise.resolve({ id: "7" }),
+        searchParams: Promise.resolve({ page: "4" }),
+      }),
+    ).rejects.toThrow("redirect:/tags/7");
+  });
+
   it("uses the tag not-found boundary without querying products", async () => {
     mocks.getTag.mockResolvedValue(null);
 
@@ -191,7 +216,7 @@ describe("tag storefront composition", () => {
   it("distinguishes a valid empty tag from a transport failure", async () => {
     mocks.listProducts.mockResolvedValue({
       results: [],
-      pagination: pagination(1, 0, 0, 12),
+      pagination: pagination(1, 0, 1, 12),
     });
 
     const markup = renderToStaticMarkup(

@@ -1,12 +1,11 @@
 import { Controller } from "react-hook-form";
 import type { Control, FieldErrors, UseFormRegister } from "react-hook-form";
+import type { Ref } from "react";
 
 import { Input } from "@/components/ui/input";
-import {
-  fieldDescriptionId,
-  fieldErrorId,
-} from "@/components/ui/field";
+import { fieldDescriptionId, fieldErrorId } from "@/components/ui/field";
 import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input";
+import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
 import type { HeroSlideFormValues } from "@/features/hero-slides/validations";
 import { FormField, FormSection } from "./form-layout";
 
@@ -14,12 +13,20 @@ export function HeroResponsiveMediaFields({
   control,
   register,
   errors,
-  onUploadingChange,
+  ownerId,
+  desktopRef,
+  mobileRef,
+  onDesktopStagedChange,
+  onDesktopPreviewChange,
 }: {
   control: Control<HeroSlideFormValues>;
   register: UseFormRegister<HeroSlideFormValues>;
   errors: FieldErrors<HeroSlideFormValues>;
-  onUploadingChange: (uploading: boolean) => void;
+  ownerId?: number | null;
+  desktopRef: Ref<FlexibleImageInputHandle>;
+  mobileRef: Ref<FlexibleImageInputHandle>;
+  onDesktopStagedChange: (staged: boolean) => void;
+  onDesktopPreviewChange: (url: string) => void;
 }) {
   return (
     <FormSection
@@ -38,11 +45,12 @@ export function HeroResponsiveMediaFields({
           name="image_url"
           render={({ field }) => (
             <FlexibleImageInput
+              ref={desktopRef}
               id="image_url"
               value={field.value}
               onChange={field.onChange}
               onBlur={field.onBlur}
-              folder="hero"
+              owner={{ ownerType: "hero-slides", ownerId, role: "desktop" }}
               placeholder="/images/hero/slide-1.jpg یا بارگذاری فایل"
               ariaInvalid={!!errors.image_url}
               ariaDescribedBy={
@@ -50,7 +58,8 @@ export function HeroResponsiveMediaFields({
                   ? fieldErrorId("image_url")
                   : fieldDescriptionId("image_url")
               }
-              onUploadingChange={onUploadingChange}
+              onStagedChange={onDesktopStagedChange}
+              onPreviewChange={onDesktopPreviewChange}
             />
           )}
         />
@@ -66,11 +75,12 @@ export function HeroResponsiveMediaFields({
           name="mobile_image_url"
           render={({ field }) => (
             <FlexibleImageInput
+              ref={mobileRef}
               id="mobile_image_url"
               value={field.value}
               onChange={field.onChange}
               onBlur={field.onBlur}
-              folder="hero"
+              owner={{ ownerType: "hero-slides", ownerId, role: "mobile" }}
               placeholder="/images/hero/slide-1-mobile.jpg یا بارگذاری فایل"
               ariaInvalid={!!errors.mobile_image_url}
               ariaDescribedBy={
@@ -78,7 +88,6 @@ export function HeroResponsiveMediaFields({
                   ? fieldErrorId("mobile_image_url")
                   : undefined
               }
-              onUploadingChange={onUploadingChange}
             />
           )}
         />

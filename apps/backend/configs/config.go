@@ -107,11 +107,10 @@ type Config struct {
 	// ── Media (product images) ────────────────────────────────────────────────
 	// Uploaded images are stored as originals under MediaRoot and served
 	// resized/recompressed on the fly via GET /media/{key}. Rendered variants are
-	// cached under MediaCacheDir. MediaPublicBaseURL is prepended when building
-	// absolute transform URLs; empty means same-origin (just "/media/...").
+	// cached under MediaCacheDir. Persisted upload URLs are always canonical,
+	// environment-independent /media/... paths.
 	MediaRoot           string   `envconfig:"MEDIA_ROOT" default:"./storage/media"`
 	MediaCacheDir       string   `envconfig:"MEDIA_CACHE_DIR" default:"./storage/media-cache"`
-	MediaPublicBaseURL  string   `envconfig:"MEDIA_PUBLIC_BASE_URL" default:""`
 	MediaMaxUploadMB    int      `envconfig:"MEDIA_MAX_UPLOAD_MB" default:"15"`
 	MediaAllowedFormats []string `envconfig:"MEDIA_ALLOWED_FORMATS" default:"avif,webp,jpeg,png"`
 	MediaDefaultQuality int      `envconfig:"MEDIA_DEFAULT_QUALITY" default:"80"`

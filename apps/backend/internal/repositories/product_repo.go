@@ -30,6 +30,7 @@ type ProductRepository interface {
 
 	// Images
 	GetImages(ctx context.Context, productID int64) ([]*models.ProductImage, error)
+	GetMediaIdentity(ctx context.Context, productID int64) (slug string, err error)
 
 	// Variants
 	GetVariants(ctx context.Context, productID int64) ([]*models.ProductVariant, error)
@@ -630,6 +631,20 @@ func (r *productRepository) ExistsByID(ctx context.Context, id int64) (bool, err
 		return false, fmt.Errorf("productRepository.ExistsByID: %w", err)
 	}
 	return exists, nil
+}
+
+// GetMediaIdentity resolves an owner for admin media writes without applying the
+// public is_active filter. The slug decorates paths; the numeric ID is identity.
+func (r *productRepository) GetMediaIdentity(ctx context.Context, productID int64) (string, error) {
+	const q = `SELECT COALESCE(slug, '') FROM products WHERE id = $1`
+	var slug string
+	if err := r.db.QueryRow(ctx, q, productID).Scan(&slug); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", models.ErrNotFound
+		}
+		return "", fmt.Errorf("productRepository.GetMediaIdentity: %w", err)
+	}
+	return slug, nil
 }
 
 func (r *productRepository) ExistsBySlug(ctx context.Context, slug string) (bool, error) {

@@ -1,10 +1,6 @@
 "use client";
 
-import type {
-  ApiErrorEnvelope,
-  ApiSuccess,
-  Paginated,
-} from "@/lib/api/types";
+import type { ApiErrorEnvelope, ApiSuccess, Paginated } from "@/lib/api/types";
 import { buildQueryString } from "@/lib/utils/api-helpers";
 import type { PublicProductListQuery } from "@/features/catalog/products/queries";
 import type {
@@ -24,8 +20,17 @@ export class ProductClientError extends Error {
   }
 }
 
-async function productRequest<T>(path: string): Promise<T> {
-  const response = await fetch(`/api/admin/${path}`);
+async function productRequest<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(`/api/admin/${path}`, {
+    ...init,
+    headers: {
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...init.headers,
+    },
+  });
   const body: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
@@ -92,4 +97,22 @@ export function uploadProductImage(
     xhr.onerror = () => reject(new Error("خطای شبکه"));
     xhr.send(form);
   });
+}
+
+export function addProductImageURL(
+  productId: number,
+  imageUrl: string,
+  opts: { altText?: string; isPrimary?: boolean },
+): Promise<ProductImage> {
+  return productRequest<ProductImage>(
+    `admin/products/${productId}/images/url`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        image_url: imageUrl,
+        alt_text: opts.altText || null,
+        is_primary: opts.isPrimary ?? false,
+      }),
+    },
+  );
 }

@@ -1,14 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { uploadProductImage } from "../admin/products/api/client";
+import {
+  addProductImageURL,
+  uploadProductImage,
+} from "../admin/products/api/client";
 import {
   deleteProductImage,
   reorderProductImages,
   setPrimaryImage,
   updateImageAlt,
 } from "../admin/products/actions/images";
-import { isSameFile, validateFile } from "./constants";
+import {
+  isSameFile,
+  validateExternalImageURL,
+  validateFile,
+} from "./constants";
 import type { ProductImage } from "../catalog/products/types";
 import type {
   ImageUploaderProps,
@@ -126,12 +133,21 @@ export function useImageUploader({
           error: undefined,
         });
         try {
-          const image = await uploadProductImage(
-            pid,
-            slot.file,
-            { altText: slot.alt || undefined, isPrimary: slot.isPrimary },
-            (progress) => patchStaged(slot.localId, { progress }),
-          );
+          const image =
+            slot.source.kind === "file"
+              ? await uploadProductImage(
+                  pid,
+                  slot.source.file,
+                  {
+                    altText: slot.alt || undefined,
+                    isPrimary: slot.isPrimary,
+                  },
+                  (progress) => patchStaged(slot.localId, { progress }),
+                )
+              : await addProductImageURL(pid, slot.source.url, {
+                  altText: slot.alt || undefined,
+                  isPrimary: slot.isPrimary,
+                });
           revokePreview(slot.previewUrl);
           replaceSlots((current) =>
             current.map((currentSlot) =>
@@ -176,8 +192,13 @@ export function useImageUploader({
       setLimitMessage(null);
       const current = slotsRef.current;
       const existingFiles = current
-        .filter((slot): slot is StagedSlot => slot.kind === "staged")
-        .map((slot) => slot.file);
+        .filter(
+          (
+            slot,
+          ): slot is StagedSlot & { source: { kind: "file"; file: File } } =>
+            slot.kind === "staged" && slot.source.kind === "file",
+        )
+        .map((slot) => slot.source.file);
       const room =
         typeof maxImages === "number"
           ? Math.max(0, maxImages - current.length)
@@ -214,7 +235,7 @@ export function useImageUploader({
         return {
           kind: "staged",
           localId: `slot-${idRef.current++}`,
-          file,
+          source: { kind: "file", file },
           previewUrl,
           alt: "",
           isPrimary: false,
@@ -244,6 +265,59 @@ export function useImageUploader({
           }
         })();
       }
+    },
+    [live, maxImages, productId, replaceSlots, uploadStaged],
+  );
+
+  const addURL = React.useCallback(
+    (rawURL: string) => {
+      if (
+        flushingRef.current ||
+        pendingPersistenceRef.current.size > 0 ||
+        inFlightUploadsRef.current.size > 0
+      ) {
+        return false;
+      }
+      setLimitMessage(null);
+      const imageURL = rawURL.trim();
+      const validationError = validateExternalImageURL(imageURL);
+      if (validationError) {
+        setLimitMessage(validationError);
+        return false;
+      }
+      const current = slotsRef.current;
+      if (typeof maxImages === "number" && current.length >= maxImages) {
+        setLimitMessage(`حداکثر ${maxImages} تصویر مجاز است.`);
+        return false;
+      }
+      const duplicate = current.some((slot) =>
+        slot.kind === "uploaded"
+          ? slot.image.image_url === imageURL
+          : slot.source.kind === "url" && slot.source.url === imageURL,
+      );
+      if (duplicate) {
+        setLimitMessage("این نشانی تصویر قبلاً اضافه شده است.");
+        return false;
+      }
+
+      const hasPrimary = current.some((slot) =>
+        slot.kind === "uploaded" ? slot.image.is_primary : slot.isPrimary,
+      );
+      const incoming: StagedSlot = {
+        kind: "staged",
+        localId: `slot-${idRef.current++}`,
+        source: { kind: "url", url: imageURL },
+        previewUrl: imageURL,
+        alt: "",
+        isPrimary: !hasPrimary,
+        status: "idle",
+        progress: 0,
+      };
+      replaceSlots((existing) => [...existing, incoming]);
+      if (live) {
+        void uploadStaged(incoming, productId).catch(() => {});
+      }
+      return true;
     },
     [live, maxImages, productId, replaceSlots, uploadStaged],
   );
@@ -290,8 +364,7 @@ export function useImageUploader({
                         ...candidate,
                         image: {
                           ...candidate.image,
-                          is_primary:
-                            candidate.localId === replacement.localId,
+                          is_primary: candidate.localId === replacement.localId,
                         },
                       }
                     : candidate,
@@ -377,7 +450,8 @@ export function useImageUploader({
           } catch (error) {
             replaceSlots((current) =>
               current.map((currentSlot) => {
-                const isPrimary = previousPrimary.get(currentSlot.localId) ?? false;
+                const isPrimary =
+                  previousPrimary.get(currentSlot.localId) ?? false;
                 return currentSlot.kind === "uploaded"
                   ? {
                       ...currentSlot,
@@ -606,6 +680,7 @@ export function useImageUploader({
     limitMessage,
     announcement,
     addFiles,
+    addURL,
     removeSlot,
     makePrimary,
     setAlt,

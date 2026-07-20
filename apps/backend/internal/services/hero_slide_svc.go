@@ -3,9 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
+	"github.com/tiredbooy/pkg/apperr"
 )
 
 // HeroSlideService owns the home-carousel slides. Reads are split into a public
@@ -52,6 +54,18 @@ func (s *heroSlideService) GetByID(ctx context.Context, id int64) (*models.HeroS
 }
 
 func (s *heroSlideService) Create(ctx context.Context, req *models.HeroSlideReq) (*models.HeroSlide, error) {
+	if req.ImageURL != nil {
+		trimmed := strings.TrimSpace(*req.ImageURL)
+		if trimmed == "" {
+			req.ImageURL = nil
+		} else {
+			req.ImageURL = &trimmed
+		}
+	}
+	active := req.IsActive == nil || *req.IsActive
+	if active && !hasHeroImage(req.ImageURL) {
+		return nil, apperr.ErrInvalidRequest
+	}
 	slide, err := s.repo.Create(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("heroSlideService.Create: %w", err)
@@ -60,11 +74,32 @@ func (s *heroSlideService) Create(ctx context.Context, req *models.HeroSlideReq)
 }
 
 func (s *heroSlideService) Update(ctx context.Context, id int64, req *models.HeroSlideUpdateReq) (*models.HeroSlide, error) {
+	if req.ImageURL != nil || req.IsActive != nil {
+		current, err := s.repo.GetByID(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("heroSlideService.Update preflight: %w", err)
+		}
+		imageURL := current.ImageURL
+		if req.ImageURL != nil {
+			imageURL = req.ImageURL
+		}
+		active := current.IsActive
+		if req.IsActive != nil {
+			active = *req.IsActive
+		}
+		if active && !hasHeroImage(imageURL) {
+			return nil, apperr.ErrInvalidRequest
+		}
+	}
 	slide, err := s.repo.Update(ctx, id, req)
 	if err != nil {
 		return nil, fmt.Errorf("heroSlideService.Update: %w", err)
 	}
 	return slide, nil
+}
+
+func hasHeroImage(value *string) bool {
+	return value != nil && strings.TrimSpace(*value) != ""
 }
 
 func (s *heroSlideService) Delete(ctx context.Context, id int64) error {

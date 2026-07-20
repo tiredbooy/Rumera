@@ -50,6 +50,7 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 
 		productRepo      = repositories.NewProductRepository(db)
 		productImageRepo = repositories.NewProductImageRepository(db)
+		contentMediaRepo = repositories.NewContentMediaRepository(db)
 		variantRepo      = repositories.NewVariantRepository(db)
 		categoryRepo     = repositories.NewCategoryRepository(db)
 		brandRepo        = repositories.NewBrandRepository(db)
@@ -120,9 +121,8 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		}
 	}
 	mediaService := services.NewMediaService(
-		mediaStore, mediaCache, productImageRepo, productRepo, imaging.New(),
+		mediaStore, mediaCache, productImageRepo, productRepo, contentMediaRepo, imaging.New(),
 		services.MediaConfig{
-			PublicBaseURL:  cfg.MediaPublicBaseURL,
 			MaxUploadBytes: int64(cfg.MediaMaxUploadMB) * 1024 * 1024,
 			DefaultQuality: cfg.MediaDefaultQuality,
 			MaxDimension:   cfg.MediaMaxDimension,

@@ -58,6 +58,7 @@ export const recipeFormSchema = z.object({
   servings: intish("حداقل ۱", { min: 1 }),
   status: z.enum(["draft", "published", "archived"]),
   image_url: z.string().trim().max(500),
+  og_image_url: z.string().trim().max(500),
   is_featured: z.boolean(),
   meta_title: z.string().trim().max(255),
   meta_description: z.string().trim().max(500),

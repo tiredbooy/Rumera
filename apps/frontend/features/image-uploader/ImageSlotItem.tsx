@@ -70,7 +70,7 @@ export function ImageSlotItem({
         className="h-full w-full object-cover"
       />
     ) : (
-      // eslint-disable-next-line @next/next/no-img-element -- local object-URL preview before upload.
+      // eslint-disable-next-line @next/next/no-img-element -- staged local or remote preview before persistence.
       <img
         src={slot.previewUrl}
         alt="پیش‌نمایش"

@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
 import type { Tag } from "@/features/catalog/tags/types";
+import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
 import {
   createRecipe,
   RecipeApiError,
@@ -52,6 +53,7 @@ function defaults(recipe?: AdminRecipeDetail): RecipeFormValues {
     servings: recipe?.servings ? String(recipe.servings) : "",
     status: recipe?.status ?? "draft",
     image_url: recipe?.image_url ?? "",
+    og_image_url: recipe?.og_image_url ?? "",
     is_featured: recipe?.is_featured ?? false,
     meta_title: recipe?.meta_title ?? "",
     meta_description: recipe?.meta_description ?? "",
@@ -88,7 +90,11 @@ export function RecipeForm({
   submitLabel?: string;
 }) {
   const router = useRouter();
-  const [imageUploading, setImageUploading] = React.useState(false);
+  const coverMediaRef = React.useRef<FlexibleImageInputHandle>(null);
+  const ogMediaRef = React.useRef<FlexibleImageInputHandle>(null);
+  const [coverPreview, setCoverPreview] = React.useState(
+    recipe?.image_url ?? "",
+  );
 
   const {
     register,
@@ -138,6 +144,7 @@ export function RecipeForm({
       servings: intOrZero(v.servings) || undefined,
       status: v.status,
       image_url: strOrNull(v.image_url),
+      og_image_url: strOrNull(v.og_image_url),
       is_featured: v.is_featured,
       meta_title: strOrNull(v.meta_title),
       meta_description: strOrNull(v.meta_description),
@@ -159,25 +166,45 @@ export function RecipeForm({
         });
       }
       toast.error(e.message);
+    } else if (e instanceof Error) {
+      toast.error(e.message);
     } else {
       toast.error("خطای غیرمنتظره رخ داد");
     }
   }
 
   async function onSubmit(v: RecipeFormValues) {
+    let savedOwnerId: number | null = null;
     try {
       const payload = toPayload(v);
-      if (mode === "create") {
-        await createRecipe(payload);
-        toast.success("دستور ایجاد شد");
-      } else if (recipe) {
-        await updateRecipe(recipe.id, payload);
-        toast.success("تغییرات ذخیره شد");
+      if (coverMediaRef.current?.hasStaged) {
+        payload.image_url = mode === "create" ? null : undefined;
       }
+      if (ogMediaRef.current?.hasStaged) {
+        payload.og_image_url = mode === "create" ? null : undefined;
+      }
+
+      let saved: AdminRecipeDetail;
+      if (mode === "create") {
+        saved = await createRecipe(payload);
+      } else if (recipe) {
+        saved = await updateRecipe(recipe.id, payload);
+      } else {
+        return;
+      }
+      savedOwnerId = saved.id;
+      await coverMediaRef.current?.flush(saved.id);
+      await ogMediaRef.current?.flush(saved.id);
+      toast.success(mode === "create" ? "دستور ایجاد شد" : "تغییرات ذخیره شد");
       router.push("/admin/recipes");
       router.refresh();
     } catch (e) {
       applyServerErrors(e);
+      if (mode === "create" && savedOwnerId) {
+        toast.info("دستور ذخیره شد؛ بارگذاری را در صفحه ویرایش ادامه دهید");
+        router.push(`/admin/recipes/${savedOwnerId}`);
+        router.refresh();
+      }
     }
   }
 
@@ -206,7 +233,13 @@ export function RecipeForm({
           errors={errors}
           setValue={setValue}
         />
-        <SeoSection register={register} errors={errors} />
+        <SeoSection
+          control={control}
+          register={register}
+          errors={errors}
+          ownerId={recipe?.id}
+          mediaRef={ogMediaRef}
+        />
       </div>
 
       <RecipeSidebar
@@ -214,12 +247,13 @@ export function RecipeForm({
         errors={errors}
         tags={tags}
         title={title}
-        imageUrl={imageUrl}
+        imageUrl={coverPreview || imageUrl}
         status={status}
         submitLabel={submitLabel}
         isSubmitting={isSubmitting}
-        imageUploading={imageUploading}
-        onUploadingChange={setImageUploading}
+        ownerId={recipe?.id}
+        mediaRef={coverMediaRef}
+        onPreviewChange={setCoverPreview}
         onCancel={() => router.push("/admin/recipes")}
       />
     </form>

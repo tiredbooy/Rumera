@@ -7,7 +7,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tiredbooy/internal/models"
@@ -39,11 +41,19 @@ var inputExt = map[string]string{
 // MediaConfig captures the runtime knobs the media service needs (sourced from
 // configs.Config in bootstrap).
 type MediaConfig struct {
-	PublicBaseURL  string // prepended to "/media/{key}"; empty = same-origin
 	MaxUploadBytes int64
 	DefaultQuality int
 	MaxDimension   int
 	AllowedOutput  map[imaging.Format]bool
+}
+
+type productMediaRepository interface {
+	GetMediaIdentity(ctx context.Context, productID int64) (slug string, err error)
+}
+
+type contentMediaRepository interface {
+	OwnerExists(ctx context.Context, ownerType string, ownerID int64) (bool, error)
+	Attach(ctx context.Context, ownerType, role string, ownerID int64, url, key string) error
 }
 
 // MediaService stores uploaded product images and serves resized/recompressed
@@ -51,19 +61,23 @@ type MediaConfig struct {
 // in `cache`. The actual codec work is delegated to an imaging.Transformer
 // (pure-Go by default, libvips under `-tags vips`).
 type MediaService struct {
-	store storage.Storage
+	store storage.WriteOnceStorage
 	cache storage.Storage
 	repo  repositories.ProductImageRepository
-	prod  repositories.ProductRepository
+	prod  productMediaRepository
+	owner contentMediaRepository
 	tr    imaging.Transformer
 	cfg   MediaConfig
 	log   *zap.Logger
+	newID func() string
 }
 
 func NewMediaService(
-	store, cache storage.Storage,
+	store storage.WriteOnceStorage,
+	cache storage.Storage,
 	repo repositories.ProductImageRepository,
-	prod repositories.ProductRepository,
+	prod productMediaRepository,
+	owner contentMediaRepository,
 	tr imaging.Transformer,
 	cfg MediaConfig,
 	log *zap.Logger,
@@ -74,12 +88,17 @@ func NewMediaService(
 	if cfg.MaxDimension <= 0 {
 		cfg.MaxDimension = 4000
 	}
-	return &MediaService{store: store, cache: cache, repo: repo, prod: prod, tr: tr, cfg: cfg, log: log}
-}
-
-// PublicURL builds the canonical serving URL for a storage key.
-func (s *MediaService) PublicURL(key string) string {
-	return s.cfg.PublicBaseURL + "/media/" + key
+	return &MediaService{
+		store: store,
+		cache: cache,
+		repo:  repo,
+		prod:  prod,
+		owner: owner,
+		tr:    tr,
+		cfg:   cfg,
+		log:   log,
+		newID: uuid.NewString,
+	}
 }
 
 // ── Upload & management ─────────────────────────────────────────────────────
@@ -90,31 +109,34 @@ func (s *MediaService) Upload(ctx context.Context, productID int64, data []byte,
 	if productID <= 0 {
 		return nil, apperr.ErrInvalidRequest
 	}
-	if s.cfg.MaxUploadBytes > 0 && int64(len(data)) > s.cfg.MaxUploadBytes {
-		return nil, ErrImageTooLarge
-	}
-	if len(data) == 0 {
-		return nil, ErrUnsupportedImage
-	}
-
-	if exists, err := s.prod.ExistsByID(ctx, productID); err != nil {
-		return nil, apperr.ErrInternal
-	} else if !exists {
+	slug, err := s.prod.GetMediaIdentity(ctx, productID)
+	if errors.Is(err, models.ErrNotFound) {
 		return nil, apperr.ErrProductNotFound
 	}
-
-	w, h, format, err := s.tr.Probe(data)
 	if err != nil {
-		return nil, ErrUnsupportedImage
-	}
-	ext, ok := inputExt[format]
-	if !ok {
-		return nil, ErrUnsupportedImage
+		return nil, apperr.ErrInternal
 	}
 
-	key := "products/" + uuid.NewString() + "." + ext
-	if err := s.store.Put(ctx, key, bytes.NewReader(data)); err != nil {
-		s.log.Error("media: store original", zap.String("key", key), zap.Error(err))
+	w, h, ext, err := s.inspectUpload(data)
+	if err != nil {
+		return nil, err
+	}
+
+	key, err := s.storeOriginal(
+		ctx,
+		MediaOwnerProduct,
+		productID,
+		slug,
+		MediaRoleGallery,
+		ext,
+		data,
+	)
+	if err != nil {
+		return nil, err
+	}
+	imageURL, err := canonicalMediaPath(key)
+	if err != nil {
+		_ = s.store.Delete(ctx, key)
 		return nil, apperr.ErrInternal
 	}
 
@@ -130,7 +152,7 @@ func (s *MediaService) Upload(ctx context.Context, productID int64, data []byte,
 	wv, hv := w, h
 	img := &models.ProductImage{
 		ProductID:  &pid,
-		ImageURL:   s.PublicURL(key),
+		ImageURL:   imageURL,
 		StorageKey: &key,
 		AltText:    altText,
 		SortOrder:  sortOrder,
@@ -140,14 +162,74 @@ func (s *MediaService) Upload(ctx context.Context, productID int64, data []byte,
 	}
 	created, err := s.repo.Create(ctx, img)
 	if err != nil {
-		_ = s.store.Delete(ctx, key)
-		s.log.Error("media: create row", zap.Error(err))
+		if isDefinitiveDatabaseRejection(err) {
+			if deleteErr := s.store.Delete(ctx, key); deleteErr != nil {
+				s.log.Warn("media: clean rejected original",
+					zap.String("key", key), zap.Error(deleteErr))
+			}
+			s.log.Error("media: create row rejected; removed original",
+				zap.String("key", key), zap.Error(err))
+		} else {
+			// A connection loss or cancellation can hide a committed INSERT. Retain
+			// the immutable blob rather than risk leaving that row broken; Task 057c
+			// reconciliation can remove it if the row definitively did not land.
+			s.log.Error("media: create row outcome ambiguous; retained original for reconciliation",
+				zap.String("key", key), zap.Error(err))
+		}
 		return nil, apperr.ErrInternal
 	}
 	if primary {
 		// Guarantee exactly one primary per product.
 		if err := s.repo.SetPrimary(ctx, productID, created.ID); err != nil {
 			s.log.Warn("media: set primary", zap.Int64("image_id", created.ID), zap.Error(err))
+		}
+		created.IsPrimary = true
+	}
+	return created, nil
+}
+
+// AddProductImageURL attaches an externally hosted or static image without
+// pretending the backend owns its bytes. Product ordering, alt text, and primary
+// behavior remain identical to uploaded product images.
+func (s *MediaService) AddProductImageURL(
+	ctx context.Context,
+	productID int64,
+	imageURL string,
+	altText *string,
+	isPrimary bool,
+) (*models.ProductImage, error) {
+	if productID <= 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+	if _, err := s.prod.GetMediaIdentity(ctx, productID); errors.Is(err, models.ErrNotFound) {
+		return nil, apperr.ErrProductNotFound
+	} else if err != nil {
+		return nil, apperr.ErrInternal
+	}
+
+	normalized, err := normalizeExternalImageURL(imageURL)
+	if err != nil {
+		return nil, apperr.ErrInvalidRequest
+	}
+	sortOrder, err := s.repo.NextSortOrder(ctx, productID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	primary := isPrimary || sortOrder == 0
+	pid := productID
+	created, err := s.repo.Create(ctx, &models.ProductImage{
+		ProductID: &pid,
+		ImageURL:  normalized,
+		AltText:   altText,
+		SortOrder: sortOrder,
+		IsPrimary: primary,
+	})
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	if primary {
+		if err := s.repo.SetPrimary(ctx, productID, created.ID); err != nil {
+			s.log.Warn("media: set external primary", zap.Int64("image_id", created.ID), zap.Error(err))
 		}
 		created.IsPrimary = true
 	}
@@ -168,31 +250,194 @@ type UploadResult struct {
 // Unlike Upload it records no database row — the URL is persisted on the owning
 // entity (e.g. hero_slides.image_url). The same size/format guards apply.
 func (s *MediaService) UploadImage(ctx context.Context, folder string, data []byte) (*UploadResult, error) {
-	if s.cfg.MaxUploadBytes > 0 && int64(len(data)) > s.cfg.MaxUploadBytes {
-		return nil, ErrImageTooLarge
-	}
-	if len(data) == 0 {
-		return nil, ErrUnsupportedImage
-	}
-
-	w, h, format, err := s.tr.Probe(data)
+	w, h, ext, err := s.inspectUpload(data)
 	if err != nil {
-		return nil, ErrUnsupportedImage
-	}
-	ext, ok := inputExt[format]
-	if !ok {
-		return nil, ErrUnsupportedImage
+		return nil, err
 	}
 
 	if folder == "" {
 		folder = "uploads"
 	}
-	key := folder + "/" + uuid.NewString() + "." + ext
-	if err := s.store.Put(ctx, key, bytes.NewReader(data)); err != nil {
-		s.log.Error("media: store upload", zap.String("key", key), zap.Error(err))
+	key, err := s.storeLegacyOriginal(ctx, folder, ext, data)
+	if err != nil {
+		return nil, err
+	}
+	url, err := canonicalMediaPath(key)
+	if err != nil {
+		_ = s.store.Delete(ctx, key)
 		return nil, apperr.ErrInternal
 	}
-	return &UploadResult{URL: s.PublicURL(key), Key: key, Width: w, Height: h}, nil
+	return &UploadResult{URL: url, Key: key, Width: w, Height: h}, nil
+}
+
+// UploadOwnerImage stores one immutable content image and atomically attaches
+// its canonical URL/key pair to an existing owner slot.
+func (s *MediaService) UploadOwnerImage(
+	ctx context.Context,
+	ownerType string,
+	ownerID int64,
+	role string,
+	data []byte,
+) (*UploadResult, error) {
+	if ownerID <= 0 {
+		return nil, ErrInvalidMediaOwner
+	}
+	kind, mediaRole, err := contentMediaSlot(ownerType, role)
+	if err != nil {
+		return nil, err
+	}
+	exists, err := s.owner.OwnerExists(ctx, ownerType, ownerID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	if !exists {
+		return nil, models.ErrNotFound
+	}
+
+	w, h, ext, err := s.inspectUpload(data)
+	if err != nil {
+		return nil, err
+	}
+	key, err := s.storeOriginal(ctx, kind, ownerID, "", mediaRole, ext, data)
+	if err != nil {
+		return nil, err
+	}
+	mediaURL, err := canonicalMediaPath(key)
+	if err != nil {
+		_ = s.store.Delete(ctx, key)
+		return nil, apperr.ErrInternal
+	}
+
+	if err := s.owner.Attach(ctx, ownerType, role, ownerID, mediaURL, key); err != nil {
+		definitive := errors.Is(err, models.ErrNotFound) || isDefinitiveDatabaseRejection(err)
+		if definitive {
+			if deleteErr := s.store.Delete(ctx, key); deleteErr != nil {
+				s.log.Warn("media: clean unattached owner image",
+					zap.String("key", key), zap.Error(deleteErr))
+			}
+		} else {
+			s.log.Error("media: owner attachment outcome ambiguous; retained original for reconciliation",
+				zap.String("key", key), zap.Error(err))
+		}
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, models.ErrNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+
+	return &UploadResult{URL: mediaURL, Key: key, Width: w, Height: h}, nil
+}
+
+func (s *MediaService) inspectUpload(data []byte) (width, height int, ext string, err error) {
+	if s.cfg.MaxUploadBytes > 0 && int64(len(data)) > s.cfg.MaxUploadBytes {
+		return 0, 0, "", ErrImageTooLarge
+	}
+	if len(data) == 0 {
+		return 0, 0, "", ErrUnsupportedImage
+	}
+	width, height, format, err := s.tr.Probe(data)
+	if err != nil {
+		return 0, 0, "", ErrUnsupportedImage
+	}
+	ext, ok := inputExt[format]
+	if !ok {
+		return 0, 0, "", ErrUnsupportedImage
+	}
+	return width, height, ext, nil
+}
+
+func normalizeExternalImageURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 2048 || strings.ContainsRune(value, '#') {
+		return "", ErrInvalidMediaOwner
+	}
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || parsed.User != nil || parsed.Fragment != "" {
+		return "", ErrInvalidMediaOwner
+	}
+	if strings.HasPrefix(value, "/") {
+		if strings.HasPrefix(value, "//") || strings.HasPrefix(value, "/media/") {
+			return "", ErrInvalidMediaOwner
+		}
+		return value, nil
+	}
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return "", ErrInvalidMediaOwner
+	}
+	return value, nil
+}
+
+const mediaWriteAttempts = 4
+
+func (s *MediaService) storeOriginal(
+	ctx context.Context,
+	kind MediaOwnerKind,
+	ownerID int64,
+	ownerSlug string,
+	role MediaRole,
+	ext string,
+	data []byte,
+) (string, error) {
+	for range mediaWriteAttempts {
+		key, err := mediaStorageKey(kind, ownerID, ownerSlug, role, s.nextID(), ext)
+		if err != nil {
+			return "", apperr.ErrInternal
+		}
+		if err := s.store.PutIfAbsent(ctx, key, bytes.NewReader(data)); err == nil {
+			return key, nil
+		} else if !errors.Is(err, storage.ErrKeyExists) {
+			s.log.Error("media: store original", zap.String("key", key), zap.Error(err))
+			return "", apperr.ErrInternal
+		}
+	}
+	s.log.Error("media: exhausted storage key attempts")
+	return "", apperr.ErrInternal
+}
+
+func (s *MediaService) storeLegacyOriginal(ctx context.Context, folder, ext string, data []byte) (string, error) {
+	for range mediaWriteAttempts {
+		key := folder + "/" + s.nextID() + "." + ext
+		if err := storage.ValidateKey(key); err != nil {
+			return "", apperr.ErrInvalidRequest
+		}
+		if err := s.store.PutIfAbsent(ctx, key, bytes.NewReader(data)); err == nil {
+			return key, nil
+		} else if !errors.Is(err, storage.ErrKeyExists) {
+			s.log.Error("media: store upload", zap.String("key", key), zap.Error(err))
+			return "", apperr.ErrInternal
+		}
+	}
+	s.log.Error("media: exhausted legacy storage key attempts")
+	return "", apperr.ErrInternal
+}
+
+func (s *MediaService) nextID() string {
+	if s.newID != nil {
+		return s.newID()
+	}
+	return uuid.NewString()
+}
+
+func isDefinitiveDatabaseRejection(err error) bool {
+	var sqlStateErr interface{ SQLState() string }
+	if !errors.As(err, &sqlStateErr) {
+		return false
+	}
+	state := sqlStateErr.SQLState()
+	if len(state) < 2 {
+		return false
+	}
+	// Only errors that prove PostgreSQL rejected or rolled back this statement
+	// permit deletion. Connection, shutdown, I/O, and internal errors remain
+	// ambiguous even when they carry a SQLSTATE.
+	switch state[:2] {
+	case "22", "23", "42", "44":
+		return true
+	case "40":
+		return state != "40003"
+	default:
+		return false
+	}
 }
 
 func (s *MediaService) List(ctx context.Context, productID int64) ([]*models.ProductImage, error) {
@@ -274,6 +519,9 @@ func (s *MediaService) OutputAllowed(f imaging.Format) bool {
 // Transform returns the rendered bytes and content type for a stored key under
 // the given options, serving from the on-disk cache when possible.
 func (s *MediaService) Transform(ctx context.Context, key string, opts imaging.Options) ([]byte, string, error) {
+	if err := storage.ValidateKey(key); err != nil {
+		return nil, "", models.ErrNotFound
+	}
 	opts = s.normalize(opts)
 
 	// The effective output format determines both the cache extension and the

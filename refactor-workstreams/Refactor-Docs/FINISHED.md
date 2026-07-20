@@ -2846,3 +2846,90 @@ in `TASKS.md`, `IN_PROGRESS.md`, and this file.
 - Task 056e's tag-contract dependency is resolved; normal `TASKS.md` ordering now
   governs when it can be claimed. Tasks 058a and 058d retain final product-write
   tag persistence and aggregate atomicity.
+
+## Task 056e - Implement The Tag Storefront
+
+**Status:** Complete
+**Date:** 2026-07-20
+
+### What Changed
+
+- Added numeric tag index and detail routes backed by `GET /tags/:id` and
+  `GET /products?tag_id=<id>` without fabricating a slug-based public contract.
+- Added tag-owned server composition, canonical positive ID/page parsing,
+  stable pagination links, malformed/out-of-range URL recovery, and explicit
+  loading, error, not-found, and valid-empty states.
+- Added canonical metadata, breadcrumb and item-list JSON-LD, static parameter
+  discovery, sitemap entries, and a storefront footer route.
+- Reused the canonical product card without changing pending product-card or
+  media behavior.
+- Corrected empty-result pagination so requests beyond the backend's real page
+  range canonicalize to page one even when `total_items` is zero, and aligned the
+  regression fixture with the backend's guaranteed minimum `total_pages` of one.
+
+### Verification
+
+- Four focused tag test files passed with 20 tests; the complete frontend suite
+  passed with 53 files and 164 tests.
+- Full TypeScript passed. Scoped ESLint passed; full ESLint passed with zero
+  errors and 10 unrelated existing warnings. Prettier and `git diff --check`
+  passed.
+- A production Next.js 16.2.6 build passed against deterministic public API
+  fixtures. The first build without a local API compiled and typechecked, then
+  stopped at the known unrelated storefront-layout API dependency.
+- Live Chromium checks passed for tag index/detail at 320, 375, 768, 1024, and
+  1440px with RTL semantics, no horizontal overflow or runtime errors, a working
+  skip link, visible tag-card focus, at least 44px targets, and keyboard-focusable
+  pagination.
+- Full backend `go test ./...` and `go vet ./...` passed.
+
+### Next Task
+
+- Task 057a is the next unblocked task. Tasks 056a-c and 056f-i remain deferred
+  until the explicit media/product readiness gate is satisfied.
+
+## Task 057a - Organize Local Media By Domain And Stable Owner
+
+**Status:** Complete
+**Date:** 2026-07-20
+
+### What Changed
+
+- Added one strict, portable storage-key grammar and symlink-contained local
+  storage with atomic overwrite plus concurrent write-once publication.
+- Added stable owner/role namespaces for products, hero slides, recipes, and
+  journal media; product uploads now use numeric owner identity, sanitized slug
+  decoration, immutable UUID leaves, collision retries, and canonical `/media/...`
+  URLs while safe legacy flat keys remain readable.
+- Added nullable content storage-key columns, URL/key invariants, partial unique
+  indexes, safe legacy backfill, shared-key detachment, and a non-transactional
+  migration that is resilient to pooled connections, partial retries, invalid
+  index artifacts, and Down/Up cycles without moving or deleting blobs.
+- Preserved content keys only when their paired URLs remain unchanged. Definitive
+  database rejections clean up new blobs; connection and operational outcomes
+  retain them for Task 057c reconciliation.
+- Removed environment-specific persisted media origins and documented the current
+  product/legacy routes plus the closed Task 057b owner/role contract.
+
+### Verification
+
+- Full `go test -race -count=1 ./...`, `go vet ./...`, and `go build ./...`
+  passed.
+- A fresh PostgreSQL integration run passed, including all six media-key columns,
+  canonical URL/key constraints, shared product/content keys, unversioned
+  non-transactional retry, and Down/Up behavior.
+- Concurrent storage publication, collision retry, traversal/symlink containment,
+  partial writes, legacy rendering, draft owners, and ambiguous/definitive
+  database outcomes have focused regression coverage.
+- Changed-line golangci-lint v2 checks reported zero issues; gofmt/goimports,
+  development and production Compose validation, and `git diff --check` passed.
+- Final independent filesystem/upload and migration reviews reported no actionable
+  Task 057a findings.
+
+### Notes / Follow-Ups
+
+- The checked-in `.golangci.yml` is a pre-existing v1 configuration and cannot be
+  loaded by the installed golangci-lint v2.12.2; repository-wide no-config lint
+  still reports unrelated baseline findings.
+- Task 057b is the next unblocked task. Tasks 057c, 057d, and 061d retain lifecycle,
+  processing-hardening, and cross-origin rendering ownership respectively.

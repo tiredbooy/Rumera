@@ -15,6 +15,7 @@ import type {
   AdminHeroSlide,
   CreateHeroSlideInput,
 } from "@/features/hero-slides/types";
+import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
 import {
   heroSlideFormSchema,
   type HeroSlideFormValues,
@@ -48,6 +49,7 @@ function defaults(slide?: AdminHeroSlide): HeroSlideFormValues {
     theme: slide?.theme ?? "dark",
     sort_order: slide?.sort_order != null ? String(slide.sort_order) : "0",
     is_active: slide?.is_active ?? true,
+    desktop_file_staged: false,
   };
 }
 
@@ -79,18 +81,18 @@ export function HeroForm({
   submitLabel?: string;
 }) {
   const router = useRouter();
-  const [uploadsInFlight, setUploadsInFlight] = React.useState(0);
-  const uploadBusy = uploadsInFlight > 0;
-
-  function handleUploadingChange(uploading: boolean) {
-    setUploadsInFlight((count) => Math.max(0, count + (uploading ? 1 : -1)));
-  }
+  const desktopMediaRef = React.useRef<FlexibleImageInputHandle>(null);
+  const mobileMediaRef = React.useRef<FlexibleImageInputHandle>(null);
+  const [desktopPreview, setDesktopPreview] = React.useState(
+    slide?.image_url ?? "",
+  );
 
   const {
     register,
     handleSubmit,
     control,
     watch,
+    setValue,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<HeroSlideFormValues>({
@@ -99,7 +101,6 @@ export function HeroForm({
   });
 
   // Live preview values.
-  const imageUrl = watch("image_url");
   const title = watch("title");
   const eyebrow = watch("eyebrow");
   const subtitle = watch("subtitle");
@@ -114,7 +115,7 @@ export function HeroForm({
       eyebrow: strOrNull(v.eyebrow),
       subtitle: strOrNull(v.subtitle),
       badge: strOrNull(v.badge),
-      image_url: v.image_url.trim(),
+      image_url: strOrNull(v.image_url),
       mobile_image_url: strOrNull(v.mobile_image_url),
       image_alt: strOrNull(v.image_alt),
       cta_label: strOrNull(v.cta_label),
@@ -140,31 +141,60 @@ export function HeroForm({
           });
       }
       toast.error(e.message);
+    } else if (e instanceof Error) {
+      toast.error(e.message);
     } else {
       toast.error("خطای غیرمنتظره رخ داد");
     }
   }
 
   async function onSubmit(v: HeroSlideFormValues) {
+    let savedOwnerId: number | null = null;
     try {
       const payload = toPayload(v);
-      if (mode === "create") {
-        await createHeroSlide(payload);
-        toast.success("اسلاید ایجاد شد");
-      } else if (slide) {
-        await updateHeroSlide(slide.id, payload);
-        toast.success("تغییرات ذخیره شد");
+      const desktopStaged = desktopMediaRef.current?.hasStaged ?? false;
+      const mobileStaged = mobileMediaRef.current?.hasStaged ?? false;
+      const needsMediaBeforeActivation =
+        v.is_active && desktopStaged && !slide?.image_url;
+      if (desktopStaged) {
+        payload.image_url = mode === "create" ? null : undefined;
       }
+      if (mobileStaged) {
+        payload.mobile_image_url = mode === "create" ? null : undefined;
+      }
+      if (needsMediaBeforeActivation) payload.is_active = false;
+
+      let saved: AdminHeroSlide;
+      if (mode === "create") {
+        saved = await createHeroSlide(payload);
+      } else if (slide) {
+        saved = await updateHeroSlide(slide.id, payload);
+      } else {
+        return;
+      }
+      savedOwnerId = saved.id;
+
+      await desktopMediaRef.current?.flush(saved.id);
+      await mobileMediaRef.current?.flush(saved.id);
+      if (needsMediaBeforeActivation) {
+        await updateHeroSlide(saved.id, { is_active: true });
+      }
+      toast.success(mode === "create" ? "اسلاید ایجاد شد" : "تغییرات ذخیره شد");
       router.push("/admin/hero-slides");
       router.refresh();
     } catch (e) {
       applyServerErrors(e);
+      if (mode === "create" && savedOwnerId) {
+        toast.info("پیش‌نویس ذخیره شد؛ بارگذاری را در صفحه ویرایش ادامه دهید");
+        router.push(`/admin/hero-slides/${savedOwnerId}`);
+        router.refresh();
+      }
     }
   }
 
   const dark = watch("theme") === "dark";
   const preview: HeroPreviewValues = {
-    imageUrl,
+    imageUrl: desktopPreview,
     imageAlt,
     title,
     eyebrow,
@@ -186,7 +216,16 @@ export function HeroForm({
           control={control}
           register={register}
           errors={errors}
-          onUploadingChange={handleUploadingChange}
+          ownerId={slide?.id}
+          desktopRef={desktopMediaRef}
+          mobileRef={mobileMediaRef}
+          onDesktopStagedChange={(staged) =>
+            setValue("desktop_file_staged", staged, {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+          }
+          onDesktopPreviewChange={setDesktopPreview}
         />
         <HeroCtaFields register={register} errors={errors} />
         <HeroAppearanceFields
@@ -200,7 +239,7 @@ export function HeroForm({
         preview={preview}
         submitLabel={submitLabel}
         isSubmitting={isSubmitting}
-        uploadBusy={uploadBusy}
+        uploadBusy={false}
         onCancel={() => router.push("/admin/hero-slides")}
       />
     </form>

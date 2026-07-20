@@ -35,11 +35,7 @@ export async function TagIndexView({
     sortBy: "title",
     orderBy: "asc",
   });
-  if (
-    data.results.length === 0 &&
-    data.pagination.total_items > 0 &&
-    page > data.pagination.total_pages
-  ) {
+  if (page > data.pagination.total_pages) {
     redirect(tagPageHref("/tags", data.pagination.total_pages));
   }
 

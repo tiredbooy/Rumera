@@ -13,6 +13,28 @@ export interface UploadImageOptions {
   signal?: AbortSignal;
 }
 
+export type OwnerMediaTarget =
+  | {
+      ownerType: "hero-slides";
+      role: "desktop" | "mobile";
+      ownerId?: number | null;
+    }
+  | {
+      ownerType: "recipes";
+      role: "cover" | "og";
+      ownerId?: number | null;
+    }
+  | {
+      ownerType: "journal";
+      role: "cover";
+      ownerId?: number | null;
+    };
+
+export interface FlexibleImageInputHandle {
+  hasStaged: boolean;
+  flush: (ownerId?: number) => Promise<UploadedImage | null>;
+}
+
 export type UploadProgressCallback = (fraction: number) => void;
 
 export type UploadImageSuccessEnvelope = ApiSuccess<UploadedImage>;

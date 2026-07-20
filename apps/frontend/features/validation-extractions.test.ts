@@ -43,16 +43,19 @@ describe("extracted validation contracts", () => {
     expect(parsed.name).toBe("رومرا");
     expect(parsed.description).toBe("  توضیح  ");
     expect(
-      siteSettingsFormSchema.safeParse({ ...base, freeThreshold: "1e2" }).success,
+      siteSettingsFormSchema.safeParse({ ...base, freeThreshold: "1e2" })
+        .success,
     ).toBe(false);
-    expect(siteSettingsFormSchema.safeParse({ ...base, name: "" }).success).toBe(
-      false,
-    );
     expect(
-      siteSettingsFormSchema.safeParse({ ...base, name: "x".repeat(255) }).success,
+      siteSettingsFormSchema.safeParse({ ...base, name: "" }).success,
+    ).toBe(false);
+    expect(
+      siteSettingsFormSchema.safeParse({ ...base, name: "x".repeat(255) })
+        .success,
     ).toBe(true);
     expect(
-      siteSettingsFormSchema.safeParse({ ...base, name: "x".repeat(256) }).success,
+      siteSettingsFormSchema.safeParse({ ...base, name: "x".repeat(256) })
+        .success,
     ).toBe(false);
   });
 
@@ -72,7 +75,8 @@ describe("extracted validation contracts", () => {
       }).success,
     ).toBe(false);
     expect(
-      brandFormSchema.safeParse({ ...base, image_url: "/media/logo.png" }).success,
+      brandFormSchema.safeParse({ ...base, image_url: "/media/logo.png" })
+        .success,
     ).toBe(false);
   });
 
@@ -111,6 +115,7 @@ describe("extracted validation contracts", () => {
       servings: "1",
       status: "draft" as const,
       image_url: "",
+      og_image_url: "",
       is_featured: false,
       meta_title: "",
       meta_description: "",
@@ -140,8 +145,37 @@ describe("extracted validation contracts", () => {
       theme: "dark",
       sort_order: "1e2",
       is_active: true,
+      desktop_file_staged: false,
     });
     expect(parsed.subtitle).toBe("  متن  ");
+  });
+
+  it("requires desktop media only when a hero is active", () => {
+    const base = {
+      title: "اسلاید",
+      eyebrow: "",
+      subtitle: "",
+      badge: "",
+      image_url: "",
+      mobile_image_url: "",
+      image_alt: "",
+      cta_label: "",
+      cta_href: "",
+      secondary_cta_label: "",
+      secondary_cta_href: "",
+      theme: "dark" as const,
+      sort_order: "0",
+      is_active: true,
+      desktop_file_staged: false,
+    };
+    expect(heroSlideFormSchema.safeParse(base).success).toBe(false);
+    expect(
+      heroSlideFormSchema.safeParse({ ...base, desktop_file_staged: true })
+        .success,
+    ).toBe(true);
+    expect(
+      heroSlideFormSchema.safeParse({ ...base, is_active: false }).success,
+    ).toBe(true);
   });
 
   it("preserves unrestricted category numeric strings and relative images", () => {
@@ -178,6 +212,8 @@ describe("extracted validation contracts", () => {
   it("preserves optional-empty profile phone semantics", () => {
     const base = { first_name: "علی", last_name: "رضایی", phone: "" };
     expect(profileFormSchema.safeParse(base).success).toBe(true);
-    expect(profileFormSchema.safeParse({ ...base, phone: " " }).success).toBe(false);
+    expect(profileFormSchema.safeParse({ ...base, phone: " " }).success).toBe(
+      false,
+    );
   });
 });

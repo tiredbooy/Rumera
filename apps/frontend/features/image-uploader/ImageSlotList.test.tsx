@@ -3,7 +3,13 @@
 import "@testing-library/jest-dom/vitest";
 
 import * as React from "react";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ImageSlotList } from "./ImageSlotList";
@@ -18,7 +24,10 @@ function stagedSlot(localId: string, alt: string): StagedSlot {
   return {
     kind: "staged",
     localId,
-    file: new File([alt], `${localId}.jpg`, { type: "image/jpeg" }),
+    source: {
+      kind: "file",
+      file: new File([alt], `${localId}.jpg`, { type: "image/jpeg" }),
+    },
     previewUrl: `blob:${localId}`,
     alt,
     isPrimary: false,
@@ -87,7 +96,9 @@ describe("ImageSlotList keyboard reordering", () => {
     fireEvent.click(moveDown);
 
     expect(
-      screen.getAllByRole("textbox").map((input) => input.getAttribute("value")),
+      screen
+        .getAllByRole("textbox")
+        .map((input) => input.getAttribute("value")),
     ).toEqual(["دوم", "اول"]);
 
     const movedControl = screen.getByRole("button", {
@@ -144,7 +155,9 @@ describe("ImageSlotList keyboard reordering", () => {
     });
 
     expect(
-      screen.getAllByRole("textbox").map((input) => input.getAttribute("value")),
+      screen
+        .getAllByRole("textbox")
+        .map((input) => input.getAttribute("value")),
     ).toEqual(["اول", "دوم"]);
     expect(
       screen.getByRole("button", {

@@ -244,14 +244,16 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	// Product images (admin media pipeline)
 	a.GET("/products/:id/images", h.ListProductImages)
 	a.POST("/products/:id/images", h.UploadProductImage)
+	a.POST("/products/:id/images/url", h.AddProductImageURL)
 	a.PUT("/products/:id/images/order", h.ReorderProductImages)
 	a.PATCH("/products/:id/images/:imageId", h.UpdateProductImage)
 	a.PUT("/products/:id/images/:imageId/primary", h.SetPrimaryProductImage)
 	a.DELETE("/products/:id/images/:imageId", h.DeleteProductImage)
 
-	// Standalone image uploads (hero/recipe/journal covers — returns a URL,
-	// no DB row). Namespaced under /admin so the BFF proxy allowlist covers it.
+	// Legacy standalone uploads remain for categories. Content owners use the
+	// explicit owner/role route so URL and storage key attach in one DB write.
 	a.POST("/uploads", h.UploadImage)
+	a.POST("/uploads/:ownerType/:ownerID/:role", h.UploadOwnerImage)
 
 	// Variants
 	a.PATCH("/variants/:id", h.UpdateVariant)

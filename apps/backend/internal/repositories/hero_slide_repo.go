@@ -65,6 +65,7 @@ func (r *heroSlideRepository) GetActive(ctx context.Context) ([]*models.HeroSlid
 	query := `SELECT ` + heroSlideColumns + `
 			  FROM hero_slides
 			  WHERE is_active
+			    AND NULLIF(BTRIM(image_url), '') IS NOT NULL
 			    AND (starts_at IS NULL OR starts_at <= NOW())
 			    AND (ends_at   IS NULL OR ends_at   >= NOW())
 			  ORDER BY sort_order ASC, id ASC`
@@ -116,8 +117,16 @@ func (r *heroSlideRepository) Update(ctx context.Context, id int64, req *models.
 			      title               = COALESCE($3, title),
 			      subtitle            = COALESCE($4, subtitle),
 			      badge               = COALESCE($5, badge),
-			      image_url           = COALESCE($6, image_url),
-			      mobile_image_url    = COALESCE($7, mobile_image_url),
+			      image_storage_key   = CASE
+			          WHEN $6::text IS NOT NULL AND $6::text IS DISTINCT FROM image_url THEN NULL
+			          ELSE image_storage_key
+			      END,
+			      image_url           = COALESCE($6::text, image_url),
+			      mobile_image_storage_key = CASE
+			          WHEN $7::text IS NOT NULL AND $7::text IS DISTINCT FROM mobile_image_url THEN NULL
+			          ELSE mobile_image_storage_key
+			      END,
+			      mobile_image_url    = COALESCE($7::text, mobile_image_url),
 			      image_alt           = COALESCE($8, image_alt),
 			      cta_label           = COALESCE($9, cta_label),
 			      cta_href            = COALESCE($10, cta_href),

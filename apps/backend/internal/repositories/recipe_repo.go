@@ -295,6 +295,9 @@ func (r *recipeRepository) Update(ctx context.Context, id int64, req *models.Rec
 		add("serving_suggestion", *req.ServingSuggestion)
 	}
 	if req.ImageURL != nil {
+		sets = append(sets,
+			"image_storage_key = CASE WHEN image_url IS DISTINCT FROM @image_url THEN NULL ELSE image_storage_key END",
+		)
 		add("image_url", *req.ImageURL)
 	}
 	if req.Status != nil {
@@ -319,6 +322,9 @@ func (r *recipeRepository) Update(ctx context.Context, id int64, req *models.Rec
 		add("canonical_url", *req.CanonicalURL)
 	}
 	if req.OGImageURL != nil {
+		sets = append(sets,
+			"og_image_storage_key = CASE WHEN og_image_url IS DISTINCT FROM @og_image_url THEN NULL ELSE og_image_storage_key END",
+		)
 		add("og_image_url", *req.OGImageURL)
 	}
 

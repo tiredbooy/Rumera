@@ -3,13 +3,17 @@ package mappers
 import "github.com/tiredbooy/internal/models"
 
 func ToPublicHeroSlideResponse(s *models.HeroSlide) models.PublicHeroSlideResponse {
+	imageURL := ""
+	if s.ImageURL != nil {
+		imageURL = *s.ImageURL
+	}
 	return models.PublicHeroSlideResponse{
 		ID:                s.ID,
 		Eyebrow:           s.Eyebrow,
 		Title:             s.Title,
 		Subtitle:          s.Subtitle,
 		Badge:             s.Badge,
-		ImageURL:          s.ImageURL,
+		ImageURL:          imageURL,
 		MobileImageURL:    s.MobileImageURL,
 		ImageAlt:          s.ImageAlt,
 		CTALabel:          s.CTALabel,
@@ -31,12 +35,25 @@ func ToPublicHeroSlideResponses(slides []*models.HeroSlide) []models.PublicHeroS
 
 func ToAdminHeroSlideResponse(s *models.HeroSlide) models.AdminHeroSlideResponse {
 	return models.AdminHeroSlideResponse{
-		PublicHeroSlideResponse: ToPublicHeroSlideResponse(s),
-		IsActive:                s.IsActive,
-		StartsAt:                s.StartsAt,
-		EndsAt:                  s.EndsAt,
-		CreatedAt:               s.CreatedAt,
-		UpdatedAt:               s.UpdatedAt,
+		ID:                s.ID,
+		Eyebrow:           s.Eyebrow,
+		Title:             s.Title,
+		Subtitle:          s.Subtitle,
+		Badge:             s.Badge,
+		ImageURL:          s.ImageURL,
+		MobileImageURL:    s.MobileImageURL,
+		ImageAlt:          s.ImageAlt,
+		CTALabel:          s.CTALabel,
+		CTAHref:           s.CTAHref,
+		SecondaryCTALabel: s.SecondaryCTALabel,
+		SecondaryCTAHref:  s.SecondaryCTAHref,
+		Theme:             s.Theme,
+		SortOrder:         s.SortOrder,
+		IsActive:          s.IsActive,
+		StartsAt:          s.StartsAt,
+		EndsAt:            s.EndsAt,
+		CreatedAt:         s.CreatedAt,
+		UpdatedAt:         s.UpdatedAt,
 	}
 }
 

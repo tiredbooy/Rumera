@@ -2,6 +2,7 @@
 
 import { ImageIcon, Loader2 } from "lucide-react";
 import { Controller, type Control, type FieldErrors } from "react-hook-form";
+import type { Ref } from "react";
 
 import { OptimizedImage } from "@/components/optimized-image";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input";
+import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
 import type { Tag } from "@/features/catalog/tags/types";
 import type { RecipeStatus } from "@/features/recipes/types";
 import type { RecipeFormValues } from "@/features/recipes/validations";
@@ -33,13 +35,17 @@ function ImageCard({
   errors,
   title,
   imageUrl,
-  onUploadingChange,
+  ownerId,
+  mediaRef,
+  onPreviewChange,
 }: {
   control: Control<RecipeFormValues>;
   errors: FieldErrors<RecipeFormValues>;
   title: string;
   imageUrl: string;
-  onUploadingChange: (uploading: boolean) => void;
+  ownerId?: number | null;
+  mediaRef: Ref<FlexibleImageInputHandle>;
+  onPreviewChange: (url: string) => void;
 }) {
   return (
     <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
@@ -63,23 +69,28 @@ function ImageCard({
         name="image_url"
         render={({ field }) => (
           <FlexibleImageInput
+            ref={mediaRef}
             id="image_url"
             value={field.value}
             onChange={field.onChange}
             onBlur={field.onBlur}
-            folder="recipes"
+            owner={{ ownerType: "recipes", ownerId, role: "cover" }}
             placeholder="https://… یا بارگذاری فایل"
             ariaInvalid={!!errors.image_url}
             ariaDescribedBy={
               errors.image_url ? fieldErrorId("image_url") : undefined
             }
             hidePreview
-            onUploadingChange={onUploadingChange}
+            onPreviewChange={onPreviewChange}
           />
         )}
       />
       {errors.image_url ? (
-        <p id={fieldErrorId("image_url")} role="alert" className="mt-1.5 text-xs text-destructive">
+        <p
+          id={fieldErrorId("image_url")}
+          role="alert"
+          className="mt-1.5 text-xs text-destructive"
+        >
           {errors.image_url.message}
         </p>
       ) : null}
@@ -189,28 +200,24 @@ function FormActions({
   status,
   submitLabel,
   isSubmitting,
-  imageUploading,
   onCancel,
 }: {
   status: RecipeStatus;
   submitLabel: string;
   isSubmitting: boolean;
-  imageUploading: boolean;
   onCancel: () => void;
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <Button type="submit" size="lg" disabled={isSubmitting || imageUploading}>
-        {isSubmitting || imageUploading ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : null}
+      <Button type="submit" size="lg" disabled={isSubmitting}>
+        {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
         {submitLabel}
       </Button>
       <Button
         type="button"
         variant="outline"
         size="lg"
-        disabled={isSubmitting || imageUploading}
+        disabled={isSubmitting}
         onClick={onCancel}
       >
         انصراف
@@ -235,8 +242,9 @@ export function RecipeSidebar({
   status,
   submitLabel,
   isSubmitting,
-  imageUploading,
-  onUploadingChange,
+  ownerId,
+  mediaRef,
+  onPreviewChange,
   onCancel,
 }: {
   control: Control<RecipeFormValues>;
@@ -247,8 +255,9 @@ export function RecipeSidebar({
   status: RecipeStatus;
   submitLabel: string;
   isSubmitting: boolean;
-  imageUploading: boolean;
-  onUploadingChange: (uploading: boolean) => void;
+  ownerId?: number | null;
+  mediaRef: Ref<FlexibleImageInputHandle>;
+  onPreviewChange: (url: string) => void;
   onCancel: () => void;
 }) {
   return (
@@ -259,7 +268,9 @@ export function RecipeSidebar({
           errors={errors}
           title={title}
           imageUrl={imageUrl}
-          onUploadingChange={onUploadingChange}
+          ownerId={ownerId}
+          mediaRef={mediaRef}
+          onPreviewChange={onPreviewChange}
         />
         <PublicationCard control={control} />
         <TagsCard control={control} tags={tags} />
@@ -267,7 +278,6 @@ export function RecipeSidebar({
           status={status}
           submitLabel={submitLabel}
           isSubmitting={isSubmitting}
-          imageUploading={imageUploading}
           onCancel={onCancel}
         />
       </div>

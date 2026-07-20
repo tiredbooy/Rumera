@@ -5,7 +5,7 @@ export type SlotStatus = "idle" | "uploading" | "error";
 export type StagedSlot = {
   kind: "staged";
   localId: string;
-  file: File;
+  source: { kind: "file"; file: File } | { kind: "url"; url: string };
   previewUrl: string;
   alt: string;
   isPrimary: boolean;

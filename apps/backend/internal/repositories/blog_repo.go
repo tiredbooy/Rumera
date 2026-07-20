@@ -337,7 +337,11 @@ func (r *blogRepository) Update(ctx context.Context, id int64, req *models.BlogU
 			      slug             = COALESCE($3, slug),
 			      content          = COALESCE($4, content),
 			      excerpt          = COALESCE($5, excerpt),
-			      image_url        = COALESCE($6, image_url),
+			      image_storage_key = CASE
+			          WHEN $6::text IS NOT NULL AND $6::text IS DISTINCT FROM image_url THEN NULL
+			          ELSE image_storage_key
+			      END,
+			      image_url        = COALESCE($6::text, image_url),
 			      time_to_read     = COALESCE($7, time_to_read),
 			      status           = COALESCE($8, status),
 			      is_featured      = COALESCE($9, is_featured),
