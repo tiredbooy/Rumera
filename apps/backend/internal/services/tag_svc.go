@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"unicode"
 
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
@@ -25,9 +24,9 @@ func (s *TagService) Create(ctx context.Context, req models.CreateTagReq) (*mode
 		return nil, apperr.ErrInvalidRequest
 	}
 	if req.Slug == "" {
-		req.Slug = normalizeTagSlug(req.Title)
+		req.Slug = normalizePublicSlug(req.Title)
 	} else {
-		req.Slug = normalizeTagSlug(req.Slug)
+		req.Slug = normalizePublicSlug(req.Slug)
 	}
 	if req.Slug == "" {
 		return nil, apperr.ErrInvalidRequest
@@ -108,7 +107,7 @@ func (s *TagService) Update(ctx context.Context, id int64, req models.UpdateTagR
 		}
 	}
 	if req.Slug != nil {
-		slug := normalizeTagSlug(*req.Slug)
+		slug := normalizePublicSlug(*req.Slug)
 		if slug == "" {
 			return nil, apperr.ErrInvalidRequest
 		}
@@ -171,25 +170,4 @@ func (s *TagService) hasConflict(ctx context.Context, title, slug string, exclud
 		return false, apperr.ErrInternal
 	}
 	return slugExists, nil
-}
-
-// normalizeTagSlug keeps Unicode letters and digits so Persian titles can
-// produce valid, stable slugs without inventing an unrelated ASCII identifier.
-func normalizeTagSlug(value string) string {
-	var slug strings.Builder
-	separator := false
-	for _, r := range strings.ToLower(strings.TrimSpace(value)) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			if separator && slug.Len() > 0 {
-				slug.WriteByte('-')
-			}
-			slug.WriteRune(r)
-			separator = false
-			continue
-		}
-		if slug.Len() > 0 {
-			separator = true
-		}
-	}
-	return slug.String()
 }

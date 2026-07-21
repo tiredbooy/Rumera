@@ -27,3 +27,25 @@ func TestProductListItemPurchasableVariantIDJSON(t *testing.T) {
 		t.Fatalf("variant id must be serialized: %s", withVariant)
 	}
 }
+
+func TestVariantResponseAvailableStockJSON(t *testing.T) {
+	variant := VariantResponse{ID: 7, Price: 100}
+
+	withoutStock, err := json.Marshal(variant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(withoutStock), "available_stock") {
+		t.Fatalf("generic variant stock must be omitted: %s", withoutStock)
+	}
+
+	stock := 0
+	variant.AvailableStock = &stock
+	withStock, err := json.Marshal(variant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(withStock), `"available_stock":0`) {
+		t.Fatalf("hydrated zero stock must be serialized: %s", withStock)
+	}
+}

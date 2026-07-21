@@ -8,12 +8,8 @@ import { buildQueryString } from "@/lib/utils/api-helpers";
 import type { PublicProductListQuery } from "../queries";
 import type { ProductListItem, ProductDetail } from "../types";
 
-const PUBLIC_CACHE_OPTIONS: ApiFetchOptions = {
-  cache: "force-cache",
-  next: { revalidate: 3600 },
-};
-
 const PRODUCT_LIST_OPTIONS: ApiFetchOptions = { cache: "no-store" };
+const PRODUCT_DETAIL_OPTIONS: ApiFetchOptions = { cache: "no-store" };
 
 // ─────────────────────────────────────────────
 // Product list (public – active only)
@@ -30,17 +26,17 @@ export async function listProducts(
 }
 
 // ─────────────────────────────────────────────
-// Product detail (cached per request)
+// Product detail
 // ─────────────────────────────────────────────
 
-/** ISR-cached public detail lookup; only a typed 404 means missing. */
+/** Product detail includes volatile inventory; only a typed 404 means missing. */
 export async function getProductById(
   id: number,
 ): Promise<ProductDetail | null> {
   try {
     return await publicRequest<ProductDetail>(
       `/products/${id}`,
-      PUBLIC_CACHE_OPTIONS,
+      PRODUCT_DETAIL_OPTIONS,
     );
   } catch (error) {
     if (isApiNotFoundError(error)) return null;
@@ -48,19 +44,35 @@ export async function getProductById(
   }
 }
 
-/** Resolve a public slug through the list projection, then hydrate by numeric id. */
+/** Exact public slug lookup; only a typed 404 means missing. */
 export async function getProductBySlug(
   slug: string,
 ): Promise<ProductDetail | null> {
-  const page = await listProducts({ search: slug, limit: 5 });
-  const match = page.results.find((product) => product.slug === slug);
-  return match ? getProductById(match.id) : null;
+  try {
+    return await publicRequest<ProductDetail>(
+      `/products/slug/${encodeURIComponent(slug)}`,
+      PRODUCT_DETAIL_OPTIONS,
+    );
+  } catch (error) {
+    if (isApiNotFoundError(error)) return null;
+    throw error;
+  }
 }
 
 /** Slugs used for static generation; missing slugs are not valid routes. */
 export async function allProductSlugs(): Promise<string[]> {
-  const page = await listProducts({ limit: 100 });
-  return page.results.flatMap((product) =>
-    product.slug ? [product.slug] : [],
-  );
+  const slugs: string[] = [];
+  let page = 1;
+
+  for (;;) {
+    const result = await listProducts({ page, limit: 100 });
+    slugs.push(
+      ...result.results.flatMap((product) =>
+        product.slug ? [product.slug] : [],
+      ),
+    );
+    if (!result.pagination.has_next || result.results.length === 0)
+      return slugs;
+    page += 1;
+  }
 }

@@ -19,6 +19,7 @@ import (
 type CategoryRepository interface {
 	Create(ctx context.Context, req models.CreateCategoryReq) (*models.Category, error)
 	GetByID(ctx context.Context, id int64) (*models.Category, error)
+	GetBySlug(ctx context.Context, slug string) (*models.Category, error)
 	GetAll(ctx context.Context, filter models.CategoryFilter) ([]*models.Category, int64, error)
 
 	// GetTree fetches the full category hierarchy in one query using
@@ -34,7 +35,8 @@ type CategoryRepository interface {
 
 	Update(ctx context.Context, id int64, req models.UpdateCategoryReq) (*models.Category, error)
 	Delete(ctx context.Context, id int64) error
-	ExistsByName(ctx context.Context, name string) (bool, error)
+	ExistsByName(ctx context.Context, name string, excludeID int64) (bool, error)
+	ExistsBySlug(ctx context.Context, slug string, excludeID int64) (bool, error)
 	ExistsByID(ctx context.Context, id int64) (bool, error)
 }
 
@@ -45,6 +47,8 @@ type CategoryRepository interface {
 type categoryRepository struct {
 	db *pgxpool.Pool
 }
+
+const categoryHierarchyLockKey int64 = 0x43415445474f5259
 
 func NewCategoryRepository(db *pgxpool.Pool) CategoryRepository {
 	return &categoryRepository{db: db}
@@ -88,11 +92,17 @@ func (r *categoryRepository) Create(ctx context.Context, req models.CreateCatego
 
 	rows, err := r.db.Query(ctx, q, args)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, models.ErrAlreadyExists
+		}
 		return nil, fmt.Errorf("categoryRepository.Create: %w", err)
 	}
 
 	category, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Category])
 	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, models.ErrAlreadyExists
+		}
 		return nil, fmt.Errorf("categoryRepository.Create scan: %w", err)
 	}
 	return &category, nil
@@ -116,6 +126,25 @@ func (r *categoryRepository) GetByID(ctx context.Context, id int64) (*models.Cat
 			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("categoryRepository.GetByID scan: %w", err)
+	}
+	return &category, nil
+}
+
+// GetBySlug resolves the public category identity with an exact slug match.
+func (r *categoryRepository) GetBySlug(ctx context.Context, slug string) (*models.Category, error) {
+	const q = `SELECT * FROM categories WHERE slug = $1`
+
+	rows, err := r.db.Query(ctx, q, slug)
+	if err != nil {
+		return nil, fmt.Errorf("categoryRepository.GetBySlug: %w", err)
+	}
+
+	category, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Category])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("categoryRepository.GetBySlug scan: %w", err)
 	}
 	return &category, nil
 }
@@ -162,9 +191,9 @@ func (r *categoryRepository) GetAll(ctx context.Context, f models.CategoryFilter
 		SELECT *, COUNT(*) OVER() AS total_count
 		FROM categories
 		WHERE %s
-		ORDER BY %s %s
+		ORDER BY %s %s, id %s
 		LIMIT @limit OFFSET @offset`,
-		strings.Join(where, " AND "), sortBy, order,
+		strings.Join(where, " AND "), sortBy, order, order,
 	)
 
 	rows, err := r.db.Query(ctx, q, args)
@@ -308,21 +337,21 @@ func (r *categoryRepository) Update(ctx context.Context, id int64, req models.Up
 		sets = append(sets, "title = @title")
 		args["title"] = *req.Title
 	}
-	if req.Description != nil {
+	if req.Description.Set {
 		sets = append(sets, "description = @description")
-		args["description"] = *req.Description
+		args["description"] = req.Description.Value
 	}
-	if req.ParentID != nil {
+	if req.ParentID.Set {
 		sets = append(sets, "parent_id = @parent_id")
-		args["parent_id"] = *req.ParentID
+		args["parent_id"] = req.ParentID.Value
 	}
-	if req.Slug != nil {
+	if req.Slug.Set {
 		sets = append(sets, "slug = @slug")
-		args["slug"] = *req.Slug
+		args["slug"] = req.Slug.Value
 	}
-	if req.ImageURL != nil {
+	if req.ImageURL.Set {
 		sets = append(sets, "image_url = @image_url")
-		args["image_url"] = *req.ImageURL
+		args["image_url"] = req.ImageURL.Value
 	}
 	if req.IsFeatured != nil {
 		sets = append(sets, "is_featured = @is_featured")
@@ -341,6 +370,40 @@ func (r *categoryRepository) Update(ctx context.Context, id int64, req models.Up
 		return r.GetByID(ctx, id)
 	}
 
+	query := r.db.Query
+	var tx pgx.Tx
+	if req.ParentID.Set {
+		var err error
+		tx, err = r.db.Begin(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("categoryRepository.Update begin: %w", err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, categoryHierarchyLockKey); err != nil {
+			return nil, fmt.Errorf("categoryRepository.Update lock hierarchy: %w", err)
+		}
+		if req.ParentID.Value != nil {
+			const cycleQuery = `
+				WITH RECURSIVE descendants(id) AS (
+					SELECT id FROM categories WHERE id = $1
+					UNION
+					SELECT child.id
+					FROM categories child
+					INNER JOIN descendants parent ON child.parent_id = parent.id
+				)
+				SELECT EXISTS(SELECT 1 FROM descendants WHERE id = $2)`
+			var createsCycle bool
+			if err := tx.QueryRow(ctx, cycleQuery, id, *req.ParentID.Value).Scan(&createsCycle); err != nil {
+				return nil, fmt.Errorf("categoryRepository.Update inspect hierarchy: %w", err)
+			}
+			if createsCycle {
+				return nil, models.ErrInvalidState
+			}
+		}
+		query = tx.Query
+	}
+
 	q := fmt.Sprintf(`
 		UPDATE categories SET %s
 		WHERE id = @id
@@ -348,8 +411,11 @@ func (r *categoryRepository) Update(ctx context.Context, id int64, req models.Up
 		strings.Join(sets, ", "),
 	)
 
-	rows, err := r.db.Query(ctx, q, args)
+	rows, err := query(ctx, q, args)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, models.ErrAlreadyExists
+		}
 		return nil, fmt.Errorf("categoryRepository.Update: %w", err)
 	}
 
@@ -358,7 +424,18 @@ func (r *categoryRepository) Update(ctx context.Context, id int64, req models.Up
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrNotFound
 		}
+		if isUniqueViolation(err) {
+			return nil, models.ErrAlreadyExists
+		}
 		return nil, fmt.Errorf("categoryRepository.Update scan: %w", err)
+	}
+	if tx != nil {
+		if err := tx.Commit(ctx); err != nil {
+			if isUniqueViolation(err) {
+				return nil, models.ErrAlreadyExists
+			}
+			return nil, fmt.Errorf("categoryRepository.Update commit: %w", err)
+		}
 	}
 	return &category, nil
 }
@@ -387,12 +464,22 @@ func (r *categoryRepository) Delete(ctx context.Context, id int64) error {
 // ExistsByName
 // ─────────────────────────────────────────────────────────────
 
-func (r *categoryRepository) ExistsByName(ctx context.Context, name string) (bool, error) {
-	const q = `SELECT EXISTS(SELECT 1 FROM categories WHERE title = $1)`
+func (r *categoryRepository) ExistsByName(ctx context.Context, name string, excludeID int64) (bool, error) {
+	const q = `SELECT EXISTS(SELECT 1 FROM categories WHERE title = $1 AND ($2 = 0 OR id <> $2))`
 
 	var exists bool
-	if err := r.db.QueryRow(ctx, q, name).Scan(&exists); err != nil {
+	if err := r.db.QueryRow(ctx, q, name, excludeID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("categoryRepository.ExistsByName: %w", err)
+	}
+	return exists, nil
+}
+
+func (r *categoryRepository) ExistsBySlug(ctx context.Context, slug string, excludeID int64) (bool, error) {
+	const q = `SELECT EXISTS(SELECT 1 FROM categories WHERE slug = $1 AND ($2 = 0 OR id <> $2))`
+
+	var exists bool
+	if err := r.db.QueryRow(ctx, q, slug, excludeID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("categoryRepository.ExistsBySlug: %w", err)
 	}
 	return exists, nil
 }

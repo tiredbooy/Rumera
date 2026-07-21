@@ -1,8 +1,9 @@
 import type { MetadataRoute } from "next";
 
 import { absoluteUrl } from "@/lib/site";
-import { listProducts } from "@/features/catalog/products/api/public";
+import { allProductSlugs } from "@/features/catalog/products/api/public";
 import { listCategories } from "@/features/catalog/categories/api";
+import { getCategoryHref } from "@/features/catalog/categories/utils";
 import { listRecipeSlugs } from "@/features/recipes/api/server";
 import { listJournalPosts } from "@/features/journal/api/server";
 import { listAllTags } from "@/features/catalog/tags/api/public";
@@ -17,9 +18,9 @@ import { listAllTags } from "@/features/catalog/tags/api/public";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
-  const [catalogue, categories, tags, recipeSlugs, journalPosts] =
+  const [productSlugs, categories, tags, recipeSlugs, journalPosts] =
     await Promise.all([
-      listProducts({ limit: 100 }),
+      allProductSlugs(),
       listCategories(),
       listAllTags(),
       listRecipeSlugs(),
@@ -38,6 +39,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.9,
+    },
+    {
+      url: absoluteUrl("/categories"),
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.8,
     },
     {
       url: absoluteUrl("/tags"),
@@ -71,21 +78,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  const categoryRoutes: MetadataRoute.Sitemap = categories.flatMap((c) =>
-    c.slug
-      ? [
-          {
-            url: absoluteUrl(`/categories/${c.slug}`),
-            lastModified: now,
-            changeFrequency: "weekly" as const,
-            priority: 0.7,
-          },
-        ]
-      : [],
+  const categoryRoutes: MetadataRoute.Sitemap = categories.flatMap(
+    (category) => {
+      const href = getCategoryHref(category);
+      return href
+        ? [
+            {
+              url: absoluteUrl(href),
+              lastModified: now,
+              changeFrequency: "weekly" as const,
+              priority: 0.7,
+            },
+          ]
+        : [];
+    },
   );
 
-  const productRoutes: MetadataRoute.Sitemap = catalogue.results.map((p) => ({
-    url: absoluteUrl(`/products/${p.slug}`),
+  const productRoutes: MetadataRoute.Sitemap = productSlugs.map((slug) => ({
+    url: absoluteUrl(`/products/${encodeURIComponent(slug)}`),
     lastModified: now,
     changeFrequency: "weekly",
     priority: 0.6,

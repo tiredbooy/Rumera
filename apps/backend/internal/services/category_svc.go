@@ -2,15 +2,20 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
+	"github.com/tiredbooy/pkg/apperr"
 )
 
 type CategoryService interface {
 	Create(ctx context.Context, req models.CreateCategoryReq) (*models.Category, error)
 	GetByID(ctx context.Context, id int64) (*models.Category, error)
+	GetBySlug(ctx context.Context, slug string) (*models.Category, error)
 	GetAll(ctx context.Context, filter models.CategoryFilter) ([]*models.Category, int64, error)
 	GetTree(ctx context.Context) ([]*models.CategoryTree, error)
 	GetChildren(ctx context.Context, parentID int64) ([]*models.Category, error)
@@ -30,13 +35,37 @@ func NewCategoryService(repo repositories.CategoryRepository) CategoryService {
 // ── Writes ────────────────────────────────────────────────────────────────────
 
 func (s *categoryService) Create(ctx context.Context, req models.CreateCategoryReq) (*models.Category, error) {
+	req.Title = strings.TrimSpace(req.Title)
+	if req.Title == "" {
+		return nil, apperr.ErrInvalidRequest
+	}
+
 	// Duplicate title guard
-	exists, err := s.repo.ExistsByName(ctx, req.Title)
+	exists, err := s.repo.ExistsByName(ctx, req.Title, 0)
 	if err != nil {
 		return nil, fmt.Errorf("categoryService.Create: check title: %w", err)
 	}
 	if exists {
 		return nil, models.ErrAlreadyExists
+	}
+	if req.Slug != nil {
+		rawSlug := strings.TrimSpace(*req.Slug)
+		if rawSlug == "" {
+			req.Slug = nil
+		} else {
+			slug := normalizePublicSlug(rawSlug)
+			if slug == "" {
+				return nil, apperr.ErrInvalidRequest
+			}
+			slugExists, err := s.repo.ExistsBySlug(ctx, slug, 0)
+			if err != nil {
+				return nil, fmt.Errorf("categoryService.Create: check slug: %w", err)
+			}
+			if slugExists {
+				return nil, models.ErrAlreadyExists
+			}
+			req.Slug = &slug
+		}
 	}
 
 	// Validate parent exists when provided
@@ -73,7 +102,12 @@ func (s *categoryService) Update(ctx context.Context, id int64, req models.Updat
 
 	// Duplicate title guard (only when title is being changed)
 	if req.Title != nil {
-		exists, err := s.repo.ExistsByName(ctx, *req.Title)
+		title := strings.TrimSpace(*req.Title)
+		if title == "" {
+			return nil, apperr.ErrInvalidRequest
+		}
+		req.Title = &title
+		exists, err := s.repo.ExistsByName(ctx, title, id)
 		if err != nil {
 			return nil, fmt.Errorf("categoryService.Update: check title: %w", err)
 		}
@@ -81,14 +115,29 @@ func (s *categoryService) Update(ctx context.Context, id int64, req models.Updat
 			return nil, models.ErrAlreadyExists
 		}
 	}
+	if req.Slug.Set && req.Slug.Value != nil {
+		slug := normalizePublicSlug(*req.Slug.Value)
+		if slug == "" || utf8.RuneCountInString(slug) > 255 {
+			return nil, apperr.ErrInvalidRequest
+		}
+		exists, err := s.repo.ExistsBySlug(ctx, slug, id)
+		if err != nil {
+			return nil, fmt.Errorf("categoryService.Update: check slug: %w", err)
+		}
+		if exists {
+			return nil, models.ErrAlreadyExists
+		}
+		req.Slug.Value = &slug
+	}
 
 	// Validate new parent exists when provided, and guard against
 	// a category being set as its own parent
-	if req.ParentID != nil {
-		if *req.ParentID == id {
+	if req.ParentID.Set && req.ParentID.Value != nil {
+		parentID := *req.ParentID.Value
+		if parentID <= 0 || parentID == id {
 			return nil, models.ErrInvalidState
 		}
-		parentExists, err := s.repo.ExistsByID(ctx, *req.ParentID)
+		parentExists, err := s.repo.ExistsByID(ctx, parentID)
 		if err != nil {
 			return nil, fmt.Errorf("categoryService.Update: check parent: %w", err)
 		}
@@ -134,6 +183,22 @@ func (s *categoryService) GetByID(ctx context.Context, id int64) (*models.Catego
 	category, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("categoryService.GetByID: %w", err)
+	}
+	return category, nil
+}
+
+func (s *categoryService) GetBySlug(ctx context.Context, slug string) (*models.Category, error) {
+	slug = normalizePublicSlug(slug)
+	if slug == "" {
+		return nil, apperr.ErrNotFound
+	}
+
+	category, err := s.repo.GetBySlug(ctx, slug)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.ErrInternal
 	}
 	return category, nil
 }

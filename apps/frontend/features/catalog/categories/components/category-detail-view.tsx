@@ -1,92 +1,126 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ChevronLeft, PackageOpen } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
 
 import { JsonLd } from "@/components/json-ld";
-import { getCategoryBySlug } from "@/features/catalog/categories/api";
+import {
+  getCategoryBySlug,
+  getCategoryTree,
+} from "@/features/catalog/categories/api";
+import {
+  CategoryHero,
+  ChildCategories,
+} from "@/features/catalog/categories/components/category-hero";
+import { CategoryResults } from "@/features/catalog/categories/components/category-results";
+import {
+  CATEGORY_PAGE_SIZE,
+  categoryPageHref,
+  categoryPath,
+  parseCategoryRouteQuery,
+  type CategoryPageSearchParams,
+} from "@/features/catalog/categories/routing";
+import {
+  findCategoryContext,
+  getCategoryHref,
+} from "@/features/catalog/categories/utils";
 import { listProducts } from "@/features/catalog/products/api/public";
-import { ProductCard } from "@/features/catalog/products/components/product-card";
-import { Placeholder } from "@/features/dashboard/components/placeholder";
-import { faNum } from "@/lib/products";
 import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld";
 
 type CategoryDetailViewProps = {
   params: Promise<{ category: string }>;
+  searchParams: CategoryPageSearchParams;
 };
 
 export async function CategoryDetailView({
   params,
+  searchParams,
 }: CategoryDetailViewProps) {
-  const { category } = await params;
-  const cat = await getCategoryBySlug(category);
-  if (!cat) notFound();
+  const [{ category: requestedSlug }, rawSearchParams] = await Promise.all([
+    params,
+    searchParams,
+  ]);
+  const query = parseCategoryRouteQuery(rawSearchParams);
+  const category = await getCategoryBySlug(requestedSlug);
+  if (!category) notFound();
 
-  const { results, pagination } = await listProducts({
-    category_id: cat.id,
-    limit: 24,
+  const tree = await getCategoryTree();
+
+  const canonicalSlug = category.slug?.trim() || requestedSlug;
+  const basePath = categoryPath(canonicalSlug);
+  if (query.needsRedirect || canonicalSlug !== requestedSlug) {
+    redirect(categoryPageHref(basePath, query, query.page));
+  }
+
+  const context = findCategoryContext(tree, category.id);
+  if (!context) {
+    throw new Error(`Category ${category.id} is missing from the public tree`);
+  }
+  const ancestors = context.ancestors;
+  const children = context.category.children ?? [];
+  const parent = ancestors.at(-1);
+
+  const data = await listProducts({
+    category_id: category.id,
+    include_descendants: true,
+    page: query.page,
+    limit: CATEGORY_PAGE_SIZE,
+    ...(query.q ? { search: query.q } : {}),
+    sortBy: query.sortBy,
+    orderBy: query.orderBy,
   });
+  const lastPage =
+    data.pagination.total_items === 0
+      ? 1
+      : Math.max(1, data.pagination.total_pages);
+  if (query.page > lastPage) {
+    redirect(categoryPageHref(basePath, query, lastPage));
+  }
+
+  const breadcrumbItems = [
+    { name: "خانه", path: "/" },
+    { name: "دسته‌بندی‌ها", path: "/categories" },
+    ...ancestors.flatMap((ancestor) => {
+      const href = getCategoryHref(ancestor);
+      return href ? [{ name: ancestor.title, path: href }] : [];
+    }),
+    { name: category.title, path: basePath },
+  ];
+  const firstPosition = (query.page - 1) * CATEGORY_PAGE_SIZE + 1;
 
   return (
     <>
       <JsonLd
         data={[
-          breadcrumbLd([
-            { name: "خانه", path: "/" },
-            { name: "فروشگاه", path: "/products" },
-            { name: cat.title, path: `/categories/${category}` },
-          ]),
-          productListLd(cat.title, results),
+          breadcrumbLd(breadcrumbItems),
+          productListLd(
+            query.q
+              ? `نتایج «${query.q}» در ${category.title}`
+              : `محصولات ${category.title} و زیرشاخه‌های آن`,
+            data.results,
+            firstPosition,
+          ),
         ]}
       />
 
-      {/* Category hero */}
-      <section className="cellar-glow border-b border-border/60">
-        <div className="container-px mx-auto max-w-7xl py-12 sm:py-16">
-          <nav
-            aria-label="مسیر"
-            className="mb-6 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
-          >
-            <Link href="/" className="transition-colors hover:text-foreground">
-              خانه
-            </Link>
-            <ChevronLeft className="size-3.5 opacity-50" />
-            <Link
-              href="/products"
-              className="transition-colors hover:text-foreground"
-            >
-              فروشگاه
-            </Link>
-            <ChevronLeft className="size-3.5 opacity-50" />
-            <span className="font-medium text-foreground">{cat.title}</span>
-          </nav>
-          <p className="eyebrow mb-3">دسته‌بندی</p>
-          <h1 className="section-title">{cat.title}</h1>
-          {cat.description ? (
-            <p className="mt-4 max-w-2xl text-muted-foreground">
-              {cat.description}
-            </p>
-          ) : null}
-          <p className="mt-4 text-sm text-muted-foreground">
-            {`${faNum(pagination.total_items)} محصول در این دسته`}
-          </p>
-        </div>
-      </section>
+      <CategoryHero
+        category={category}
+        ancestors={ancestors}
+        parent={parent}
+        childCategories={children}
+        totalItems={data.pagination.total_items}
+        query={query}
+      />
 
-      <section className="container-px mx-auto max-w-7xl py-12 sm:py-14">
-        {results.length ? (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {results.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        ) : (
-          <Placeholder
-            icon={PackageOpen}
-            title="محصولی در این دسته نیست"
-            description="به‌زودی محصولاتی در این دسته اضافه می‌شود."
-          />
-        )}
-      </section>
+      {children.length ? (
+        <ChildCategories categories={children} parentTitle={category.title} />
+      ) : null}
+
+      <CategoryResults
+        basePath={basePath}
+        categoryTitle={category.title}
+        query={query}
+        pagination={data.pagination}
+        products={data.results}
+        hasChildren={children.length > 0}
+      />
     </>
   );
 }

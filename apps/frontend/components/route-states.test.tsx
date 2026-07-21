@@ -12,6 +12,9 @@ import AccountNotFound from "../app/(account)/account/not-found";
 import CheckoutError from "../app/(storefront)/checkout/error";
 import CheckoutLoading from "../app/(storefront)/checkout/loading";
 import CheckoutNotFound from "../app/(storefront)/checkout/not-found";
+import CategoriesError from "../app/(storefront)/categories/error";
+import CategoriesLoading from "../app/(storefront)/categories/loading";
+import CategoriesNotFound from "../app/(storefront)/categories/not-found";
 import StorefrontError from "../app/(storefront)/error";
 import JournalDetailLoading from "../app/(storefront)/journal/[slug]/loading";
 import StorefrontLoading from "../app/(storefront)/loading";
@@ -47,6 +50,11 @@ const notFoundCases = [
     hrefs: ["/cart", "/products"],
   },
   {
+    name: "categories",
+    Component: CategoriesNotFound,
+    hrefs: ["/categories", "/products"],
+  },
+  {
     name: "tags",
     Component: TagsNotFound,
     hrefs: ["/tags", "/products"],
@@ -59,6 +67,7 @@ const errorCases = [
   { name: "storefront", Component: StorefrontError },
   { name: "account", Component: AccountError },
   { name: "checkout", Component: CheckoutError },
+  { name: "categories", Component: CategoriesError },
   { name: "tags", Component: TagsError },
   { name: "admin", Component: AdminError },
 ];
@@ -69,6 +78,7 @@ const loadingCases = [
   { name: "journal detail", Component: JournalDetailLoading },
   { name: "account", Component: AccountLoading },
   { name: "checkout", Component: CheckoutLoading },
+  { name: "categories", Component: CategoriesLoading },
   { name: "tags", Component: TagsLoading },
   { name: "admin", Component: AdminLoading },
 ];

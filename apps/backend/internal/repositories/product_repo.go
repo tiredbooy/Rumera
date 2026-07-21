@@ -18,6 +18,7 @@ import (
 type ProductRepository interface {
 	Create(ctx context.Context, req models.CreateProductReq) (*models.Product, error)
 	GetByID(ctx context.Context, id int64) (*models.Product, error)
+	GetBySlug(ctx context.Context, slug string) (*models.Product, error)
 	GetAll(ctx context.Context, filter models.ProductFilter) ([]*models.ProductListItem, int64, error)
 	Update(ctx context.Context, id int64, req models.UpdateProductReq) (*models.Product, error)
 	Delete(ctx context.Context, id int64) error
@@ -34,6 +35,7 @@ type ProductRepository interface {
 
 	// Variants
 	GetVariants(ctx context.Context, productID int64) ([]*models.ProductVariant, error)
+	GetVariantAvailableStock(ctx context.Context, productID int64) (map[int64]int, error)
 
 	ExistsByID(ctx context.Context, id int64) (bool, error)
 	ExistsBySlug(ctx context.Context, slug string) (bool, error)
@@ -180,6 +182,26 @@ func (r *productRepository) GetByID(ctx context.Context, id int64) (*models.Prod
 	return &product, nil
 }
 
+// GetBySlug is the public product identity lookup. Slugs are matched exactly
+// and inactive products intentionally share the same not-found result.
+func (r *productRepository) GetBySlug(ctx context.Context, slug string) (*models.Product, error) {
+	const q = `SELECT * FROM products WHERE slug = $1 AND is_active = true`
+
+	rows, err := r.db.Query(ctx, q, slug)
+	if err != nil {
+		return nil, fmt.Errorf("productRepository.GetBySlug: %w", err)
+	}
+
+	product, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Product])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("productRepository.GetBySlug scan: %w", err)
+	}
+	return &product, nil
+}
+
 // ─────────────────────────────────────────────────────────────
 // GetAll  (paginated + filtered)
 // Price filters are applied via correlated EXISTS subqueries against
@@ -188,20 +210,35 @@ func (r *productRepository) GetByID(ctx context.Context, id int64) (*models.Prod
 // unjoined `pv` alias — invalid SQL that 500'd every price-faceted request.)
 // ─────────────────────────────────────────────────────────────
 
-func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) ([]*models.ProductListItem, int64, error) {
-	// No hardcoded is_active filter — callers decide (the public list forces
-	// active, the admin list shows all) via f.IsActive. Seed with 1=1 so the
-	// optional clauses AND on cleanly.
+type productFilterSQL struct {
+	categoryScope string
+	whereSQL      string
+	args          pgx.NamedArgs
+}
+
+func buildProductFilterSQL(f models.ProductFilter) productFilterSQL {
 	where := []string{"1=1"}
 	args := pgx.NamedArgs{}
+	categoryScope := ""
 
 	if f.Search != "" {
-		where = append(where, "p.title ILIKE @search")
-		args["search"] = "%" + f.Search + "%"
+		where = append(where, `p.title ILIKE @search ESCAPE E'\\'`)
+		args["search"] = "%" + escapeLikePattern(f.Search) + "%"
 	}
 	if f.CategoryID != nil {
-		where = append(where, "p.category_id = @category_id")
 		args["category_id"] = *f.CategoryID
+		if f.IncludeDescendants {
+			categoryScope = `RECURSIVE category_scope(id) AS (
+			SELECT CAST(@category_id AS BIGINT)
+			UNION
+			SELECT child.id
+			FROM categories child
+			INNER JOIN category_scope parent ON child.parent_id = parent.id
+		),`
+			where = append(where, "p.category_id IN (SELECT id FROM category_scope)")
+		} else {
+			where = append(where, "p.category_id = @category_id")
+		}
 	}
 	if f.BrandID != nil {
 		where = append(where, "p.brand_id = @brand_id")
@@ -233,6 +270,27 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		args["max_price"] = *f.MaxPrice
 	}
 
+	return productFilterSQL{
+		categoryScope: categoryScope,
+		whereSQL:      strings.Join(where, " AND "),
+		args:          args,
+	}
+}
+
+func escapeLikePattern(value string) string {
+	return strings.NewReplacer(
+		`\`, `\\`,
+		`%`, `\%`,
+		`_`, `\_`,
+	).Replace(value)
+}
+
+func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) ([]*models.ProductListItem, int64, error) {
+	// No hardcoded is_active filter — callers decide (the public list forces
+	// active, the admin list shows all) via f.IsActive.
+	filterSQL := buildProductFilterSQL(f)
+	args := filterSQL.args
+
 	allowed := map[string]bool{
 		"created_at": true,
 		"title":      true,
@@ -246,22 +304,29 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 	if strings.ToUpper(f.OrderBy) == "ASC" {
 		order = "ASC"
 	}
-	whereSQL := strings.Join(where, " AND ")
-	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM products p WHERE %s`, whereSQL)
-	var total int64
-	if err := r.db.QueryRow(ctx, countQuery, args).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("productRepository.GetAll count: %w", err)
-	}
-	if total == 0 || int64(f.Offset()) >= total {
-		return []*models.ProductListItem{}, total, nil
-	}
-
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
 
-	// Project the lightweight list row: joined brand title + cheapest/priciest
-	// active variant price band (mirrors the recommendation card projection).
+	// filtered_products is referenced by both the page and total CTEs inside one
+	// statement. The LEFT JOIN from total keeps the count available even when an
+	// offset is beyond the last page and there are no product rows to return.
 	q := fmt.Sprintf(`
+	WITH %s
+	filtered_products AS (
+		SELECT p.id
+		FROM products p
+		WHERE %s
+	),
+	paged_products AS (
+		SELECT p.id
+		FROM products p
+		INNER JOIN filtered_products filtered ON filtered.id = p.id
+		ORDER BY %s %s, p.id %s
+		LIMIT @limit OFFSET @offset
+	),
+	product_total AS (
+		SELECT COUNT(*) AS total_count FROM filtered_products
+	)
     SELECT
         p.id, p.title, p.code, p.slug, p.is_active,
         b.title AS brand,
@@ -271,8 +336,12 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		COALESCE(pr.active_variant_count, 0) AS active_variant_count,
 		COALESCE(pr.available_variant_count, 0) AS available_variant_count,
 		pr.purchasable_variant_id,
-		img.id AS image_id, img.image_url, img.storage_key, img.alt_text, img.width, img.height
-    FROM products p
+		img.id AS image_id, img.image_url, img.storage_key, img.alt_text, img.width, img.height,
+		img.sort_order, img.is_primary,
+		product_total.total_count
+	FROM product_total
+	LEFT JOIN paged_products page ON TRUE
+	LEFT JOIN products p ON p.id = page.id
     LEFT JOIN brands b ON b.id = p.brand_id
     LEFT JOIN categories c ON c.id = p.category_id
 	LEFT JOIN LATERAL (
@@ -280,10 +349,20 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 			MIN(price) AS min_price,
 			MAX(price) AS max_price,
 			COUNT(*) AS active_variant_count,
-			COUNT(*) FILTER (WHERE COALESCE(i.stock_on_hand, 0) > 0) AS available_variant_count,
+			COUNT(*) FILTER (
+				WHERE GREATEST(
+					COALESCE(i.stock_on_hand, 0) - COALESCE(i.committed_stock, 0),
+					0
+				) > 0
+			) AS available_variant_count,
 			CASE
 				WHEN COUNT(*) = 1
-					AND COALESCE(MAX(i.stock_on_hand), 0) > 0
+					AND COALESCE(MAX(
+						GREATEST(
+							COALESCE(i.stock_on_hand, 0) - COALESCE(i.committed_stock, 0),
+							0
+						)
+					), 0) > 0
 				THEN MIN(pv.id)
 			END AS purchasable_variant_id
 		FROM product_variants pv
@@ -291,16 +370,22 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		WHERE pv.product_id = p.id AND pv.is_active
 	) pr ON TRUE
     LEFT JOIN LATERAL (
-        SELECT id, image_url, storage_key, alt_text, width, height
+		SELECT id, image_url, storage_key, alt_text, width, height,
+			sort_order, COALESCE(is_primary, FALSE) AS is_primary
         FROM product_images pi
         WHERE pi.product_id = p.id
         ORDER BY pi.is_primary DESC, pi.sort_order ASC
         LIMIT 1	
     ) img ON TRUE
-	    WHERE %s
-	    ORDER BY %s %s, p.id %s
-	    LIMIT @limit OFFSET @offset`,
-		whereSQL, sortBy, order, order,
+	ORDER BY %s %s NULLS LAST, p.id %s NULLS LAST`,
+		filterSQL.categoryScope,
+		filterSQL.whereSQL,
+		sortBy,
+		order,
+		order,
+		sortBy,
+		order,
+		order,
 	)
 
 	rows, err := r.db.Query(ctx, q, args)
@@ -309,42 +394,82 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 	}
 	defer rows.Close()
 
-	var items []*models.ProductListItem
+	items := make([]*models.ProductListItem, 0, f.Limit)
+	var total int64
 
 	for rows.Next() {
-		var it models.ProductListItem
-
 		var (
-			imgID         *int64
-			imgURL        *string
-			imgStorageKey *string
-			imgAltText    *string
-			imgWidth      *int
-			imgHeight     *int
+			productID      *int64
+			title          *string
+			code           *string
+			slug           *string
+			isActive       *bool
+			brand          *string
+			category       *string
+			minPrice       float64
+			maxPrice       float64
+			activeCount    int
+			availableCount int
+			purchasableID  *int64
+			imgID          *int64
+			imgURL         *string
+			imgStorageKey  *string
+			imgAltText     *string
+			imgWidth       *int
+			imgHeight      *int
+			imgSortOrder   *int
+			imgIsPrimary   *bool
 		)
 
 		if err := rows.Scan(
-			&it.ID, &it.Title, &it.Code, &it.Slug, &it.IsActive,
-			&it.Brand, &it.Category, &it.MinPrice, &it.MaxPrice,
-			&it.ActiveVariantCount, &it.AvailableVariantCount,
-			&it.PurchasableVariantID,
+			&productID, &title, &code, &slug, &isActive,
+			&brand, &category, &minPrice, &maxPrice,
+			&activeCount, &availableCount, &purchasableID,
 			&imgID, &imgURL, &imgStorageKey, &imgAltText, &imgWidth, &imgHeight,
+			&imgSortOrder, &imgIsPrimary,
+			&total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("productRepository.GetAll scan: %w", err)
 		}
+		if productID == nil {
+			continue
+		}
+		if title == nil || isActive == nil {
+			return nil, 0, fmt.Errorf("productRepository.GetAll scan: product %d missing required fields", *productID)
+		}
+
+		it := &models.ProductListItem{
+			ID:                    *productID,
+			Title:                 *title,
+			Code:                  code,
+			Slug:                  slug,
+			Brand:                 brand,
+			Category:              category,
+			IsActive:              *isActive,
+			MinPrice:              minPrice,
+			MaxPrice:              maxPrice,
+			ActiveVariantCount:    activeCount,
+			AvailableVariantCount: availableCount,
+			PurchasableVariantID:  purchasableID,
+		}
 
 		if imgID != nil && imgURL != nil {
+			if imgSortOrder == nil || imgIsPrimary == nil {
+				return nil, 0, fmt.Errorf("productRepository.GetAll scan: image %d missing required fields", *imgID)
+			}
 			it.Image = &models.ImageResponse{
 				ID:         *imgID,
 				ImageURL:   *imgURL,
 				StorageKey: imgStorageKey,
 				AltText:    imgAltText,
+				SortOrder:  *imgSortOrder,
+				IsPrimary:  *imgIsPrimary,
 				Width:      imgWidth,
 				Height:     imgHeight,
 			}
 		}
 
-		items = append(items, &it)
+		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("productRepository.GetAll rows: %w", err)
@@ -618,6 +743,42 @@ func (r *productRepository) GetVariants(ctx context.Context, productID int64) ([
 		result[i] = &variants[i]
 	}
 	return result, nil
+}
+
+// GetVariantAvailableStock hydrates every variant in one inventory query. A
+// missing inventory row is sold out, and inconsistent negative availability is
+// clamped at zero at the database boundary.
+func (r *productRepository) GetVariantAvailableStock(ctx context.Context, productID int64) (map[int64]int, error) {
+	const q = `
+		SELECT
+			pv.id,
+			GREATEST(
+				COALESCE(i.stock_on_hand, 0) - COALESCE(i.committed_stock, 0),
+				0
+			) AS available_stock
+		FROM product_variants pv
+		LEFT JOIN inventory i ON i.product_variant_id = pv.id
+		WHERE pv.product_id = $1`
+
+	rows, err := r.db.Query(ctx, q, productID)
+	if err != nil {
+		return nil, fmt.Errorf("productRepository.GetVariantAvailableStock: %w", err)
+	}
+	defer rows.Close()
+
+	stock := make(map[int64]int)
+	for rows.Next() {
+		var variantID int64
+		var available int
+		if err := rows.Scan(&variantID, &available); err != nil {
+			return nil, fmt.Errorf("productRepository.GetVariantAvailableStock scan: %w", err)
+		}
+		stock[variantID] = available
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("productRepository.GetVariantAvailableStock rows: %w", err)
+	}
+	return stock, nil
 }
 
 // ─────────────────────────────────────────────────────────────

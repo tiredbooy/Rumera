@@ -33,6 +33,7 @@ func ToVariantResponse(
 	v *models.ProductVariant,
 	options []models.OptionValueResponse,
 	images []models.ImageResponse,
+	availableStock *int,
 ) models.VariantResponse {
 	return models.VariantResponse{
 		ID:             v.ID,
@@ -40,6 +41,7 @@ func ToVariantResponse(
 		Price:          v.Price,
 		CompareAtPrice: v.CompareAtPrice,
 		IsActive:       v.IsActive,
+		AvailableStock: availableStock,
 		Options:        options,
 		Images:         images,
 	}

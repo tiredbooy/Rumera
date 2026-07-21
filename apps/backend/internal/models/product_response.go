@@ -64,6 +64,7 @@ type VariantResponse struct {
 	Price          float64               `json:"price"`
 	CompareAtPrice *float64              `json:"compare_at_price,omitempty"`
 	IsActive       bool                  `json:"is_active"`
+	AvailableStock *int                  `json:"available_stock,omitempty"`
 	Options        []OptionValueResponse `json:"options,omitempty"`
 	Images         []ImageResponse       `json:"images,omitempty"`
 }

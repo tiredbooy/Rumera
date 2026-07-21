@@ -84,6 +84,16 @@ func (h *Handler) GetCategory(c *gin.Context) {
 	response.OK(c, toCategoryResponse(cat))
 }
 
+// GetCategoryBySlug — GET /categories/slug/:slug
+func (h *Handler) GetCategoryBySlug(c *gin.Context) {
+	cat, err := h.Category.GetBySlug(c.Request.Context(), c.Param("slug"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.OK(c, toCategoryResponse(cat))
+}
+
 // CategoryChildren — GET /categories/:id/children
 func (h *Handler) CategoryChildren(c *gin.Context) {
 	id, ok := h.paramInt64(c, "id")

@@ -26,7 +26,7 @@ func (h *Handler) CreateVariant(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	response.Created(c, mappers.ToVariantResponse(variant, nil, nil))
+	response.Created(c, mappers.ToVariantResponse(variant, nil, nil, nil))
 }
 
 // GetVariant returns a variant with its options and images.
@@ -58,7 +58,7 @@ func (h *Handler) GetVariant(c *gin.Context) {
 	for i, img := range images {
 		imgResp[i] = mappers.ToImageResponse(img)
 	}
-	response.OK(c, mappers.ToVariantResponse(variant, options, imgResp))
+	response.OK(c, mappers.ToVariantResponse(variant, options, imgResp, nil))
 }
 
 // UpdateVariant — PATCH /admin/variants/:id
@@ -76,7 +76,7 @@ func (h *Handler) UpdateVariant(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	response.OK(c, mappers.ToVariantResponse(variant, nil, nil))
+	response.OK(c, mappers.ToVariantResponse(variant, nil, nil, nil))
 }
 
 // DeleteVariant — DELETE /admin/variants/:id

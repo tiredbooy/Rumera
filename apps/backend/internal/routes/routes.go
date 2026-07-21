@@ -71,6 +71,7 @@ func registerAuthRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Mana
 func registerPublicRoutes(v1 *gin.RouterGroup, h *handlers.Handler) {
 	// Products
 	v1.GET("/products", h.ListProducts)
+	v1.GET("/products/slug/:slug", h.GetProductBySlug)
 	v1.GET("/products/:id", h.GetProduct)
 	v1.GET("/products/:id/tags", h.ProductTags)
 	v1.GET("/products/:id/images", h.ProductImages)
@@ -87,6 +88,7 @@ func registerPublicRoutes(v1 *gin.RouterGroup, h *handlers.Handler) {
 	v1.GET("/categories", h.ListCategories)
 	v1.GET("/categories/featured", h.FeaturedCategories)
 	v1.GET("/categories/tree", h.CategoryTree)
+	v1.GET("/categories/slug/:slug", h.GetCategoryBySlug)
 	v1.GET("/categories/:id", h.GetCategory)
 	v1.GET("/categories/:id/children", h.CategoryChildren)
 

@@ -39,9 +39,9 @@ export function ReviewsSummary({
 }) {
   return (
     <div className="lg:sticky lg:top-24 lg:self-start">
-      <p className="eyebrow mb-3">
+      <h2 id="reviews-heading" className="eyebrow mb-3">
         <MessageSquare className="size-3.5" /> نظرات خریداران
-      </p>
+      </h2>
       <div className="flex items-end gap-3">
         <span className="font-serif text-5xl text-foil">
           {faNum(Number(averageRating.toFixed(1)))}

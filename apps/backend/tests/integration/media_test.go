@@ -298,7 +298,7 @@ func TestMediaMigrationKeepsSharedKeysDetachedAcrossDownUp(t *testing.T) {
 	// Simulate a NO TRANSACTION failure after all schema statements completed but
 	// before Goose recorded the migration version. Retrying must first remove the
 	// existing unique indexes, then safely repeat backfill and shared-key cleanup.
-	if err := goose.Down(db, migrationDir); err != nil {
+	if err := goose.DownTo(db, migrationDir, mediaMigrationID); err != nil {
 		t.Fatalf("remove post-media migration before retry simulation: %v", err)
 	}
 	migrationApplied = false

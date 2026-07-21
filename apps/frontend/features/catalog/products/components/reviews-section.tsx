@@ -124,7 +124,10 @@ export function ReviewsSection({
   const mergedReviews = [...visiblePending, ...reviews];
 
   return (
-    <section className="container-px mx-auto max-w-7xl py-16 sm:py-20">
+    <section
+      aria-labelledby="reviews-heading"
+      className="container-px mx-auto max-w-7xl py-16 sm:py-20"
+    >
       <div className="grid gap-10 lg:grid-cols-[20rem_1fr] lg:gap-14">
         <ReviewsSummary
           summary={summary}

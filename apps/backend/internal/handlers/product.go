@@ -106,6 +106,28 @@ func (h *Handler) GetProduct(c *gin.Context) {
 	response.CachedJSON(c, data, productCacheTTL)
 }
 
+// GetProductBySlug resolves an exact active slug, then shares the hydrated ID
+// cache with GetProduct so both public identities have the same staleness bound.
+//
+// GET /products/slug/:slug
+func (h *Handler) GetProductBySlug(c *gin.Context) {
+	ctx := c.Request.Context()
+	product, err := h.Product.GetBySlug(ctx, c.Param("slug"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	data, err := h.cachedJSON(ctx, cache.KeyProduct(product.ID), productCacheTTL, func() (any, error) {
+		return h.buildProductDetail(ctx, product.ID)
+	})
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.CachedJSON(c, data, productCacheTTL)
+}
+
 // buildProductDetail assembles the hydrated product view from the service layer.
 func (h *Handler) buildProductDetail(ctx context.Context, id int64) (*models.ProductDetail, error) {
 	product, err := h.Product.GetByID(ctx, id)
@@ -124,6 +146,10 @@ func (h *Handler) buildProductDetail(ctx context.Context, id int64) (*models.Pro
 	if err != nil {
 		return nil, err
 	}
+	availableStock, err := h.Product.GetVariantAvailableStock(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 
 	tagResp := make([]models.TagResponse, len(tags))
 	for i, t := range tags {
@@ -135,7 +161,8 @@ func (h *Handler) buildProductDetail(ctx context.Context, id int64) (*models.Pro
 	}
 	varResp := make([]models.VariantResponse, len(variants))
 	for i, v := range variants {
-		varResp[i] = mappers.ToVariantResponse(v, nil, nil)
+		stock := availableStock[v.ID]
+		varResp[i] = mappers.ToVariantResponse(v, nil, nil, &stock)
 	}
 
 	return mappers.ToProductDetail(product, tagResp, imgResp, varResp), nil
@@ -230,7 +257,7 @@ func (h *Handler) ProductVariants(c *gin.Context) {
 	}
 	out := make([]models.VariantResponse, len(variants))
 	for i, v := range variants {
-		out[i] = mappers.ToVariantResponse(v, nil, nil)
+		out[i] = mappers.ToVariantResponse(v, nil, nil, nil)
 	}
 	response.OK(c, out)
 }

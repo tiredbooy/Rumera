@@ -9,6 +9,8 @@ export interface ProductListQuery extends PaginationQuery {
   orderBy?: ProductSortDirection;
   search?: string;
   category_id?: number;
+  /** Effective only with category_id; includes that category's full subtree. */
+  include_descendants?: boolean;
   brand_id?: number;
   tag_id?: number;
   is_active?: boolean;

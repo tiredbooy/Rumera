@@ -58,8 +58,7 @@ export function productLd(p: Product) {
     offers: {
       "@type": "Offer",
       price: p.price,
-      priceCurrency: "IRR",
-      availability: "https://schema.org/InStock",
+      priceCurrency: "IRT",
       url: absoluteUrl(`/products/${p.slug}`),
     },
   };
@@ -75,21 +74,30 @@ export function productDetailLd(
     rating: number;
     title?: string;
     content?: string;
-    author?: string;
     created_at: string;
   }[],
 ) {
-  const prices = (p.variants ?? []).map((v) => v.price).filter((n) => n > 0);
+  const variants = (p.variants ?? []).filter(
+    (variant) => variant.is_active && variant.price > 0,
+  );
+  const prices = variants.map((variant) => variant.price);
   const low = prices.length ? Math.min(...prices) : undefined;
   const high = prices.length ? Math.max(...prices) : undefined;
+  const slug = p.slug?.trim();
+  const productUrl = slug
+    ? absoluteUrl(`/products/${encodeURIComponent(slug)}`)
+    : undefined;
+  const singleSku =
+    variants.length === 1 ? variants[0]?.sku?.trim() || undefined : undefined;
+
   return {
     "@context": "https://schema.org",
     "@type": "Product",
     name: p.title,
     description: p.description ?? p.meta_description,
-    sku: p.variants?.[0]?.sku,
+    ...(singleSku ? { sku: singleSku } : {}),
     mpn: p.code,
-    url: absoluteUrl(`/products/${p.slug}`),
+    ...(productUrl ? { url: productUrl } : {}),
     image: (p.images ?? []).map((img) => img.image_url),
     ...(p.country_of_origin ? { countryOfOrigin: p.country_of_origin } : {}),
     ...(rating && rating.count > 0
@@ -110,9 +118,6 @@ export function productDetailLd(
               ratingValue: r.rating,
               bestRating: 5,
             },
-            ...(r.author
-              ? { author: { "@type": "Person", name: r.author } }
-              : {}),
             ...(r.title ? { name: r.title } : {}),
             ...(r.content ? { reviewBody: r.content } : {}),
             datePublished: r.created_at,
@@ -123,12 +128,22 @@ export function productDetailLd(
       low !== undefined
         ? {
             "@type": "AggregateOffer",
-            priceCurrency: "IRR",
+            priceCurrency: "IRT",
             lowPrice: low,
             highPrice: high,
             offerCount: prices.length,
-            availability: "https://schema.org/InStock",
-            url: absoluteUrl(`/products/${p.slug}`),
+            ...(productUrl ? { url: productUrl } : {}),
+            offers: variants.map((variant) => ({
+              "@type": "Offer",
+              price: variant.price,
+              priceCurrency: "IRT",
+              availability:
+                (variant.available_stock ?? 0) > 0
+                  ? "https://schema.org/InStock"
+                  : "https://schema.org/OutOfStock",
+              ...(variant.sku?.trim() ? { sku: variant.sku.trim() } : {}),
+              ...(productUrl ? { url: productUrl } : {}),
+            })),
           }
         : undefined,
   };
@@ -144,12 +159,19 @@ export function productListLd(
     "@context": "https://schema.org",
     "@type": "ItemList",
     name,
-    itemListElement: items.map((p, i) => ({
-      "@type": "ListItem",
-      position: startPosition + i,
-      name: p.title,
-      url: absoluteUrl(`/products/${p.slug}`),
-    })),
+    itemListElement: items.flatMap((product, index) => {
+      const slug = product.slug?.trim();
+      return slug
+        ? [
+            {
+              "@type": "ListItem",
+              position: startPosition + index,
+              name: product.title,
+              url: absoluteUrl(`/products/${encodeURIComponent(slug)}`),
+            },
+          ]
+        : [];
+    }),
   };
 }
 

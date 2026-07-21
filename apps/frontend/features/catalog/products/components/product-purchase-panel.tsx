@@ -1,29 +1,40 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { createPortal } from "react-dom"
-import { useSession } from "next-auth/react"
-import { Heart, Minus, Plus, Loader2, Check } from "lucide-react"
-import { toast } from "sonner"
+import * as React from "react";
+import { createPortal } from "react-dom";
+import { useSession } from "next-auth/react";
+import { Heart, Minus, Plus, Loader2, Check } from "lucide-react";
+import { toast } from "sonner";
 
-import { cn } from "@/lib/utils"
-import { formatPrice, faNum } from "@/lib/products"
+import { cn } from "@/lib/utils";
+import { formatPrice, faNum } from "@/lib/products";
 import type {
   ProductDetail,
   ProductVariant,
-} from "@/features/catalog/products/types"
+} from "@/features/catalog/products/types";
 import {
   useWishlist,
   useAddWishlistItem,
   useRemoveWishlistItem,
-} from "@/features/wishlist/hooks"
-import { useRecordInteraction } from "@/features/recommendations/hooks"
-import { AddToCartButton } from "@/features/cart/components/add-to-cart-button"
-import { AlertButton } from "./alert-button"
+} from "@/features/wishlist/hooks";
+import { useRecordInteraction } from "@/features/recommendations/hooks";
+import { AddToCartButton } from "@/features/cart/components/add-to-cart-button";
+import { AlertButton } from "./alert-button";
 
-const variantLabel = (v: ProductVariant) =>
-  v.options?.map((o) => o.value).join(" · ") || v.sku
-const MAX_QTY = 12
+const MAX_QTY = 12;
+
+function variantLabel(variant: ProductVariant, index: number) {
+  const options = variant.options
+    ?.map((option) => option.value.trim())
+    .filter(Boolean)
+    .join(" · ");
+
+  return options || variant.sku?.trim() || `گزینه ${faNum(index + 1)}`;
+}
+
+function availableStock(variant: ProductVariant | undefined) {
+  return Math.max(0, variant?.available_stock ?? 0);
+}
 
 /**
  * ProductPurchasePanel — client-side buy box for the PDP. Owns variant selection,
@@ -33,16 +44,32 @@ const MAX_QTY = 12
  * stays reachable while the long page scrolls.
  */
 export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
-  const variants = (product.variants ?? []).filter((v) => v.is_active)
-  const [selectedId, setSelectedId] = React.useState<number | undefined>(variants[0]?.id)
-  const [qty, setQty] = React.useState(1)
-  const selected = variants.find((v) => v.id === selectedId) ?? variants[0]
+  const variants = (product.variants ?? []).filter((v) => v.is_active);
+  const defaultVariant =
+    variants.find((variant) => availableStock(variant) > 0) ?? variants[0];
+  const [selectedId, setSelectedId] = React.useState<number | undefined>(
+    defaultVariant?.id,
+  );
+  const [qty, setQty] = React.useState(1);
+  const selected = variants.find((v) => v.id === selectedId) ?? defaultVariant;
+  const selectedIndex = variants.findIndex(
+    (variant) => variant.id === selected?.id,
+  );
+  const selectedLabel = selected
+    ? variantLabel(selected, Math.max(0, selectedIndex))
+    : "";
+  const stock = availableStock(selected);
+  const isAvailable = stock > 0;
+  const maxQty = Math.min(MAX_QTY, stock);
+  const safeQty = maxQty > 0 ? Math.min(qty, maxQty) : 1;
 
-  const compareAt = selected?.compare_at_price
-  const onSale = !!compareAt && compareAt > (selected?.price ?? 0)
+  const compareAt = selected?.compare_at_price;
+  const onSale = !!compareAt && compareAt > (selected?.price ?? 0);
   const discountPct =
-    onSale && compareAt ? Math.round(((compareAt - selected!.price) / compareAt) * 100) : 0
-  const saving = onSale && compareAt ? compareAt - selected!.price : 0
+    onSale && compareAt
+      ? Math.round(((compareAt - selected!.price) / compareAt) * 100)
+      : 0;
+  const saving = onSale && compareAt ? compareAt - selected!.price : 0;
 
   // Portal the sticky mobile bar to <body> so ancestor backdrop-blur/overflow
   // (which establish a containing block) can't trap a position:fixed child.
@@ -50,46 +77,52 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
   const mounted = React.useSyncExternalStore(
     () => () => {},
     () => true, // client snapshot
-    () => false // server snapshot
-  )
+    () => false, // server snapshot
+  );
 
-  // Switching variant resets quantity (handled in the picker's onClick).
+  // Switching variants always starts a fresh, stock-safe quantity selection.
   function selectVariant(id: number) {
-    setSelectedId(id)
-    setQty(1)
+    setSelectedId(id);
+    setQty(1);
   }
 
   // Wishlist — keyed by variant; remove needs the wishlist-item row id.
-  const { status } = useSession()
-  const authed = status === "authenticated"
-  const wishlist = useWishlist(authed)
-  const addWish = useAddWishlistItem()
-  const removeWish = useRemoveWishlistItem()
-  const record = useRecordInteraction()
-  const wishItem = wishlist.data?.items.find((i) => i.variant_id === selected?.id)
-  const inWishlist = !!wishItem
-  const wishPending = addWish.isPending || removeWish.isPending
+  const { status } = useSession();
+  const authed = status === "authenticated";
+  const wishlist = useWishlist(authed);
+  const addWish = useAddWishlistItem();
+  const removeWish = useRemoveWishlistItem();
+  const record = useRecordInteraction();
+  const wishItem = wishlist.data?.items.find(
+    (i) => i.variant_id === selected?.id,
+  );
+  const inWishlist = !!wishItem;
+  const wishPending = addWish.isPending || removeWish.isPending;
 
   function toggleWishlist() {
     if (!authed) {
-      toast.info("برای افزودن به علاقه‌مندی‌ها وارد شوید")
-      return
+      toast.info("برای افزودن به علاقه‌مندی‌ها وارد شوید");
+      return;
     }
-    if (!selected) return
+    if (!selected) return;
     if (wishItem) {
       removeWish.mutate(wishItem.id, {
         onSuccess: () => toast.success("از علاقه‌مندی‌ها حذف شد"),
         onError: () => toast.error("حذف ناموفق بود"),
-      })
+      });
     } else {
       addWish.mutate(selected.id, {
         onSuccess: () => {
-          toast.success("به علاقه‌مندی‌ها افزوده شد")
+          toast.success("به علاقه‌مندی‌ها افزوده شد");
           // Warm personalisation — fire-and-forget, never blocks the UI.
-          record.mutate({ product_id: product.id, interaction_type: "wishlist", source: "pdp" })
+          record.mutate({
+            product_id: product.id,
+            interaction_type: "wishlist",
+            source: "pdp",
+          });
         },
         onError: () => toast.error("افزودن ناموفق بود"),
-      })
+      });
     }
   }
 
@@ -97,113 +130,155 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
     <div data-testid="purchase-panel">
       {variants.length > 1 ? (
         <fieldset className="mb-6">
-          <legend className="mb-2 text-sm text-muted-foreground">انتخاب گزینه</legend>
-          <div role="radiogroup" aria-label="انتخاب گزینهٔ محصول" className="flex flex-wrap gap-2">
-            {variants.map((v) => {
-              const isSel = v.id === selectedId
+          <legend className="mb-2 text-sm text-muted-foreground">
+            انتخاب گزینه
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {variants.map((variant, index) => {
+              const isSel = variant.id === selected?.id;
+              const label = variantLabel(variant, index);
+              const variantStock = availableStock(variant);
               return (
-                <button
-                  key={v.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={isSel}
-                  onClick={() => selectVariant(v.id)}
-                  className={cn(
-                    "min-h-11 cursor-pointer rounded-xl border px-4 py-2 text-sm transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
-                    isSel
-                      ? "border-primary bg-primary/10 font-medium text-primary ring-1 ring-primary/30"
-                      : "border-border hover:border-primary/40 hover:bg-accent/40"
-                  )}
-                >
-                  {variantLabel(v)}
-                </button>
-              )
+                <label key={variant.id} className="relative cursor-pointer">
+                  <input
+                    type="radio"
+                    name={`product-${product.id}-variant`}
+                    value={variant.id}
+                    checked={isSel}
+                    onChange={() => selectVariant(variant.id)}
+                    aria-label={variantStock > 0 ? label : `${label}، ناموجود`}
+                    className="peer sr-only"
+                  />
+                  <span
+                    className={cn(
+                      "flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:outline-none",
+                      isSel
+                        ? "border-primary bg-primary/10 font-medium text-primary ring-1 ring-primary/30"
+                        : "border-border hover:border-primary/40 hover:bg-accent/40",
+                    )}
+                  >
+                    <span>{label}</span>
+                    {variantStock <= 0 ? (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        ناموجود
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+              );
             })}
           </div>
         </fieldset>
       ) : null}
 
-      {selected ? (
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-          <span className="font-serif text-4xl text-foil">{formatPrice(selected.price)}</span>
-          {onSale ? (
-            <>
-              <span className="text-muted-foreground line-through" aria-label="قیمت پیشین">
-                {formatPrice(compareAt!)}
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {selected ? (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+              <span className="font-serif text-4xl text-foil">
+                {formatPrice(selected.price)}
               </span>
-              <span className="inline-flex items-center rounded-full bg-wine/10 px-2.5 py-1 text-xs font-bold text-wine ring-1 ring-wine/20">
-                {faNum(discountPct)}٪ تخفیف
-              </span>
-            </>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-muted-foreground">این محصول در حال حاضر ناموجود است.</p>
-      )}
-
-      {onSale ? (
-        <p className="mt-1.5 text-sm text-wine">{formatPrice(saving)} صرفه‌جویی می‌کنید</p>
-      ) : null}
+              {onSale ? (
+                <>
+                  <span
+                    className="text-muted-foreground line-through"
+                    aria-label="قیمت پیشین"
+                  >
+                    {formatPrice(compareAt!)}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-wine/10 px-2.5 py-1 text-xs font-bold text-wine ring-1 ring-wine/20">
+                    {faNum(discountPct)}٪ تخفیف
+                  </span>
+                </>
+              ) : null}
+            </div>
+            {onSale ? (
+              <p className="mt-1.5 text-sm text-wine">
+                {formatPrice(saving)} صرفه‌جویی می‌کنید
+              </p>
+            ) : null}
+            <p
+              className={cn(
+                "mt-2 text-sm",
+                isAvailable ? "text-primary" : "text-wine",
+              )}
+            >
+              {isAvailable
+                ? `${faNum(stock)} عدد آمادهٔ سفارش`
+                : "این گزینه در حال حاضر ناموجود است."}
+            </p>
+          </>
+        ) : (
+          <p className="text-muted-foreground">
+            این محصول گزینهٔ فعالی برای خرید ندارد.
+          </p>
+        )}
+      </div>
 
       {/* Quantity + primary actions */}
       {selected ? (
         <div className="mt-7 space-y-4">
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground" id="qty-label">
-              تعداد
-            </span>
-            <div
-              className="inline-flex items-center rounded-xl border border-border bg-card"
-              role="group"
-              aria-labelledby="qty-label"
-            >
-              <button
-                type="button"
-                onClick={() => setQty((q) => Math.max(1, q - 1))}
-                disabled={qty <= 1}
-                aria-label="کاهش تعداد"
-                className="flex size-11 cursor-pointer items-center justify-center rounded-r-xl text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Minus className="size-4" />
-              </button>
-              <span
-                aria-live="polite"
-                className="w-10 text-center text-sm font-semibold tabular-nums"
-              >
-                {faNum(qty)}
+          {isAvailable ? (
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground" id="qty-label">
+                تعداد
               </span>
-              <button
-                type="button"
-                onClick={() => setQty((q) => Math.min(MAX_QTY, q + 1))}
-                disabled={qty >= MAX_QTY}
-                aria-label="افزایش تعداد"
-                className="flex size-11 cursor-pointer items-center justify-center rounded-l-xl text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              <div
+                className="inline-flex items-center rounded-xl border border-border bg-card"
+                role="group"
+                aria-labelledby="qty-label"
               >
-                <Plus className="size-4" />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setQty(Math.max(1, safeQty - 1))}
+                  disabled={safeQty <= 1}
+                  aria-label="کاهش تعداد"
+                  className="flex size-11 cursor-pointer items-center justify-center rounded-r-xl text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Minus className="size-4" />
+                </button>
+                <span
+                  aria-live="polite"
+                  className="w-10 text-center text-sm font-semibold tabular-nums"
+                >
+                  {faNum(safeQty)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setQty(Math.min(maxQty, safeQty + 1))}
+                  disabled={safeQty >= maxQty}
+                  aria-label="افزایش تعداد"
+                  className="flex size-11 cursor-pointer items-center justify-center rounded-l-xl text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Plus className="size-4" />
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-3">
             <AddToCartButton
               productVariantId={selected.id}
-              quantity={qty}
-              className="flex-1 sm:flex-none"
+              quantity={safeQty}
+              disabled={!isAvailable}
+              label={isAvailable ? "افزودن به سبد" : "ناموجود"}
+              className="hidden flex-1 lg:inline-flex lg:flex-none"
             />
-            <AlertButton productVariantId={selected.id} />
+            <AlertButton
+              productVariantId={selected.id}
+              isAvailable={isAvailable}
+            />
             <WishlistToggle
               inWishlist={inWishlist}
               pending={wishPending}
               onToggle={toggleWishlist}
               disabled={!selected}
+              variantLabel={selectedLabel}
+              className="hidden lg:inline-flex"
             />
           </div>
         </div>
-      ) : (
-        <div className="mt-7">
-          <AlertButton productVariantId={undefined} />
-        </div>
-      )}
+      ) : null}
 
       {/* Sticky mobile bar — primary CTA stays in reach through the long page.
           Portaled to <body> so it's truly viewport-fixed. */}
@@ -220,11 +295,10 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
                       <p className="truncate font-serif text-lg text-foil">
                         {formatPrice(selected.price)}
                       </p>
-                      {onSale ? (
-                        <p className="truncate text-xs text-muted-foreground line-through">
-                          {formatPrice(compareAt!)}
-                        </p>
-                      ) : null}
+                      <p className="truncate text-xs text-muted-foreground">
+                        {selectedLabel} ·{" "}
+                        {isAvailable ? `تعداد ${faNum(safeQty)}` : "ناموجود"}
+                      </p>
                     </>
                   ) : (
                     <p className="text-sm text-muted-foreground">ناموجود</p>
@@ -235,20 +309,22 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
                   pending={wishPending}
                   onToggle={toggleWishlist}
                   disabled={!selected}
+                  variantLabel={selectedLabel}
                 />
                 <AddToCartButton
                   productVariantId={selected?.id}
-                  quantity={qty}
-                  disabled={!selected}
+                  quantity={safeQty}
+                  disabled={!selected || !isAvailable}
+                  label={isAvailable ? "افزودن به سبد" : "ناموجود"}
                   className="flex-[1.4]"
                 />
               </div>
             </div>,
-            document.body
+            document.body,
           )
         : null}
     </div>
-  )
+  );
 }
 
 /** Heart toggle shared by the inline panel and the sticky mobile bar. */
@@ -257,11 +333,15 @@ function WishlistToggle({
   pending,
   onToggle,
   disabled,
+  variantLabel,
+  className,
 }: {
-  inWishlist: boolean
-  pending: boolean
-  onToggle: () => void
-  disabled?: boolean
+  inWishlist: boolean;
+  pending: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+  variantLabel?: string;
+  className?: string;
 }) {
   return (
     <button
@@ -269,12 +349,13 @@ function WishlistToggle({
       onClick={onToggle}
       disabled={disabled || pending}
       aria-pressed={inWishlist}
-      aria-label={inWishlist ? "حذف از علاقه‌مندی‌ها" : "افزودن به علاقه‌مندی‌ها"}
+      aria-label={`${inWishlist ? "حذف از علاقه‌مندی‌ها" : "افزودن به علاقه‌مندی‌ها"}${variantLabel ? `: ${variantLabel}` : ""}`}
       className={cn(
         "inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border transition-colors duration-200 disabled:opacity-50",
         inWishlist
           ? "border-wine/40 bg-wine/10 text-wine"
-          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
+        className,
       )}
     >
       {pending ? (
@@ -291,5 +372,5 @@ function WishlistToggle({
         <Heart className="size-5" />
       )}
     </button>
-  )
+  );
 }

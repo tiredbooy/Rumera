@@ -1,62 +1,61 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useRouter } from "next/navigation"
-import { useForm, Controller } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { toast } from "sonner"
-import { useQueryClient } from "@tanstack/react-query"
-import { Loader2 } from "lucide-react"
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   FieldControl,
   fieldDescriptionId,
   fieldErrorId,
-} from "@/components/ui/field"
+} from "@/components/ui/field";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type {
   Category,
   CategoryTree,
   CreateCategoryInput,
-} from "@/features/catalog/categories/types"
+} from "@/features/catalog/categories/types";
 import {
   CategoryApiError,
   createCategory,
   updateCategory,
-} from "@/features/admin/categories/client"
+} from "@/features/admin/categories/client";
 import {
   categoryFormSchema,
   type CategoryFormValues,
-} from "@/features/catalog/categories/validations"
-import { CATEGORIES_QUERY_KEY } from "@/lib/admin/category-keys"
-import { CategoryImageInput } from "./category-image-input"
+} from "@/features/catalog/categories/validations";
+import { CATEGORIES_QUERY_KEY } from "@/lib/admin/category-keys";
+import { CategoryImageInput } from "./category-image-input";
 
 // ── Validation (all fields are strings; coerced to the API shape on submit) ────
 
-const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null)
-const numOrNull = (v?: string) => (v && v.trim() !== "" ? Number(v) : null)
+const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null);
+const numOrNull = (v?: string) => (v && v.trim() !== "" ? Number(v) : null);
 
-/** Latinise a label into a URL-safe slug; Persian text falls back to empty. */
+/** Normalize a label into the same Unicode-safe path segment as the backend. */
 function toSlug(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/[‌\s]+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
+    .replace(/^-|-$/g, "");
 }
 
 function defaults(category?: Category): CategoryFormValues {
@@ -68,8 +67,9 @@ function defaults(category?: Category): CategoryFormValues {
     image_url: category?.image_url ?? "",
     is_featured: category?.is_featured ?? false,
     card_size: category?.card_size ?? "small",
-    display_order: category?.display_order != null ? String(category.display_order) : "0",
-  }
+    display_order:
+      category?.display_order != null ? String(category.display_order) : "0",
+  };
 }
 
 /**
@@ -77,24 +77,25 @@ function defaults(category?: Category): CategoryFormValues {
  * excluding `excludeId` and all of its descendants (a category can never be its
  * own ancestor — that would create a cycle).
  */
-type ParentOption = { id: number; label: string; depth: number }
+type ParentOption = { id: number; label: string; depth: number };
 
 function flattenForPicker(
   nodes: CategoryTree[],
   excludeId?: number,
   depth = 0,
-  out: ParentOption[] = []
+  out: ParentOption[] = [],
 ): ParentOption[] {
   // The tree comes from the network; guard against a null/undefined or
   // non-array payload (e.g. an empty `{ data: null }` envelope) so the picker
   // degrades to "no parents" instead of throwing "nodes is not iterable".
-  if (!Array.isArray(nodes)) return out
+  if (!Array.isArray(nodes)) return out;
   for (const node of nodes) {
-    if (node.id === excludeId) continue // skips the node AND (by not recursing) its subtree
-    out.push({ id: node.id, label: node.title, depth })
-    if (node.children?.length) flattenForPicker(node.children, excludeId, depth + 1, out)
+    if (node.id === excludeId) continue; // skips the node AND (by not recursing) its subtree
+    out.push({ id: node.id, label: node.title, depth });
+    if (node.children?.length)
+      flattenForPicker(node.children, excludeId, depth + 1, out);
   }
-  return out
+  return out;
 }
 
 function Field({
@@ -104,11 +105,11 @@ function Field({
   hint,
   children,
 }: {
-  id: string
-  label: string
-  error?: string
-  hint?: string
-  children: React.ReactElement
+  id: string;
+  label: string;
+  error?: string;
+  hint?: string;
+  children: React.ReactElement;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -117,13 +118,24 @@ function Field({
         {children as React.ReactElement}
       </FieldControl>
       {hint && !error ? (
-        <p id={fieldDescriptionId(id)} className="text-xs text-muted-foreground">{hint}</p>
+        <p
+          id={fieldDescriptionId(id)}
+          className="text-xs text-muted-foreground"
+        >
+          {hint}
+        </p>
       ) : null}
       {error ? (
-        <p id={fieldErrorId(id)} role="alert" className="text-xs text-destructive">{error}</p>
+        <p
+          id={fieldErrorId(id)}
+          role="alert"
+          className="text-xs text-destructive"
+        >
+          {error}
+        </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 export function CategoryForm({
@@ -132,17 +144,17 @@ export function CategoryForm({
   tree,
   submitLabel = "ذخیره",
 }: {
-  mode: "create" | "edit"
-  category?: Category
-  tree: CategoryTree[]
-  submitLabel?: string
+  mode: "create" | "edit";
+  category?: Category;
+  tree: CategoryTree[];
+  submitLabel?: string;
 }) {
-  const router = useRouter()
-  const queryClient = useQueryClient()
+  const router = useRouter();
+  const queryClient = useQueryClient();
   // Tracks whether the user has hand-edited the slug, so auto-suggest stops
   // clobbering their input once they take over.
-  const [slugTouched, setSlugTouched] = React.useState(mode === "edit")
-  const [imageUploading, setImageUploading] = React.useState(false)
+  const [slugTouched, setSlugTouched] = React.useState(mode === "edit");
+  const [imageUploading, setImageUploading] = React.useState(false);
 
   const {
     register,
@@ -155,26 +167,26 @@ export function CategoryForm({
   } = useForm<CategoryFormValues>({
     resolver: zodResolver(categoryFormSchema),
     defaultValues: defaults(category),
-  })
+  });
 
-  const title = watch("title")
-  const slug = watch("slug")
-  const imageUrl = watch("image_url")
-  const isFeatured = watch("is_featured")
-  const cardSize = watch("card_size")
+  const title = watch("title");
+  const slug = watch("slug");
+  const imageUrl = watch("image_url");
+  const isFeatured = watch("is_featured");
+  const cardSize = watch("card_size");
 
   // Auto-suggest the slug from the title until the user edits the slug directly.
   React.useEffect(() => {
     if (!slugTouched) {
-      const suggestion = toSlug(title)
-      if (suggestion) setValue("slug", suggestion, { shouldValidate: false })
+      const suggestion = toSlug(title);
+      if (suggestion) setValue("slug", suggestion, { shouldValidate: false });
     }
-  }, [title, slugTouched, setValue])
+  }, [title, slugTouched, setValue]);
 
   const parentOptions = React.useMemo(
     () => flattenForPicker(tree, category?.id),
-    [tree, category?.id]
-  )
+    [tree, category?.id],
+  );
 
   function applyServerErrors(e: unknown) {
     if (e instanceof CategoryApiError) {
@@ -183,13 +195,13 @@ export function CategoryForm({
           setError(
             key as keyof CategoryFormValues,
             { message: msgs[0] },
-            { shouldFocus: index === 0 }
-          )
-        })
+            { shouldFocus: index === 0 },
+          );
+        });
       }
-      toast.error(e.message)
+      toast.error(e.message);
     } else {
-      toast.error("خطای غیرمنتظره رخ داد")
+      toast.error("خطای غیرمنتظره رخ داد");
     }
   }
 
@@ -203,37 +215,47 @@ export function CategoryForm({
       is_featured: v.is_featured,
       card_size: v.card_size,
       display_order: numOrNull(v.display_order) ?? 0,
-    }
+    };
   }
 
   async function onSubmit(v: CategoryFormValues) {
     try {
       if (mode === "create") {
-        await createCategory(toPayload(v))
-        toast.success("دسته‌بندی ایجاد شد")
+        await createCategory(toPayload(v));
+        toast.success("دسته‌بندی ایجاد شد");
       } else if (category) {
-        await updateCategory(category.id, toPayload(v))
-        toast.success("تغییرات ذخیره شد")
+        await updateCategory(category.id, toPayload(v));
+        toast.success("تغییرات ذخیره شد");
       }
-      await queryClient.invalidateQueries({ queryKey: CATEGORIES_QUERY_KEY })
-      router.push("/admin/categories")
-      router.refresh()
+      await queryClient.invalidateQueries({ queryKey: CATEGORIES_QUERY_KEY });
+      router.push("/admin/categories");
+      router.refresh();
     } catch (e) {
-      applyServerErrors(e)
+      applyServerErrors(e);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="grid gap-6 lg:grid-cols-[1fr_320px]">
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="grid gap-6 lg:grid-cols-[1fr_320px]"
+    >
       <div className="flex flex-col gap-6">
         <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
-          <legend className="px-1 font-serif text-base">اطلاعات دسته‌بندی</legend>
+          <legend className="px-1 font-serif text-base">
+            اطلاعات دسته‌بندی
+          </legend>
           <p className="-mt-0.5 text-xs text-muted-foreground">
-            دسته‌بندی‌ها ساختار درختی دارند؛ می‌توانید یک دستهٔ والد انتخاب کنید.
+            دسته‌بندی‌ها ساختار درختی دارند؛ می‌توانید یک دستهٔ والد انتخاب
+            کنید.
           </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Field id="title" label="نام دسته‌بندی" error={errors.title?.message}>
+              <Field
+                id="title"
+                label="نام دسته‌بندی"
+                error={errors.title?.message}
+              >
                 <Input
                   id="title"
                   data-testid="category-title"
@@ -267,16 +289,28 @@ export function CategoryForm({
                 render={({ field }) => (
                   <Select
                     value={field.value || "none"}
-                    onValueChange={(val) => field.onChange(val === "none" ? "" : val)}
+                    onValueChange={(val) =>
+                      field.onChange(val === "none" ? "" : val)
+                    }
                   >
-                    <SelectTrigger id="parent_id" className="w-full" data-testid="category-parent">
+                    <SelectTrigger
+                      id="parent_id"
+                      className="w-full"
+                      data-testid="category-parent"
+                    >
                       <SelectValue placeholder="انتخاب دستهٔ والد" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">بدون والد (دستهٔ اصلی)</SelectItem>
+                      <SelectItem value="none">
+                        بدون والد (دستهٔ اصلی)
+                      </SelectItem>
                       {parentOptions.map((opt) => (
                         <SelectItem key={opt.id} value={String(opt.id)}>
-                          <span style={{ paddingInlineStart: `${opt.depth * 0.85}rem` }}>
+                          <span
+                            style={{
+                              paddingInlineStart: `${opt.depth * 0.85}rem`,
+                            }}
+                          >
                             {opt.depth > 0 ? "↳ " : ""}
                             {opt.label}
                           </span>
@@ -289,13 +323,25 @@ export function CategoryForm({
             </Field>
 
             <div className="sm:col-span-2">
-              <Field id="description" label="توضیحات" error={errors.description?.message}>
-                <Textarea id="description" rows={3} {...register("description")} />
+              <Field
+                id="description"
+                label="توضیحات"
+                error={errors.description?.message}
+              >
+                <Textarea
+                  id="description"
+                  rows={3}
+                  {...register("description")}
+                />
               </Field>
             </div>
 
             <div className="sm:col-span-2">
-              <Field id="image_url" label="تصویر دسته‌بندی" error={errors.image_url?.message}>
+              <Field
+                id="image_url"
+                label="تصویر دسته‌بندی"
+                error={errors.image_url?.message}
+              >
                 <Controller
                   control={control}
                   name="image_url"
@@ -316,9 +362,12 @@ export function CategoryForm({
         </fieldset>
 
         <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
-          <legend className="px-1 font-serif text-base">نمایش در صفحهٔ اصلی</legend>
+          <legend className="px-1 font-serif text-base">
+            نمایش در صفحهٔ اصلی
+          </legend>
           <p className="-mt-0.5 text-xs text-muted-foreground">
-            دسته‌بندی‌های ویژه در صفحهٔ اصلی، در قالب یک کارت بزرگ و چند کارت کوچک نمایش داده می‌شوند.
+            دسته‌بندی‌های ویژه در صفحهٔ اصلی، در قالب یک کارت بزرگ و چند کارت
+            کوچک نمایش داده می‌شوند.
           </p>
 
           <div className="mt-4 flex flex-col gap-4">
@@ -350,8 +399,15 @@ export function CategoryForm({
                     control={control}
                     name="card_size"
                     render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger id="card_size" className="w-full" data-testid="category-card-size">
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger
+                          id="card_size"
+                          className="w-full"
+                          data-testid="category-card-size"
+                        >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -387,11 +443,13 @@ export function CategoryForm({
       <aside className="flex flex-col gap-6">
         <div className="lg:sticky lg:top-20 lg:flex lg:flex-col lg:gap-6">
           <div className="border-hairline rounded-2xl bg-card p-6 ring-1 ring-foreground/[0.04]">
-            <p className="mb-4 text-xs font-medium text-muted-foreground">پیش‌نمایش</p>
+            <p className="mb-4 text-xs font-medium text-muted-foreground">
+              پیش‌نمایش
+            </p>
             <div
               className={cn(
                 "overflow-hidden rounded-xl bg-muted/40 ring-1 ring-foreground/[0.04]",
-                cardSize === "large" ? "aspect-[4/3]" : "aspect-[16/10]"
+                cardSize === "large" ? "aspect-[4/3]" : "aspect-[16/10]",
               )}
             >
               {imageUrl ? (
@@ -399,9 +457,14 @@ export function CategoryForm({
                 <img src={imageUrl} alt="" className="size-full object-cover" />
               ) : null}
             </div>
-            <p className="mt-3 font-serif text-lg">{title || "نام دسته‌بندی"}</p>
+            <p className="mt-3 font-serif text-lg">
+              {title || "نام دسته‌بندی"}
+            </p>
             {slug ? (
-              <p dir="ltr" className="mt-1 text-start text-xs text-muted-foreground">
+              <p
+                dir="ltr"
+                className="mt-1 text-start text-xs text-muted-foreground"
+              >
                 /{slug}
               </p>
             ) : null}
@@ -413,8 +476,15 @@ export function CategoryForm({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Button type="submit" size="lg" disabled={isSubmitting || imageUploading} data-testid="category-submit">
-              {isSubmitting || imageUploading ? <Loader2 className="size-4 animate-spin" /> : null}
+            <Button
+              type="submit"
+              size="lg"
+              disabled={isSubmitting || imageUploading}
+              data-testid="category-submit"
+            >
+              {isSubmitting || imageUploading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
               {submitLabel}
             </Button>
             <Button
@@ -430,5 +500,5 @@ export function CategoryForm({
         </div>
       </aside>
     </form>
-  )
+  );
 }

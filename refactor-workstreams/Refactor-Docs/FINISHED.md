@@ -2933,3 +2933,172 @@ in `TASKS.md`, `IN_PROGRESS.md`, and this file.
   still reports unrelated baseline findings.
 - Task 057b is the next unblocked task. Tasks 057c, 057d, and 061d retain lifecycle,
   processing-hardening, and cross-origin rendering ownership respectively.
+
+## Task 056a - Improve The Product-Detail Storefront
+
+**Status:** Complete
+**Date:** 2026-07-21
+
+### What Changed
+
+- Replaced the broken title-search slug workaround with an exact, active-only
+  `/products/slug/:slug` contract that reuses the hydrated product cache and
+  paginated static-slug discovery beyond the former 100-product cap.
+- Added one batched per-product availability projection using
+  `max(stock_on_hand - committed_stock, 0)` and exposed optional
+  `available_stock` only where the detail response actually hydrates it.
+- Made product detail requests inventory-safe, selected the first purchasable
+  active variant, capped quantity by stock, preserved sold-out variants for
+  alerts, and prevented duplicate mobile/desktop cart controls from being
+  operable at the same breakpoint.
+- Rebuilt variant choices with native radio semantics and nonblank labels,
+  corrected gallery RTL controls and changing-image behavior, added touch-visible
+  controls, and removed the false zoom affordance.
+- Corrected weight units, breadcrumb/review semantics, conservative trust copy,
+  recently-viewed pricing, responsive sticky-buy context, and product-specific
+  loading, error, and not-found experiences.
+- Kept the user-required Toman contract end to end: displayed and structured
+  prices remain unchanged and JSON-LD uses `priceCurrency: "IRT"`, never `IRR`.
+  Structured offers now exclude inactive/zero-price variants and expose truthful
+  per-variant stock state without generating undefined URLs or private authors.
+
+### Files Touched
+
+- Product handlers, service, repository, response model, mapper, routes, and
+  focused backend tests under `apps/backend/internal`.
+- Product detail route states and metadata under
+  `apps/frontend/app/(storefront)/products/[slug]`.
+- Product public API, types, gallery, purchase panel, alert/review semantics, and
+  focused tests under `apps/frontend/features/catalog/products`.
+- `apps/frontend/lib/seo/jsonld.ts` and its focused product tests.
+
+### Verification
+
+- Focused frontend verification passed with six files and 19 tests; the final
+  gallery lint/regression rerun passed with five tests.
+- Scoped ESLint, full TypeScript, and full frontend lint passed; full lint retained
+  only 10 unrelated existing warnings.
+- Scoped Go tests, full `go test ./...`, and `go build ./...` passed; touched Go
+  files were formatted.
+- Prettier and `git diff --check` passed.
+- The production build compiled and typechecked, then static prerender stopped on
+  the unrelated `/about` API request because `localhost:8080` was not running.
+
+### Notes / Follow-Ups
+
+- Option CRUD, option-combination authoring, variant-specific image authoring, and
+  aggregate product writes remain correctly owned by Task Group 058.
+- Shared media-origin resolution remains Task 061d; this task did not fabricate a
+  media transport contract.
+
+## Task 056b - Improve The Category-Index Storefront
+
+**Status:** Complete
+**Date:** 2026-07-21
+
+### What Changed
+
+- Preserved slugless structural parents and recursively rendered every routeable
+  descendant instead of deleting subtrees, truncating children, or replacing
+  hidden routes with inert count text.
+- Added truthful routeable-subcategory counts without claiming unsupported
+  product totals, encoded all category links through the canonical helper, and
+  kept keyboard order aligned with the visual hierarchy.
+- Reworked category cards into equal-height semantic articles with real category
+  media, branded absent/failed fallbacks, 44px targets, visible focus, logical RTL
+  nesting, and responsive containment from narrow mobile through desktop.
+- Added explicit valid-empty copy and category-owned loading, retryable error, and
+  not-found states using the established route-state system.
+- Added hierarchical `CollectionPage`/`ItemList` JSON-LD that retains structural
+  groups while omitting unrouteable URLs, and added the category directory plus
+  encoded detail URLs to the sitemap.
+- Switched product sitemap discovery to the paginated validated-slug helper so it
+  no longer stops at 100 products or emits `/products/undefined`.
+
+### Verification
+
+- Final focused category, sitemap, and route-state verification passed with three
+  files and 36 tests.
+- Scoped ESLint, full TypeScript, and full frontend lint passed; full lint retained
+  only 10 unrelated existing warnings.
+- Prettier and `git diff --check` passed.
+- The production build compiled and typechecked, then static prerender stopped on
+  the unrelated `/about` API request because `localhost:8080` was not running.
+
+### Notes / Follow-Ups
+
+- Product counts were intentionally not invented because the category tree
+  contract exposes no aggregate product count.
+- Cross-origin local media resolution remains Task 061d; category images use the
+  existing shared image/fallback contract.
+
+## Task 056c - Improve The Category-Detail Storefront
+
+**Status:** Complete
+**Date:** 2026-07-21
+
+### What Changed
+
+- Added an exact category-slug endpoint and made every non-null category slug a
+  normalized, unique, single-path-segment identity. The migration safely
+  canonicalizes collisions and legacy punctuation while retaining intentionally
+  slugless structural categories.
+- Made category PATCH writes truthful: explicit null now clears slug, parent,
+  description, and image fields, and hierarchy-changing writes serialize through
+  a transaction-scoped advisory lock so concurrent parent swaps cannot create a
+  cycle.
+- Replaced first-page category lookup with paginated static-slug discovery and a
+  fresh detail/tree contract that distinguishes missing categories, malformed
+  identities, hierarchy inconsistencies, and operational failures.
+- Added canonical `q`, `sort`, and `page` parsing with supported backend sorts,
+  bounded search, stable filter-preserving pagination, invalid/out-of-range URL
+  recovery, query-aware metadata, and clean canonical/noindex behavior.
+- Added recursive descendant product filtering in PostgreSQL, stable total counts
+  for out-of-range pages, literal `%`/`_`/backslash search semantics, sellable
+  stock based on uncommitted inventory, and complete list-image metadata.
+- Rebuilt category detail composition around hierarchical breadcrumbs, real media
+  with deliberate fallbacks, routeable descendants beneath slugless groups,
+  responsive child navigation, a mobile-first search/sort toolbar, semantic
+  product lists, and distinct intrinsic-empty versus filtered-empty states.
+- Added hash-targeted result focus after search, clear, and pagination navigation,
+  visible programmatic focus, live result status, 44px controls, encoded links,
+  and page-aware breadcrumb/product-list JSON-LD positions.
+
+### Files Touched
+
+- Category handlers, models, repository, service, route registration, slug helper,
+  migration, and focused unit/integration tests under `apps/backend`.
+- Product list query/repository behavior and database-backed regressions under
+  `apps/backend/internal/repositories` and `apps/backend/tests/integration`.
+- Category detail route, metadata tests, public API, routing, validation, hero,
+  results, focus helper, and composition tests under `apps/frontend`.
+- The admin category form's slug normalization and explicit-null payload behavior.
+
+### Verification
+
+- Focused frontend verification passed with six files and 25 tests; scoped ESLint
+  passed, and Prettier confirmed every touched frontend file.
+- Full TypeScript passed. Full frontend lint passed with zero errors and 10 known
+  unrelated warnings.
+- Full Go `go test ./...`, `go vet ./...`, and `go build ./...` passed.
+- The complete database-backed integration suite passed against a disposable
+  PostgreSQL 16 instance, including migration backfill/collision handling,
+  nullable clearing, concurrent parent swaps, descendant pagination, literal
+  search characters, sellable stock, and image metadata.
+- `git diff --check` passed and all modified files remain text, with the
+  shutdown-introduced trailing NUL bytes removed.
+- The full frontend suite executed 70 files and all 236 assertions passed, but
+  Vitest still exits nonzero on the pre-existing delayed `input-otp` timer from
+  `phone-login-form.test.tsx`; Task 062 retains lifecycle-test ownership.
+- The production build compiled and typechecked, then prerender stopped on `/`
+  because the Rumera API was not running and returned `404 route not found`.
+
+### Notes / Follow-Ups
+
+- Task 061b retains coordinated cache invalidation across admin writes.
+- Task 061c retains catalogue-wide zero-price, sorting, link, and quick-commerce
+  truthfulness beyond the corrected committed-stock projection.
+- Task 061d retains cross-origin resolution for backend-relative media paths.
+- Task 062 retains browser-level responsive, axe, history, and lifecycle coverage.
+- Task 057b is restored as the next unblocked task; journal and recipe storefront
+  passes remain dependency-blocked by the media/product workstreams.

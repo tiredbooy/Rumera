@@ -31,6 +31,9 @@ func TestSetupRegistersWithoutPanic(t *testing.T) {
 		t.Fatal("expected routes to be registered")
 	}
 	want := map[string]bool{
+		"GET /api/v1/categories/slug/:slug":                    false,
+		"GET /api/v1/categories/:id":                           false,
+		"GET /api/v1/products/slug/:slug":                      false,
 		"POST /api/v1/admin/uploads/:ownerType/:ownerID/:role": false,
 		"POST /api/v1/admin/products/:id/images/url":           false,
 	}

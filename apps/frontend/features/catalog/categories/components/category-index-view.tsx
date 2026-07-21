@@ -11,6 +11,10 @@ import { JsonLd } from "@/components/json-ld";
 import { getCategoryTree } from "@/features/catalog/categories/api";
 import { CategoryDirectoryCard } from "@/features/catalog/categories/components/category-directory-card";
 import type { CategoryTree } from "@/features/catalog/categories/types";
+import {
+  countRouteableCategories,
+  getCategoryHref,
+} from "@/features/catalog/categories/utils";
 import { Placeholder } from "@/features/dashboard/components/placeholder";
 import { Reveal } from "@/features/motion/components/reveal";
 import { faNum } from "@/lib/products";
@@ -19,16 +23,12 @@ import { absoluteUrl } from "@/lib/site";
 
 /**
  * Storefront category directory. Presents the full category tree as a browsable
- * grid of premium cards. Cards use `SmartImage`'s on-brand monogram fallback and
- * surface child categories as quick-jump chips.
+ * grid of premium cards. Each card preserves its complete nested branch while
+ * `SmartImage` keeps missing or failed media intentional.
  */
 export async function CategoryIndexView() {
   const tree: CategoryTree[] = await getCategoryTree();
-  const roots = tree.filter((c) => Boolean(c.slug));
-  const totalChildren = roots.reduce(
-    (sum, c) => sum + (c.children?.length ?? 0),
-    0,
-  );
+  const routeableCategoryCount = countRouteableCategories(tree);
 
   return (
     <>
@@ -38,7 +38,7 @@ export async function CategoryIndexView() {
             { name: "خانه", path: "/" },
             { name: "دسته‌بندی‌ها", path: "/categories" },
           ]),
-          categoryListLd(roots),
+          categoryCollectionLd(tree),
         ]}
       />
 
@@ -67,13 +67,10 @@ export async function CategoryIndexView() {
               مجموعهٔ رومرا را بر اساس دسته‌بندی مرور کنید — هر دسته دروازه‌ای
               است به برچسب‌های منتخب، از کلاسیک‌های بی‌زمان تا یافته‌های نادر.
             </p>
-            {roots.length ? (
+            {routeableCategoryCount > 0 ? (
               <p className="mt-6 inline-flex items-center gap-2 text-sm text-muted-foreground">
                 <Layers className="size-4 text-primary" aria-hidden />
-                {`${faNum(roots.length)} دستهٔ اصلی`}
-                {totalChildren > 0
-                  ? ` · ${faNum(totalChildren)} زیرشاخه`
-                  : null}
+                {`${faNum(routeableCategoryCount)} دستهٔ قابل‌مشاهده برای کاوش`}
               </p>
             ) : null}
           </Reveal>
@@ -82,11 +79,11 @@ export async function CategoryIndexView() {
 
       {/* Category grid */}
       <section className="container-px mx-auto max-w-7xl py-12 sm:py-16">
-        {roots.length ? (
-          <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
-            {roots.map((category, i) => (
-              <li key={category.id}>
-                <Reveal delay={Math.min(i, 5) * 0.04} y={16}>
+        {tree.length ? (
+          <ul className="grid list-none grid-cols-1 items-stretch gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
+            {tree.map((category, i) => (
+              <li key={category.id} className="h-full min-w-0">
+                <Reveal delay={Math.min(i, 5) * 0.04} y={16} className="h-full">
                   <CategoryDirectoryCard category={category} />
                 </Reveal>
               </li>
@@ -95,12 +92,12 @@ export async function CategoryIndexView() {
         ) : (
           <Placeholder
             icon={PackageOpen}
-            title="هنوز دسته‌بندی‌ای ثبت نشده است"
-            description="به‌زودی دسته‌بندی‌ها در این صفحه نمایش داده می‌شوند. اگر سرویس در دسترس نیست، کمی بعد دوباره سر بزنید."
+            title="هنوز دسته‌بندی‌ای برای نمایش نیست"
+            description="با اضافه‌شدن دسته‌بندی‌ها، مسیرهای تازهٔ کاوش در این صفحه ظاهر می‌شوند."
           >
             <Link
               href="/products"
-              className="inline-flex h-11 items-center gap-1.5 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               مشاهدهٔ همهٔ محصولات
               <ArrowLeft className="size-4" aria-hidden />
@@ -112,18 +109,67 @@ export async function CategoryIndexView() {
   );
 }
 
-/** Inline `ItemList` schema for the category directory (the tree carries no
- * Product nodes, so `itemListLd` from the SEO lib doesn't fit here). */
-function categoryListLd(roots: CategoryTree[]) {
+function categoryCollectionLd(tree: CategoryTree[]) {
   return {
     "@context": "https://schema.org",
-    "@type": "ItemList",
+    "@type": "CollectionPage",
     name: "دسته‌بندی‌های رومرا",
-    itemListElement: roots.map((c, i) => ({
-      "@type": "ListItem",
-      position: i + 1,
-      name: c.title,
-      url: absoluteUrl(`/categories/${c.slug}`),
+    url: absoluteUrl("/categories"),
+    inLanguage: "fa-IR",
+    mainEntity: categoryItemListLd(tree, "فهرست دسته‌بندی‌های رومرا"),
+  };
+}
+
+type CategoryItemListSchema = {
+  "@type": "ItemList";
+  name: string;
+  url?: string;
+  itemListElement: CategoryListItemSchema[];
+};
+
+type CategoryListItemSchema = {
+  "@type": "ListItem";
+  position?: number;
+  item: CategoryItemListSchema;
+};
+
+function categoryItemListLd(
+  categories: CategoryTree[],
+  name: string,
+): CategoryItemListSchema {
+  const itemListElement = categories.flatMap((category) => {
+    const item = categoryListItemLd(category);
+    return item ? [item] : [];
+  });
+
+  return {
+    "@type": "ItemList",
+    name,
+    itemListElement: itemListElement.map((item, index) => ({
+      ...item,
+      position: index + 1,
     })),
+  };
+}
+
+function categoryListItemLd(
+  category: CategoryTree,
+): CategoryListItemSchema | null {
+  const href = getCategoryHref(category);
+  const children = categoryItemListLd(
+    category.children ?? [],
+    `زیرشاخه‌های ${category.title}`,
+  );
+  const hasRouteableChildren = children.itemListElement.length > 0;
+
+  if (!href && !hasRouteableChildren) return null;
+
+  return {
+    "@type": "ListItem",
+    item: {
+      ...children,
+      name: category.title,
+      ...(href ? { url: absoluteUrl(href) } : {}),
+    },
   };
 }

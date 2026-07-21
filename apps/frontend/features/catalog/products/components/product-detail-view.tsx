@@ -28,19 +28,20 @@ import {
 import { faNum } from "@/lib/products";
 import { breadcrumbLd, productDetailLd } from "@/lib/seo/jsonld";
 
-// Trust signals shown beneath the buy box — the spirits-retail reassurance trio.
+// Trust signals shown beneath the buy box. Keep claims limited to behavior the
+// storefront itself can support and shoppers can verify.
 const TRUST = [
   {
     icon: ShieldCheck,
-    title: "اصالت تضمین‌شده",
-    desc: "مستقیم از سازندهٔ رسمی",
+    title: "انتخاب آگاهانه",
+    desc: "مشخصات هر محصول پیش از خرید",
   },
   {
     icon: Truck,
-    title: "ارسال خنک و سریع",
-    desc: "بسته‌بندی ایمن، سراسر کشور",
+    title: "پیگیری سفارش",
+    desc: "مشاهدهٔ وضعیت در حساب کاربری",
   },
-  { icon: Wallet, title: "پرداخت امن", desc: "درگاه بانکی و کیف پول" },
+  { icon: Wallet, title: "قیمت شفاف", desc: "قیمت هر گزینه به تومان" },
 ];
 
 type ProductDetailViewProps = {
@@ -51,6 +52,8 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) notFound();
+  const canonicalSlug = product.slug?.trim() || slug;
+  const canonicalPath = `/products/${encodeURIComponent(canonicalSlug)}`;
 
   const images = [...(product.images ?? [])].sort(
     (a, b) =>
@@ -72,23 +75,16 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
 
   // For the recently-viewed memory.
   const variantPrices = (product.variants ?? [])
-    .map((v) => v.price)
-    .filter((n) => n > 0);
+    .filter(
+      (variant) =>
+        variant.is_active &&
+        variant.price > 0 &&
+        (variant.available_stock ?? 0) > 0,
+    )
+    .map((v) => v.price);
   const minPrice = variantPrices.length
     ? Math.min(...variantPrices)
     : undefined;
-
-  // Best whole-percent saving across active variants → gallery ribbon.
-  const galleryDiscount = (product.variants ?? [])
-    .filter(
-      (v) => v.is_active && v.compare_at_price && v.compare_at_price > v.price,
-    )
-    .reduce((best, v) => {
-      const pct = Math.round(
-        ((v.compare_at_price! - v.price) / v.compare_at_price!) * 100,
-      );
-      return Math.max(best, pct);
-    }, 0);
 
   // Specs table — only render rows we actually have.
   const specs: { label: string; value: string }[] = [
@@ -99,7 +95,7 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
       ? { label: "کشور مبدأ", value: product.country_of_origin }
       : null,
     product.weight != null
-      ? { label: "وزن", value: `${faNum(product.weight)} گرم` }
+      ? { label: "وزن", value: `${faNum(product.weight)} کیلوگرم` }
       : null,
     product.code ? { label: "کد محصول", value: product.code } : null,
   ].filter(Boolean) as { label: string; value: string }[];
@@ -109,7 +105,7 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
       <JsonLd
         data={[
           productDetailLd(
-            product,
+            { ...product, slug: canonicalSlug },
             reviewSummary
               ? {
                   value: reviewSummary.average_rating,
@@ -120,14 +116,13 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
               rating: r.rating,
               title: r.title,
               content: r.content,
-              author: r.user_full_name || undefined,
               created_at: r.created_at,
             })),
           ),
           breadcrumbLd([
             { name: "خانه", path: "/" },
             { name: "فروشگاه", path: "/products" },
-            { name: product.title, path: `/products/${product.slug}` },
+            { name: product.title, path: canonicalPath },
           ]),
         ]}
       />
@@ -149,7 +144,10 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
             فروشگاه
           </Link>
           <ChevronLeft className="size-3.5 opacity-50" />
-          <span className="truncate font-medium text-foreground">
+          <span
+            aria-current="page"
+            className="truncate font-medium text-foreground"
+          >
             {product.title}
           </span>
         </nav>
@@ -159,7 +157,6 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
           <ProductGallery
             images={images}
             title={product.title}
-            discount={galleryDiscount}
             fallback={
               <Bottle
                 product={{ id: product.id, maker: product.title }}
@@ -292,7 +289,7 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
       {/* Recently viewed (records this product) */}
       <RecentlyViewedRail
         current={{
-          slug: product.slug ?? slug,
+          slug: canonicalSlug,
           title: product.title,
           image: images[0]?.image_url,
           price: minPrice,

@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   listAllTags: vi.fn(),
+  allProductSlugs: vi.fn(),
   listCategories: vi.fn(),
   listJournalPosts: vi.fn(),
-  listProducts: vi.fn(),
   listRecipeSlugs: vi.fn(),
 }));
 
 vi.mock("@/features/catalog/products/api/public", () => ({
-  listProducts: mocks.listProducts,
+  allProductSlugs: mocks.allProductSlugs,
 }));
 vi.mock("@/features/catalog/categories/api", () => ({
   listCategories: mocks.listCategories,
@@ -29,7 +29,7 @@ import sitemap from "./sitemap";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.listProducts.mockResolvedValue({ results: [] });
+  mocks.allProductSlugs.mockResolvedValue([]);
   mocks.listCategories.mockResolvedValue([]);
   mocks.listAllTags.mockResolvedValue([
     {
@@ -42,6 +42,25 @@ beforeEach(() => {
   ]);
   mocks.listRecipeSlugs.mockResolvedValue([]);
   mocks.listJournalPosts.mockResolvedValue([]);
+});
+
+describe("sitemap product discovery", () => {
+  it("uses every validated slug and encodes product URLs", async () => {
+    mocks.allProductSlugs.mockResolvedValue(["first", "ویژه / A?"]);
+
+    const entries = await sitemap();
+
+    expect(entries).toContainEqual(
+      expect.objectContaining({ url: absoluteUrl("/products/first") }),
+    );
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        url: absoluteUrl(`/products/${encodeURIComponent("ویژه / A?")}`),
+      }),
+    );
+    expect(entries.some((entry) => entry.url.includes("undefined"))).toBe(false);
+    expect(mocks.allProductSlugs).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("sitemap tag discovery", () => {
@@ -61,5 +80,43 @@ describe("sitemap tag discovery", () => {
       priority: 0.6,
     });
     expect(mocks.listAllTags).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("sitemap category discovery", () => {
+  it("includes the category directory and only encoded routeable details", async () => {
+    mocks.listCategories.mockResolvedValue([
+      {
+        id: 1,
+        title: "گروه ساختاری",
+        is_featured: false,
+        display_order: 0,
+      },
+      {
+        id: 2,
+        title: "انتخاب ویژه",
+        slug: "ویژه / A?",
+        is_featured: false,
+        display_order: 1,
+      },
+    ]);
+
+    const entries = await sitemap();
+
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        url: absoluteUrl("/categories"),
+        changeFrequency: "weekly",
+      }),
+    );
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        url: absoluteUrl(`/categories/${encodeURIComponent("ویژه / A?")}`),
+      }),
+    );
+    expect(entries.some((entry) => entry.url.includes("undefined"))).toBe(
+      false,
+    );
+    expect(mocks.listCategories).toHaveBeenCalledTimes(1);
   });
 });

@@ -6,6 +6,7 @@
 ## Task 057b - Generalize The Working Image Uploader
 
 **Started:** 2026-07-20
+**Resumed:** 2026-07-21
 
 Reuse one uploader contract across products, hero slides, recipes, and journal
 content with URL-or-local-file input, previews, progress, alt text, ordering,

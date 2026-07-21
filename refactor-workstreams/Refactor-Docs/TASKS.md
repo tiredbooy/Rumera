@@ -158,20 +158,20 @@ Each task starts only after its corresponding Task Group 045 route is thin and
 green. Preserve the established Rumera visual language while improving logic,
 accessibility, responsive behavior, loading/error/empty states, and product feel.
 
-- [ ] **Task 056a - Improve the product-detail storefront**
+- [x] **Task 056a - Improve the product-detail storefront**
   - Scope: product detail route and product-domain detail components.
   - Verify gallery keyboard behavior, variant selection, unavailable/empty data,
     price presentation, review/recommendation states, mobile layout, metadata,
     and structured data against actual backend fields.
   - Depends: Tasks 045d, 050, and 053-054.
 
-- [ ] **Task 056b - Improve the category-index storefront**
+- [x] **Task 056b - Improve the category-index storefront**
   - Scope: category index route and category-domain presentation components.
   - Verify hierarchy comprehension, counts, empty trees, image fallbacks,
     responsive cards, keyboard navigation, metadata, and structured data.
   - Depends: Tasks 045e and 052-054.
 
-- [ ] **Task 056c - Improve the category-detail storefront**
+- [x] **Task 056c - Improve the category-detail storefront**
   - Scope: category detail route, product results, filtering, sorting, and
     pagination presentation.
   - Preserve URL state, distinguish empty/error states, and verify mobile filters,
@@ -254,7 +254,10 @@ future adapter remains possible without changing feature code.
 
 Variant dimensions such as size, color, material, or pack are product option
 types/values. Inventory remains responsible for stock against the resulting SKU;
-it must not become the owner of merchandising attributes.
+it must not become the owner of merchandising attributes. The admin product
+experience must support reusable option types and values (for example size,
+color, material, volume, and pack) and concrete combinations such as `750 ml /`
+`red` without hard-coding any one merchandise category.
 
 - [ ] **Task 058a - Repair product admin read/update correctness**
   - Add an admin-safe detail read for inactive products, exclude the current row
@@ -279,6 +282,9 @@ it must not become the owner of merchandising attributes.
   - Improve progressive disclosure, variant tables, bulk option generation,
     responsive editing, validation/focus behavior, unsaved-change protection, and
     create/edit tests while retaining the established admin visual language.
+  - Make the form production-ready with reusable sections, clear draft/publish
+    state, complete merchandising fields, media and tag integration, variant-level
+    pricing/SKU/availability feedback, and truthful aggregate save progress.
 
 ### Task Group 059 - Modular Hero Builder And Storefront Rendering
 
@@ -376,6 +382,9 @@ it must not become the owner of merchandising attributes.
   - Use one resolver for upload previews and persisted product, category, hero,
     recipe, and journal media; preserve already absolute URLs and prevent duplicate
     origin or `/media` prefixes.
+  - Permit explicit `http://` origins for local development, require `https://`
+    for configured public/external media origins, and prevent mixed-content or
+    accidental protocol-downgrade behavior in production.
   - Verify local development, same-origin production, and Docker rendering with
     focused resolver and upload-to-render regression tests.
 
@@ -408,6 +417,43 @@ it must not become the owner of merchandising attributes.
   - Reuse the canonical product, cart, inventory, and media contracts; extend the
     backend only where evidence shows the current recipe projection cannot support
     the required connection, and cover the complete recipe-to-cart path.
+
+- [ ] **Task 061h - Apply the canonical Rumera logo across product surfaces**
+  - Audit the assets under `apps/frontend/public/logo`, select source files by
+    actual dimensions and transparency, and use them consistently for the site
+    header, footer, metadata, social/share images, authentication/admin brand
+    moments, favicon family, and install surfaces where each asset is appropriate.
+  - Keep one reusable brand-mark component and metadata source, provide useful alt
+    text where the logo conveys identity, mark decorative repeats appropriately,
+    avoid layout shift, and do not stretch or redraw the supplied artwork.
+
+- [ ] **Task 061i - Add a production-ready installable PWA**
+  - Add a standards-compliant web app manifest, generated icon set based on the
+    canonical Rumera logo, theme/background colors, standalone display behavior,
+    install metadata, and a deliberately scoped service worker/update strategy.
+  - Prioritize iPhone and iPad installation with Apple touch icons, safe-area-aware
+    standalone layouts, status-bar metadata, and clear manual Add to Home Screen
+    guidance where the platform does not expose an install prompt.
+  - Define truthful offline and failure behavior instead of caching authenticated,
+    checkout, or mutation responses indiscriminately; verify installability,
+    upgrades, cache invalidation, and responsive launch behavior on iOS, Android,
+    and desktop.
+  - Depends: Task 061h.
+
+- [ ] **Task 061j - Add a Kafka-backed notification worker and architecture guide**
+  - Inventory the existing notification producers, persistence, delivery channels,
+    retries, and worker runtime before selecting topic boundaries and message
+    schemas; do not add a second source of truth or publish inside a database
+    transaction without an outbox or another documented atomicity strategy.
+  - Implement versioned events, idempotent consumers, retry/backoff and dead-letter
+    handling, graceful shutdown, health/readiness, correlation IDs, metrics, and
+    local Docker development while keeping delivery providers behind interfaces.
+  - Document the end-to-end architecture and flow, producer/consumer ownership,
+    topic and partition-key decisions, ordering and delivery guarantees, failure
+    recovery, replay procedure, observability, security, deployment, and the
+    evidence-based reasons Kafka is used instead of the previous mechanism.
+  - Add integration tests covering publish, consume, duplicate delivery, retry,
+    dead-letter, restart/replay, and broker-unavailable behavior.
 
 - [ ] **Task 062 - Add automated accessibility, interaction, and lifecycle regression tests**
   - Add axe checks and Playwright coverage for keyboard navigation, responsive

@@ -41,16 +41,16 @@ type CreateCategoryReq struct {
 }
 
 type UpdateCategoryReq struct {
-	Title       *string `json:"title"        validate:"omitempty,max=255"`
-	Description *string `json:"description"`
-	ParentID    *int64  `json:"parent_id"    validate:"omitempty,min=1"`
-	Slug        *string `json:"slug"         validate:"omitempty,max=255"`
+	Title       *string               `json:"title" validate:"omitempty,max=255"`
+	Description NullablePatch[string] `json:"description"`
+	ParentID    NullablePatch[int64]  `json:"parent_id"`
+	Slug        NullablePatch[string] `json:"slug"`
 	// TODO: re-enable `url` validation once the image upload API exists.
 	// ImageURL     *string `json:"image_url"    validate:"omitempty,url"`
-	ImageURL     *string `json:"image_url"`
-	IsFeatured   *bool   `json:"is_featured"`
-	CardSize     *string `json:"card_size"    validate:"omitempty,oneof=small large"`
-	DisplayOrder *int16  `json:"display_order" validate:"omitempty,min=0"`
+	ImageURL     NullablePatch[string] `json:"image_url"`
+	IsFeatured   *bool                 `json:"is_featured"`
+	CardSize     *string               `json:"card_size"    validate:"omitempty,oneof=small large"`
+	DisplayOrder *int16                `json:"display_order" validate:"omitempty,min=0"`
 }
 
 // ─────────────────────────────────────────────────────────────

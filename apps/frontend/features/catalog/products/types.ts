@@ -29,6 +29,8 @@ export interface ProductVariant {
   price: number;
   compare_at_price?: number;
   is_active: boolean;
+  /** Populated by product-detail responses; omitted by generic variant APIs. */
+  available_stock?: number;
   options?: ProductOptionValue[];
   images?: ProductImage[];
 }

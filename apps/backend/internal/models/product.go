@@ -90,12 +90,13 @@ type UpdateProductReq struct {
 
 type ProductFilter struct {
 	BaseFilter
-	CategoryID *int64   `query:"category_id"`
-	BrandID    *int64   `query:"brand_id"`
-	TagID      *int64   `query:"tag_id"`
-	IsActive   *bool    `query:"is_active"`
-	MinPrice   *float64 `query:"min_price"`
-	MaxPrice   *float64 `query:"max_price"`
+	CategoryID         *int64   `query:"category_id"`
+	IncludeDescendants bool     `query:"include_descendants"`
+	BrandID            *int64   `query:"brand_id"`
+	TagID              *int64   `query:"tag_id"`
+	IsActive           *bool    `query:"is_active"`
+	MinPrice           *float64 `query:"min_price"`
+	MaxPrice           *float64 `query:"max_price"`
 }
 
 func (f *ProductFilter) Defaults() {

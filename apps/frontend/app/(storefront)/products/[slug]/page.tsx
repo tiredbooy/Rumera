@@ -8,7 +8,7 @@ import { ProductDetailView } from "@/features/catalog/products/components/produc
 import { getSafeApiErrorContext } from "@/lib/api/error-semantics";
 import { buildMetadata } from "@/lib/seo/metadata";
 
-export const revalidate = 3600;
+export const revalidate = 60;
 
 export async function generateStaticParams() {
   try {
@@ -28,14 +28,30 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  const requestedPath = `/products/${encodeURIComponent(slug)}`;
   const product = await getProductBySlug(slug);
-  if (!product) return buildMetadata({ title: "محصول یافت نشد", index: false });
+  if (!product) {
+    return buildMetadata({
+      title: "محصول یافت نشد",
+      path: requestedPath,
+      index: false,
+      type: "website",
+    });
+  }
+
+  const productSlug = product.slug?.trim();
+  const images = product.images
+    ?.map((image) => image.image_url)
+    .filter(Boolean);
+
   return buildMetadata({
     title: product.meta_title ?? product.title,
     description: product.meta_description ?? product.description,
-    path: `/products/${product.slug}`,
-    type: "article",
-    images: product.images?.map((i) => i.image_url),
+    path: productSlug
+      ? `/products/${encodeURIComponent(productSlug)}`
+      : requestedPath,
+    type: "website",
+    images: images?.length ? images : undefined,
     keywords: [
       product.title,
       ...(product.country_of_origin ? [product.country_of_origin] : []),

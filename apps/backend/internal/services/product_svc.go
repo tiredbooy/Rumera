@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
@@ -55,8 +56,28 @@ func (s *ProductService) GetByID(ctx context.Context, id int64) (*models.Product
 	return product, nil
 }
 
+func (s *ProductService) GetBySlug(ctx context.Context, slug string) (*models.Product, error) {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return nil, apperr.ErrInvalidRequest
+	}
+
+	product, err := s.productRepo.GetBySlug(ctx, slug)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrProductNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+
+	return product, nil
+}
+
 func (s *ProductService) GetAll(ctx context.Context, filter models.ProductFilter) ([]*models.ProductListItem, int64, error) {
 	if filter.Limit <= 0 {
+		return nil, 0, apperr.ErrInvalidRequest
+	}
+	if filter.IncludeDescendants && filter.CategoryID == nil {
 		return nil, 0, apperr.ErrInvalidRequest
 	}
 
@@ -228,6 +249,18 @@ func (s *ProductService) GetVariants(ctx context.Context, productID int64) ([]*m
 	}
 
 	return variants, nil
+}
+
+func (s *ProductService) GetVariantAvailableStock(ctx context.Context, productID int64) (map[int64]int, error) {
+	if productID <= 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+
+	stock, err := s.productRepo.GetVariantAvailableStock(ctx, productID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	return stock, nil
 }
 
 // ── private helpers ───────────────────────────────────────────────────────────
