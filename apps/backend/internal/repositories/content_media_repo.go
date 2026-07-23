@@ -15,7 +15,7 @@ import (
 // every query remains static so path parameters can never become SQL identifiers.
 type ContentMediaRepository interface {
 	OwnerExists(ctx context.Context, ownerType string, ownerID int64) (bool, error)
-	Attach(ctx context.Context, ownerType, role string, ownerID int64, url, key string) error
+	Attach(ctx context.Context, ownerType, role string, ownerID int64, url, key string, alt models.NullablePatch[string]) error
 }
 
 type contentMediaRepository struct{ db *pgxpool.Pool }
@@ -49,35 +49,52 @@ func (r *contentMediaRepository) Attach(
 	ownerType, role string,
 	ownerID int64,
 	url, key string,
+	alt models.NullablePatch[string],
 ) error {
-	var query string
+	var (
+		query string
+		args  []any
+	)
 	switch {
 	case ownerType == "hero-slides" && role == "desktop":
 		query = `UPDATE hero_slides
-			SET image_url = $2, image_storage_key = $3, updated_at = NOW()
+			SET image_url = $2, image_storage_key = $3,
+			    image_alt = CASE WHEN $4 THEN $5::text ELSE image_alt END,
+			    updated_at = NOW()
 			WHERE id = $1 RETURNING id`
+		args = []any{ownerID, url, key, alt.Set, alt.Value}
 	case ownerType == "hero-slides" && role == "mobile":
 		query = `UPDATE hero_slides
-			SET mobile_image_url = $2, mobile_image_storage_key = $3, updated_at = NOW()
+			SET mobile_image_url = $2, mobile_image_storage_key = $3,
+			    image_alt = CASE WHEN $4 THEN $5::text ELSE image_alt END,
+			    updated_at = NOW()
 			WHERE id = $1 RETURNING id`
+		args = []any{ownerID, url, key, alt.Set, alt.Value}
 	case ownerType == "recipes" && role == "cover":
 		query = `UPDATE recipes
-			SET image_url = $2, image_storage_key = $3, updated_at = NOW()
+			SET image_url = $2, image_storage_key = $3,
+			    image_alt = CASE WHEN $4 THEN $5::text ELSE image_alt END,
+			    updated_at = NOW()
 			WHERE id = $1 RETURNING id`
+		args = []any{ownerID, url, key, alt.Set, alt.Value}
 	case ownerType == "recipes" && role == "og":
 		query = `UPDATE recipes
 			SET og_image_url = $2, og_image_storage_key = $3, updated_at = NOW()
 			WHERE id = $1 RETURNING id`
+		args = []any{ownerID, url, key}
 	case ownerType == "journal" && role == "cover":
 		query = `UPDATE blogs
-			SET image_url = $2, image_storage_key = $3, updated_at = NOW()
+			SET image_url = $2, image_storage_key = $3,
+			    image_alt = CASE WHEN $4 THEN $5::text ELSE image_alt END,
+			    updated_at = NOW()
 			WHERE id = $1 AND deleted_at IS NULL RETURNING id`
+		args = []any{ownerID, url, key, alt.Set, alt.Value}
 	default:
 		return fmt.Errorf("content media: unsupported owner/role %q/%q", ownerType, role)
 	}
 
 	var attachedID int64
-	if err := r.db.QueryRow(ctx, query, ownerID, url, key).Scan(&attachedID); err != nil {
+	if err := r.db.QueryRow(ctx, query, args...).Scan(&attachedID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.ErrNotFound
 		}

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Slot, StagedSlot } from "./types";
+import type { Slot, StagedSlot } from "./product-types";
 import { ImageSlotItem } from "./ImageSlotItem";
 
 type ImageSlotListProps = {
@@ -105,6 +105,7 @@ export function ImageSlotList({
               requestFocus();
             }}
             onDragStart={() => setDragIndex(i)}
+            onDragEnd={() => setDragIndex(null)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => {
               if (dragIndex !== null) onMove(dragIndex, i);

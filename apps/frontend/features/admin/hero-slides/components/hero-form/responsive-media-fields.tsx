@@ -1,32 +1,36 @@
 import { Controller } from "react-hook-form";
-import type { Control, FieldErrors, UseFormRegister } from "react-hook-form";
+import type { Control, FieldErrors } from "react-hook-form";
 import type { Ref } from "react";
 
-import { Input } from "@/components/ui/input";
 import { fieldDescriptionId, fieldErrorId } from "@/components/ui/field";
-import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input";
-import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
+import { ImageInput } from "@/features/image-uploader/ImageInput";
+import type {
+  ImageUploaderHandle,
+  UploadedImage,
+} from "@/features/image-uploader/types";
 import type { HeroSlideFormValues } from "@/features/hero-slides/validations";
 import { FormField, FormSection } from "./form-layout";
 
 export function HeroResponsiveMediaFields({
   control,
-  register,
   errors,
   ownerId,
   desktopRef,
   mobileRef,
   onDesktopStagedChange,
   onDesktopPreviewChange,
+  imageAlt,
+  disabled,
 }: {
   control: Control<HeroSlideFormValues>;
-  register: UseFormRegister<HeroSlideFormValues>;
   errors: FieldErrors<HeroSlideFormValues>;
   ownerId?: number | null;
-  desktopRef: Ref<FlexibleImageInputHandle>;
-  mobileRef: Ref<FlexibleImageInputHandle>;
+  desktopRef: Ref<ImageUploaderHandle<UploadedImage | null>>;
+  mobileRef: Ref<ImageUploaderHandle<UploadedImage | null>>;
   onDesktopStagedChange: (staged: boolean) => void;
   onDesktopPreviewChange: (url: string) => void;
+  imageAlt: string;
+  disabled?: boolean;
 }) {
   return (
     <FormSection
@@ -43,23 +47,43 @@ export function HeroResponsiveMediaFields({
         <Controller
           control={control}
           name="image_url"
-          render={({ field }) => (
-            <FlexibleImageInput
-              ref={desktopRef}
-              id="image_url"
-              value={field.value}
-              onChange={field.onChange}
-              onBlur={field.onBlur}
-              owner={{ ownerType: "hero-slides", ownerId, role: "desktop" }}
-              placeholder="/images/hero/slide-1.jpg یا بارگذاری فایل"
-              ariaInvalid={!!errors.image_url}
-              ariaDescribedBy={
-                errors.image_url
-                  ? fieldErrorId("image_url")
-                  : fieldDescriptionId("image_url")
-              }
-              onStagedChange={onDesktopStagedChange}
-              onPreviewChange={onDesktopPreviewChange}
+          render={({ field: imageField }) => (
+            <Controller
+              control={control}
+              name="image_alt"
+              render={({ field: altField }) => (
+                <ImageInput
+                  ref={desktopRef}
+                  id="image_url"
+                  name={imageField.name}
+                  urlInputRef={imageField.ref}
+                  value={imageField.value}
+                  onChange={imageField.onChange}
+                  onBlur={imageField.onBlur}
+                  owner={{
+                    ownerType: "hero-slides",
+                    ownerId,
+                    role: "desktop",
+                  }}
+                  placeholder="/images/hero/slide-1.jpg یا بارگذاری فایل"
+                  ariaInvalid={!!errors.image_url}
+                  ariaDescribedBy={
+                    errors.image_url
+                      ? fieldErrorId("image_url")
+                      : fieldDescriptionId("image_url")
+                  }
+                  altValue={altField.value}
+                  altInputId="image_alt"
+                  altDescription="برای دسترس‌پذیری و سئو، تصویر را در یک جمله توصیف کنید."
+                  altPlaceholder="مجموعه منتخب رومرا"
+                  altError={errors.image_alt?.message}
+                  onAltChange={altField.onChange}
+                  onAltBlur={altField.onBlur}
+                  onStagedChange={onDesktopStagedChange}
+                  onPreviewChange={onDesktopPreviewChange}
+                  disabled={disabled}
+                />
+              )}
             />
           )}
         />
@@ -73,14 +97,20 @@ export function HeroResponsiveMediaFields({
         <Controller
           control={control}
           name="mobile_image_url"
-          render={({ field }) => (
-            <FlexibleImageInput
+          render={({ field: imageField }) => (
+            <ImageInput
               ref={mobileRef}
               id="mobile_image_url"
-              value={field.value}
-              onChange={field.onChange}
-              onBlur={field.onBlur}
-              owner={{ ownerType: "hero-slides", ownerId, role: "mobile" }}
+              name={imageField.name}
+              urlInputRef={imageField.ref}
+              value={imageField.value}
+              onChange={imageField.onChange}
+              onBlur={imageField.onBlur}
+              owner={{
+                ownerType: "hero-slides",
+                ownerId,
+                role: "mobile",
+              }}
               placeholder="/images/hero/slide-1-mobile.jpg یا بارگذاری فایل"
               ariaInvalid={!!errors.mobile_image_url}
               ariaDescribedBy={
@@ -88,21 +118,10 @@ export function HeroResponsiveMediaFields({
                   ? fieldErrorId("mobile_image_url")
                   : undefined
               }
+              altValue={imageAlt}
+              disabled={disabled}
             />
           )}
-        />
-      </FormField>
-      <FormField
-        id="image_alt"
-        label="متن جایگزین تصویر"
-        hint="برای دسترس‌پذیری و سئو؛ تصویر را در یک جمله توصیف کنید."
-        error={errors.image_alt?.message}
-        full
-      >
-        <Input
-          id="image_alt"
-          placeholder="مجموعه منتخب رومرا"
-          {...register("image_alt")}
         />
       </FormField>
     </FormSection>

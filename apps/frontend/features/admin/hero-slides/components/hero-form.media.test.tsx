@@ -12,7 +12,12 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
+import type {
+  ImageUploaderHandle,
+  UploadedImage,
+} from "@/features/image-uploader/types";
+
+type ContentImageHandle = ImageUploaderHandle<UploadedImage | null>;
 
 const {
   createHeroSlideMock,
@@ -61,8 +66,8 @@ vi.mock("./hero-form/responsive-media-fields", () => ({
     mobileRef,
     onDesktopStagedChange,
   }: {
-    desktopRef: React.Ref<FlexibleImageInputHandle>;
-    mobileRef: React.Ref<FlexibleImageInputHandle>;
+    desktopRef: React.Ref<ContentImageHandle>;
+    mobileRef: React.Ref<ContentImageHandle>;
     onDesktopStagedChange: (staged: boolean) => void;
   }) => {
     const initialized = React.useRef(false);
@@ -70,17 +75,34 @@ vi.mock("./hero-form/responsive-media-fields", () => ({
       if (initialized.current) return;
       initialized.current = true;
       if (typeof desktopRef === "function") {
-        desktopRef({ hasStaged: true, flush: desktopFlushMock });
+        desktopRef({
+          hasStaged: true,
+          isBusy: false,
+          validate: () => null,
+          flush: desktopFlushMock,
+        });
       } else if (desktopRef) {
         desktopRef.current = {
           hasStaged: true,
+          isBusy: false,
+          validate: () => null,
           flush: desktopFlushMock,
         };
       }
       if (typeof mobileRef === "function") {
-        mobileRef({ hasStaged: false, flush: vi.fn() });
+        mobileRef({
+          hasStaged: false,
+          isBusy: false,
+          validate: () => null,
+          flush: vi.fn(),
+        });
       } else if (mobileRef) {
-        mobileRef.current = { hasStaged: false, flush: vi.fn() };
+        mobileRef.current = {
+          hasStaged: false,
+          isBusy: false,
+          validate: () => null,
+          flush: vi.fn(),
+        };
       }
       onDesktopStagedChange(true);
     });

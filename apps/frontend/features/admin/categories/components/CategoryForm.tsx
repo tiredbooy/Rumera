@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { validateImageURL } from "@/features/image-uploader/constants";
 import type {
   Category,
   CategoryTree,
@@ -172,6 +173,12 @@ export function CategoryForm({
   const title = watch("title");
   const slug = watch("slug");
   const imageUrl = watch("image_url");
+  const previewImageUrl = validateImageURL(imageUrl, {
+    allowEmpty: true,
+    allowMediaPath: true,
+  })
+    ? ""
+    : imageUrl;
   const isFeatured = watch("is_featured");
   const cardSize = watch("card_size");
 
@@ -348,6 +355,8 @@ export function CategoryForm({
                   render={({ field }) => (
                     <CategoryImageInput
                       id="image_url"
+                      name={field.name}
+                      urlInputRef={field.ref}
                       value={field.value}
                       onChange={field.onChange}
                       onBlur={field.onBlur}
@@ -452,9 +461,13 @@ export function CategoryForm({
                 cardSize === "large" ? "aspect-[4/3]" : "aspect-[16/10]",
               )}
             >
-              {imageUrl ? (
+              {previewImageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={imageUrl} alt="" className="size-full object-cover" />
+                <img
+                  src={previewImageUrl}
+                  alt=""
+                  className="size-full object-cover"
+                />
               ) : null}
             </div>
             <p className="mt-3 font-serif text-lg">

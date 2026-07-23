@@ -115,6 +115,7 @@ describe("extracted validation contracts", () => {
       servings: "1",
       status: "draft" as const,
       image_url: "",
+      image_alt: "",
       og_image_url: "",
       is_featured: false,
       meta_title: "",

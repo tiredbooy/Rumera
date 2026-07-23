@@ -134,6 +134,15 @@ func (s *recipeService) Sitemap(ctx context.Context) ([]*models.RecipeSitemapIte
 // ── Writes ────────────────────────────────────────────────────────────────────
 
 func (s *recipeService) Create(ctx context.Context, req *models.RecipeReq) (*models.RecipeDetailResponse, error) {
+	if err := normalizeCreateMediaURL(&req.ImageURL); err != nil {
+		return nil, err
+	}
+	if err := normalizeCreateImageAlt(&req.ImageAlt); err != nil {
+		return nil, err
+	}
+	if err := normalizeCreateMediaURL(&req.OGImageURL); err != nil {
+		return nil, err
+	}
 	s.applyCreateDefaults(ctx, req)
 
 	if err := s.assertSlugFree(ctx, req.Slug); err != nil {
@@ -172,6 +181,31 @@ func (s *recipeService) Create(ctx context.Context, req *models.RecipeReq) (*mod
 }
 
 func (s *recipeService) Update(ctx context.Context, id int64, req *models.RecipeUpdateReq) (*models.RecipeDetailResponse, error) {
+	if req.ImageURL.Set || req.ImageAlt.Set || req.OGImageURL.Set {
+		current, err := s.repo.GetByID(ctx, id)
+		if err != nil {
+			if errors.Is(err, models.ErrNotFound) {
+				return nil, apperr.ErrNotFound
+			}
+			return nil, fmt.Errorf("recipeService.Update media preflight: %w", err)
+		}
+		if req.ImageURL.Set || req.ImageAlt.Set {
+			req.ExpectedImageURL = mediaExpectation(current.ImageURL)
+		}
+		if req.OGImageURL.Set {
+			req.ExpectedOGImageURL = mediaExpectation(current.OGImageURL)
+		}
+		if err := normalizeMediaURLPatch(&req.ImageURL, current.ImageURL); err != nil {
+			return nil, err
+		}
+		if err := normalizeImageAltPatch(&req.ImageAlt); err != nil {
+			return nil, err
+		}
+		if err := normalizeMediaURLPatch(&req.OGImageURL, current.OGImageURL); err != nil {
+			return nil, err
+		}
+	}
+
 	// Normalise / guard the slug if it is being changed.
 	if req.Slug != nil {
 		normalized := slugify(*req.Slug)

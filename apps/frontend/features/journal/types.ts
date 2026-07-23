@@ -21,6 +21,7 @@ export interface JournalListItem {
   slug: string;
   excerpt: string | null;
   image_url: string | null;
+  image_alt: string | null;
   time_to_read: number;
   total_reads: number;
   status: JournalStatus;
@@ -46,6 +47,7 @@ export interface CreateJournalPostInput {
   content: string;
   excerpt?: string | null;
   image_url?: string | null;
+  image_alt?: string | null;
   time_to_read?: number;
   status?: JournalStatus;
   is_featured?: boolean;
@@ -63,6 +65,7 @@ export interface UpdateJournalPostInput {
   content?: string | null;
   excerpt?: string | null;
   image_url?: string | null;
+  image_alt?: string | null;
   time_to_read?: number | null;
   status?: JournalStatus | null;
   is_featured?: boolean | null;

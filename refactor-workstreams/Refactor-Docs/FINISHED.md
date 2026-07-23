@@ -3102,3 +3102,73 @@ in `TASKS.md`, `IN_PROGRESS.md`, and this file.
 - Task 062 retains browser-level responsive, axe, history, and lifecycle coverage.
 - Task 057b is restored as the next unblocked task; journal and recipe storefront
   passes remain dependency-blocked by the media/product workstreams.
+
+## Task 057b - Generalize The Working Image Uploader
+
+**Completed:** 2026-07-22
+
+### Summary
+
+- Consolidated the duplicate fixed-role uploader into the shared
+  `features/image-uploader` boundary and removed the old admin upload client,
+  component, and handle contract.
+- Added one typed owner/role grammar and save handle for product galleries, hero
+  desktop/mobile media, recipe cover/Open Graph media, and journal covers, while
+  retaining the standalone endpoint only for category compatibility.
+- Added URL-or-file switching, safe previews, XHR progress, staged replacement
+  cancellation, deduplicated flushes, actionable validation, HTTPS/static URL
+  validation, alt metadata, and create-before-owner attachment flows.
+- Preserved product gallery drag/keyboard ordering and primary controls while
+  making focused alt edits, retry reconciliation, order, and primary state part
+  of the durable form flush boundary.
+- Added recipe and journal alt fields through database, Go projections, and
+  storefront rendering; recipe content now renders the cover role rather than
+  reusing social Open Graph media.
+- Made content URL/key/alt attachment atomic and guarded ordinary content updates
+  with optimistic media expectations so stale forms cannot overwrite a newer
+  owner-aware attachment.
+- Made product image creation, primary changes, reordering, and deletion serialize
+  per product. Deletion now compacts ordering and promotes a replacement primary;
+  the migration normalizes historical rows and enforces one primary with a unique
+  partial index.
+
+### Files Touched
+
+- Shared frontend uploader types, XHR client, fixed-role input, product gallery
+  adapter, controls, and focused tests under `apps/frontend/features/image-uploader`.
+- Admin product, hero, recipe, and category form integrations plus public recipe
+  and journal media projections/renderers.
+- Backend media handlers, services, repositories, request models, mappers, API
+  documentation, and owner-aware media tests.
+- Migration `20260722120000_media_uploader_contract.sql` and database-backed media
+  regressions in `apps/backend/tests/integration/media_test.go`.
+
+### Verification
+
+- Full TypeScript validation passed. Frontend lint passed with zero errors and 10
+  known warnings, and Prettier confirmed the changed frontend files.
+- The complete frontend suite executed 70 files with all 251 assertions passing;
+  the final all-suite process still reported the pre-existing delayed `input-otp`
+  timer from `phone-login-form.test.tsx`. A focused eight-file media/form run
+  passed all 43 assertions without unhandled errors.
+- Full backend `go test ./...`, `go vet ./...`, `go build ./...`, and
+  `go test -race ./...` passed.
+- The complete integration suite passed against a fresh disposable PostgreSQL 17
+  instance, including migration down/up retries, historical gallery normalization,
+  concurrent product image writes, delete repair, owner-slot alt attachment, and
+  stale media-update conflicts.
+- The production frontend build compiled and typechecked, then stopped while
+  prerendering `/` because the Rumera API was not running (`ECONNREFUSED`).
+- `golangci-lint` could not load the repository's existing versionless config with
+  the installed binary; Go vet and race checks passed independently.
+- `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Task 057c owns old/replaced blob deletion, cancelled-upload release, derivative
+  cleanup, orphan reconciliation, cache invalidation, and deployment durability.
+- Task 057d retains multipart overhead, decoded dimension/signature limits, and
+  deeper image-processing hardening.
+- Task 061d retains frontend/backend origin resolution for canonical `/media/...`
+  paths.
+- Task 057c is the next unblocked task and is now claimed in `IN_PROGRESS.md`.

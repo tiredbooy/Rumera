@@ -5,6 +5,8 @@ package integration
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5/stdlib"
@@ -48,13 +50,13 @@ func TestContentMediaKeysTrackCanonicalURLChanges(t *testing.T) {
 			t.Fatalf("insert hero: %v", err)
 		}
 		repo := repositories.NewHeroSlideRepository(testPool)
-		if _, err := repo.Update(ctx, id, &models.HeroSlideUpdateReq{ImageURL: &url}); err != nil {
+		if _, err := repo.Update(ctx, id, &models.HeroSlideUpdateReq{ImageURL: mediaValuePatch(url)}); err != nil {
 			t.Fatalf("keep hero URL: %v", err)
 		}
 		assertColumnString(t, "hero_slides", "image_storage_key", id, &key)
 
 		external := "https://images.example/hero.webp"
-		if _, err := repo.Update(ctx, id, &models.HeroSlideUpdateReq{ImageURL: &external}); err != nil {
+		if _, err := repo.Update(ctx, id, &models.HeroSlideUpdateReq{ImageURL: mediaValuePatch(external)}); err != nil {
 			t.Fatalf("replace hero URL: %v", err)
 		}
 		assertColumnString(t, "hero_slides", "image_storage_key", id, nil)
@@ -71,13 +73,13 @@ func TestContentMediaKeysTrackCanonicalURLChanges(t *testing.T) {
 			t.Fatalf("insert recipe: %v", err)
 		}
 		repo := repositories.NewRecipeRepository(testPool)
-		if _, err := repo.Update(ctx, id, &models.RecipeUpdateReq{ImageURL: &url}); err != nil {
+		if _, err := repo.Update(ctx, id, &models.RecipeUpdateReq{ImageURL: mediaValuePatch(url)}); err != nil {
 			t.Fatalf("keep recipe URL: %v", err)
 		}
 		assertColumnString(t, "recipes", "image_storage_key", id, &key)
 
 		external := "https://images.example/recipe.webp"
-		if _, err := repo.Update(ctx, id, &models.RecipeUpdateReq{ImageURL: &external}); err != nil {
+		if _, err := repo.Update(ctx, id, &models.RecipeUpdateReq{ImageURL: mediaValuePatch(external)}); err != nil {
 			t.Fatalf("replace recipe URL: %v", err)
 		}
 		assertColumnString(t, "recipes", "image_storage_key", id, nil)
@@ -95,17 +97,116 @@ func TestContentMediaKeysTrackCanonicalURLChanges(t *testing.T) {
 			t.Fatalf("insert journal: %v", err)
 		}
 		repo := repositories.NewBlogRepository(testPool)
-		if _, err := repo.Update(ctx, id, &models.BlogUpdateReq{ImageURL: &url}); err != nil {
+		if _, err := repo.Update(ctx, id, &models.BlogUpdateReq{ImageURL: mediaValuePatch(url)}); err != nil {
 			t.Fatalf("keep journal URL: %v", err)
 		}
 		assertColumnString(t, "blogs", "image_storage_key", id, &key)
 
 		external := "https://images.example/journal.webp"
-		if _, err := repo.Update(ctx, id, &models.BlogUpdateReq{ImageURL: &external}); err != nil {
+		if _, err := repo.Update(ctx, id, &models.BlogUpdateReq{ImageURL: mediaValuePatch(external)}); err != nil {
 			t.Fatalf("replace journal URL: %v", err)
 		}
 		assertColumnString(t, "blogs", "image_storage_key", id, nil)
 	})
+}
+
+func TestProductImageRepositorySerializesOrderingAndPrimaryWrites(t *testing.T) {
+	requireDB(t)
+	resetTables(t, "products")
+	ctx := context.Background()
+	productID := seedProduct(t)
+	repo := repositories.NewProductImageRepository(testPool)
+
+	const imageCount = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, imageCount)
+	for i := range imageCount {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := repo.Create(ctx, &models.ProductImage{
+				ProductID: &productID,
+				ImageURL:  fmt.Sprintf("https://images.example/product-%d.webp", i),
+				IsPrimary: true,
+			})
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent create: %v", err)
+		}
+	}
+
+	images, err := repo.ListByProduct(ctx, productID)
+	if err != nil {
+		t.Fatalf("list product images: %v", err)
+	}
+	if len(images) != imageCount {
+		t.Fatalf("image count = %d; want %d", len(images), imageCount)
+	}
+	primaryCount := 0
+	ids := make([]int64, len(images))
+	for i, image := range images {
+		ids[len(images)-1-i] = image.ID
+		if image.SortOrder != i {
+			t.Fatalf("sort order at index %d = %d; want %d", i, image.SortOrder, i)
+		}
+		if image.IsPrimary {
+			primaryCount++
+		}
+	}
+	if primaryCount != 1 {
+		t.Fatalf("primary image count = %d; want 1", primaryCount)
+	}
+
+	if err := repo.Reorder(ctx, productID, ids); err != nil {
+		t.Fatalf("reverse image order: %v", err)
+	}
+	reordered, err := repo.ListByProduct(ctx, productID)
+	if err != nil {
+		t.Fatalf("list reordered images: %v", err)
+	}
+	for i, image := range reordered {
+		if image.ID != ids[i] || image.SortOrder != i {
+			t.Fatalf("reordered image %d = id %d/order %d; want id %d/order %d", i, image.ID, image.SortOrder, ids[i], i)
+		}
+	}
+	if err := repo.Reorder(ctx, productID, ids[:len(ids)-1]); !errors.Is(err, models.ErrInvalidState) {
+		t.Fatalf("partial reorder error = %v; want ErrInvalidState", err)
+	}
+
+	var primaryID int64
+	for _, image := range reordered {
+		if image.IsPrimary {
+			primaryID = image.ID
+			break
+		}
+	}
+	if err := repo.Delete(ctx, productID, primaryID); err != nil {
+		t.Fatalf("delete primary image: %v", err)
+	}
+	afterDelete, err := repo.ListByProduct(ctx, productID)
+	if err != nil {
+		t.Fatalf("list after primary delete: %v", err)
+	}
+	if len(afterDelete) != imageCount-1 {
+		t.Fatalf("image count after delete = %d; want %d", len(afterDelete), imageCount-1)
+	}
+	primaryCount = 0
+	for i, image := range afterDelete {
+		if image.SortOrder != i {
+			t.Fatalf("post-delete order at index %d = %d; want %d", i, image.SortOrder, i)
+		}
+		if image.IsPrimary {
+			primaryCount++
+		}
+	}
+	if primaryCount != 1 {
+		t.Fatalf("primary count after primary delete = %d; want 1", primaryCount)
+	}
 }
 
 func TestMediaSchemaRejectsUnsafeOrCollidingKeys(t *testing.T) {
@@ -207,12 +308,39 @@ func TestContentMediaRepositoryAttachesEveryOwnerSlot(t *testing.T) {
 				t.Fatalf("OwnerExists = %v, %v; want true, nil", exists, err)
 			}
 			mediaURL := "/media/" + tt.key
-			if err := repo.Attach(ctx, tt.ownerType, tt.role, tt.ownerID, mediaURL, tt.key); err != nil {
+			alt := models.NullablePatch[string]{}
+			if tt.role != "og" {
+				alt = mediaValuePatch(tt.name + " alt")
+			}
+			if err := repo.Attach(ctx, tt.ownerType, tt.role, tt.ownerID, mediaURL, tt.key, alt); err != nil {
 				t.Fatalf("Attach: %v", err)
 			}
 			assertColumnString(t, tt.table, tt.column, tt.ownerID, &tt.key)
+			if alt.Set {
+				assertColumnString(t, tt.table, "image_alt", tt.ownerID, alt.Value)
+			}
 		})
 	}
+
+	var oldRecipeURL string
+	if err := testPool.QueryRow(ctx, `SELECT image_url FROM recipes WHERE id = $1`, recipeID).Scan(&oldRecipeURL); err != nil {
+		t.Fatalf("read recipe URL before concurrent attachment: %v", err)
+	}
+	replacementKey := "recipes/1/cover-550e8400-e29b-41d4-a716-446655440099.webp"
+	replacementAlt := mediaValuePatch("replacement alt")
+	if err := repo.Attach(ctx, "recipes", "cover", recipeID, "/media/"+replacementKey, replacementKey, replacementAlt); err != nil {
+		t.Fatalf("attach replacement recipe cover: %v", err)
+	}
+	staleAlt := mediaValuePatch("stale alt")
+	_, err := repositories.NewRecipeRepository(testPool).Update(ctx, recipeID, &models.RecipeUpdateReq{
+		ImageAlt:         staleAlt,
+		ExpectedImageURL: mediaValuePatch(oldRecipeURL),
+	})
+	if !errors.Is(err, models.ErrConflict) {
+		t.Fatalf("stale recipe media update error = %v; want ErrConflict", err)
+	}
+	assertColumnString(t, "recipes", "image_storage_key", recipeID, &replacementKey)
+	assertColumnString(t, "recipes", "image_alt", recipeID, replacementAlt.Value)
 
 	if _, err := testPool.Exec(ctx, `UPDATE hero_slides SET is_active = true WHERE id = $1`, heroID); err != nil {
 		t.Fatalf("activate hero after desktop attachment: %v", err)
@@ -223,7 +351,7 @@ func TestContentMediaRepositoryAttachesEveryOwnerSlot(t *testing.T) {
 	if exists, err := repo.OwnerExists(ctx, "journal", blogID); err != nil || exists {
 		t.Fatalf("deleted journal OwnerExists = %v, %v; want false, nil", exists, err)
 	}
-	if err := repo.Attach(ctx, "journal", "cover", blogID, "/media/journal/new.webp", "journal/new.webp"); !errors.Is(err, models.ErrNotFound) {
+	if err := repo.Attach(ctx, "journal", "cover", blogID, "/media/journal/new.webp", "journal/new.webp", models.NullablePatch[string]{}); !errors.Is(err, models.ErrNotFound) {
 		t.Fatalf("attach deleted journal error = %v; want ErrNotFound", err)
 	}
 }
@@ -268,6 +396,14 @@ func TestMediaMigrationKeepsSharedKeysDetachedAcrossDownUp(t *testing.T) {
 		t.Fatalf("insert legacy product media: %v", err)
 	}
 	if _, err := testPool.Exec(ctx,
+		`INSERT INTO product_images (product_id, image_url, sort_order, is_primary)
+		 VALUES ($1, 'https://old.example/null-primary.webp', 0, NULL),
+		        ($1, 'https://old.example/primary.webp', 2, true),
+		        ($1, 'https://old.example/duplicate-primary.webp', 5, true)`, productID,
+	); err != nil {
+		t.Fatalf("insert legacy gallery state: %v", err)
+	}
+	if _, err := testPool.Exec(ctx,
 		`INSERT INTO hero_slides (title, image_url, mobile_image_url, is_active)
 		 VALUES ('Legacy hero', $1, $2, false)`,
 		"/media/"+sharedKey, "/media/"+heroMobileKey,
@@ -294,6 +430,7 @@ func TestMediaMigrationKeepsSharedKeysDetachedAcrossDownUp(t *testing.T) {
 	}
 	migrationApplied = true
 	assertMigratedMediaKeys(t, sharedKey, heroMobileKey, recipeCoverKey, recipeOGKey, journalKey)
+	assertProductGalleryInvariant(t, productID, 4)
 
 	// Simulate a NO TRANSACTION failure after all schema statements completed but
 	// before Goose recorded the migration version. Retrying must first remove the
@@ -332,7 +469,7 @@ func assertMigratedMediaKeys(t *testing.T, shared, heroMobile, recipeCover, reci
 	var productURL string
 	var productKey, heroKey, gotHeroMobile, gotRecipeCover, gotRecipeOG, gotJournal *string
 	if err := testPool.QueryRow(ctx,
-		`SELECT image_url, storage_key FROM product_images LIMIT 1`,
+		`SELECT image_url, storage_key FROM product_images ORDER BY id LIMIT 1`,
 	).Scan(&productURL, &productKey); err != nil {
 		t.Fatalf("read migrated product media: %v", err)
 	}
@@ -365,12 +502,46 @@ func assertMigratedMediaKeys(t *testing.T, shared, heroMobile, recipeCover, reci
 	}
 }
 
+func assertProductGalleryInvariant(t *testing.T, productID int64, wantCount int) {
+	t.Helper()
+	rows, err := testPool.Query(context.Background(),
+		`SELECT sort_order, is_primary FROM product_images WHERE product_id = $1 ORDER BY sort_order`,
+		productID,
+	)
+	if err != nil {
+		t.Fatalf("read product gallery invariant: %v", err)
+	}
+	defer rows.Close()
+	count := 0
+	primaryCount := 0
+	for rows.Next() {
+		var order int
+		var primary bool
+		if err := rows.Scan(&order, &primary); err != nil {
+			t.Fatalf("scan product gallery invariant: %v", err)
+		}
+		if order != count {
+			t.Fatalf("gallery order at index %d = %d", count, order)
+		}
+		if primary {
+			primaryCount++
+		}
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate product gallery invariant: %v", err)
+	}
+	if count != wantCount || primaryCount != 1 {
+		t.Fatalf("gallery count/primary = %d/%d; want %d/1", count, primaryCount, wantCount)
+	}
+}
+
 func assertColumnString(t *testing.T, table, column string, id int64, want *string) {
 	t.Helper()
 	allowed := map[string]map[string]bool{
-		"hero_slides": {"image_storage_key": true, "mobile_image_storage_key": true},
-		"recipes":     {"image_storage_key": true, "og_image_storage_key": true},
-		"blogs":       {"image_storage_key": true},
+		"hero_slides": {"image_storage_key": true, "mobile_image_storage_key": true, "image_alt": true},
+		"recipes":     {"image_storage_key": true, "og_image_storage_key": true, "image_alt": true},
+		"blogs":       {"image_storage_key": true, "image_alt": true},
 	}
 	if !allowed[table][column] {
 		t.Fatalf("unsupported test column %s.%s", table, column)
@@ -390,4 +561,8 @@ func assertColumnString(t *testing.T, table, column string, id int64, want *stri
 	if got == nil || *got != *want {
 		t.Fatalf("%s.%s = %v; want %q", table, column, got, *want)
 	}
+}
+
+func mediaValuePatch(value string) models.NullablePatch[string] {
+	return models.NullablePatch[string]{Set: true, Value: &value}
 }

@@ -19,11 +19,10 @@ type ProductImageRepository interface {
 	GetByID(ctx context.Context, id int64) (*models.ProductImage, error)
 	// GetProductMainImage(ctx context.Context, productID int64) (*models.ProductImage, error)
 	ListByProduct(ctx context.Context, productID int64) ([]*models.ProductImage, error)
-	NextSortOrder(ctx context.Context, productID int64) (int, error)
 	UpdateAlt(ctx context.Context, id int64, alt *string) (*models.ProductImage, error)
 	SetPrimary(ctx context.Context, productID, id int64) error
 	Reorder(ctx context.Context, productID int64, ids []int64) error
-	Delete(ctx context.Context, id int64) error
+	Delete(ctx context.Context, productID, id int64) error
 }
 
 type productImageRepository struct {
@@ -51,6 +50,40 @@ func scanProductImage(row pgx.Row) (*models.ProductImage, error) {
 }
 
 func (r *productImageRepository) Create(ctx context.Context, img *models.ProductImage) (*models.ProductImage, error) {
+	if img.ProductID == nil || *img.ProductID <= 0 {
+		return nil, models.ErrInvalidState
+	}
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("productImageRepository.Create begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	productID := *img.ProductID
+	if _, err := tx.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended('product-images:' || ($1::bigint)::text, 0))`,
+		productID,
+	); err != nil {
+		return nil, fmt.Errorf("productImageRepository.Create lock: %w", err)
+	}
+	var nextOrder int
+	if err := tx.QueryRow(ctx,
+		`SELECT COALESCE(MAX(sort_order) + 1, 0) FROM product_images WHERE product_id = $1`,
+		productID,
+	).Scan(&nextOrder); err != nil {
+		return nil, fmt.Errorf("productImageRepository.Create order: %w", err)
+	}
+	primary := img.IsPrimary || nextOrder == 0
+	if primary {
+		if _, err := tx.Exec(ctx,
+			`UPDATE product_images SET is_primary = false, updated_at = NOW()
+			 WHERE product_id = $1 AND is_primary`,
+			productID,
+		); err != nil {
+			return nil, fmt.Errorf("productImageRepository.Create clear primary: %w", err)
+		}
+	}
+
 	const q = `
 		INSERT INTO product_images
 			(product_id, product_variant_id, image_url, storage_key, alt_text, sort_order, is_primary, width, height)
@@ -63,14 +96,17 @@ func (r *productImageRepository) Create(ctx context.Context, img *models.Product
 		"image_url":          img.ImageURL,
 		"storage_key":        img.StorageKey,
 		"alt_text":           img.AltText,
-		"sort_order":         img.SortOrder,
-		"is_primary":         img.IsPrimary,
+		"sort_order":         nextOrder,
+		"is_primary":         primary,
 		"width":              img.Width,
 		"height":             img.Height,
 	}
-	out, err := scanProductImage(r.db.QueryRow(ctx, q, args))
+	out, err := scanProductImage(tx.QueryRow(ctx, q, args))
 	if err != nil {
 		return nil, fmt.Errorf("productImageRepository.Create: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("productImageRepository.Create commit: %w", err)
 	}
 	return out, nil
 }
@@ -89,7 +125,7 @@ func (r *productImageRepository) GetByID(ctx context.Context, id int64) (*models
 
 // func (r *productImageRepository) GetProductMainImage(ctx context.Context, productID int64) (*models.ProductImage, error) {
 // 	const q = `
-// 		SELECT id, image_url, storage_key, alt_text FROM product_images 
+// 		SELECT id, image_url, storage_key, alt_text FROM product_images
 // 		WHERE product_id = $1 AND is_primary = $2
 // 	`
 // 	var image *models.ProductImage
@@ -122,15 +158,6 @@ func (r *productImageRepository) ListByProduct(ctx context.Context, productID in
 	return out, rows.Err()
 }
 
-func (r *productImageRepository) NextSortOrder(ctx context.Context, productID int64) (int, error) {
-	const q = `SELECT COALESCE(MAX(sort_order)+1, 0) FROM product_images WHERE product_id = $1`
-	var next int
-	if err := r.db.QueryRow(ctx, q, productID).Scan(&next); err != nil {
-		return 0, fmt.Errorf("productImageRepository.NextSortOrder: %w", err)
-	}
-	return next, nil
-}
-
 func (r *productImageRepository) UpdateAlt(ctx context.Context, id int64, alt *string) (*models.ProductImage, error) {
 	const q = `UPDATE product_images SET alt_text = $2, updated_at = NOW()
 		WHERE id = $1 RETURNING ` + productImageCols
@@ -147,15 +174,47 @@ func (r *productImageRepository) UpdateAlt(ctx context.Context, id int64, alt *s
 // SetPrimary flips is_primary on exactly the target image and clears it on every
 // other image of the same product, in a single atomic statement.
 func (r *productImageRepository) SetPrimary(ctx context.Context, productID, id int64) error {
-	const q = `UPDATE product_images
-		SET is_primary = (id = $2), updated_at = NOW()
-		WHERE product_id = $1`
-	tag, err := r.db.Exec(ctx, q, productID, id)
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("productImageRepository.SetPrimary begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if _, err := tx.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended('product-images:' || ($1::bigint)::text, 0))`,
+		productID,
+	); err != nil {
+		return fmt.Errorf("productImageRepository.SetPrimary lock: %w", err)
+	}
+	var exists bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM product_images WHERE product_id = $1 AND id = $2)`,
+		productID, id,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("productImageRepository.SetPrimary target: %w", err)
+	}
+	if !exists {
+		return models.ErrNotFound
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE product_images SET is_primary = false, updated_at = NOW()
+		 WHERE product_id = $1 AND is_primary`,
+		productID,
+	); err != nil {
+		return fmt.Errorf("productImageRepository.SetPrimary clear: %w", err)
+	}
+	tag, err := tx.Exec(ctx,
+		`UPDATE product_images SET is_primary = true, updated_at = NOW()
+		 WHERE product_id = $1 AND id = $2`,
+		productID, id,
+	)
 	if err != nil {
 		return fmt.Errorf("productImageRepository.SetPrimary: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return models.ErrNotFound
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("productImageRepository.SetPrimary commit: %w", err)
 	}
 	return nil
 }
@@ -166,6 +225,31 @@ func (r *productImageRepository) Reorder(ctx context.Context, productID int64, i
 	if len(ids) == 0 {
 		return nil
 	}
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("productImageRepository.Reorder begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if _, err := tx.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended('product-images:' || ($1::bigint)::text, 0))`,
+		productID,
+	); err != nil {
+		return fmt.Errorf("productImageRepository.Reorder lock: %w", err)
+	}
+	var matches bool
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*) = $3
+		   AND count(DISTINCT id) = $3
+		   AND count(*) = (SELECT count(*) FROM product_images WHERE product_id = $1)
+		FROM product_images
+		WHERE product_id = $1 AND id = ANY($2::bigint[])`,
+		productID, ids, len(ids),
+	).Scan(&matches); err != nil {
+		return fmt.Errorf("productImageRepository.Reorder validate: %w", err)
+	}
+	if !matches {
+		return models.ErrInvalidState
+	}
 	orders := make([]int32, len(ids))
 	for i := range ids {
 		orders[i] = int32(i)
@@ -175,20 +259,70 @@ func (r *productImageRepository) Reorder(ctx context.Context, productID int64, i
 		SET sort_order = v.ord, updated_at = NOW()
 		FROM (SELECT * FROM unnest($2::bigint[], $3::int[]) AS t(id, ord)) AS v
 		WHERE pi.id = v.id AND pi.product_id = $1`
-	if _, err := r.db.Exec(ctx, q, productID, ids, orders); err != nil {
+	if _, err := tx.Exec(ctx, q, productID, ids, orders); err != nil {
 		return fmt.Errorf("productImageRepository.Reorder: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("productImageRepository.Reorder commit: %w", err)
 	}
 	return nil
 }
 
-func (r *productImageRepository) Delete(ctx context.Context, id int64) error {
-	const q = `DELETE FROM product_images WHERE id = $1`
-	tag, err := r.db.Exec(ctx, q, id)
+func (r *productImageRepository) Delete(ctx context.Context, productID, id int64) error {
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
+		return fmt.Errorf("productImageRepository.Delete begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if _, err := tx.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended('product-images:' || ($1::bigint)::text, 0))`,
+		productID,
+	); err != nil {
+		return fmt.Errorf("productImageRepository.Delete lock: %w", err)
+	}
+
+	var wasPrimary bool
+	if err := tx.QueryRow(ctx,
+		`DELETE FROM product_images
+		 WHERE product_id = $1 AND id = $2
+		 RETURNING is_primary`,
+		productID, id,
+	).Scan(&wasPrimary); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.ErrNotFound
+		}
 		return fmt.Errorf("productImageRepository.Delete: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return models.ErrNotFound
+
+	if _, err := tx.Exec(ctx, `
+		WITH ranked AS (
+			SELECT id, row_number() OVER (ORDER BY sort_order ASC, id ASC) - 1 AS position
+			FROM product_images
+			WHERE product_id = $1
+		)
+		UPDATE product_images AS image
+		SET sort_order = ranked.position, updated_at = NOW()
+		FROM ranked
+		WHERE image.id = ranked.id AND image.sort_order IS DISTINCT FROM ranked.position`,
+		productID,
+	); err != nil {
+		return fmt.Errorf("productImageRepository.Delete compact order: %w", err)
+	}
+	if wasPrimary {
+		if _, err := tx.Exec(ctx, `
+			UPDATE product_images
+			SET is_primary = true, updated_at = NOW()
+			WHERE id = (
+				SELECT id FROM product_images
+				WHERE product_id = $1
+				ORDER BY sort_order ASC, id ASC
+				LIMIT 1
+			)`, productID); err != nil {
+			return fmt.Errorf("productImageRepository.Delete promote primary: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("productImageRepository.Delete commit: %w", err)
 	}
 	return nil
 }

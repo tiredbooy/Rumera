@@ -61,6 +61,7 @@ export function HeroPreviewPanel({
           {/* Mimics the storefront hero proportions (16:9 desktop crop). */}
           <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
             <SmartImage
+              key={imageUrl}
               src={imageUrl || null}
               alt={imageAlt || title || "پیش‌نمایش اسلاید"}
               sizes="400px"

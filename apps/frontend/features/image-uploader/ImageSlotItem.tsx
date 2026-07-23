@@ -15,7 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import * as React from "react";
-import type { Slot, StagedSlot } from "./types";
+import type { Slot, StagedSlot } from "./product-types";
 import { UploadProgressBar } from "./UploadProgressBar";
 
 type ImageSlotItemProps = {
@@ -34,6 +34,7 @@ type ImageSlotItemProps = {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onDragStart: () => void;
+  onDragEnd: () => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: () => void;
 };
@@ -54,6 +55,7 @@ export function ImageSlotItem({
   onMoveUp,
   onMoveDown,
   onDragStart,
+  onDragEnd,
   onDragOver,
   onDrop,
 }: ImageSlotItemProps) {
@@ -84,6 +86,7 @@ export function ImageSlotItem({
       aria-posinset={index + 1}
       aria-setsize={total}
       onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDrop={onDrop}
       className={cn(
@@ -139,6 +142,7 @@ export function ImageSlotItem({
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Input
           value={slot.alt}
+          maxLength={255}
           onChange={(e) => onAltChange(e.target.value)}
           onBlur={onAltCommit}
           placeholder="متن جایگزین (alt)"

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { validateImageURL } from "@/features/image-uploader/constants";
 
 const categorySlugPattern = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u;
 
@@ -18,7 +19,16 @@ export const categoryFormSchema = z.object({
     ),
   parent_id: z.string(),
   description: z.string(),
-  image_url: z.string().trim(),
+  image_url: z
+    .string()
+    .trim()
+    .superRefine((value, context) => {
+      const error = validateImageURL(value, {
+        allowEmpty: true,
+        allowMediaPath: true,
+      });
+      if (error) context.addIssue({ code: "custom", message: error });
+    }),
   is_featured: z.boolean(),
   card_size: z.enum(["small", "large"]),
   display_order: z.string().trim(),

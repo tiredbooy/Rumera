@@ -46,12 +46,24 @@ beforeEach(() => {
   });
   setPrimaryImageMock.mockResolvedValue(undefined);
   reorderProductImagesMock.mockResolvedValue(undefined);
+  updateImageAltMock.mockImplementation(
+    async (_productId: number, imageId: number, altText: string) => ({
+      id: imageId,
+      image_url: "/media/products/12/gallery.webp",
+      alt_text: altText || undefined,
+      sort_order: 0,
+      is_primary: true,
+    }),
+  );
 });
 
 describe("useImageUploader URL sources", () => {
   it("stages an external URL until the product owner exists", async () => {
     const { result } = renderHook(() =>
-      useImageUploader({ productId: null, initialImages: [] }),
+      useImageUploader({
+        owner: { ownerType: "products", role: "gallery", ownerId: null },
+        initialImages: [],
+      }),
     );
 
     act(() => {
@@ -73,5 +85,48 @@ describe("useImageUploader URL sources", () => {
     );
     expect(setPrimaryImageMock).toHaveBeenCalledWith(12, 81);
     expect(result.current.hasStaged).toBe(false);
+  });
+
+  it("flushes a focused alt edit without requiring blur", async () => {
+    const image = {
+      id: 91,
+      image_url: "/media/products/12/gallery.webp",
+      alt_text: "Old alt",
+      sort_order: 0,
+      is_primary: true,
+    };
+    const { result } = renderHook(() =>
+      useImageUploader({
+        owner: { ownerType: "products", role: "gallery", ownerId: 12 },
+        initialImages: [image],
+      }),
+    );
+
+    act(() => result.current.setAlt(result.current.slots[0], "New alt"));
+    await act(async () => result.current.flush());
+
+    expect(updateImageAltMock).toHaveBeenCalledWith(12, 91, "New alt");
+    expect(result.current.slots[0].alt).toBe("New alt");
+  });
+
+  it("rejects overlong product alt text before persistence", () => {
+    const image = {
+      id: 91,
+      image_url: "/media/products/12/gallery.webp",
+      alt_text: "",
+      sort_order: 0,
+      is_primary: true,
+    };
+    const { result } = renderHook(() =>
+      useImageUploader({
+        owner: { ownerType: "products", role: "gallery", ownerId: 12 },
+        initialImages: [image],
+      }),
+    );
+
+    act(() => result.current.setAlt(result.current.slots[0], "x".repeat(256)));
+
+    expect(result.current.validate()).toMatch(/۲۵۵/);
+    expect(updateImageAltMock).not.toHaveBeenCalled();
   });
 });

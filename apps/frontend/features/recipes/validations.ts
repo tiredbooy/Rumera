@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { validateImageURL } from "@/features/image-uploader/constants";
 
 const intish = (message: string, options: { min?: number } = {}) =>
   z.string().refine(
@@ -12,6 +13,18 @@ const intish = (message: string, options: { min?: number } = {}) =>
     },
     { message },
   );
+
+const imageURL = z
+  .string()
+  .trim()
+  .max(2048, "نشانی تصویر بسیار طولانی است")
+  .superRefine((value, context) => {
+    const error = validateImageURL(value, {
+      allowEmpty: true,
+      allowMediaPath: true,
+    });
+    if (error) context.addIssue({ code: "custom", message: error });
+  });
 
 export const recipeIngredientFormSchema = z.object({
   ingredient_name: z
@@ -57,8 +70,9 @@ export const recipeFormSchema = z.object({
   cook_time_minutes: intish("عدد صحیح وارد کنید", { min: 0 }),
   servings: intish("حداقل ۱", { min: 1 }),
   status: z.enum(["draft", "published", "archived"]),
-  image_url: z.string().trim().max(500),
-  og_image_url: z.string().trim().max(500),
+  image_url: imageURL,
+  image_alt: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
+  og_image_url: imageURL,
   is_featured: z.boolean(),
   meta_title: z.string().trim().max(255),
   meta_description: z.string().trim().max(500),

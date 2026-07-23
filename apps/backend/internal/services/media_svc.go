@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/pkg/apperr"
@@ -53,7 +54,7 @@ type productMediaRepository interface {
 
 type contentMediaRepository interface {
 	OwnerExists(ctx context.Context, ownerType string, ownerID int64) (bool, error)
-	Attach(ctx context.Context, ownerType, role string, ownerID int64, url, key string) error
+	Attach(ctx context.Context, ownerType, role string, ownerID int64, url, key string, alt models.NullablePatch[string]) error
 }
 
 // MediaService stores uploaded product images and serves resized/recompressed
@@ -116,6 +117,10 @@ func (s *MediaService) Upload(ctx context.Context, productID int64, data []byte,
 	if err != nil {
 		return nil, apperr.ErrInternal
 	}
+	altText, err = normalizeProductImageAlt(altText)
+	if err != nil {
+		return nil, err
+	}
 
 	w, h, ext, err := s.inspectUpload(data)
 	if err != nil {
@@ -140,14 +145,6 @@ func (s *MediaService) Upload(ctx context.Context, productID int64, data []byte,
 		return nil, apperr.ErrInternal
 	}
 
-	sortOrder, err := s.repo.NextSortOrder(ctx, productID)
-	if err != nil {
-		_ = s.store.Delete(ctx, key) // don't leak the blob if the row never lands
-		return nil, apperr.ErrInternal
-	}
-	// The first image of a product is primary by default.
-	primary := isPrimary || sortOrder == 0
-
 	pid := productID
 	wv, hv := w, h
 	img := &models.ProductImage{
@@ -155,8 +152,7 @@ func (s *MediaService) Upload(ctx context.Context, productID int64, data []byte,
 		ImageURL:   imageURL,
 		StorageKey: &key,
 		AltText:    altText,
-		SortOrder:  sortOrder,
-		IsPrimary:  primary,
+		IsPrimary:  isPrimary,
 		Width:      &wv,
 		Height:     &hv,
 	}
@@ -176,14 +172,10 @@ func (s *MediaService) Upload(ctx context.Context, productID int64, data []byte,
 			s.log.Error("media: create row outcome ambiguous; retained original for reconciliation",
 				zap.String("key", key), zap.Error(err))
 		}
-		return nil, apperr.ErrInternal
-	}
-	if primary {
-		// Guarantee exactly one primary per product.
-		if err := s.repo.SetPrimary(ctx, productID, created.ID); err != nil {
-			s.log.Warn("media: set primary", zap.Int64("image_id", created.ID), zap.Error(err))
+		if isProductOwnerForeignKeyViolation(err) {
+			return nil, apperr.ErrProductNotFound
 		}
-		created.IsPrimary = true
+		return nil, apperr.ErrInternal
 	}
 	return created, nil
 }
@@ -206,32 +198,27 @@ func (s *MediaService) AddProductImageURL(
 	} else if err != nil {
 		return nil, apperr.ErrInternal
 	}
+	altText, err := normalizeProductImageAlt(altText)
+	if err != nil {
+		return nil, err
+	}
 
 	normalized, err := normalizeExternalImageURL(imageURL)
 	if err != nil {
 		return nil, apperr.ErrInvalidRequest
 	}
-	sortOrder, err := s.repo.NextSortOrder(ctx, productID)
-	if err != nil {
-		return nil, apperr.ErrInternal
-	}
-	primary := isPrimary || sortOrder == 0
 	pid := productID
 	created, err := s.repo.Create(ctx, &models.ProductImage{
 		ProductID: &pid,
 		ImageURL:  normalized,
 		AltText:   altText,
-		SortOrder: sortOrder,
-		IsPrimary: primary,
+		IsPrimary: isPrimary,
 	})
 	if err != nil {
-		return nil, apperr.ErrInternal
-	}
-	if primary {
-		if err := s.repo.SetPrimary(ctx, productID, created.ID); err != nil {
-			s.log.Warn("media: set external primary", zap.Int64("image_id", created.ID), zap.Error(err))
+		if isProductOwnerForeignKeyViolation(err) {
+			return nil, apperr.ErrProductNotFound
 		}
-		created.IsPrimary = true
+		return nil, apperr.ErrInternal
 	}
 	return created, nil
 }
@@ -278,12 +265,19 @@ func (s *MediaService) UploadOwnerImage(
 	ownerID int64,
 	role string,
 	data []byte,
+	altText models.NullablePatch[string],
 ) (*UploadResult, error) {
 	if ownerID <= 0 {
 		return nil, ErrInvalidMediaOwner
 	}
 	kind, mediaRole, err := contentMediaSlot(ownerType, role)
 	if err != nil {
+		return nil, err
+	}
+	if altText.Set && ownerType == "recipes" && role == "og" {
+		return nil, ErrInvalidMediaOwner
+	}
+	if err := normalizeImageAltPatch(&altText); err != nil {
 		return nil, err
 	}
 	exists, err := s.owner.OwnerExists(ctx, ownerType, ownerID)
@@ -308,7 +302,7 @@ func (s *MediaService) UploadOwnerImage(
 		return nil, apperr.ErrInternal
 	}
 
-	if err := s.owner.Attach(ctx, ownerType, role, ownerID, mediaURL, key); err != nil {
+	if err := s.owner.Attach(ctx, ownerType, role, ownerID, mediaURL, key, altText); err != nil {
 		definitive := errors.Is(err, models.ErrNotFound) || isDefinitiveDatabaseRejection(err)
 		if definitive {
 			if deleteErr := s.store.Delete(ctx, key); deleteErr != nil {
@@ -355,13 +349,16 @@ func normalizeExternalImageURL(value string) (string, error) {
 	if err != nil || parsed.User != nil || parsed.Fragment != "" {
 		return "", ErrInvalidMediaOwner
 	}
+	if strings.ContainsRune(value, '\\') {
+		return "", ErrInvalidMediaOwner
+	}
 	if strings.HasPrefix(value, "/") {
 		if strings.HasPrefix(value, "//") || strings.HasPrefix(value, "/media/") {
 			return "", ErrInvalidMediaOwner
 		}
 		return value, nil
 	}
-	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+	if parsed.Scheme != "https" || parsed.Host == "" {
 		return "", ErrInvalidMediaOwner
 	}
 	return value, nil
@@ -440,6 +437,13 @@ func isDefinitiveDatabaseRejection(err error) bool {
 	}
 }
 
+func isProductOwnerForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) &&
+		pgErr.Code == "23503" &&
+		pgErr.ConstraintName == "product_images_product_id_fkey"
+}
+
 func (s *MediaService) List(ctx context.Context, productID int64) ([]*models.ProductImage, error) {
 	if productID <= 0 {
 		return nil, apperr.ErrInvalidRequest
@@ -447,11 +451,28 @@ func (s *MediaService) List(ctx context.Context, productID int64) ([]*models.Pro
 	return s.repo.ListByProduct(ctx, productID)
 }
 
-func (s *MediaService) UpdateAlt(ctx context.Context, productID, imageID int64, alt *string) (*models.ProductImage, error) {
-	if err := s.assertImageBelongs(ctx, productID, imageID); err != nil {
+func (s *MediaService) UpdateAlt(
+	ctx context.Context,
+	productID, imageID int64,
+	alt models.NullablePatch[string],
+) (*models.ProductImage, error) {
+	if productID <= 0 || imageID <= 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+	image, err := s.repo.GetByID(ctx, imageID)
+	if err != nil {
 		return nil, err
 	}
-	return s.repo.UpdateAlt(ctx, imageID, alt)
+	if image.ProductID == nil || *image.ProductID != productID {
+		return nil, models.ErrNotFound
+	}
+	if !alt.Set {
+		return image, nil
+	}
+	if err := normalizeImageAltPatch(&alt); err != nil {
+		return nil, err
+	}
+	return s.repo.UpdateAlt(ctx, imageID, alt.Value)
 }
 
 func (s *MediaService) SetPrimary(ctx context.Context, productID, imageID int64) error {
@@ -465,7 +486,13 @@ func (s *MediaService) Reorder(ctx context.Context, productID int64, ids []int64
 	if productID <= 0 {
 		return apperr.ErrInvalidRequest
 	}
-	return s.repo.Reorder(ctx, productID, ids)
+	if err := s.repo.Reorder(ctx, productID, ids); err != nil {
+		if errors.Is(err, models.ErrInvalidState) {
+			return apperr.ErrInvalidRequest
+		}
+		return err
+	}
+	return nil
 }
 
 // Delete removes the row and best-effort deletes the stored original.
@@ -477,7 +504,7 @@ func (s *MediaService) Delete(ctx context.Context, productID, imageID int64) err
 	if img.ProductID == nil || *img.ProductID != productID {
 		return models.ErrNotFound
 	}
-	if err := s.repo.Delete(ctx, imageID); err != nil {
+	if err := s.repo.Delete(ctx, productID, imageID); err != nil {
 		return err
 	}
 	if img.StorageKey != nil {

@@ -13,16 +13,21 @@ import {
 import { Controller } from "react-hook-form";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
+import type {
+  ImageUploaderHandle,
+  UploadedImage,
+} from "@/features/image-uploader/types";
 
-const { createRecipeMock, coverFlushMock, pushMock, refreshMock } = vi.hoisted(
-  () => ({
+type ContentImageHandle = ImageUploaderHandle<UploadedImage | null>;
+
+const { createRecipeMock, coverFlushMock, pushMock, refreshMock, mediaState } =
+  vi.hoisted(() => ({
     createRecipeMock: vi.fn(),
     coverFlushMock: vi.fn(),
     pushMock: vi.fn(),
     refreshMock: vi.fn(),
-  }),
-);
+    mediaState: { ogError: null as string | null },
+  }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock, refresh: refreshMock }),
@@ -69,20 +74,34 @@ vi.mock("./recipe-form/ShoppableProductsSection", () => ({
 vi.mock("./recipe-form/SeoSection", () => ({
   SeoSection: ({
     mediaRef,
+    errors,
   }: {
-    mediaRef: React.Ref<FlexibleImageInputHandle>;
+    mediaRef: React.Ref<ContentImageHandle>;
+    errors: { og_image_url?: { message?: string } };
   }) => {
     const initialized = React.useRef(false);
     React.useEffect(() => {
       if (initialized.current) return;
       initialized.current = true;
       if (typeof mediaRef === "function") {
-        mediaRef({ hasStaged: false, flush: vi.fn() });
+        mediaRef({
+          hasStaged: false,
+          isBusy: false,
+          validate: () => mediaState.ogError,
+          flush: vi.fn(),
+        });
       } else if (mediaRef) {
-        mediaRef.current = { hasStaged: false, flush: vi.fn() };
+        mediaRef.current = {
+          hasStaged: false,
+          isBusy: false,
+          validate: () => mediaState.ogError,
+          flush: vi.fn(),
+        };
       }
     });
-    return null;
+    return errors.og_image_url?.message ? (
+      <p role="alert">{errors.og_image_url.message}</p>
+    ) : null;
   },
 }));
 
@@ -91,7 +110,7 @@ vi.mock("./recipe-form/RecipeSidebar", () => ({
     mediaRef,
     submitLabel,
   }: {
-    mediaRef: React.Ref<FlexibleImageInputHandle>;
+    mediaRef: React.Ref<ContentImageHandle>;
     submitLabel: string;
   }) => {
     const initialized = React.useRef(false);
@@ -99,9 +118,19 @@ vi.mock("./recipe-form/RecipeSidebar", () => ({
       if (initialized.current) return;
       initialized.current = true;
       if (typeof mediaRef === "function") {
-        mediaRef({ hasStaged: true, flush: coverFlushMock });
+        mediaRef({
+          hasStaged: true,
+          isBusy: false,
+          validate: () => null,
+          flush: coverFlushMock,
+        });
       } else if (mediaRef) {
-        mediaRef.current = { hasStaged: true, flush: coverFlushMock };
+        mediaRef.current = {
+          hasStaged: true,
+          isBusy: false,
+          validate: () => null,
+          flush: coverFlushMock,
+        };
       }
     });
     return <button type="submit">{submitLabel}</button>;
@@ -117,6 +146,7 @@ beforeEach(() => {
   coverFlushMock.mockReset();
   pushMock.mockReset();
   refreshMock.mockReset();
+  mediaState.ogError = null;
   createRecipeMock.mockResolvedValue({ id: 52, image_url: null });
   coverFlushMock.mockResolvedValue({
     url: "/media/recipes/52/cover-image.webp",
@@ -146,5 +176,24 @@ describe("RecipeForm owner-aware media", () => {
     );
     expect(coverFlushMock).toHaveBeenCalledWith(52);
     expect(pushMock).toHaveBeenCalledWith("/admin/recipes");
+  });
+
+  it("attributes an OG upload validation failure to the OG field", async () => {
+    mediaState.ogError = "فرمت تصویر اشتراک‌گذاری معتبر نیست";
+    render(<RecipeForm mode="create" tags={[]} submitLabel="ذخیره" />);
+    fireEvent.change(screen.getByLabelText("عنوان دستور"), {
+      target: { value: "دستور محلی" },
+    });
+    fireEvent.change(screen.getByLabelText("محتوا"), {
+      target: { value: "<p>مراحل دستور</p>" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ذخیره" }));
+
+    expect(
+      await screen.findByRole("alert", {
+        name: "",
+      }),
+    ).toHaveTextContent("فرمت تصویر اشتراک‌گذاری معتبر نیست");
+    expect(createRecipeMock).not.toHaveBeenCalled();
   });
 });

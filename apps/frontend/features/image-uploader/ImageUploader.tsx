@@ -7,12 +7,17 @@ import { Input } from "@/components/ui/input";
 import { ImageDropzone } from "./ImageDropzone";
 import { ImageSlotList } from "./ImageSlotList";
 import { useImageUploader } from "./use-image-uploader";
-import type { ImageUploaderHandle, ImageUploaderProps } from "./types";
+import type { ImageUploaderHandle } from "./types";
+import type { ProductImageUploaderProps } from "./product-types";
 
 export const ImageUploader = React.forwardRef<
-  ImageUploaderHandle,
-  ImageUploaderProps
->(function ImageUploader({ productId, initialImages = [], maxImages }, ref) {
+  ImageUploaderHandle<void>,
+  ProductImageUploaderProps
+>(function ImageUploader(
+  { owner, initialImages = [], maxImages, disabled = false },
+  ref,
+) {
+  const productId = owner.ownerId;
   const live = typeof productId === "number" && productId > 0;
   const {
     slots,
@@ -31,13 +36,16 @@ export const ImageUploader = React.forwardRef<
     retryUpload,
     flush,
     hasStaged,
-  } = useImageUploader({ productId, initialImages, maxImages });
+    validate,
+  } = useImageUploader({ owner, initialImages, maxImages, disabled });
   const [imageURL, setImageURL] = React.useState("");
+  const unavailable = disabled || isPending;
 
-  React.useImperativeHandle(ref, () => ({ hasStaged, flush }), [
-    hasStaged,
-    flush,
-  ]);
+  React.useImperativeHandle(
+    ref,
+    () => ({ hasStaged, isBusy: isPending, validate, flush }),
+    [flush, hasStaged, isPending, validate],
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -45,7 +53,7 @@ export const ImageUploader = React.forwardRef<
         onFilesSelected={addFiles}
         count={slots.length}
         maxImages={maxImages}
-        disabled={isPending}
+        disabled={unavailable}
       />
 
       <div className="flex items-center gap-2">
@@ -53,7 +61,7 @@ export const ImageUploader = React.forwardRef<
           dir="ltr"
           inputMode="url"
           value={imageURL}
-          disabled={isPending}
+          disabled={unavailable}
           aria-label="نشانی تصویر محصول"
           placeholder="https://images.example/product.webp"
           onChange={(event) => setImageURL(event.target.value)}
@@ -66,7 +74,7 @@ export const ImageUploader = React.forwardRef<
         <Button
           type="button"
           variant="outline"
-          disabled={isPending || imageURL.trim() === ""}
+          disabled={unavailable || imageURL.trim() === ""}
           onClick={() => {
             if (addURL(imageURL)) setImageURL("");
           }}
@@ -84,7 +92,7 @@ export const ImageUploader = React.forwardRef<
 
       <ImageSlotList
         slots={slots}
-        isPending={isPending}
+        isPending={unavailable}
         live={live}
         onAltChange={setAlt}
         onAltCommit={commitAlt}

@@ -152,6 +152,12 @@ func (s *blogService) RecordRead(ctx context.Context, id int64) error {
 // ── Writes ────────────────────────────────────────────────────────────────────
 
 func (s *blogService) Create(ctx context.Context, req *models.BlogReq) (*models.BlogDetailResponse, error) {
+	if err := normalizeCreateMediaURL(&req.ImageURL); err != nil {
+		return nil, err
+	}
+	if err := normalizeCreateImageAlt(&req.ImageAlt); err != nil {
+		return nil, err
+	}
 	s.applyCreateDefaults(ctx, req)
 
 	if err := s.assertSlugFree(ctx, req.Slug); err != nil {
@@ -181,6 +187,25 @@ func (s *blogService) Create(ctx context.Context, req *models.BlogReq) (*models.
 }
 
 func (s *blogService) Update(ctx context.Context, id int64, req *models.BlogUpdateReq) (*models.BlogDetailResponse, error) {
+	if req.ImageURL.Set || req.ImageAlt.Set {
+		current, err := s.repo.GetByID(ctx, id)
+		if err != nil {
+			if errors.Is(err, models.ErrNotFound) {
+				return nil, apperr.ErrNotFound
+			}
+			return nil, fmt.Errorf("blogService.Update media preflight: %w", err)
+		}
+		if req.ImageURL.Set || req.ImageAlt.Set {
+			req.ExpectedImageURL = mediaExpectation(current.ImageURL)
+		}
+		if err := normalizeMediaURLPatch(&req.ImageURL, current.ImageURL); err != nil {
+			return nil, err
+		}
+		if err := normalizeImageAltPatch(&req.ImageAlt); err != nil {
+			return nil, err
+		}
+	}
+
 	// Normalise / guard the slug if it is being changed.
 	if req.Slug != nil {
 		normalized := slugify(*req.Slug)
@@ -315,6 +340,7 @@ func (s *blogService) hydrate(ctx context.Context, load func() (*models.Blog, er
 			Content:         blog.Content,
 			Excerpt:         blog.Excerpt,
 			ImageURL:        blog.ImageURL,
+			ImageAlt:        blog.ImageAlt,
 			TimeToRead:      blog.TimeToRead,
 			TotalReads:      blog.TotalReads,
 			Status:          blog.Status,

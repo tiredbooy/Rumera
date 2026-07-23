@@ -35,4 +35,19 @@ describe("categoryFormSchema slug contract", () => {
         .success,
     ).toBe(false);
   });
+
+  it("accepts uploaded/static images and rejects unsafe image URLs", () => {
+    expect(
+      categoryFormSchema.safeParse({
+        ...validForm,
+        image_url: "/media/categories/cover.webp",
+      }).success,
+    ).toBe(true);
+    expect(
+      categoryFormSchema.safeParse({
+        ...validForm,
+        image_url: "javascript:alert(1)",
+      }).success,
+    ).toBe(false);
+  });
 });

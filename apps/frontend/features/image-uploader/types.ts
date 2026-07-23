@@ -1,38 +1,58 @@
-import type { ProductImage } from "../catalog/products/types";
+import type { ApiErrorEnvelope, ApiSuccess } from "@/lib/api/types";
 
-export type SlotStatus = "idle" | "uploading" | "error";
-
-export type StagedSlot = {
-  kind: "staged";
-  localId: string;
-  source: { kind: "file"; file: File } | { kind: "url"; url: string };
-  previewUrl: string;
-  alt: string;
-  isPrimary: boolean;
-  status: SlotStatus;
-  progress: number;
-  error?: string;
-  validationError?: boolean;
+export type ProductMediaTarget = {
+  ownerType: "products";
+  role: "gallery";
+  ownerId?: number | null;
 };
 
-export type UploadedSlot = {
-  kind: "uploaded";
-  localId: string;
-  image: ProductImage;
-  alt: string;
+export type ContentMediaTarget =
+  | {
+      ownerType: "hero-slides";
+      role: "desktop" | "mobile";
+      ownerId?: number | null;
+    }
+  | {
+      ownerType: "recipes";
+      role: "cover" | "og";
+      ownerId?: number | null;
+    }
+  | {
+      ownerType: "journal";
+      role: "cover";
+      ownerId?: number | null;
+    };
+
+export type MediaTarget = ProductMediaTarget | ContentMediaTarget;
+
+export type ImageSource =
+  | { kind: "file"; file: File }
+  | { kind: "url"; url: string };
+
+/** Canonical result returned by owner-aware and legacy single-image uploads. */
+export interface UploadedImage {
+  url: string;
+  key: string;
+  width: number;
+  height: number;
+}
+
+export interface UploadImageOptions {
+  folder?: string;
+  altText?: string;
+  signal?: AbortSignal;
+}
+
+export type UploadProgressCallback = (fraction: number) => void;
+
+/** Shared save boundary used by gallery and fixed-role media controls. */
+export type ImageUploaderHandle<TResult = void> = {
+  readonly hasStaged: boolean;
+  readonly isBusy: boolean;
+  validate: () => string | null;
+  /** Resolves only after all staged media changes are durable. */
+  flush: (ownerId?: number) => Promise<TResult>;
 };
 
-export type Slot = StagedSlot | UploadedSlot;
-
-export type ImageUploaderHandle = {
-  hasStaged: boolean;
-  /** Resolves only after every staged image and ordering change is durable. */
-  flush: (productId: number) => Promise<void>;
-};
-
-export type ImageUploaderProps = {
-  productId?: number | null;
-  initialImages?: ProductImage[];
-  /** Optional cap on total images (staged + uploaded). Omit for no limit. */
-  maxImages?: number;
-};
+export type UploadImageSuccessEnvelope = ApiSuccess<UploadedImage>;
+export type UploadImageErrorEnvelope = ApiErrorEnvelope;

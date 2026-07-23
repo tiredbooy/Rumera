@@ -7,6 +7,9 @@ export const ACCEPT = [
 ] as const;
 export const RECOMMENDED_DIMENSIONS = "۱۰۰۰×۱۲۵۰ پیکسل پیشنهادی";
 
+export const MAX_IMAGE_URL_LENGTH = 2048;
+export const MAX_IMAGE_ALT_LENGTH = 255;
+
 export function validateFile(file: File): string | null {
   if (!ACCEPT.includes(file.type as (typeof ACCEPT)[number]))
     return "فرمت پشتیبانی نمی‌شود (JPG/PNG/WebP/AVIF)";
@@ -15,28 +18,35 @@ export function validateFile(file: File): string | null {
   return null;
 }
 
-export function validateExternalImageURL(raw: string): string | null {
+export function validateImageURL(
+  raw: string,
+  options: { allowEmpty?: boolean; allowMediaPath?: boolean } = {},
+): string | null {
   const value = raw.trim();
-  if (!value) return "نشانی تصویر را وارد کنید";
-  if (value.length > 2048) return "نشانی تصویر بسیار طولانی است";
+  if (!value) {
+    return options.allowEmpty ? null : "نشانی تصویر را وارد کنید";
+  }
+  if (value.length > MAX_IMAGE_URL_LENGTH) {
+    return "نشانی تصویر بسیار طولانی است";
+  }
   if (value.includes("#")) return "نشانی تصویر نباید بخش fragment داشته باشد";
+  if (value.includes("\\")) return "نشانی HTTPS معتبر وارد کنید";
   if (value.startsWith("/")) {
-    if (value.startsWith("//") || value.startsWith("/media/")) {
+    if (value.startsWith("//")) {
+      return "نشانی HTTPS معتبر وارد کنید";
+    }
+    if (value.startsWith("/media/") && !options.allowMediaPath) {
       return "برای فایل محلی از گزینه بارگذاری استفاده کنید";
     }
     return null;
   }
   try {
     const parsed = new URL(value);
-    if (
-      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
-      parsed.username ||
-      parsed.password
-    ) {
-      return "نشانی HTTP یا HTTPS معتبر وارد کنید";
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+      return "نشانی HTTPS معتبر وارد کنید";
     }
   } catch {
-    return "نشانی HTTP یا HTTPS معتبر وارد کنید";
+    return "نشانی HTTPS معتبر وارد کنید";
   }
   return null;
 }

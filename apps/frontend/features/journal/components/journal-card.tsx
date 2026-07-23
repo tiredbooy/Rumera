@@ -1,11 +1,11 @@
-import Link from "next/link"
-import { Clock, ArrowLeft, Eye } from "lucide-react"
+import Link from "next/link";
+import { Clock, ArrowLeft, Eye } from "lucide-react";
 
-import { cn } from "@/lib/utils"
-import { faNum } from "@/lib/products"
-import { SmartImage } from "@/components/smart-image"
-import type { JournalListItem } from "@/features/journal/types"
-import { formatJournalDate, formatReadingTime } from "@/features/journal/utils"
+import { cn } from "@/lib/utils";
+import { faNum } from "@/lib/products";
+import { SmartImage } from "@/components/smart-image";
+import type { JournalListItem } from "@/features/journal/types";
+import { formatJournalDate, formatReadingTime } from "@/features/journal/utils";
 
 // Rotated placeholder tints so an occasional cover-less post still feels
 // editorial (SmartImage uses these as its gradient fallback).
@@ -14,10 +14,10 @@ const tints = [
   "from-primary/15 via-card to-secondary",
   "from-wine/15 via-card to-secondary",
   "from-secondary via-card to-accent/60",
-]
+];
 
 function tint(index: number): string {
-  return tints[index % tints.length]
+  return tints[index % tints.length];
 }
 
 /**
@@ -35,13 +35,13 @@ export function JournalCard({
   featured = false,
   priority = false,
 }: {
-  post: JournalListItem
-  index?: number
-  featured?: boolean
+  post: JournalListItem;
+  index?: number;
+  featured?: boolean;
   /** Pass for above-the-fold cards (e.g. the featured lead) to prioritize the cover. */
-  priority?: boolean
+  priority?: boolean;
 }) {
-  const href = `/journal/${post.slug}`
+  const href = `/journal/${post.slug}`;
 
   if (featured) {
     return (
@@ -49,11 +49,15 @@ export function JournalCard({
         data-journal-card="featured"
         className="group/feat border-hairline shadow-e1 hover:shadow-e3 relative grid overflow-hidden rounded-[1.5rem] bg-card ring-1 ring-foreground/5 transition-[box-shadow,border-color] duration-300 hover:ring-primary/30 sm:rounded-[2rem] lg:grid-cols-2"
       >
-        <Link href={href} className="relative block focus-visible:outline-none" aria-label={post.title}>
+        <Link
+          href={href}
+          className="relative block focus-visible:outline-none"
+          aria-label={post.title}
+        >
           <div className="relative aspect-[16/10] overflow-hidden lg:h-full lg:aspect-auto">
             <SmartImage
               src={post.image_url}
-              alt={post.title}
+              alt={post.image_alt?.trim() || post.title}
               monogram={post.title.charAt(0)}
               fallbackClassName={cn("bg-gradient-to-br", tint(index))}
               sizes="(max-width: 1024px) 100vw, 50vw"
@@ -61,7 +65,8 @@ export function JournalCard({
               className="transition-transform duration-500 ease-cellar group-hover/feat:scale-[1.03]"
             />
             <span className="absolute bottom-3 end-3 inline-flex items-center gap-1.5 rounded-full bg-background/75 px-2.5 py-1 text-xs font-medium text-foreground shadow-e1 backdrop-blur-sm">
-              <Clock className="size-3.5" aria-hidden /> {formatReadingTime(post.time_to_read)}
+              <Clock className="size-3.5" aria-hidden />{" "}
+              {formatReadingTime(post.time_to_read)}
             </span>
           </div>
         </Link>
@@ -77,23 +82,31 @@ export function JournalCard({
             </Link>
           </h2>
           {post.excerpt ? (
-            <p className="line-clamp-3 leading-relaxed text-muted-foreground">{post.excerpt}</p>
+            <p className="line-clamp-3 leading-relaxed text-muted-foreground">
+              {post.excerpt}
+            </p>
           ) : null}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {post.published_at ? <span>{formatJournalDate(post.published_at)}</span> : null}
+            {post.published_at ? (
+              <span>{formatJournalDate(post.published_at)}</span>
+            ) : null}
             {post.total_reads > 0 ? (
               <span className="inline-flex items-center gap-1.5">
-                <Eye className="size-3.5" aria-hidden /> {faNum(post.total_reads)} بازدید
+                <Eye className="size-3.5" aria-hidden />{" "}
+                {faNum(post.total_reads)} بازدید
               </span>
             ) : null}
           </div>
           <span className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
             ادامهٔ مطلب
-            <ArrowLeft className="size-4 transition-transform duration-300 group-hover/feat:-translate-x-1" aria-hidden />
+            <ArrowLeft
+              className="size-4 transition-transform duration-300 group-hover/feat:-translate-x-1"
+              aria-hidden
+            />
           </span>
         </div>
       </article>
-    )
+    );
   }
 
   return (
@@ -101,11 +114,15 @@ export function JournalCard({
       data-journal-card="default"
       className="group/post press border-hairline shadow-e1 hover:shadow-e3 relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 ease-cellar hover:-translate-y-1 hover:ring-primary/30 sm:rounded-3xl"
     >
-      <Link href={href} className="relative block focus-visible:outline-none" aria-label={post.title}>
+      <Link
+        href={href}
+        className="relative block focus-visible:outline-none"
+        aria-label={post.title}
+      >
         <div className="relative aspect-[16/10] overflow-hidden">
           <SmartImage
             src={post.image_url}
-            alt={post.title}
+            alt={post.image_alt?.trim() || post.title}
             monogram={post.title.charAt(0)}
             fallbackClassName={cn("bg-gradient-to-br", tint(index))}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -113,14 +130,17 @@ export function JournalCard({
             className="transition-transform duration-500 ease-cellar group-hover/post:scale-105"
           />
           <span className="absolute bottom-3 end-3 inline-flex items-center gap-1.5 rounded-full bg-background/75 px-2.5 py-1 text-xs font-medium text-foreground shadow-e1 backdrop-blur-sm">
-            <Clock className="size-3.5" aria-hidden /> {formatReadingTime(post.time_to_read)}
+            <Clock className="size-3.5" aria-hidden />{" "}
+            {formatReadingTime(post.time_to_read)}
           </span>
         </div>
       </Link>
 
       <div className="flex flex-1 flex-col gap-3 p-5 sm:p-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          {post.published_at ? <span>{formatJournalDate(post.published_at)}</span> : null}
+          {post.published_at ? (
+            <span>{formatJournalDate(post.published_at)}</span>
+          ) : null}
           {post.total_reads > 0 ? (
             <span className="inline-flex items-center gap-1.5">
               <Eye className="size-3.5" aria-hidden /> {faNum(post.total_reads)}
@@ -138,14 +158,19 @@ export function JournalCard({
         </h3>
 
         {post.excerpt ? (
-          <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">{post.excerpt}</p>
+          <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+            {post.excerpt}
+          </p>
         ) : null}
 
         <span className="mt-auto inline-flex items-center gap-1.5 pt-3 text-sm font-medium text-primary">
           ادامهٔ مطلب
-          <ArrowLeft className="size-4 transition-transform duration-300 group-hover/post:-translate-x-1" aria-hidden />
+          <ArrowLeft
+            className="size-4 transition-transform duration-300 group-hover/post:-translate-x-1"
+            aria-hidden
+          />
         </span>
       </div>
     </article>
-  )
+  );
 }

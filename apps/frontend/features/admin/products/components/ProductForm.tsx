@@ -101,7 +101,7 @@ export function ProductForm({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [saveError, setSaveError] = React.useState<string | null>(null);
-  const uploaderRef = React.useRef<ImageUploaderHandle>(null);
+  const uploaderRef = React.useRef<ImageUploaderHandle<void>>(null);
 
   const {
     register,
@@ -134,8 +134,13 @@ export function ProductForm({
 
   function onSubmit(
     v: ProductFormValues,
-    uploader: ImageUploaderHandle | null,
+    uploader: ImageUploaderHandle<void> | null,
   ) {
+    const mediaError = uploader?.validate();
+    if (mediaError) {
+      applyServerErrors(new Error(mediaError));
+      return;
+    }
     startTransition(async () => {
       setSaveError(null);
       try {
@@ -282,6 +287,7 @@ export function ProductForm({
             productId={product?.id ?? null}
             mode={mode}
             initialImages={product?.images ?? []}
+            disabled={isPending}
           />
 
           <SeoSection

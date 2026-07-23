@@ -15,7 +15,10 @@ import type {
   AdminHeroSlide,
   CreateHeroSlideInput,
 } from "@/features/hero-slides/types";
-import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
+import type {
+  ImageUploaderHandle,
+  UploadedImage,
+} from "@/features/image-uploader/types";
 import {
   heroSlideFormSchema,
   type HeroSlideFormValues,
@@ -81,8 +84,10 @@ export function HeroForm({
   submitLabel?: string;
 }) {
   const router = useRouter();
-  const desktopMediaRef = React.useRef<FlexibleImageInputHandle>(null);
-  const mobileMediaRef = React.useRef<FlexibleImageInputHandle>(null);
+  const desktopMediaRef =
+    React.useRef<ImageUploaderHandle<UploadedImage | null>>(null);
+  const mobileMediaRef =
+    React.useRef<ImageUploaderHandle<UploadedImage | null>>(null);
   const [desktopPreview, setDesktopPreview] = React.useState(
     slide?.image_url ?? "",
   );
@@ -151,6 +156,20 @@ export function HeroForm({
   async function onSubmit(v: HeroSlideFormValues) {
     let savedOwnerId: number | null = null;
     try {
+      const desktopMediaError = desktopMediaRef.current?.validate() ?? null;
+      const mobileMediaError = mobileMediaRef.current?.validate() ?? null;
+      if (desktopMediaError || mobileMediaError) {
+        const field = desktopMediaError ? "image_url" : "mobile_image_url";
+        setError(
+          field,
+          {
+            message:
+              desktopMediaError ?? mobileMediaError ?? "تصویر معتبر نیست",
+          },
+          { shouldFocus: true },
+        );
+        return;
+      }
       const payload = toPayload(v);
       const desktopStaged = desktopMediaRef.current?.hasStaged ?? false;
       const mobileStaged = mobileMediaRef.current?.hasStaged ?? false;
@@ -162,6 +181,7 @@ export function HeroForm({
       if (mobileStaged) {
         payload.mobile_image_url = mode === "create" ? null : undefined;
       }
+      if (desktopStaged || mobileStaged) payload.image_alt = undefined;
       if (needsMediaBeforeActivation) payload.is_active = false;
 
       let saved: AdminHeroSlide;
@@ -214,7 +234,6 @@ export function HeroForm({
         <HeroContentFields register={register} errors={errors} />
         <HeroResponsiveMediaFields
           control={control}
-          register={register}
           errors={errors}
           ownerId={slide?.id}
           desktopRef={desktopMediaRef}
@@ -226,6 +245,8 @@ export function HeroForm({
             })
           }
           onDesktopPreviewChange={setDesktopPreview}
+          imageAlt={imageAlt}
+          disabled={isSubmitting}
         />
         <HeroCtaFields register={register} errors={errors} />
         <HeroAppearanceFields
@@ -239,7 +260,7 @@ export function HeroForm({
         preview={preview}
         submitLabel={submitLabel}
         isSubmitting={isSubmitting}
-        uploadBusy={false}
+        uploadBusy={isSubmitting}
         onCancel={() => router.push("/admin/hero-slides")}
       />
     </form>

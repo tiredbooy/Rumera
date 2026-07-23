@@ -13,7 +13,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ImageSlotList } from "./ImageSlotList";
-import type { Slot, StagedSlot } from "./types";
+import type { Slot, StagedSlot } from "./product-types";
 
 afterEach(() => {
   cleanup();

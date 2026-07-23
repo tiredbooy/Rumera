@@ -16,8 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input";
-import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
+import { ImageInput } from "@/features/image-uploader/ImageInput";
+import type {
+  ImageUploaderHandle,
+  UploadedImage,
+} from "@/features/image-uploader/types";
 import type { Tag } from "@/features/catalog/tags/types";
 import type { RecipeStatus } from "@/features/recipes/types";
 import type { RecipeFormValues } from "@/features/recipes/validations";
@@ -35,17 +38,21 @@ function ImageCard({
   errors,
   title,
   imageUrl,
+  imageAlt,
   ownerId,
   mediaRef,
   onPreviewChange,
+  disabled,
 }: {
   control: Control<RecipeFormValues>;
   errors: FieldErrors<RecipeFormValues>;
   title: string;
   imageUrl: string;
+  imageAlt: string;
   ownerId?: number | null;
-  mediaRef: Ref<FlexibleImageInputHandle>;
+  mediaRef: Ref<ImageUploaderHandle<UploadedImage | null>>;
   onPreviewChange: (url: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
@@ -55,8 +62,9 @@ function ImageCard({
       </h2>
       <span className="relative mb-3 flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-xl bg-muted ring-1 ring-foreground/[0.04]">
         <OptimizedImage
+          key={imageUrl}
           src={imageUrl || null}
-          alt={title || "تصویر دستور"}
+          alt={imageAlt || title || "تصویر دستور"}
           width={480}
           className="h-full w-full"
         />
@@ -67,21 +75,35 @@ function ImageCard({
       <Controller
         control={control}
         name="image_url"
-        render={({ field }) => (
-          <FlexibleImageInput
-            ref={mediaRef}
-            id="image_url"
-            value={field.value}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            owner={{ ownerType: "recipes", ownerId, role: "cover" }}
-            placeholder="https://… یا بارگذاری فایل"
-            ariaInvalid={!!errors.image_url}
-            ariaDescribedBy={
-              errors.image_url ? fieldErrorId("image_url") : undefined
-            }
-            hidePreview
-            onPreviewChange={onPreviewChange}
+        render={({ field: imageField }) => (
+          <Controller
+            control={control}
+            name="image_alt"
+            render={({ field: altField }) => (
+              <ImageInput
+                ref={mediaRef}
+                id="image_url"
+                name={imageField.name}
+                urlInputRef={imageField.ref}
+                value={imageField.value}
+                onChange={imageField.onChange}
+                onBlur={imageField.onBlur}
+                owner={{ ownerType: "recipes", ownerId, role: "cover" }}
+                placeholder="https://… یا بارگذاری فایل"
+                ariaInvalid={!!errors.image_url}
+                ariaDescribedBy={
+                  errors.image_url ? fieldErrorId("image_url") : undefined
+                }
+                altValue={altField.value}
+                altInputId="image_alt"
+                altError={errors.image_alt?.message}
+                onAltChange={altField.onChange}
+                onAltBlur={altField.onBlur}
+                hidePreview
+                onPreviewChange={onPreviewChange}
+                disabled={disabled}
+              />
+            )}
           />
         )}
       />
@@ -239,12 +261,14 @@ export function RecipeSidebar({
   tags,
   title,
   imageUrl,
+  imageAlt,
   status,
   submitLabel,
   isSubmitting,
   ownerId,
   mediaRef,
   onPreviewChange,
+  disabled,
   onCancel,
 }: {
   control: Control<RecipeFormValues>;
@@ -252,12 +276,14 @@ export function RecipeSidebar({
   tags: Tag[];
   title: string;
   imageUrl: string;
+  imageAlt: string;
   status: RecipeStatus;
   submitLabel: string;
   isSubmitting: boolean;
   ownerId?: number | null;
-  mediaRef: Ref<FlexibleImageInputHandle>;
+  mediaRef: Ref<ImageUploaderHandle<UploadedImage | null>>;
   onPreviewChange: (url: string) => void;
+  disabled?: boolean;
   onCancel: () => void;
 }) {
   return (
@@ -268,9 +294,11 @@ export function RecipeSidebar({
           errors={errors}
           title={title}
           imageUrl={imageUrl}
+          imageAlt={imageAlt}
           ownerId={ownerId}
           mediaRef={mediaRef}
           onPreviewChange={onPreviewChange}
+          disabled={disabled}
         />
         <PublicationCard control={control} />
         <TagsCard control={control} tags={tags} />

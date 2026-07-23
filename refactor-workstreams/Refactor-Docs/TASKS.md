@@ -234,7 +234,7 @@ future adapter remains possible without changing feature code.
   - Persist storage keys and canonical public `/media/...` paths, protect against
     traversal/collisions, preserve atomic writes, and define migration behavior
     for already persisted flat UUID keys.
-- [ ] **Task 057b - Generalize the working image uploader**
+- [x] **Task 057b - Generalize the working image uploader**
   - Reuse one uploader contract across products, hero slides, recipes, and journal
     content with URL-or-local-file input, previews, progress, alt text, ordering,
     primary/responsive roles, validation, and explicit ownership attachment.

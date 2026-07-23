@@ -1,4 +1,17 @@
 import { z } from "zod";
+import { validateImageURL } from "@/features/image-uploader/constants";
+
+const imageURL = z
+  .string()
+  .trim()
+  .max(2048, "نشانی تصویر بسیار طولانی است")
+  .superRefine((value, context) => {
+    const error = validateImageURL(value, {
+      allowEmpty: true,
+      allowMediaPath: true,
+    });
+    if (error) context.addIssue({ code: "custom", message: error });
+  });
 
 export const heroSlideFormSchema = z
   .object({
@@ -10,11 +23,8 @@ export const heroSlideFormSchema = z
     eyebrow: z.string().trim().max(120, "حداکثر ۱۲۰ نویسه"),
     subtitle: z.string(),
     badge: z.string().trim().max(120, "حداکثر ۱۲۰ نویسه"),
-    image_url: z.string().trim().max(2048, "نشانی تصویر بسیار طولانی است"),
-    mobile_image_url: z
-      .string()
-      .trim()
-      .max(2048, "نشانی تصویر بسیار طولانی است"),
+    image_url: imageURL,
+    mobile_image_url: imageURL,
     image_alt: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
     cta_label: z.string().trim().max(120, "حداکثر ۱۲۰ نویسه"),
     cta_href: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),

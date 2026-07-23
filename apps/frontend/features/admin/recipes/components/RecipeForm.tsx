@@ -7,7 +7,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
 import type { Tag } from "@/features/catalog/tags/types";
-import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
+import type {
+  ImageUploaderHandle,
+  UploadedImage,
+} from "@/features/image-uploader/types";
 import {
   createRecipe,
   RecipeApiError,
@@ -53,6 +56,7 @@ function defaults(recipe?: AdminRecipeDetail): RecipeFormValues {
     servings: recipe?.servings ? String(recipe.servings) : "",
     status: recipe?.status ?? "draft",
     image_url: recipe?.image_url ?? "",
+    image_alt: recipe?.image_alt ?? "",
     og_image_url: recipe?.og_image_url ?? "",
     is_featured: recipe?.is_featured ?? false,
     meta_title: recipe?.meta_title ?? "",
@@ -90,8 +94,10 @@ export function RecipeForm({
   submitLabel?: string;
 }) {
   const router = useRouter();
-  const coverMediaRef = React.useRef<FlexibleImageInputHandle>(null);
-  const ogMediaRef = React.useRef<FlexibleImageInputHandle>(null);
+  const coverMediaRef =
+    React.useRef<ImageUploaderHandle<UploadedImage | null>>(null);
+  const ogMediaRef =
+    React.useRef<ImageUploaderHandle<UploadedImage | null>>(null);
   const [coverPreview, setCoverPreview] = React.useState(
     recipe?.image_url ?? "",
   );
@@ -110,7 +116,7 @@ export function RecipeForm({
   });
 
   const title = watch("title");
-  const imageUrl = watch("image_url");
+  const imageAlt = watch("image_alt");
   const status = watch("status");
 
   /** Map the (string-keyed, form-shaped) values onto the API payload. */
@@ -144,6 +150,7 @@ export function RecipeForm({
       servings: intOrZero(v.servings) || undefined,
       status: v.status,
       image_url: strOrNull(v.image_url),
+      image_alt: strOrNull(v.image_alt),
       og_image_url: strOrNull(v.og_image_url),
       is_featured: v.is_featured,
       meta_title: strOrNull(v.meta_title),
@@ -176,13 +183,29 @@ export function RecipeForm({
   async function onSubmit(v: RecipeFormValues) {
     let savedOwnerId: number | null = null;
     try {
+      const coverMediaError = coverMediaRef.current?.validate() ?? null;
+      const ogMediaError = ogMediaRef.current?.validate() ?? null;
+      if (coverMediaError || ogMediaError) {
+        const field = coverMediaError ? "image_url" : "og_image_url";
+        setError(
+          field,
+          { message: coverMediaError ?? ogMediaError ?? "تصویر معتبر نیست" },
+          { shouldFocus: true },
+        );
+        return;
+      }
       const payload = toPayload(v);
-      if (coverMediaRef.current?.hasStaged) {
+      const coverStaged = coverMediaRef.current?.hasStaged ?? false;
+      const publishAfterCover =
+        v.status === "published" && coverStaged && !recipe?.image_url;
+      if (coverStaged) {
         payload.image_url = mode === "create" ? null : undefined;
+        payload.image_alt = undefined;
       }
       if (ogMediaRef.current?.hasStaged) {
         payload.og_image_url = mode === "create" ? null : undefined;
       }
+      if (publishAfterCover) payload.status = "draft";
 
       let saved: AdminRecipeDetail;
       if (mode === "create") {
@@ -195,6 +218,9 @@ export function RecipeForm({
       savedOwnerId = saved.id;
       await coverMediaRef.current?.flush(saved.id);
       await ogMediaRef.current?.flush(saved.id);
+      if (publishAfterCover) {
+        await updateRecipe(saved.id, { status: "published" });
+      }
       toast.success(mode === "create" ? "دستور ایجاد شد" : "تغییرات ذخیره شد");
       router.push("/admin/recipes");
       router.refresh();
@@ -239,6 +265,7 @@ export function RecipeForm({
           errors={errors}
           ownerId={recipe?.id}
           mediaRef={ogMediaRef}
+          disabled={isSubmitting}
         />
       </div>
 
@@ -247,13 +274,15 @@ export function RecipeForm({
         errors={errors}
         tags={tags}
         title={title}
-        imageUrl={coverPreview || imageUrl}
+        imageUrl={coverPreview}
+        imageAlt={imageAlt}
         status={status}
         submitLabel={submitLabel}
         isSubmitting={isSubmitting}
         ownerId={recipe?.id}
         mediaRef={coverMediaRef}
         onPreviewChange={setCoverPreview}
+        disabled={isSubmitting}
         onCancel={() => router.push("/admin/recipes")}
       />
     </form>

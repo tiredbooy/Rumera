@@ -44,6 +44,7 @@ type Recipe struct {
 	ServingSuggestion *string `json:"serving_suggestion"`
 
 	ImageURL *string `json:"image_url"`
+	ImageAlt *string `json:"image_alt"`
 
 	// Publishing
 	Status      RecipeStatus `json:"status"`
@@ -113,7 +114,8 @@ type RecipeReq struct {
 	GlassType         *string `json:"glass_type"`
 	ServingSuggestion *string `json:"serving_suggestion"`
 
-	ImageURL *string `json:"image_url"`
+	ImageURL *string `json:"image_url" validate:"omitempty,max=2048"`
+	ImageAlt *string `json:"image_alt" validate:"omitempty,max=255"`
 
 	Status      RecipeStatus `json:"status"       validate:"omitempty,oneof=draft published archived"`
 	IsFeatured  bool         `json:"is_featured"`
@@ -123,7 +125,7 @@ type RecipeReq struct {
 	MetaDescription *string  `json:"meta_description"`
 	MetaKeywords    []string `json:"meta_keywords"`
 	CanonicalURL    *string  `json:"canonical_url"`
-	OGImageURL      *string  `json:"og_image_url"`
+	OGImageURL      *string  `json:"og_image_url" validate:"omitempty,max=2048"`
 
 	UserID *int64 `json:"user_id"`
 
@@ -150,17 +152,20 @@ type RecipeUpdateReq struct {
 	GlassType         *string `json:"glass_type"`
 	ServingSuggestion *string `json:"serving_suggestion"`
 
-	ImageURL *string `json:"image_url"`
+	ImageURL           NullablePatch[string] `json:"image_url"`
+	ImageAlt           NullablePatch[string] `json:"image_alt"`
+	ExpectedImageURL   NullablePatch[string] `json:"-"`
+	ExpectedOGImageURL NullablePatch[string] `json:"-"`
 
 	Status      *RecipeStatus `json:"status"       validate:"omitempty,oneof=draft published archived"`
 	IsFeatured  *bool         `json:"is_featured"`
 	PublishedAt *time.Time    `json:"published_at"`
 
-	MetaTitle       *string  `json:"meta_title"        validate:"omitempty,max=255"`
-	MetaDescription *string  `json:"meta_description"`
-	MetaKeywords    []string `json:"meta_keywords"`
-	CanonicalURL    *string  `json:"canonical_url"`
-	OGImageURL      *string  `json:"og_image_url"`
+	MetaTitle       *string               `json:"meta_title"        validate:"omitempty,max=255"`
+	MetaDescription *string               `json:"meta_description"`
+	MetaKeywords    []string              `json:"meta_keywords"`
+	CanonicalURL    *string               `json:"canonical_url"`
+	OGImageURL      NullablePatch[string] `json:"og_image_url"`
 
 	// Relations — nil = leave untouched, non-nil (incl. empty) = replace.
 	Ingredients []*RecipeIngredientReq `json:"ingredients"`
@@ -227,6 +232,7 @@ type RecipeResponse struct {
 	ServingSuggestion *string `json:"serving_suggestion"`
 
 	ImageURL *string `json:"image_url"`
+	ImageAlt *string `json:"image_alt"`
 
 	Status      RecipeStatus `json:"status"`
 	IsFeatured  bool         `json:"is_featured"`
@@ -254,6 +260,7 @@ type RecipeListItem struct {
 	TotalTimeMinutes int              `json:"total_time_minutes"`
 	Servings         int              `json:"servings"`
 	ImageURL         *string          `json:"image_url"`
+	ImageAlt         *string          `json:"image_alt"`
 	CocktailType     *string          `json:"cocktail_type"`
 	IsFeatured       bool             `json:"is_featured"`
 	ViewCount        int64            `json:"view_count"`

@@ -66,6 +66,7 @@ describe("uploadOwnerImage", () => {
     const result = await uploadOwnerImage(
       file,
       { ownerType: "recipes", ownerId: 19, role: "og" },
+      {},
       onProgress,
     );
 
@@ -76,5 +77,18 @@ describe("uploadOwnerImage", () => {
     expect((request.body as FormData).get("file")).toBe(file);
     expect(onProgress).toHaveBeenCalledWith(0.5);
     expect(result.key).toBe("recipes/19/og-image.webp");
+  });
+
+  it("sends explicit alt metadata with owner attachment", async () => {
+    const file = new File(["image"], "cover.webp", { type: "image/webp" });
+
+    await uploadOwnerImage(
+      file,
+      { ownerType: "journal", ownerId: 8, role: "cover" },
+      { altText: "Bottle on a table" },
+    );
+
+    const body = FakeXMLHttpRequest.latest.body as FormData;
+    expect(body.get("alt_text")).toBe("Bottle on a table");
   });
 });

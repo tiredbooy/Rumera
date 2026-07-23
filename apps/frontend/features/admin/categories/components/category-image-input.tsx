@@ -1,7 +1,9 @@
 "use client";
 
-import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input";
+import type { Ref } from "react";
+
 import { fieldErrorId } from "@/components/ui/field";
+import { ImageInput } from "@/features/image-uploader/ImageInput";
 
 interface CategoryImageInputProps {
   id: string;
@@ -10,6 +12,8 @@ interface CategoryImageInputProps {
   onBlur?: () => void;
   onUploadingChange?: (uploading: boolean) => void;
   error?: string;
+  name?: string;
+  urlInputRef?: Ref<HTMLInputElement>;
 }
 
 export function CategoryImageInput({
@@ -19,15 +23,19 @@ export function CategoryImageInput({
   onBlur,
   onUploadingChange,
   error,
+  name,
+  urlInputRef,
 }: CategoryImageInputProps) {
   return (
-    <FlexibleImageInput
+    <ImageInput
       id={id}
+      name={name}
+      urlInputRef={urlInputRef}
       value={value}
       onChange={onChange}
       onBlur={onBlur}
       onUploadingChange={onUploadingChange}
-      folder="categories"
+      legacyFolder="categories"
       ariaInvalid={Boolean(error)}
       ariaDescribedBy={error ? fieldErrorId(id) : undefined}
       placeholder="نشانی تصویر یا بارگذاری فایل"

@@ -126,7 +126,7 @@ func (h *Handler) SetPrimaryProductImage(c *gin.Context) {
 }
 
 type updateImageReq struct {
-	AltText *string `json:"alt_text"`
+	AltText models.NullablePatch[string] `json:"alt_text"`
 }
 
 // UpdateProductImage — PATCH /admin/products/:id/images/:imageId (alt text)
@@ -171,10 +171,7 @@ func (h *Handler) DeleteProductImage(c *gin.Context) {
 // uploadFolders is the allow-list of storage folders a standalone upload may
 // target, keeping arbitrary path segments out of storage keys.
 var uploadFolders = map[string]bool{
-	"hero":       true,
 	"categories": true,
-	"recipes":    true,
-	"journals":   true,
 	"uploads":    true,
 }
 
@@ -212,8 +209,13 @@ func (h *Handler) UploadOwnerImage(c *gin.Context) {
 	if !ok {
 		return
 	}
+	altText := models.NullablePatch[string]{}
+	if value, exists := c.GetPostForm("alt_text"); exists {
+		altText.Set = true
+		altText.Value = &value
+	}
 	res, err := h.Media.UploadOwnerImage(
-		c.Request.Context(), c.Param("ownerType"), ownerID, c.Param("role"), data,
+		c.Request.Context(), c.Param("ownerType"), ownerID, c.Param("role"), data, altText,
 	)
 	if err != nil {
 		h.handleMediaError(c, err)

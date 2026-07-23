@@ -65,9 +65,11 @@ type HeroSlideUpdateReq struct {
 	Subtitle *string `json:"subtitle"`
 	Badge    *string `json:"badge" validate:"omitempty,max=120"`
 
-	ImageURL       *string `json:"image_url" validate:"omitempty,max=2048"`
-	MobileImageURL *string `json:"mobile_image_url" validate:"omitempty,max=2048"`
-	ImageAlt       *string `json:"image_alt" validate:"omitempty,max=255"`
+	ImageURL               NullablePatch[string] `json:"image_url"`
+	MobileImageURL         NullablePatch[string] `json:"mobile_image_url"`
+	ImageAlt               NullablePatch[string] `json:"image_alt"`
+	ExpectedImageURL       NullablePatch[string] `json:"-"`
+	ExpectedMobileImageURL NullablePatch[string] `json:"-"`
 
 	CTALabel          *string `json:"cta_label" validate:"omitempty,max=120"`
 	CTAHref           *string `json:"cta_href" validate:"omitempty,max=255"`

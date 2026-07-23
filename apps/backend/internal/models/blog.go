@@ -32,6 +32,7 @@ type Blog struct {
 	Content         string     `json:"content"`
 	Excerpt         *string    `json:"excerpt"`
 	ImageURL        *string    `json:"image_url"`
+	ImageAlt        *string    `json:"image_alt"`
 	TimeToRead      int        `json:"time_to_read"`
 	TotalReads      int64      `json:"total_reads"`
 	Status          BlogStatus `json:"status"`
@@ -77,7 +78,8 @@ type BlogReq struct {
 	Slug            string     `json:"slug"             validate:"omitempty,max=255"`
 	Content         string     `json:"content"          validate:"required"`
 	Excerpt         *string    `json:"excerpt"`
-	ImageURL        *string    `json:"image_url"`
+	ImageURL        *string    `json:"image_url" validate:"omitempty,max=2048"`
+	ImageAlt        *string    `json:"image_alt" validate:"omitempty,max=255"`
 	TimeToRead      int        `json:"time_to_read"     validate:"omitempty,min=1"`
 	Status          BlogStatus `json:"status"           validate:"omitempty,oneof=draft published archived"`
 	IsFeatured      bool       `json:"is_featured"`
@@ -90,20 +92,22 @@ type BlogReq struct {
 }
 
 type BlogUpdateReq struct {
-	Title           *string     `json:"title"            validate:"omitempty,max=255"`
-	Slug            *string     `json:"slug"             validate:"omitempty,max=255"`
-	Content         *string     `json:"content"`
-	Excerpt         *string     `json:"excerpt"`
-	ImageURL        *string     `json:"image_url"`
-	TimeToRead      *int        `json:"time_to_read"     validate:"omitempty,min=1"`
-	Status          *BlogStatus `json:"status"           validate:"omitempty,oneof=draft published archived"`
-	IsFeatured      *bool       `json:"is_featured"`
-	MetaTitle       *string     `json:"meta_title"       validate:"omitempty,max=255"`
-	MetaDescription *string     `json:"meta_description"`
-	PublishedAt     *time.Time  `json:"published_at"`
-	CategoryIDs     []int64     `json:"category_ids"`
-	ProductIDs      []int64     `json:"product_ids"`
-	TagIDs          []int64     `json:"tag_ids"`
+	Title            *string               `json:"title"            validate:"omitempty,max=255"`
+	Slug             *string               `json:"slug"             validate:"omitempty,max=255"`
+	Content          *string               `json:"content"`
+	Excerpt          *string               `json:"excerpt"`
+	ImageURL         NullablePatch[string] `json:"image_url"`
+	ImageAlt         NullablePatch[string] `json:"image_alt"`
+	ExpectedImageURL NullablePatch[string] `json:"-"`
+	TimeToRead       *int                  `json:"time_to_read"     validate:"omitempty,min=1"`
+	Status           *BlogStatus           `json:"status"           validate:"omitempty,oneof=draft published archived"`
+	IsFeatured       *bool                 `json:"is_featured"`
+	MetaTitle        *string               `json:"meta_title"       validate:"omitempty,max=255"`
+	MetaDescription  *string               `json:"meta_description"`
+	PublishedAt      *time.Time            `json:"published_at"`
+	CategoryIDs      []int64               `json:"category_ids"`
+	ProductIDs       []int64               `json:"product_ids"`
+	TagIDs           []int64               `json:"tag_ids"`
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
@@ -140,6 +144,7 @@ type BlogResponse struct {
 	Content         string     `json:"content"`
 	Excerpt         *string    `json:"excerpt"`
 	ImageURL        *string    `json:"image_url"`
+	ImageAlt        *string    `json:"image_alt"`
 	TimeToRead      int        `json:"time_to_read"`
 	TotalReads      int64      `json:"total_reads"`
 	Status          BlogStatus `json:"status"`
@@ -159,6 +164,7 @@ type BlogListItem struct {
 	Slug        string     `json:"slug"`
 	Excerpt     *string    `json:"excerpt"`
 	ImageURL    *string    `json:"image_url"`
+	ImageAlt    *string    `json:"image_alt"`
 	TimeToRead  int        `json:"time_to_read"`
 	TotalReads  int64      `json:"total_reads"`
 	Status      BlogStatus `json:"status"`

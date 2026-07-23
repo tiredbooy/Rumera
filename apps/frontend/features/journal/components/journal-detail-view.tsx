@@ -134,7 +134,7 @@ export async function JournalDetailView({ params }: JournalDetailViewProps) {
         <div className="border-hairline relative aspect-[16/9] overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
           <SmartImage
             src={post.image_url}
-            alt={post.title}
+            alt={post.image_alt?.trim() || post.title}
             monogram={post.title.charAt(0)}
             fallbackClassName="from-primary/20 via-card to-secondary"
             sizes="(max-width: 1024px) 100vw, 56rem"

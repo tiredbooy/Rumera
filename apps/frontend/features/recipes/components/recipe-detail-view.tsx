@@ -126,8 +126,8 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
               {/* Recipe hero image — recommended 1600×1200 (4:3). */}
               <div className="border-hairline relative aspect-[4/3] overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
                 <SmartImage
-                  src={recipe.og_image_url ?? recipe.image_url}
-                  alt={recipe.title}
+                  src={recipe.image_url}
+                  alt={recipe.image_alt?.trim() || recipe.title}
                   sizes="(max-width: 1024px) 100vw, 50vw"
                   priority
                 />
@@ -234,10 +234,7 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
             </div>
             <div className="mt-10 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
               {recipe.products.map((p) => (
-                <ShoppableProductCard
-                  key={p.recipe_product_id}
-                  product={p}
-                />
+                <ShoppableProductCard key={p.recipe_product_id} product={p} />
               ))}
             </div>
           </div>

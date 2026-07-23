@@ -3,7 +3,7 @@
 import { Sparkles } from "lucide-react";
 import { Controller } from "react-hook-form";
 import type { Control, FieldErrors, UseFormRegister } from "react-hook-form";
-import type { Ref } from "react";
+import { useState, type Ref } from "react";
 
 import {
   Accordion,
@@ -13,8 +13,12 @@ import {
 } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FlexibleImageInput } from "@/features/admin/uploads/components/flexible-image-input";
-import type { FlexibleImageInputHandle } from "@/features/admin/uploads/types";
+import { fieldErrorId } from "@/components/ui/field";
+import { ImageInput } from "@/features/image-uploader/ImageInput";
+import type {
+  ImageUploaderHandle,
+  UploadedImage,
+} from "@/features/image-uploader/types";
 import type { RecipeFormValues } from "@/features/recipes/validations";
 import { Field } from "./FormLayout";
 
@@ -24,17 +28,26 @@ export function SeoSection({
   errors,
   ownerId,
   mediaRef,
+  disabled,
 }: {
   register: UseFormRegister<RecipeFormValues>;
   control: Control<RecipeFormValues>;
   errors: FieldErrors<RecipeFormValues>;
   ownerId?: number | null;
-  mediaRef: Ref<FlexibleImageInputHandle>;
+  mediaRef: Ref<ImageUploaderHandle<UploadedImage | null>>;
+  disabled?: boolean;
 }) {
+  const [openSection, setOpenSection] = useState("");
+  const hasSEOError = Boolean(
+    errors.meta_title || errors.meta_description || errors.og_image_url,
+  );
+
   return (
     <Accordion
       type="single"
       collapsible
+      value={hasSEOError ? "seo" : openSection}
+      onValueChange={setOpenSection}
       className="bg-card ring-1 ring-foreground/[0.04]"
     >
       <AccordionItem value="seo">
@@ -44,7 +57,10 @@ export function SeoSection({
             سئو و متادیتا
           </span>
         </AccordionTrigger>
-        <AccordionContent>
+        <AccordionContent
+          forceMount
+          onFocusCapture={() => setOpenSection("seo")}
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               id="meta_title"
@@ -76,15 +92,23 @@ export function SeoSection({
                 control={control}
                 name="og_image_url"
                 render={({ field }) => (
-                  <FlexibleImageInput
+                  <ImageInput
                     ref={mediaRef}
                     id="og_image_url"
+                    name={field.name}
+                    urlInputRef={field.ref}
                     value={field.value}
                     onChange={field.onChange}
                     onBlur={field.onBlur}
                     owner={{ ownerType: "recipes", ownerId, role: "og" }}
                     placeholder="https://… یا بارگذاری فایل"
                     ariaInvalid={!!errors.og_image_url}
+                    ariaDescribedBy={
+                      errors.og_image_url
+                        ? fieldErrorId("og_image_url")
+                        : undefined
+                    }
+                    disabled={disabled}
                   />
                 )}
               />

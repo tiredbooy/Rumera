@@ -13,26 +13,29 @@ import {
 } from "../admin/products/actions/images";
 import {
   isSameFile,
-  validateExternalImageURL,
+  MAX_IMAGE_ALT_LENGTH,
+  validateImageURL,
   validateFile,
 } from "./constants";
 import type { ProductImage } from "../catalog/products/types";
 import type {
-  ImageUploaderProps,
+  ProductImageUploaderProps,
   Slot,
   StagedSlot,
   UploadedSlot,
-} from "./types";
+} from "./product-types";
 
 function asError(error: unknown, fallback: string): Error {
   return error instanceof Error ? error : new Error(fallback);
 }
 
 export function useImageUploader({
-  productId,
+  owner,
   initialImages = [],
   maxImages,
-}: ImageUploaderProps) {
+  disabled = false,
+}: ProductImageUploaderProps) {
+  const productId = owner.ownerId;
   const live = typeof productId === "number" && productId > 0;
   const idRef = React.useRef(0);
   const initialSlots = React.useMemo<Slot[]>(
@@ -150,16 +153,23 @@ export function useImageUploader({
                 });
           revokePreview(slot.previewUrl);
           replaceSlots((current) =>
-            current.map((currentSlot) =>
-              currentSlot.localId === slot.localId
+            current.map((currentSlot) => {
+              if (currentSlot.localId === slot.localId) {
+                return {
+                  kind: "uploaded",
+                  localId: currentSlot.localId,
+                  image,
+                  alt: image.alt_text ?? "",
+                };
+              }
+              if (!image.is_primary) return currentSlot;
+              return currentSlot.kind === "uploaded"
                 ? {
-                    kind: "uploaded",
-                    localId: currentSlot.localId,
-                    image: { ...image, is_primary: slot.isPrimary },
-                    alt: image.alt_text ?? "",
+                    ...currentSlot,
+                    image: { ...currentSlot.image, is_primary: false },
                   }
-                : currentSlot,
-            ),
+                : { ...currentSlot, isPrimary: false };
+            }),
           );
           return image;
         } catch (error) {
@@ -183,6 +193,7 @@ export function useImageUploader({
   const addFiles = React.useCallback(
     (files: FileList | File[]) => {
       if (
+        disabled ||
         flushingRef.current ||
         pendingPersistenceRef.current.size > 0 ||
         inFlightUploadsRef.current.size > 0
@@ -266,12 +277,13 @@ export function useImageUploader({
         })();
       }
     },
-    [live, maxImages, productId, replaceSlots, uploadStaged],
+    [disabled, live, maxImages, productId, replaceSlots, uploadStaged],
   );
 
   const addURL = React.useCallback(
     (rawURL: string) => {
       if (
+        disabled ||
         flushingRef.current ||
         pendingPersistenceRef.current.size > 0 ||
         inFlightUploadsRef.current.size > 0
@@ -280,7 +292,7 @@ export function useImageUploader({
       }
       setLimitMessage(null);
       const imageURL = rawURL.trim();
-      const validationError = validateExternalImageURL(imageURL);
+      const validationError = validateImageURL(imageURL);
       if (validationError) {
         setLimitMessage(validationError);
         return false;
@@ -319,11 +331,12 @@ export function useImageUploader({
       }
       return true;
     },
-    [live, maxImages, productId, replaceSlots, uploadStaged],
+    [disabled, live, maxImages, productId, replaceSlots, uploadStaged],
   );
 
   const removeSlot = React.useCallback(
     (slot: Slot) => {
+      if (disabled) return;
       if (slot.kind === "staged") {
         if (inFlightUploadsRef.current.has(slot.localId)) return;
         revokePreview(slot.previewUrl);
@@ -415,11 +428,20 @@ export function useImageUploader({
         })(),
       );
     },
-    [announce, live, productId, replaceSlots, revokePreview, trackPersistence],
+    [
+      announce,
+      disabled,
+      live,
+      productId,
+      replaceSlots,
+      revokePreview,
+      trackPersistence,
+    ],
   );
 
   const makePrimary = React.useCallback(
     (slot: Slot) => {
+      if (disabled) return;
       const previousPrimary = new Map(
         slotsRef.current.map((currentSlot) => [
           currentSlot.localId,
@@ -469,12 +491,18 @@ export function useImageUploader({
         })(),
       );
     },
-    [announce, live, productId, replaceSlots, trackPersistence],
+    [announce, disabled, live, productId, replaceSlots, trackPersistence],
   );
 
   const setAlt = React.useCallback(
     (slot: Slot, alt: string) => {
-      if (pendingPersistenceRef.current.size > 0 || flushingRef.current) return;
+      if (
+        disabled ||
+        pendingPersistenceRef.current.size > 0 ||
+        flushingRef.current
+      ) {
+        return;
+      }
       replaceSlots((current) =>
         current.map((currentSlot) =>
           currentSlot.localId === slot.localId
@@ -483,12 +511,13 @@ export function useImageUploader({
         ),
       );
     },
-    [replaceSlots],
+    [disabled, replaceSlots],
   );
 
   const commitAlt = React.useCallback(
     (slot: Slot) => {
       if (
+        disabled ||
         !live ||
         slot.kind !== "uploaded" ||
         pendingPersistenceRef.current.size > 0 ||
@@ -536,13 +565,14 @@ export function useImageUploader({
         })(),
       );
     },
-    [announce, live, productId, replaceSlots, trackPersistence],
+    [announce, disabled, live, productId, replaceSlots, trackPersistence],
   );
 
   const move = React.useCallback(
     (from: number, to: number) => {
       const previous = slotsRef.current;
       if (
+        disabled ||
         pendingPersistenceRef.current.size > 0 ||
         to < 0 ||
         to >= previous.length ||
@@ -578,7 +608,7 @@ export function useImageUploader({
       );
       return true;
     },
-    [announce, live, productId, replaceSlots, trackPersistence],
+    [announce, disabled, live, productId, replaceSlots, trackPersistence],
   );
 
   const moveUp = React.useCallback(
@@ -595,21 +625,112 @@ export function useImageUploader({
     [move],
   );
 
+  const validate = React.useCallback(() => {
+    const invalidAlt = slotsRef.current.find(
+      (slot) => slot.alt.length > MAX_IMAGE_ALT_LENGTH,
+    );
+    if (invalidAlt) return "متن جایگزین باید حداکثر ۲۵۵ نویسه باشد";
+    const invalid = slotsRef.current.find(
+      (slot): slot is StagedSlot =>
+        slot.kind === "staged" &&
+        (slot.validationError || slot.status === "error"),
+    );
+    return invalid?.error ?? null;
+  }, []);
+
+  const persistDirtyAlts = React.useCallback(
+    async (pid: number) => {
+      const dirty = slotsRef.current.filter(
+        (slot): slot is UploadedSlot =>
+          slot.kind === "uploaded" && slot.alt !== (slot.image.alt_text ?? ""),
+      );
+      for (const slot of dirty) {
+        const image = await updateImageAlt(pid, slot.image.id, slot.alt);
+        replaceSlots((items) =>
+          items.map((item) =>
+            item.localId === slot.localId && item.kind === "uploaded"
+              ? { ...item, image, alt: image.alt_text ?? "" }
+              : item,
+          ),
+        );
+      }
+    },
+    [replaceSlots],
+  );
+
+  const persistGalleryState = React.useCallback(
+    async (pid: number) => {
+      const uploaded = slotsRef.current.filter(
+        (slot): slot is UploadedSlot => slot.kind === "uploaded",
+      );
+      if (uploaded.length > 1) {
+        await reorderProductImages(
+          pid,
+          uploaded.map((slot) => slot.image.id),
+        );
+      }
+      const primary =
+        uploaded.find((slot) => slot.image.is_primary) ?? uploaded[0];
+      if (!primary) return;
+      await setPrimaryImage(pid, primary.image.id);
+      replaceSlots((items) =>
+        items.map((item) =>
+          item.kind === "uploaded"
+            ? {
+                ...item,
+                image: {
+                  ...item.image,
+                  is_primary: item.localId === primary.localId,
+                },
+              }
+            : item,
+        ),
+      );
+    },
+    [replaceSlots],
+  );
+
   const retryUpload = React.useCallback(
     (slot: StagedSlot) => {
-      if (!live || slot.validationError) return;
-      void uploadStaged(slot, productId).catch(() => {});
+      if (disabled || !live || slot.validationError) return;
+      persistenceErrorRef.current = null;
+      trackPersistence(
+        uploadStaged(slot, productId)
+          .then(() => persistGalleryState(productId))
+          .catch((error) => {
+            const retryError = asError(
+              error,
+              "هماهنگ‌سازی تصاویر پس از تلاش دوباره ناموفق بود",
+            );
+            persistenceErrorRef.current = retryError;
+            setLimitMessage(retryError.message);
+            announce("ذخیره تصویر کامل نشد؛ دوباره فرم را ذخیره کنید.");
+          }),
+      );
     },
-    [live, productId, uploadStaged],
+    [
+      announce,
+      disabled,
+      live,
+      persistGalleryState,
+      productId,
+      trackPersistence,
+      uploadStaged,
+    ],
   );
 
   const flush = React.useCallback(
-    async (pid: number) => {
+    async (ownerId?: number) => {
       if (flushingRef.current) throw new Error("ذخیره تصاویر در حال انجام است");
+      const pid = ownerId ?? owner.ownerId ?? null;
+      if (!pid || pid <= 0) throw new Error("شناسه مالک تصویر در دسترس نیست");
+      const validationError = validate();
+      if (validationError) throw new Error(validationError);
       flushingRef.current = true;
       setIsFlushing(true);
       try {
         await waitForPersistence();
+        await persistDirtyAlts(pid);
 
         for (const slot of slotsRef.current) {
           if (slot.kind === "uploaded") continue;
@@ -634,44 +755,26 @@ export function useImageUploader({
           throw new Error(failed.error ?? "بارگذاری تصویر کامل نشد");
         }
 
-        const uploaded = current.filter(
-          (slot): slot is UploadedSlot => slot.kind === "uploaded",
-        );
-        if (uploaded.length > 1) {
-          await reorderProductImages(
-            pid,
-            uploaded.map((slot) => slot.image.id),
-          );
-        }
-        const primary =
-          uploaded.find((slot) => slot.image.is_primary) ?? uploaded[0];
-        if (primary) {
-          await setPrimaryImage(pid, primary.image.id);
-          replaceSlots((items) =>
-            items.map((item) =>
-              item.kind === "uploaded"
-                ? {
-                    ...item,
-                    image: {
-                      ...item.image,
-                      is_primary: item.localId === primary.localId,
-                    },
-                  }
-                : item,
-            ),
-          );
-        }
+        await persistGalleryState(pid);
       } finally {
         flushingRef.current = false;
         setIsFlushing(false);
       }
     },
-    [replaceSlots, uploadStaged, waitForPersistence],
+    [
+      owner.ownerId,
+      persistDirtyAlts,
+      persistGalleryState,
+      uploadStaged,
+      validate,
+      waitForPersistence,
+    ],
   );
 
   return {
     slots,
     isPending:
+      disabled ||
       isFlushing ||
       pendingCount > 0 ||
       slots.some(
@@ -690,6 +793,7 @@ export function useImageUploader({
     moveDown,
     retryUpload,
     flush,
+    validate,
     hasStaged: slots.some((slot) => slot.kind === "staged"),
   };
 }

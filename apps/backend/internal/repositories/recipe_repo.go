@@ -60,7 +60,7 @@ func NewRecipeRepository(db *pgxpool.Pool) RecipeRepository {
 const recipeColumns = `id, title, slug, excerpt, description, content, difficulty,
 	prep_time_minutes, cook_time_minutes, total_time_minutes, servings, calories,
 	cocktail_type, glass_type, serving_suggestion,
-	image_url, status, is_featured, published_at, view_count,
+	image_url, image_alt, status, is_featured, published_at, view_count,
 	meta_title, meta_description, meta_keywords, canonical_url, og_image_url,
 	user_id, created_at, updated_at`
 
@@ -71,7 +71,7 @@ func recipeScanDest(r *models.Recipe) []any {
 		&r.ID, &r.Title, &r.Slug, &r.Excerpt, &r.Description, &r.Content, &r.Difficulty,
 		&r.PrepTimeMinutes, &r.CookTimeMinutes, &r.TotalTimeMinutes, &r.Servings, &r.Calories,
 		&r.CocktailType, &r.GlassType, &r.ServingSuggestion,
-		&r.ImageURL, &r.Status, &r.IsFeatured, &r.PublishedAt, &r.ViewCount,
+		&r.ImageURL, &r.ImageAlt, &r.Status, &r.IsFeatured, &r.PublishedAt, &r.ViewCount,
 		&r.MetaTitle, &r.MetaDescription, &r.MetaKeywords, &r.CanonicalURL, &r.OGImageURL,
 		&r.UserID, &r.CreatedAt, &r.UpdatedAt,
 	}
@@ -221,15 +221,15 @@ func (r *recipeRepository) Create(ctx context.Context, req *models.RecipeReq) (*
 		(title, slug, excerpt, description, content, difficulty,
 		 prep_time_minutes, cook_time_minutes, servings, calories,
 		 cocktail_type, glass_type, serving_suggestion,
-		 image_url, status, is_featured, published_at,
+		 image_url, image_alt, status, is_featured, published_at,
 		 meta_title, meta_description, meta_keywords, canonical_url, og_image_url,
 		 user_id)
 		VALUES ($1,$2,$3,$4,$5,$6,
 		        $7,$8,$9,$10,
 		        $11,$12,$13,
-		        $14,$15,$16,$17,
-		        $18,$19,$20,$21,$22,
-		        $23)
+		        $14,$15,$16,$17,$18,
+		        $19,$20,$21,$22,$23,
+		        $24)
 		RETURNING ` + recipeColumns
 
 	rec := &models.Recipe{}
@@ -237,7 +237,7 @@ func (r *recipeRepository) Create(ctx context.Context, req *models.RecipeReq) (*
 		req.Title, req.Slug, req.Excerpt, req.Description, req.Content, req.Difficulty,
 		req.PrepTimeMinutes, req.CookTimeMinutes, req.Servings, req.Calories,
 		req.CocktailType, req.GlassType, req.ServingSuggestion,
-		req.ImageURL, req.Status, req.IsFeatured, req.PublishedAt,
+		req.ImageURL, req.ImageAlt, req.Status, req.IsFeatured, req.PublishedAt,
 		req.MetaTitle, req.MetaDescription, req.MetaKeywords, req.CanonicalURL, req.OGImageURL,
 		req.UserID,
 	), rec); err != nil {
@@ -294,11 +294,14 @@ func (r *recipeRepository) Update(ctx context.Context, id int64, req *models.Rec
 	if req.ServingSuggestion != nil {
 		add("serving_suggestion", *req.ServingSuggestion)
 	}
-	if req.ImageURL != nil {
+	if req.ImageURL.Set {
 		sets = append(sets,
 			"image_storage_key = CASE WHEN image_url IS DISTINCT FROM @image_url THEN NULL ELSE image_storage_key END",
 		)
-		add("image_url", *req.ImageURL)
+		add("image_url", req.ImageURL.Value)
+	}
+	if req.ImageAlt.Set {
+		add("image_alt", req.ImageAlt.Value)
 	}
 	if req.Status != nil {
 		add("status", string(*req.Status))
@@ -321,21 +324,33 @@ func (r *recipeRepository) Update(ctx context.Context, id int64, req *models.Rec
 	if req.CanonicalURL != nil {
 		add("canonical_url", *req.CanonicalURL)
 	}
-	if req.OGImageURL != nil {
+	if req.OGImageURL.Set {
 		sets = append(sets,
 			"og_image_storage_key = CASE WHEN og_image_url IS DISTINCT FROM @og_image_url THEN NULL ELSE og_image_storage_key END",
 		)
-		add("og_image_url", *req.OGImageURL)
+		add("og_image_url", req.OGImageURL.Value)
 	}
 
+	where := "id = @id"
+	if req.ExpectedImageURL.Set {
+		where += " AND image_url IS NOT DISTINCT FROM @expected_image_url"
+		args["expected_image_url"] = req.ExpectedImageURL.Value
+	}
+	if req.ExpectedOGImageURL.Set {
+		where += " AND og_image_url IS NOT DISTINCT FROM @expected_og_image_url"
+		args["expected_og_image_url"] = req.ExpectedOGImageURL.Value
+	}
 	query := fmt.Sprintf(
-		`UPDATE recipes SET %s WHERE id = @id RETURNING `+recipeColumns,
-		strings.Join(sets, ", "),
+		`UPDATE recipes SET %s WHERE %s RETURNING `+recipeColumns,
+		strings.Join(sets, ", "), where,
 	)
 
 	rec := &models.Recipe{}
 	if err := scanRecipe(r.db.QueryRow(ctx, query, args), rec); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if req.ExpectedImageURL.Set || req.ExpectedOGImageURL.Set {
+				return nil, models.ErrConflict
+			}
 			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("updating recipe: %w", err)

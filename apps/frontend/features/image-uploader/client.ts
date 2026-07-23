@@ -2,8 +2,8 @@
 
 import type { ApiFieldErrors } from "@/lib/api/types";
 import type {
+  ContentMediaTarget,
   UploadedImage,
-  OwnerMediaTarget,
   UploadImageErrorEnvelope,
   UploadImageOptions,
   UploadImageSuccessEnvelope,
@@ -28,7 +28,10 @@ type UploadImageEnvelope =
 
 function parseUploadEnvelope(responseText: string): UploadImageEnvelope | null {
   try {
-    return JSON.parse(responseText) as UploadImageEnvelope;
+    const parsed: unknown = JSON.parse(responseText);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as UploadImageEnvelope)
+      : null;
   } catch {
     return null;
   }
@@ -44,6 +47,7 @@ function upload(
     const form = new FormData();
     form.append("file", file);
     if (options.folder) form.append("folder", options.folder);
+    if (options.altText !== undefined) form.append("alt_text", options.altText);
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", path);
@@ -116,16 +120,16 @@ export function uploadImage(
 /** Uploads and atomically attaches a file to an existing content owner slot. */
 export function uploadOwnerImage(
   file: File,
-  target: OwnerMediaTarget & { ownerId: number },
+  target: ContentMediaTarget & { ownerId: number },
+  options: Omit<UploadImageOptions, "folder"> = {},
   onProgress?: UploadProgressCallback,
-  signal?: AbortSignal,
 ): Promise<UploadedImage> {
   const ownerType = encodeURIComponent(target.ownerType);
   const role = encodeURIComponent(target.role);
   return upload(
     file,
     `/api/admin/admin/uploads/${ownerType}/${target.ownerId}/${role}`,
-    { signal },
+    options,
     onProgress,
   );
 }

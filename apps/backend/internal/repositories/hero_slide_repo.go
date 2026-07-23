@@ -118,37 +118,46 @@ func (r *heroSlideRepository) Update(ctx context.Context, id int64, req *models.
 			      subtitle            = COALESCE($4, subtitle),
 			      badge               = COALESCE($5, badge),
 			      image_storage_key   = CASE
-			          WHEN $6::text IS NOT NULL AND $6::text IS DISTINCT FROM image_url THEN NULL
+			          WHEN $6::boolean AND $7::text IS DISTINCT FROM image_url THEN NULL
 			          ELSE image_storage_key
 			      END,
-			      image_url           = COALESCE($6::text, image_url),
+			      image_url           = CASE WHEN $6::boolean THEN $7::text ELSE image_url END,
 			      mobile_image_storage_key = CASE
-			          WHEN $7::text IS NOT NULL AND $7::text IS DISTINCT FROM mobile_image_url THEN NULL
+			          WHEN $8::boolean AND $9::text IS DISTINCT FROM mobile_image_url THEN NULL
 			          ELSE mobile_image_storage_key
 			      END,
-			      mobile_image_url    = COALESCE($7::text, mobile_image_url),
-			      image_alt           = COALESCE($8, image_alt),
-			      cta_label           = COALESCE($9, cta_label),
-			      cta_href            = COALESCE($10, cta_href),
-			      secondary_cta_label = COALESCE($11, secondary_cta_label),
-			      secondary_cta_href  = COALESCE($12, secondary_cta_href),
-			      theme               = COALESCE($13, theme),
-			      sort_order          = COALESCE($14, sort_order),
-			      is_active           = COALESCE($15, is_active),
-			      starts_at           = COALESCE($16, starts_at),
-			      ends_at             = COALESCE($17, ends_at),
+			      mobile_image_url    = CASE WHEN $8::boolean THEN $9::text ELSE mobile_image_url END,
+			      image_alt           = CASE WHEN $10::boolean THEN $11::text ELSE image_alt END,
+			      cta_label           = COALESCE($12, cta_label),
+			      cta_href            = COALESCE($13, cta_href),
+			      secondary_cta_label = COALESCE($14, secondary_cta_label),
+			      secondary_cta_href  = COALESCE($15, secondary_cta_href),
+			      theme               = COALESCE($16, theme),
+			      sort_order          = COALESCE($17, sort_order),
+			      is_active           = COALESCE($18, is_active),
+			      starts_at           = COALESCE($19, starts_at),
+			      ends_at             = COALESCE($20, ends_at),
 			      updated_at          = NOW()
 			  WHERE id = $1
+			    AND (NOT $21::boolean OR image_url IS NOT DISTINCT FROM $22::text)
+			    AND (NOT $23::boolean OR mobile_image_url IS NOT DISTINCT FROM $24::text)
 			  RETURNING ` + heroSlideColumns
 
 	s := &models.HeroSlide{}
 	if err := scanHeroSlide(r.db.QueryRow(ctx, query,
 		id, req.Eyebrow, req.Title, req.Subtitle, req.Badge,
-		req.ImageURL, req.MobileImageURL, req.ImageAlt,
+		req.ImageURL.Set, req.ImageURL.Value,
+		req.MobileImageURL.Set, req.MobileImageURL.Value,
+		req.ImageAlt.Set, req.ImageAlt.Value,
 		req.CTALabel, req.CTAHref, req.SecondaryCTALabel, req.SecondaryCTAHref,
 		req.Theme, req.SortOrder, req.IsActive, req.StartsAt, req.EndsAt,
+		req.ExpectedImageURL.Set, req.ExpectedImageURL.Value,
+		req.ExpectedMobileImageURL.Set, req.ExpectedMobileImageURL.Value,
 	), s); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if req.ExpectedImageURL.Set || req.ExpectedMobileImageURL.Set {
+				return nil, fmt.Errorf("hero slide media changed concurrently: %w", models.ErrConflict)
+			}
 			return nil, fmt.Errorf("hero slide not found: %d: %w", id, models.ErrNotFound)
 		}
 		return nil, fmt.Errorf("updating hero slide: %w", err)

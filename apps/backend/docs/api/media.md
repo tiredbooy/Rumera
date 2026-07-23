@@ -96,7 +96,7 @@ Content-Type: application/json
 }
 ```
 
-Absolute HTTP/HTTPS URLs and root-relative static paths are supported. Canonical
+Absolute HTTPS URLs and root-relative static paths are supported. Canonical
 `/media/...` values are rejected on this route because a local path without its
 storage key would not have durable ownership.
 
@@ -109,9 +109,9 @@ Content-Type: multipart/form-data
 ```
 
 The legacy route accepts required `file` and optional `folder` fields. Its
-folder allowlist is `hero`, `categories`, `recipes`, `journals`, and `uploads`;
-missing or unsupported values fall back to `uploads`. It returns `url`, `key`,
-`width`, and `height` in a `201 Created` envelope.
+folder allowlist is limited to `categories` and `uploads`; missing or unsupported
+values fall back to `uploads`. It returns `url`, `key`, `width`, and `height` in
+a `201 Created` envelope.
 
 This route stores a blob but does not attach it to an owner row. It remains for
 category compatibility; hero-slide, recipe, and journal forms use the
@@ -125,8 +125,9 @@ Authorization: Bearer <access_token>
 Content-Type: multipart/form-data
 ```
 
-The route accepts a required `file` part. `ownerID` is the positive database ID
-of an existing owner. Only these owner and role combinations are supported:
+The route accepts a required `file` part and optional `alt_text` metadata for
+cover/hero roles. `ownerID` is the positive database ID of an existing owner.
+Only these owner and role combinations are supported:
 
 | `ownerType`   | `role`    | Owner table   | URL column         | Storage-key column         |
 | ------------- | --------- | ------------- | ------------------ | -------------------------- |
@@ -141,8 +142,9 @@ blob under the owner's stable namespace and persists the URL/key pair on that
 owner. Its response uses the same `url`, `key`, `width`, and `height` fields as
 the legacy standalone upload.
 
-URL and key are written to the owner in one database statement. A missing or
-soft-deleted owner returns `404`; unsupported owner/role pairs return `400`.
+URL, key, and supplied alt text are written to the owner in one database
+statement. A missing or soft-deleted owner returns `404`; unsupported owner/role
+pairs return `400`.
 Replacing a slot does not delete its old blob in this task; Task 057c owns that
 lifecycle cleanup.
 

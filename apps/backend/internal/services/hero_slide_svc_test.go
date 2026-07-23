@@ -45,9 +45,9 @@ func TestHeroSlideUpdateRequiresMediaBeforeActivation(t *testing.T) {
 		t.Fatal("invalid activation reached repository update")
 	}
 
-	imageURL := "/media/hero-slides/7/desktop-550e8400-e29b-41d4-a716-446655440000.webp"
+	imageURL := "/images/hero/desktop.webp"
 	updated, err := service.Update(context.Background(), 7, &models.HeroSlideUpdateReq{
-		ImageURL: &imageURL,
+		ImageURL: models.NullablePatch[string]{Set: true, Value: &imageURL},
 		IsActive: &active,
 	})
 	if err != nil {
@@ -90,8 +90,8 @@ func (r *heroSlideRepositoryStub) Update(_ context.Context, id int64, req *model
 	r.updated = req
 	current := *r.current
 	current.ID = id
-	if req.ImageURL != nil {
-		current.ImageURL = req.ImageURL
+	if req.ImageURL.Set {
+		current.ImageURL = req.ImageURL.Value
 	}
 	if req.IsActive != nil {
 		current.IsActive = *req.IsActive

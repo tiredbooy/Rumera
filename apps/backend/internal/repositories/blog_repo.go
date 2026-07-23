@@ -148,7 +148,7 @@ func NewBlogRepository(db *pgxpool.Pool) BlogRepository {
 	return &blogRepository{db: db}
 }
 
-const blogColumns = `id, author_id, title, slug, content, excerpt, image_url, time_to_read,
+const blogColumns = `id, author_id, title, slug, content, excerpt, image_url, image_alt, time_to_read,
 					  total_reads, status, is_featured, meta_title, meta_description,
 					  published_at, created_at, updated_at`
 
@@ -157,7 +157,7 @@ const blogColumns = `id, author_id, title, slug, content, excerpt, image_url, ti
 func blogScanDest(b *models.Blog) []any {
 	return []any{
 		&b.ID, &b.AuthorID, &b.Title, &b.Slug, &b.Content,
-		&b.Excerpt, &b.ImageURL, &b.TimeToRead, &b.TotalReads,
+		&b.Excerpt, &b.ImageURL, &b.ImageAlt, &b.TimeToRead, &b.TotalReads,
 		&b.Status, &b.IsFeatured, &b.MetaTitle, &b.MetaDescription,
 		&b.PublishedAt, &b.CreatedAt, &b.UpdatedAt,
 	}
@@ -308,15 +308,15 @@ func (r *blogRepository) List(ctx context.Context, f models.BlogFilter) ([]*mode
 
 func (r *blogRepository) Create(ctx context.Context, req *models.BlogReq) (*models.Blog, error) {
 	query := `INSERT INTO blogs
-			  (author_id, title, slug, content, excerpt, image_url, time_to_read,
+			  (author_id, title, slug, content, excerpt, image_url, image_alt, time_to_read,
 			   status, is_featured, meta_title, meta_description, published_at)
-			  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 			  RETURNING ` + blogColumns
 
 	b := &models.Blog{}
 	if err := scanBlog(r.db.QueryRow(ctx, query,
 		req.AuthorID, req.Title, req.Slug, req.Content,
-		req.Excerpt, req.ImageURL, req.TimeToRead,
+		req.Excerpt, req.ImageURL, req.ImageAlt, req.TimeToRead,
 		req.Status, req.IsFeatured, req.MetaTitle,
 		req.MetaDescription, req.PublishedAt,
 	), b); err != nil {
@@ -326,40 +326,69 @@ func (r *blogRepository) Create(ctx context.Context, req *models.BlogReq) (*mode
 }
 
 func (r *blogRepository) Update(ctx context.Context, id int64, req *models.BlogUpdateReq) (*models.Blog, error) {
-	var status *string
-	if req.Status != nil {
-		s := string(*req.Status)
-		status = &s
+	sets := []string{"updated_at = NOW()"}
+	args := pgx.NamedArgs{"id": id}
+	add := func(column string, value any) {
+		sets = append(sets, fmt.Sprintf("%s = @%s", column, column))
+		args[column] = value
 	}
 
-	query := `UPDATE blogs
-			  SET title            = COALESCE($2, title),
-			      slug             = COALESCE($3, slug),
-			      content          = COALESCE($4, content),
-			      excerpt          = COALESCE($5, excerpt),
-			      image_storage_key = CASE
-			          WHEN $6::text IS NOT NULL AND $6::text IS DISTINCT FROM image_url THEN NULL
-			          ELSE image_storage_key
-			      END,
-			      image_url        = COALESCE($6::text, image_url),
-			      time_to_read     = COALESCE($7, time_to_read),
-			      status           = COALESCE($8, status),
-			      is_featured      = COALESCE($9, is_featured),
-			      meta_title       = COALESCE($10, meta_title),
-			      meta_description = COALESCE($11, meta_description),
-			      published_at     = COALESCE($12, published_at),
-			      updated_at       = NOW()
-			  WHERE id = $1 AND deleted_at IS NULL
-			  RETURNING ` + blogColumns
+	if req.Title != nil {
+		add("title", *req.Title)
+	}
+	if req.Slug != nil {
+		add("slug", *req.Slug)
+	}
+	if req.Content != nil {
+		add("content", *req.Content)
+	}
+	if req.Excerpt != nil {
+		add("excerpt", *req.Excerpt)
+	}
+	if req.ImageURL.Set {
+		sets = append(sets,
+			"image_storage_key = CASE WHEN image_url IS DISTINCT FROM @image_url THEN NULL ELSE image_storage_key END",
+		)
+		add("image_url", req.ImageURL.Value)
+	}
+	if req.ImageAlt.Set {
+		add("image_alt", req.ImageAlt.Value)
+	}
+	if req.TimeToRead != nil {
+		add("time_to_read", *req.TimeToRead)
+	}
+	if req.Status != nil {
+		add("status", string(*req.Status))
+	}
+	if req.IsFeatured != nil {
+		add("is_featured", *req.IsFeatured)
+	}
+	if req.MetaTitle != nil {
+		add("meta_title", *req.MetaTitle)
+	}
+	if req.MetaDescription != nil {
+		add("meta_description", *req.MetaDescription)
+	}
+	if req.PublishedAt != nil {
+		add("published_at", *req.PublishedAt)
+	}
+
+	where := "id = @id AND deleted_at IS NULL"
+	if req.ExpectedImageURL.Set {
+		where += " AND image_url IS NOT DISTINCT FROM @expected_image_url"
+		args["expected_image_url"] = req.ExpectedImageURL.Value
+	}
+	query := fmt.Sprintf(
+		`UPDATE blogs SET %s WHERE %s RETURNING `+blogColumns,
+		strings.Join(sets, ", "), where,
+	)
 
 	b := &models.Blog{}
-	if err := scanBlog(r.db.QueryRow(ctx, query,
-		id, req.Title, req.Slug, req.Content,
-		req.Excerpt, req.ImageURL, req.TimeToRead,
-		status, req.IsFeatured, req.MetaTitle,
-		req.MetaDescription, req.PublishedAt,
-	), b); err != nil {
+	if err := scanBlog(r.db.QueryRow(ctx, query, args), b); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if req.ExpectedImageURL.Set {
+				return nil, models.ErrConflict
+			}
 			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("updating blog: %w", err)

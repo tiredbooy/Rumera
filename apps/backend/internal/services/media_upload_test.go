@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/imaging"
@@ -203,12 +204,13 @@ func TestMediaOwnerUploadAttachesEverySupportedSlot(t *testing.T) {
 		ownerType string
 		role      string
 		wantKey   string
+		withAlt   bool
 	}{
-		{ownerType: "hero-slides", role: "desktop", wantKey: "hero-slides/17/desktop-" + testMediaObjectID + ".png"},
-		{ownerType: "hero-slides", role: "mobile", wantKey: "hero-slides/17/mobile-" + testMediaObjectID + ".png"},
-		{ownerType: "recipes", role: "cover", wantKey: "recipes/17/cover-" + testMediaObjectID + ".png"},
+		{ownerType: "hero-slides", role: "desktop", wantKey: "hero-slides/17/desktop-" + testMediaObjectID + ".png", withAlt: true},
+		{ownerType: "hero-slides", role: "mobile", wantKey: "hero-slides/17/mobile-" + testMediaObjectID + ".png", withAlt: true},
+		{ownerType: "recipes", role: "cover", wantKey: "recipes/17/cover-" + testMediaObjectID + ".png", withAlt: true},
 		{ownerType: "recipes", role: "og", wantKey: "recipes/17/og-" + testMediaObjectID + ".png"},
-		{ownerType: "journal", role: "cover", wantKey: "journal/17/cover-" + testMediaObjectID + ".png"},
+		{ownerType: "journal", role: "cover", wantKey: "journal/17/cover-" + testMediaObjectID + ".png", withAlt: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.ownerType+" "+tt.role, func(t *testing.T) {
@@ -226,8 +228,12 @@ func TestMediaOwnerUploadAttachesEverySupportedSlot(t *testing.T) {
 			)
 			service.newID = func() string { return testMediaObjectID }
 
+			alt := models.NullablePatch[string]{}
+			if tt.withAlt {
+				alt = models.NullablePatch[string]{Set: true, Value: stringPointer(" Owner image ")}
+			}
 			got, err := service.UploadOwnerImage(
-				context.Background(), tt.ownerType, 17, tt.role, testPNG(t),
+				context.Background(), tt.ownerType, 17, tt.role, testPNG(t), alt,
 			)
 			if err != nil {
 				t.Fatalf("UploadOwnerImage: %v", err)
@@ -237,6 +243,9 @@ func TestMediaOwnerUploadAttachesEverySupportedSlot(t *testing.T) {
 			}
 			if owner.attachedKey != tt.wantKey || owner.attachedURL != got.URL || owner.ownerID != 17 {
 				t.Fatalf("attachment = %+v; want owner 17 and key %q", owner, tt.wantKey)
+			}
+			if tt.withAlt && (!owner.alt.Set || owner.alt.Value == nil || *owner.alt.Value != "Owner image") {
+				t.Fatalf("attachment alt = %+v; want normalized owner image alt", owner.alt)
 			}
 			if exists, err := store.Exists(context.Background(), tt.wantKey); err != nil || !exists {
 				t.Fatalf("stored original exists = %v, %v; want true, nil", exists, err)
@@ -275,7 +284,7 @@ func TestMediaOwnerUploadRejectsInvalidOrMissingOwnerBeforeStorage(t *testing.T)
 			service.newID = func() string { return testMediaObjectID }
 
 			_, err := service.UploadOwnerImage(
-				context.Background(), tt.ownerType, tt.ownerID, tt.role, testPNG(t),
+				context.Background(), tt.ownerType, tt.ownerID, tt.role, testPNG(t), models.NullablePatch[string]{},
 			)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("UploadOwnerImage error = %v; want %v", err, tt.wantErr)
@@ -320,7 +329,7 @@ func TestMediaOwnerUploadCompensatesOnlyDefinitiveAttachmentFailures(t *testing.
 			service.newID = func() string { return testMediaObjectID }
 
 			_, err := service.UploadOwnerImage(
-				context.Background(), "recipes", 17, "cover", testPNG(t),
+				context.Background(), "recipes", 17, "cover", testPNG(t), models.NullablePatch[string]{},
 			)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("UploadOwnerImage error = %v; want %v", err, tt.wantErr)
@@ -361,12 +370,37 @@ func TestMediaAddsExternalProductImageWithoutStorageOwnership(t *testing.T) {
 	}
 }
 
+func TestMediaMapsProductDeletionRaceToNotFound(t *testing.T) {
+	images := &mediaImageRepositoryStub{createErr: &pgconn.PgError{
+		Code:           "23503",
+		ConstraintName: "product_images_product_id_fkey",
+	}}
+	service := NewMediaService(
+		newTestLocalStorage(t),
+		newTestLocalStorage(t),
+		images,
+		&productMediaRepositoryStub{slug: "deleted-product"},
+		&contentMediaRepositoryStub{},
+		imaging.New(),
+		MediaConfig{},
+		zap.NewNop(),
+	)
+
+	_, err := service.AddProductImageURL(
+		context.Background(), 23, "https://images.example/bottle.webp", nil, false,
+	)
+	if !errors.Is(err, apperr.ErrProductNotFound) {
+		t.Fatalf("deletion race error = %v; want product not found", err)
+	}
+}
+
 func TestMediaRejectsUnsafeExternalProductImageURLs(t *testing.T) {
 	invalid := []string{
 		"",
 		"relative/image.webp",
 		"//images.example/image.webp",
 		"ftp://images.example/image.webp",
+		"http://images.example/image.webp",
 		"https://user:pass@images.example/image.webp",
 		"https://images.example/image.webp#fragment",
 		"/media/products/unowned.webp",
@@ -442,6 +476,7 @@ type contentMediaRepositoryStub struct {
 	ownerID     int64
 	attachedURL string
 	attachedKey string
+	alt         models.NullablePatch[string]
 }
 
 func (r *contentMediaRepositoryStub) OwnerExists(_ context.Context, ownerType string, ownerID int64) (bool, error) {
@@ -458,12 +493,14 @@ func (r *contentMediaRepositoryStub) Attach(
 	ownerType, role string,
 	ownerID int64,
 	url, key string,
+	alt models.NullablePatch[string],
 ) error {
 	r.ownerType = ownerType
 	r.role = role
 	r.ownerID = ownerID
 	r.attachedURL = url
 	r.attachedKey = key
+	r.alt = alt
 	return r.attachErr
 }
 
@@ -491,6 +528,11 @@ func (r *mediaImageRepositoryStub) Create(_ context.Context, img *models.Product
 	}
 	created := *img
 	created.ID = 71
+	created.SortOrder = r.nextSortOrder
+	created.IsPrimary = img.IsPrimary || r.nextSortOrder == 0
+	if created.IsPrimary {
+		r.primaryImageID = created.ID
+	}
 	return &created, nil
 }
 
@@ -500,10 +542,6 @@ func (r *mediaImageRepositoryStub) GetByID(context.Context, int64) (*models.Prod
 
 func (r *mediaImageRepositoryStub) ListByProduct(context.Context, int64) ([]*models.ProductImage, error) {
 	return nil, nil
-}
-
-func (r *mediaImageRepositoryStub) NextSortOrder(context.Context, int64) (int, error) {
-	return r.nextSortOrder, nil
 }
 
 func (r *mediaImageRepositoryStub) UpdateAlt(context.Context, int64, *string) (*models.ProductImage, error) {
@@ -519,7 +557,7 @@ func (r *mediaImageRepositoryStub) Reorder(context.Context, int64, []int64) erro
 	return nil
 }
 
-func (r *mediaImageRepositoryStub) Delete(context.Context, int64) error {
+func (r *mediaImageRepositoryStub) Delete(context.Context, int64, int64) error {
 	return nil
 }
 

@@ -130,7 +130,7 @@ export async function RecipeListView({ searchParams }: RecipeListViewProps) {
                 <div className="absolute inset-0 transition-transform duration-[1200ms] ease-out group-hover/spot:scale-[1.05]">
                   <SmartImage
                     src={spotlight.image_url}
-                    alt={spotlight.title}
+                    alt={spotlight.image_alt?.trim() || spotlight.title}
                     sizes="(max-width: 1024px) 100vw, 50vw"
                     monogram={spotlight.title.charAt(0)}
                     fallbackClassName="from-primary/20 via-card to-secondary"
