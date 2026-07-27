@@ -4,6 +4,7 @@ import { Controller, type Control } from "react-hook-form";
 import { Loader2, RotateCw, Tag as TagIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { fieldErrorId } from "@/components/ui/field";
 import { useAllTags } from "@/features/admin/tags/api";
 import { cn } from "@/lib/utils";
 import type { ProductTag, Tag } from "@/features/catalog/tags/types";
@@ -13,16 +14,19 @@ export function TagSelector({
   control,
   initialTags = [],
   disabled = false,
+  error,
 }: {
   control: Control<ProductFormValues>;
   initialTags?: ProductTag[];
   disabled?: boolean;
+  error?: string;
 }) {
   const query = useAllTags();
   const tagsByID = new Map<number, Tag | ProductTag>();
   for (const tag of initialTags) tagsByID.set(tag.id, tag);
   for (const tag of query.data ?? []) tagsByID.set(tag.id, tag);
   const tags = [...tagsByID.values()];
+  const errorId = fieldErrorId("tag_ids");
 
   return (
     <fieldset className="flex min-w-0 flex-col gap-2 sm:col-span-2">
@@ -79,7 +83,7 @@ export function TagSelector({
             className="flex flex-wrap gap-2"
             aria-busy={query.isFetching || undefined}
           >
-            {tags.map((t) => {
+            {tags.map((t, index) => {
               const value = field.value ?? [];
               const active = value.includes(t.id);
               return (
@@ -87,6 +91,8 @@ export function TagSelector({
                   key={t.id}
                   type="button"
                   aria-pressed={active}
+                  aria-invalid={error && index === 0 ? true : undefined}
+                  aria-describedby={error && index === 0 ? errorId : undefined}
                   disabled={disabled}
                   onClick={() =>
                     field.onChange(
@@ -110,6 +116,11 @@ export function TagSelector({
           </div>
         )}
       />
+      {error ? (
+        <p id={errorId} role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
     </fieldset>
   );
 }

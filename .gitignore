@@ -44,4 +44,8 @@ yarn-error.log*
 next-env.d.ts
 graphify-out
 
+# Local backend media originals and disposable render cache
+/storage/
+/apps/backend/storage/
+
 apps/frontend/public/images

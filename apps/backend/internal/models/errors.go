@@ -9,6 +9,11 @@ var (
 	ErrInvalidState  = errors.New("record is in an invalid state")
 	ErrConflict      = errors.New("conflict")
 
+	// Hero slides
+	ErrHeroSchedule     = errors.New("hero slide schedule is invalid")
+	ErrHeroPrimaryCTA   = errors.New("hero slide primary CTA is invalid")
+	ErrHeroSecondaryCTA = errors.New("hero slide secondary CTA is invalid")
+
 	// Stock / funds
 	ErrInsufficientStock = errors.New("insufficient stock")
 	ErrInsufficientFunds = errors.New("insufficient funds")

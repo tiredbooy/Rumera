@@ -7,18 +7,25 @@ import { Input } from "@/components/ui/input";
 import { ImageDropzone } from "./ImageDropzone";
 import { ImageSlotList } from "./ImageSlotList";
 import { useImageUploader } from "./use-image-uploader";
-import type { ImageUploaderHandle } from "./types";
+import type { ProductImageUploaderHandle } from "./types";
 import type { ProductImageUploaderProps } from "./product-types";
 
 export const ImageUploader = React.forwardRef<
-  ImageUploaderHandle<void>,
+  ProductImageUploaderHandle,
   ProductImageUploaderProps
 >(function ImageUploader(
-  { owner, initialImages = [], maxImages, disabled = false },
+  {
+    owner,
+    initialImages = [],
+    maxImages,
+    deferred = false,
+    disabled = false,
+    onDirtyChange,
+  },
   ref,
 ) {
   const productId = owner.ownerId;
-  const live = typeof productId === "number" && productId > 0;
+  const live = !deferred && typeof productId === "number" && productId > 0;
   const {
     slots,
     isPending,
@@ -35,16 +42,45 @@ export const ImageUploader = React.forwardRef<
     moveDown,
     retryUpload,
     flush,
+    prepare,
+    preservePrepared,
+    discardPrepared,
+    commit,
     hasStaged,
     validate,
-  } = useImageUploader({ owner, initialImages, maxImages, disabled });
+  } = useImageUploader({
+    owner,
+    initialImages,
+    maxImages,
+    deferred,
+    disabled,
+    onDirtyChange,
+  });
   const [imageURL, setImageURL] = React.useState("");
   const unavailable = disabled || isPending;
 
   React.useImperativeHandle(
     ref,
-    () => ({ hasStaged, isBusy: isPending, validate, flush }),
-    [flush, hasStaged, isPending, validate],
+    () => ({
+      hasStaged,
+      isBusy: isPending,
+      validate,
+      flush,
+      prepare,
+      preservePrepared,
+      discardPrepared,
+      commit,
+    }),
+    [
+      commit,
+      discardPrepared,
+      flush,
+      hasStaged,
+      isPending,
+      prepare,
+      preservePrepared,
+      validate,
+    ],
   );
 
   return (

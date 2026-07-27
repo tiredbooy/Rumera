@@ -238,14 +238,14 @@ future adapter remains possible without changing feature code.
   - Reuse one uploader contract across products, hero slides, recipes, and journal
     content with URL-or-local-file input, previews, progress, alt text, ordering,
     primary/responsive roles, validation, and explicit ownership attachment.
-- [ ] **Task 057c - Make media lifecycle and cache behavior durable**
+- [x] **Task 057c - Make media lifecycle and cache behavior durable**
   - Delete replaced/removed blobs and rendered derivatives, clean product-cascade
     files, release cancelled standalone uploads, and provide a safe orphan
     reconciliation job with an auditable dry run.
   - Invalidate affected product/category/home/hero caches after writes and ensure
     local development, Docker persistence, backup/restore, and multi-process
     serving behavior are documented and verified.
-- [ ] **Task 057d - Harden and test local image processing**
+- [x] **Task 057d - Harden and test local image processing**
   - Correct multipart size overhead, enforce decoded pixel/dimension limits,
     validate real file signatures, keep transform limits/cache keys deterministic,
     and add upload/serve/replace/delete/rollback/path-safety integration tests.
@@ -259,26 +259,26 @@ experience must support reusable option types and values (for example size,
 color, material, volume, and pack) and concrete combinations such as `750 ml /`
 `red` without hard-coding any one merchandise category.
 
-- [ ] **Task 058a - Repair product admin read/update correctness**
+- [x] **Task 058a - Repair product admin read/update correctness**
   - Add an admin-safe detail read for inactive products, exclude the current row
     from slug/code uniqueness checks, persist submitted tags, and add focused
     backend tests for create/edit/draft behavior.
-- [ ] **Task 058b - Correct and expose the product-option data model**
+- [x] **Task 058b - Correct and expose the product-option data model**
   - Replace the independently unique variant-option columns with the correct
     composite/invariant constraints, add option-type/value CRUD and replacement
     APIs, and define deletion rules for options already used by variants.
-- [ ] **Task 058c - Hydrate and edit variant attributes**
+- [x] **Task 058c - Hydrate and edit variant attributes**
   - Return variant option values and variant-specific images in admin/product
     detail projections, then add reusable size/color/material/custom option
     selectors to each variant row with duplicate-combination and SKU validation.
   - Keep stock quantities and movement history in inventory while linking each
     generated option combination to its concrete variant ID/SKU.
-- [ ] **Task 058d - Make aggregate product persistence atomic and recoverable**
+- [x] **Task 058d - Make aggregate product persistence atomic and recoverable**
   - Save product fields, tags, variant creates/updates/deletes, option assignments,
     and image ownership through one transactional or explicitly resumable backend
     workflow. Support intentional clearing of nullable fields and report precise
     partial/validation failures rather than leaving half-created products.
-- [ ] **Task 058e - Polish and verify the complete product form**
+- [x] **Task 058e - Polish and verify the complete product form**
   - Improve progressive disclosure, variant tables, bulk option generation,
     responsive editing, validation/focus behavior, unsaved-change protection, and
     create/edit tests while retaining the established admin visual language.
@@ -288,17 +288,17 @@ color, material, volume, and pack) and concrete combinations such as `750 ml /`
 
 ### Task Group 059 - Modular Hero Builder And Storefront Rendering
 
-- [ ] **Task 059a - Build the modular hero-slide editor**
+- [x] **Task 059a - Build the modular hero-slide editor**
   - Use the section composition from Task 047e and shared uploader from Task 057b
     for desktop/mobile media or external URLs, content, CTA pairs, theme,
     scheduling, publication, order, and an accurate responsive preview.
   - Keep the model extension-ready but do not invent an unbounded page-builder
     schema that the backend and storefront cannot render.
-- [ ] **Task 059b - Complete hero persistence and publication semantics**
+- [x] **Task 059b - Complete hero persistence and publication semantics**
   - Support intentional field clearing, validate CTA label/href pairs and safe URL
     protocols, validate schedule ranges, add atomic reorder, and invalidate public
     hero caches after every successful mutation.
-- [ ] **Task 059c - Render every supported hero field truthfully**
+- [x] **Task 059c - Render every supported hero field truthfully**
   - Use mobile imagery at the appropriate breakpoint, apply light/dark theme to
     text/overlays/controls, honor schedule/publication windows, keep one semantic
     page heading, and verify focus, autoplay, reduced motion, and touch behavior.

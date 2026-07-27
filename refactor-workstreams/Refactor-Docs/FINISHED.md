@@ -3172,3 +3172,561 @@ in `TASKS.md`, `IN_PROGRESS.md`, and this file.
 - Task 061d retains frontend/backend origin resolution for canonical `/media/...`
   paths.
 - Task 057c is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 057c - Make Media Lifecycle And Cache Behavior Durable
+
+**Completed:** 2026-07-25
+
+### Summary
+
+- Added reference-aware cleanup for replaced, removed, and cascade-deleted local
+  originals plus every source-addressable rendered derivative.
+- Made owner-slot replacement return the detached key atomically and retained
+  shared or legacy URL-backed files while another live row references them.
+- Added explicit cancelled standalone-upload release and age-gated orphan
+  reconciliation with dry-run JSON reports, a PostgreSQL singleton lock,
+  per-candidate reference rechecks, fixed reviewed cutoffs, and missing-file
+  reporting.
+- Moved rendered variants to deterministic `render-v2/<source-hash>/...`
+  namespaces, verified originals before cache hits, and removed the independent
+  nginx media cache and obsolete render namespace.
+- Coordinated backend product/recipe cache invalidation with Next.js
+  hero/category tags and affected storefront path invalidation after admin media
+  writes.
+- Documented local and Docker persistence, destructive volume commands,
+  reconciliation operations, synchronized database/media backup and restore, and
+  the supported single-node/shared-POSIX process topology.
+
+### Files Touched
+
+- Local storage contracts and tests under `apps/backend/pkg/storage`.
+- Media lifecycle repository/service, reconciliation command, media/content
+  repositories, domain services, handlers, routes, bootstrap, and tests under
+  `apps/backend`.
+- Shared uploader release behavior, admin BFF revalidation planning, cache tags,
+  category/hero fetch tags, and focused tests under `apps/frontend`.
+- Backend media/operations documentation, root Docker documentation, Make targets,
+  backend image construction, ignore rules, and production nginx configuration.
+
+### Verification
+
+- Full backend `go test -count=1 ./...`, `go vet ./...`, and `go build ./...`
+  passed.
+- The complete database-backed integration suite passed against a fresh
+  disposable Timescale/PostgreSQL 17 container, including migrations and the
+  owner-slot replacement contract.
+- Focused frontend media/cache tests passed with 18 assertions; the final
+  uploader regression rerun passed all 12 assertions.
+- Full TypeScript and scoped ESLint passed; all touched frontend files passed
+  Prettier.
+- Development Compose validation passed with `.env.dev`; production Compose
+  validation passed with `.env.prod.example` plus non-secret validation values.
+- `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Task 057d retains multipart overhead, decoded dimensions/pixel budgets, real
+  signature validation, deterministic transform limits, and deeper end-to-end
+  image-processing integration coverage.
+- Task 061d retains frontend/backend origin resolution for canonical
+  `/media/...` paths.
+- Task 057d is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 057d - Harden And Test Local Image Processing
+
+**Completed:** 2026-07-25
+
+### Summary
+
+- Preserved the configured compressed-file limit while giving multipart framing
+  a separate bounded allowance and returning `413` for either limit violation.
+- Required real JPEG, PNG, WebP, or AVIF container signatures, decoder agreement,
+  positive dimensions, a 12,000-pixel axis ceiling, and a 40-million-pixel source
+  budget before storing or transforming an image.
+- Bounded reads of authoritative originals, normalized transform options before
+  deriving cache keys, and kept fallback output bytes, content types, extensions,
+  and cache namespaces consistent.
+- Made libvips encoding capability runtime-aware and added Alpine's split
+  HEIF/AOM packages so the production image can actually emit AVIF while still
+  falling back safely when a codec is unavailable.
+- Added end-to-end coverage for upload, serve, replacement, deletion, rollback,
+  signature spoofing, derivative cleanup, and unsafe storage paths.
+
+### Files Touched
+
+- Media configuration, bootstrap wiring, handlers, services, and hardening tests
+  under `apps/backend`.
+- Signature detection and backend-independent output tests under
+  `apps/backend/pkg/imaging`.
+- Database-backed media pipeline coverage under
+  `apps/backend/tests/integration/media_pipeline_test.go`.
+- Backend Docker image codec dependencies, Compose environment wiring, example
+  environment files, and media/operations documentation.
+
+### Verification
+
+- Full backend `go test -count=1 ./...`, `go test -race -count=1 ./...`,
+  `go vet ./...`, and `go build ./...` passed.
+- The complete tagged integration suite passed against disposable PostgreSQL 17,
+  including the new media pipeline scenarios.
+- Libvips-tagged imaging/service tests passed in the production builder, and a
+  test binary executed in the final runtime image emitted self-consistent JPEG,
+  PNG, WebP, and AVIF output.
+- The final production Docker image built successfully and its reconciliation
+  binary started under the non-root runtime image.
+- Development and production Compose validation and `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Task 061d still owns frontend/backend origin resolution for canonical
+  `/media/...` paths.
+- Task 058a is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 058a - Repair Product Admin Read/Update Correctness
+
+**Completed:** 2026-07-25
+
+### Summary
+
+- Added an authenticated admin product-detail route and dedicated repository and
+  service lookup that hydrate inactive drafts without placing them in the public
+  product cache.
+- Kept public product and subresource reads active-only while making repository
+  row-existence checks usable by legitimate admin operations on drafts.
+- Changed slug/code existence checks to exclude the edited product ID, allowing
+  unchanged identities to be resubmitted while preserving conflicts with other
+  products.
+- Persisted submitted `tag_ids` during product creation and update, collapsed
+  duplicate IDs, preserved omitted tag sets, and supported intentional clearing
+  with an empty array.
+- Pointed the admin editor at the new admin detail route and removed its redundant
+  second tag-sync request so one product payload is authoritative.
+
+### Files Touched
+
+- Product repository, service, handler, routes, unit tests, integration coverage,
+  and API documentation under `apps/backend`.
+- Admin product API, form orchestration, and focused tag-form tests under
+  `apps/frontend/features/admin/products`.
+
+### Verification
+
+- Full backend `go test -count=1 ./...`, `go vet ./...`, and `go build ./...`
+  passed; focused service/handler/route race tests also passed.
+- The complete tagged PostgreSQL integration suite passed, including create/edit
+  tag persistence, unchanged slug/code updates, draft PATCH/GET hydration, tag
+  clearing, duplicate collapse, and public draft-subresource rejection.
+- Full frontend TypeScript validation passed; all eight scoped admin-product tests
+  passed, and scoped ESLint and Prettier checks passed.
+- `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Product scalar fields and tag replacement still use separate update operations;
+  Task 058d owns aggregate transactional or explicitly resumable persistence and
+  precise partial-failure reporting.
+- Task 058b is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 058b - Correct And Expose The Product-Option Data Model
+
+**Completed:** 2026-07-26
+
+### Summary
+
+- Replaced the legacy independently unique variant/value junction constraints
+  with reusable option values, multi-dimension variant combinations, one value
+  per option type, and composite foreign-key protection against mismatched type
+  metadata.
+- Made option type titles case-insensitively unique, option values unique only
+  within their type, normalized legacy labels/order values, added update
+  timestamps, and retained a guarded down migration that refuses lossy rollback
+  after reusable combinations exist.
+- Added admin CRUD for reusable option types and values with trimmed inputs,
+  deterministic ordering, truthful not-found/conflict mapping, non-null empty
+  lists, and restrictive deletion for non-empty types or values attached to any
+  variant.
+- Added transactional additive attachment and complete replacement APIs for
+  variant option combinations. Replacement supports intentional clearing,
+  collapses duplicate IDs, validates every referenced value, serializes writes
+  per variant, and rolls the old combination back on conflict.
+- Reused the same invariant-preserving option insertion path for standalone and
+  inline product variant creation, wired the repository/service/handler graph,
+  registered the authenticated routes, invalidated affected product caches, and
+  documented the complete contract.
+- Added defensive request handling so an omitted replacement field cannot be
+  dereferenced even when a handler is constructed without the production
+  validator.
+
+### Files Touched
+
+- Migration `20260725180000_correct_product_option_model.sql` and product-option
+  database models under `apps/backend`.
+- Option and variant repositories/services/handlers, inline product variant
+  persistence, bootstrap wiring, route registration, and route smoke coverage.
+- Focused option-service tests and database-backed CRUD, migration, replacement,
+  rollback, reuse, deletion, and invariant coverage.
+- Backend product/variant API reference documentation.
+
+### Verification
+
+- Full backend `go test -count=1 ./...`, `go test -race -count=1 ./...`,
+  `go vet ./...`, and `go build ./...` passed.
+- The complete PostgreSQL 17 integration suite passed both normally and under the
+  race detector, including legacy down/up migration preservation, reusable option
+  values, multi-type combinations, duplicate-type rejection, atomic replacement,
+  read-after-clear empty arrays, and restrictive deletion.
+- Full frontend TypeScript validation passed. Full frontend lint passed with zero
+  errors and the same 10 unrelated existing warnings.
+- Go formatting and `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Task 058c owns hydrating options and variant-specific images into product detail
+  projections plus the reusable admin selectors, per-product duplicate-combination
+  checks, and SKU validation.
+- Task 058d retains aggregate product/variant/option/image transactional or
+  resumable persistence and precise partial-failure reporting.
+- Task 058c is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 058c - Hydrate And Edit Variant Attributes
+
+**Completed:** 2026-07-26
+
+### Summary
+
+- Hydrated every product-detail variant with reusable option metadata,
+  variant-specific images, and inventory-derived availability while keeping the
+  product gallery and stock mutation ownership separate.
+- Added independent product/variant image ordering and primary-image invariants,
+  repaired historical variant-image ownership, enforced matching product and
+  variant parents, and kept product-list thumbnails product-gallery-only.
+- Normalized optional SKUs, enforced trimmed case-insensitive catalogue identity,
+  mapped database races to conflicts, supported explicit SKU clearing, and
+  serialized duplicate non-empty option-combination checks per product.
+- Added data-driven option selectors to each responsive admin variant row,
+  hydrated existing selections and image counts, blocked duplicate SKUs and
+  order-independent combinations, supported valid option/SKU exchanges, and
+  retained newly created variant IDs across saves.
+- Kept the editor free of stock controls and documented explicit hydrated arrays,
+  option metadata, variant galleries, SKU clearing, and conflict behavior.
+
+### Files Touched
+
+- SKU and variant-image migrations, product/variant/image repositories, product
+  and variant services, response models/mappers, handlers, and integration tests
+  under `apps/backend`.
+- Product and variant API reference documentation under `apps/backend/docs/api`.
+- Admin product API/types/validation/save orchestration, reusable option selector,
+  responsive variant row, and focused tests under
+  `apps/frontend/features/admin/products`.
+- Project-local 21st design context under `apps/frontend/.21st`.
+
+### Verification
+
+- Full backend `go test -count=1 ./...`, `go test -race -count=1 ./...`,
+  `go vet ./...`, and `go build ./...` passed.
+- The complete PostgreSQL integration suite passed normally and under the race
+  detector, including migrations, concurrent combination creation, SKU conflicts,
+  independent primary images, ownership constraints, and hydrated projections.
+- Full frontend TypeScript validation, all 264 Vitest assertions, and the
+  production Next.js build passed. The build used a live local backend plus
+  disposable Redis/Timescale dependencies for prerender data.
+- Full frontend lint passed with zero errors and the same 10 unrelated existing
+  warnings. Deterministic `21st review` reported zero findings for the form,
+  variant row, and option selectors.
+- Prettier, Go formatting, and `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Variant reconciliation still spans multiple HTTP writes; Task 058d now owns one
+  transactional or explicitly resumable aggregate workflow and precise
+  partial-failure reporting.
+- Task 058e retains broader progressive disclosure, bulk generation,
+  unsaved-change protection, focus behavior, and final product-form polish.
+- Task 058d is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 058d - Make Aggregate Product Persistence Atomic And Recoverable
+
+**Completed:** 2026-07-26
+
+### Summary
+
+- Added canonical admin aggregate create/update endpoints that persist product
+  scalars, tags, variants, option assignments, and product-gallery ownership in
+  one PostgreSQL transaction. Nullable scalar values clear intentionally, arrays
+  are authoritative, and retained variant IDs preserve their inventory.
+- Added optimistic `expected_updated_at` checks plus structured field errors for
+  stale revisions, invalid relationships, duplicate SKUs/combinations, image
+  ownership, and operation conflicts. Cyclic SKU and option exchanges are valid
+  because temporary uniqueness is released inside the transaction.
+- Added UUID operation records with normalized request hashes. Exact retries
+  replay committed creates/updates, concurrent retries serialize safely, failed
+  transactions leave no operation claim, and replay lookup happens before staged
+  media resolution so a lost response remains recoverable after later cleanup.
+- Made local gallery preparation retry-safe: files upload once into `uploads/`,
+  transient failures retry on the next save, prepared results survive request
+  retries, deferred removals preserve the primary-image invariant, and late
+  uploads are released after unmount.
+- Serialized ownerless-media release and aggregate attachment with sorted
+  per-storage-key PostgreSQL advisory locks. A release now either wins before
+  validation or observes the committed reference; it cannot delete a blob under
+  a committed image row. Lock holders are bounded to preserve pool capacity, and
+  detached media still uses reconciliation as its durable cleanup fallback.
+- Persisted an immutable aggregate request envelope in browser session storage
+  when the response is ambiguous. The form preserves its prepared blobs, locks
+  edits, and retries that exact operation across reloads, but releases normal
+  abandoned uploads and discards definitively rejected 4xx envelopes so
+  validation errors can be corrected.
+- Made every granular tag, variant, option-assignment, and product-image mutation
+  advance the parent product graph revision under compatible lock ordering. An
+  aggregate editor loaded before one of those writes now receives a stale-revision
+  conflict instead of silently replacing the newer child state.
+- Prevented variant deletion from cascading inventory or movement history by
+  changing those foreign keys to restrictive deletion. Unused variants remain
+  deletable, while standalone and aggregate deletion report conflicts for
+  stocked/audited variants.
+- Replaced ProductForm's multi-request save choreography with one aggregate call,
+  reconciled the uploader and form from the committed hydrated response, updated
+  all product-write BFF revalidation, and documented the canonical contract.
+
+### Files Touched
+
+- Aggregate operation/inventory-history migrations, aggregate request/result
+  models, repository transaction, service validation/replay/media coordination,
+  handlers, routes, structured application errors, cleanup retention, and
+  database-backed tests under `apps/backend`.
+- Media lifecycle key locking and prepared-image resolution under
+  `apps/backend/internal/repositories` and `apps/backend/internal/services`.
+- Product aggregate API/type contracts, ProductForm save/recovery orchestration,
+  deferred image uploader behavior, admin revalidation, and focused Vitest
+  coverage under `apps/frontend`.
+- Product, variant, media, and API-index documentation under
+  `apps/backend/docs/api`.
+
+### Verification
+
+- Full backend `go test -count=1 ./...`, `go test -race -count=1 ./...`,
+  `go vet ./...`, and `go build ./...` passed.
+- The complete PostgreSQL integration suite passed under the race detector,
+  including atomic rollback, failed-operation reuse, exact replay/collision,
+  nullable clearing, stale revisions, cyclic SKU/option exchange, retained
+  inventory and variant media, restrictive variant deletion, gallery replacement,
+  prepared-media cleanup/replay, bounded media-lock pool capacity, granular-write
+  revision invalidation, and HTTP field-error envelopes.
+- Full frontend TypeScript validation and all 272 Vitest assertions passed.
+- The production Next.js build passed against a live local backend and disposable
+  Timescale dependency used for prerender data.
+- Full frontend lint passed with zero errors and the same 10 unrelated existing
+  warnings. Deterministic `21st review` reported zero findings for ProductForm.
+- Prettier, Go formatting, and `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Granular product/tag/variant/image write routes remain available for specialized
+  administrative operations and now invalidate stale aggregate revisions; the
+  product editor itself exclusively uses the aggregate contract.
+- Task 058e retains progressive disclosure, bulk option generation, broader
+  validation/focus behavior, unsaved-change protection, responsive polish, and
+  complete create/edit interaction coverage.
+- Task 058e is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 058e - Polish And Verify The Complete Product Form
+
+**Completed:** 2026-07-27
+
+### Summary
+
+- Finished the product editor's progressive disclosure and responsive authoring
+  surfaces with live tag/gallery summaries, current primary-image preview,
+  one visible action set per breakpoint, explicit draft/publish language, and a
+  safe draft default for new products.
+- Matched frontend price validation to the aggregate backend: all numeric values
+  must be finite and a compare-at price must exceed the sale price. Variant rows
+  remain expanded while their corrected controls hold focus.
+- Routed aggregate image and variant-identity failures to their owning sections,
+  translated known backend errors into actionable Persian messages, and delayed
+  error focus until the save transition unlocks the controls.
+- Added rejected prepared-upload recovery. A missing/invalid staged key is
+  released and invalidated so the next save uploads the local file again instead
+  of retrying a permanently bad key.
+- Extended unsaved-change protection across in-app links, explicit cancellation,
+  unloads, browser history traversal, ambiguous retries, and active saves. An
+  in-flight aggregate save cannot be abandoned through the confirmation dialog.
+- Added real-section create/edit journey coverage for complete merchandising
+  fields, tags, external media, generated option combinations, draft state,
+  intentional nullable clearing, aggregate child removal, and committed resets.
+
+### Files Touched
+
+- Product form orchestration, validation, progressive sections, variant rows,
+  responsive action bars, preview, and navigation dialog under
+  `apps/frontend/features/admin/products`.
+- Deferred product-gallery contracts, state reporting, prepared-upload recovery,
+  and focused tests under `apps/frontend/features/image-uploader`.
+- Product-form validation, behavior, recovery, responsive-action, uploader, and
+  integrated create/edit tests.
+
+### Verification
+
+- Full frontend TypeScript validation passed.
+- Full frontend lint passed with zero errors and the same 10 unrelated existing
+  warnings.
+- All 292 Vitest assertions passed when the pre-existing phone OTP timer test and
+  the remaining 77 files were run in isolated clean slices. The one-shot parallel
+  command also passed every assertion but still reports the unrelated
+  `input-otp` post-environment timer from `phone-login-form.test.tsx` as an
+  unhandled teardown error.
+- The production Next.js build passed against the live local API on port 18080.
+- Browser verification at 320, 375, 768, 1024, and 1440 pixels confirmed no
+  horizontal overflow, exactly one visible save action, and keyboard-focusable
+  section controls.
+- Full backend unit, race, vet, and build gates passed. The complete disposable
+  PostgreSQL integration suite also passed under the race detector.
+- Scoped Prettier and repository `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- The full-suite OTP teardown timer is outside the product domain; its isolated
+  test passes, and no Task 058e assertion or runtime path depends on it.
+- Task 059a is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 059a - Build The Modular Hero-Slide Editor
+
+**Completed:** 2026-07-27
+
+### Summary
+
+- Added optional local scheduling controls with ISO serialization, targeted
+  server-error mapping, invalid local-time rejection, and unchanged edit-field
+  omission so ambiguous DST instants retain their original offsets.
+- Kept the existing bounded content, CTA, theme, publication, order, and
+  owner-aware desktop/mobile media contract. The mobile uploader and live preview
+  now share the intended 4:5 crop.
+- Rebuilt the live preview around the installed toggle-group primitive with
+  desktop/mobile modes, mobile-to-desktop media fallback, light/dark legibility
+  treatments, complete-pair CTA visibility, and live publication status.
+- Derived inactive, scheduled, active, and expired admin states from the real
+  publication window and refreshed them on a bounded clock.
+- Switched edit loading from the full collection to the existing admin detail
+  endpoint, suppressed retries for deterministic 404s, and retained explicit
+  loading, announced not-found, and retryable failure states.
+- Removed the 320-pixel min-content overflow while preserving the established
+  section composition and admin visual language.
+
+### Files Touched
+
+- Hero form orchestration, appearance/scheduling fields, responsive media,
+  preview, section layout, edit loader, and list status under
+  `apps/frontend/features/admin/hero-slides`.
+- Hero form validation/conversion and the admin detail client under
+  `apps/frontend/features/hero-slides`.
+- Focused schedule, media, preview, publication-status, detail-client, and
+  edit-loader tests.
+
+### Verification
+
+- Full frontend TypeScript validation and the production Next.js build passed
+  against the live local API on port 18080.
+- Full frontend lint passed with zero errors and the same 10 existing repository
+  warnings.
+- All 300 frontend Vitest assertions passed across 82 files in the known-safe
+  split; the schedule/media slice also passed under `TZ=America/New_York`.
+- Authenticated browser verification at 320, 375, 768, 1024, and 1440 pixels
+  confirmed no horizontal overflow and preserved mobile media, light theme, and
+  scheduled-state preview behavior.
+- `21st search` found no better project fit than the installed primitives.
+  `21st review` returned only two informational notices for intentional
+  photographic black/white text shadows and applied no fixes.
+- Scoped Prettier and repository `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Task 059b retains intentional nullable clearing, CTA pair/protocol validation,
+  schedule-range validation, atomic reorder, and mutation cache invalidation.
+- Task 059c retains storefront mobile imagery, theme rendering, publication
+  behavior, semantic headings, and carousel interaction verification.
+- Task 059b is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 059b - Complete Hero Persistence And Publication Semantics
+
+**Completed:** 2026-07-27
+
+### Summary
+
+- Added omission-aware nullable PATCH values so ordinary copy, CTA, media, alt,
+  and schedule fields can be cleared intentionally without changing omitted data.
+- Validated complete CTA pairs, single-slash local paths, credential-free HTTPS
+  URLs, active desktop media, theme values, and timestamp ranges against the
+  merged persisted state at PostgreSQL microsecond precision.
+- Added strict database guards for schedule ordering, complete CTA pairs, and safe
+  URL protocols. Constraint races now return field-level validation errors instead
+  of surfacing as internal errors.
+- Replaced per-row order writes with one complete-permutation endpoint and a
+  locked transaction that assigns contiguous zero-based positions atomically.
+- Prevented an unchanged edit form from restoring stale order after a concurrent
+  reorder, and revalidated the home route after every successful hero mutation or
+  attached hero upload. Public hero reads intentionally remain uncached so
+  schedule boundaries take effect on the next request.
+
+### Files Touched
+
+- Hero request models, validation, service, repository, handler, routing, API
+  documentation, migration, and focused unit/integration coverage under
+  `apps/backend`.
+- Hero admin API types/client, form payload semantics, board reorder behavior,
+  BFF revalidation planning, validation, and tests under `apps/frontend`.
+
+### Verification
+
+- Full backend unit tests, `go vet ./...`, and `go build ./...` passed.
+- The complete tagged integration suite passed against disposable PostgreSQL 17,
+  including migration guards, explicit null persistence, stale media protection,
+  and atomic complete-permutation reorder.
+- Full frontend lint passed with zero errors and the same 10 existing warnings;
+  TypeScript validation passed.
+- Repository `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Public hero data uses `no-store`; successful writes still invalidate `/` so the
+  route remains correct if its surrounding cache policy changes later.
+- Task 059c storefront rendering was completed in the same verification cycle.
+
+## Task 059c - Render Every Supported Hero Field Truthfully
+
+**Completed:** 2026-07-27
+
+### Summary
+
+- Added Next.js `getImageProps` art direction for mobile imagery below 640 pixels,
+  with source-aware fallback from a failed mobile image to desktop media before
+  the branded placeholder appears.
+- Applied each slide's light/dark theme to text, overlays, dots, arrows, and the
+  autoplay control while preserving readable photographic contrast.
+- Kept one page-level heading and rendered slide titles as second-level headings;
+  inactive slides are inert and hidden from the accessibility tree.
+- Added an accessible persistent autoplay pause/resume control. Autoplay also
+  stops for reduced motion, hover, focus, and the full pointer/touch lifetime,
+  while vertical touch panning remains available.
+- Preserved intentionally empty public hero results instead of replacing them with
+  defaults; editorial fallback slides now appear only when the API fails.
+
+### Files Touched
+
+- Storefront hero loading, carousel composition, responsive image rendering, page
+  heading semantics, and focused tests under `apps/frontend/features/home` and
+  `apps/frontend/features/hero-slides`.
+
+### Verification
+
+- All 307 frontend assertions passed across 83 files in the known-safe split,
+  including no-store/failure fallback, art direction, image fallback, semantics,
+  theme controls, persistent autoplay pause, pointer lifetime, and reduced motion.
+- The production Next.js 16 build passed against the live local API on port 18080.
+- Full frontend lint and TypeScript validation passed as recorded for Task 059b.
+
+### Notes / Follow-Ups
+
+- The build retains the existing Next.js middleware-deprecation notice and lint
+  retains 10 unrelated repository warnings.
+- Task 060a is the next unblocked task and is now claimed in `IN_PROGRESS.md`.

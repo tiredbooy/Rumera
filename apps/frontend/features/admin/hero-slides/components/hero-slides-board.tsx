@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import * as React from "react";
+import Link from "next/link";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Pencil,
   Trash2,
@@ -14,14 +14,14 @@ import {
   ExternalLink,
   Plus,
   Loader2,
-} from "lucide-react"
-import { toast } from "sonner"
+} from "lucide-react";
+import { toast } from "sonner";
 
-import { cn } from "@/lib/utils"
-import { faNum } from "@/lib/products"
-import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
-import { SmartImage } from "@/components/smart-image"
+import { cn } from "@/lib/utils";
+import { faNum } from "@/lib/products";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SmartImage } from "@/components/smart-image";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,84 +31,113 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 import {
   HeroSlideApiError,
   listAdminHeroSlides,
-  updateHeroSlide,
+  reorderHeroSlides,
   deleteHeroSlide,
-} from "@/features/hero-slides/api/client"
-import type { AdminHeroSlide } from "@/features/hero-slides/types"
+} from "@/features/hero-slides/api/client";
+import type { AdminHeroSlide } from "@/features/hero-slides/types";
+import {
+  getHeroPublicationStatus,
+  heroPublicationStatusLabel,
+  type HeroPublicationStatus,
+} from "../publication-status";
+import { usePublicationClock } from "../use-publication-clock";
 
 const heroKeys = {
   all: ["admin", "hero-slides"] as const,
-}
+};
 
-function StatusPill({ active }: { active: boolean }) {
+const statusClasses: Record<HeroPublicationStatus, string> = {
+  active:
+    "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400",
+  scheduled:
+    "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300",
+  expired: "bg-destructive/10 text-destructive ring-destructive/20",
+  inactive: "bg-muted text-muted-foreground ring-border/60",
+};
+
+const statusDotClasses: Record<HeroPublicationStatus, string> = {
+  active: "bg-emerald-500",
+  scheduled: "bg-amber-500",
+  expired: "bg-destructive",
+  inactive: "bg-muted-foreground/50",
+};
+
+function StatusPill({ slide, now }: { slide: AdminHeroSlide; now: number }) {
+  const status = getHeroPublicationStatus(slide, now);
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
-        active
-          ? "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400"
-          : "bg-muted text-muted-foreground ring-border/60"
+        statusClasses[status],
       )}
     >
-      <span
-        className={cn("size-1.5 rounded-full", active ? "bg-emerald-500" : "bg-muted-foreground/50")}
-      />
-      {active ? "فعال" : "غیرفعال"}
+      <span className={cn("size-1.5 rounded-full", statusDotClasses[status])} />
+      {heroPublicationStatusLabel[status]}
     </span>
-  )
+  );
 }
 
 export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
-  const qc = useQueryClient()
-  const [pendingDelete, setPendingDelete] = React.useState<AdminHeroSlide | null>(null)
+  const qc = useQueryClient();
+  const publicationNow = usePublicationClock();
+  const [pendingDelete, setPendingDelete] =
+    React.useState<AdminHeroSlide | null>(null);
   // Tracks which slide id has an in-flight reorder so its buttons can disable.
-  const [movingId, setMovingId] = React.useState<number | null>(null)
+  const [movingId, setMovingId] = React.useState<number | null>(null);
 
   const { data, isPending, isError, refetch, isFetching } = useQuery({
     queryKey: heroKeys.all,
     queryFn: listAdminHeroSlides,
-  })
+  });
 
   // Stable display order: by sort_order, then id (mirrors the public API).
   const slides = React.useMemo(
     () =>
-      [...(data ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
-    [data]
-  )
+      [...(data ?? [])].sort(
+        (a, b) => a.sort_order - b.sort_order || a.id - b.id,
+      ),
+    [data],
+  );
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteHeroSlide(id),
     onSuccess: () => {
-      toast.success("اسلاید حذف شد")
-      qc.invalidateQueries({ queryKey: heroKeys.all })
+      toast.success("اسلاید حذف شد");
+      qc.invalidateQueries({ queryKey: heroKeys.all });
     },
     onError: (e) => {
-      toast.error(e instanceof HeroSlideApiError ? e.message : "حذف اسلاید ناموفق بود")
+      toast.error(
+        e instanceof HeroSlideApiError ? e.message : "حذف اسلاید ناموفق بود",
+      );
     },
     onSettled: () => setPendingDelete(null),
-  })
+  });
 
-  // Swap two adjacent slides' sort_order to move one up/down. Optimistic-free,
-  // small payloads (two PATCHes), then refetch for the source of truth.
+  // Submit the complete permutation once so ordering cannot partially apply.
   async function move(index: number, direction: -1 | 1) {
-    const a = slides[index]
-    const b = slides[index + direction]
-    if (!a || !b) return
-    setMovingId(a.id)
+    const destination = index + direction;
+    const slide = slides[index];
+    if (!slide || !slides[destination]) return;
+    const ids = slides.map((item) => item.id);
+    const destinationId = ids[destination];
+    ids[destination] = ids[index];
+    ids[index] = destinationId;
+    setMovingId(slide.id);
     try {
-      await Promise.all([
-        updateHeroSlide(a.id, { sort_order: b.sort_order }),
-        updateHeroSlide(b.id, { sort_order: a.sort_order }),
-      ])
-      await qc.invalidateQueries({ queryKey: heroKeys.all })
+      await reorderHeroSlides(ids);
+      await qc.invalidateQueries({ queryKey: heroKeys.all });
     } catch (e) {
-      toast.error(e instanceof HeroSlideApiError ? e.message : "جابه‌جایی ترتیب ناموفق بود")
+      toast.error(
+        e instanceof HeroSlideApiError
+          ? e.message
+          : "جابه‌جایی ترتیب ناموفق بود",
+      );
     } finally {
-      setMovingId(null)
+      setMovingId(null);
     }
   }
 
@@ -117,7 +146,10 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
     return (
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true">
         {Array.from({ length: 3 }).map((_, i) => (
-          <li key={i} className="border-hairline overflow-hidden rounded-2xl bg-card">
+          <li
+            key={i}
+            className="border-hairline overflow-hidden rounded-2xl bg-card"
+          >
             <Skeleton className="aspect-[16/9] w-full rounded-none" />
             <div className="space-y-2 p-5">
               <Skeleton className="h-4 w-2/3" />
@@ -126,7 +158,7 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
           </li>
         ))}
       </ul>
-    )
+    );
   }
 
   // ── Error ───────────────────────────────────────────────────────────────────
@@ -147,7 +179,7 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
           <RotateCw className="size-4" /> تلاش دوباره
         </Button>
       </div>
-    )
+    );
   }
 
   // ── Empty ───────────────────────────────────────────────────────────────────
@@ -159,7 +191,8 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
         </span>
         <p className="font-serif text-lg">هنوز اسلایدی ساخته نشده است</p>
         <p className="max-w-sm text-sm text-muted-foreground">
-          اولین بنر هیرو را بسازید تا در کاروسل صفحهٔ اصلی فروشگاه نمایش داده شود.
+          اولین بنر هیرو را بسازید تا در کاروسل صفحهٔ اصلی فروشگاه نمایش داده
+          شود.
         </p>
         {canWrite ? (
           <Button asChild className="mt-1">
@@ -169,7 +202,7 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
           </Button>
         ) : null}
       </div>
-    )
+    );
   }
 
   // ── List ────────────────────────────────────────────────────────────────────
@@ -181,7 +214,7 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
         data-testid="hero-slides-list"
       >
         {slides.map((slide, i) => {
-          const busy = movingId === slide.id
+          const busy = movingId !== null;
           return (
             <li
               key={slide.id}
@@ -198,7 +231,7 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
                 <div className="absolute inset-x-3 bottom-2.5 flex items-center justify-between gap-2">
-                  <StatusPill active={slide.is_active} />
+                  <StatusPill slide={slide} now={publicationNow} />
                   <span className="inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-md">
                     ترتیب {faNum(slide.sort_order)}
                   </span>
@@ -208,7 +241,9 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
               {/* Body */}
               <div className="flex flex-1 flex-col p-4">
                 {slide.eyebrow ? (
-                  <p className="truncate text-xs font-semibold text-primary">{slide.eyebrow}</p>
+                  <p className="truncate text-xs font-semibold text-primary">
+                    {slide.eyebrow}
+                  </p>
                 ) : null}
                 <p className="mt-0.5 line-clamp-1 font-serif text-base leading-snug">
                   {slide.title}
@@ -223,7 +258,10 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
                   <p className="mt-2 inline-flex max-w-full items-center gap-1 truncate text-xs text-muted-foreground">
                     <ExternalLink className="size-3 shrink-0" />
                     <span className="truncate">{slide.cta_label}</span>
-                    <span dir="ltr" className="truncate text-muted-foreground/70">
+                    <span
+                      dir="ltr"
+                      className="truncate text-muted-foreground/70"
+                    >
                       {slide.cta_href}
                     </span>
                   </p>
@@ -286,28 +324,33 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
                 </div>
               </div>
             </li>
-          )
+          );
         })}
       </ul>
 
       <AlertDialog
         open={!!pendingDelete}
-        onOpenChange={(o) => !o && !deleteMutation.isPending && setPendingDelete(null)}
+        onOpenChange={(o) =>
+          !o && !deleteMutation.isPending && setPendingDelete(null)
+        }
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>حذف اسلاید</AlertDialogTitle>
             <AlertDialogDescription>
-              آیا از حذف «{pendingDelete?.title}» مطمئن هستید؟ این عمل قابل بازگشت نیست.
+              آیا از حذف «{pendingDelete?.title}» مطمئن هستید؟ این عمل قابل
+              بازگشت نیست.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>انصراف</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              انصراف
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={deleteMutation.isPending}
               onClick={(e) => {
-                e.preventDefault()
-                if (pendingDelete) deleteMutation.mutate(pendingDelete.id)
+                e.preventDefault();
+                if (pendingDelete) deleteMutation.mutate(pendingDelete.id);
               }}
               className="bg-destructive text-white hover:bg-destructive/90"
             >
@@ -322,5 +365,5 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
         </AlertDialogContent>
       </AlertDialog>
     </>
-  )
+  );
 }

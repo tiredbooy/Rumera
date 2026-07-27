@@ -1,13 +1,8 @@
-import "server-only"
+import "server-only";
 
-import { publicRequest } from "@/lib/api/public"
+import { publicRequest } from "@/lib/api/public";
 
-import type { PublicHeroSlide } from "../types"
-
-const PUBLIC_CACHE = {
-  cache: "force-cache" as const,
-  next: { revalidate: 300 },
-}
+import type { PublicHeroSlide } from "../types";
 
 const FALLBACK_HERO_SLIDES: PublicHeroSlide[] = [
   {
@@ -44,18 +39,15 @@ const FALLBACK_HERO_SLIDES: PublicHeroSlide[] = [
     theme: "dark",
     sort_order: 2,
   },
-]
+];
 
 export async function listActiveHeroSlides(): Promise<PublicHeroSlide[]> {
   try {
-    const slides = await publicRequest<PublicHeroSlide[]>(
-      "/hero-slides",
-      PUBLIC_CACHE
-    )
-    return Array.isArray(slides) && slides.length > 0
-      ? slides
-      : FALLBACK_HERO_SLIDES
+    const slides = await publicRequest<PublicHeroSlide[]>("/hero-slides", {
+      cache: "no-store",
+    });
+    return Array.isArray(slides) ? slides : FALLBACK_HERO_SLIDES;
   } catch {
-    return FALLBACK_HERO_SLIDES
+    return FALLBACK_HERO_SLIDES;
   }
 }

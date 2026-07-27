@@ -103,14 +103,14 @@ func newSeeder(pool *pgxpool.Pool, zlog *zap.Logger) *seeder {
 		log:      zlog,
 		c:        newCounts(),
 		brand:    services.NewBrandService(repositories.NewBrandRepository(pool)),
-		category: services.NewCategoryService(repositories.NewCategoryRepository(pool)),
+		category: services.NewCategoryService(repositories.NewCategoryRepository(pool), nil),
 		tag:      services.NewTagService(repositories.NewTagRepository(pool)),
-		product:  services.NewProductService(repositories.NewProductRepository(pool)),
-		variant:  services.NewVariantService(repositories.NewVariantRepository(pool)),
+		product:  services.NewProductService(repositories.NewProductRepository(pool), nil, nil),
+		variant:  services.NewVariantService(repositories.NewVariantRepository(pool), nil),
 		image:    repositories.NewProductImageRepository(pool),
-		recipe:   services.NewRecipeService(repositories.NewRecipeRepository(pool), pool),
-		blog:     services.NewBlogService(repositories.NewBlogRepository(pool), pool),
-		hero:     services.NewHeroSlideService(repositories.NewHeroSlideRepository(pool)),
+		recipe:   services.NewRecipeService(repositories.NewRecipeRepository(pool), pool, nil),
+		blog:     services.NewBlogService(repositories.NewBlogRepository(pool), pool, nil),
+		hero:     services.NewHeroSlideService(repositories.NewHeroSlideRepository(pool), nil),
 	}
 }
 

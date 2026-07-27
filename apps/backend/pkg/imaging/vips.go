@@ -10,17 +10,20 @@ import (
 
 // New returns the libvips-backed transformer. Built only with `-tags vips`,
 // which requires libvips (with HEIF/AOM for AVIF) at build and run time.
-func New() Transformer { return vipsTransformer{} }
-
-type vipsTransformer struct{}
-
-func (vipsTransformer) CanEncode(f Format) bool {
-	switch f {
-	case FormatAVIF, FormatWebP, FormatJPEG, FormatPNG:
-		return true
-	}
-	return false
+func New() Transformer {
+	return vipsTransformer{encodable: map[Format]bool{
+		FormatAVIF: bimg.IsTypeSupportedSave(bimg.AVIF),
+		FormatWebP: bimg.IsTypeSupportedSave(bimg.WEBP),
+		FormatJPEG: bimg.IsTypeSupportedSave(bimg.JPEG),
+		FormatPNG:  bimg.IsTypeSupportedSave(bimg.PNG),
+	}}
 }
+
+type vipsTransformer struct {
+	encodable map[Format]bool
+}
+
+func (t vipsTransformer) CanEncode(f Format) bool { return t.encodable[f] }
 
 func (vipsTransformer) Probe(src []byte) (int, int, string, error) {
 	meta, err := bimg.NewImage(src).Metadata()
@@ -30,7 +33,10 @@ func (vipsTransformer) Probe(src []byte) (int, int, string, error) {
 	return meta.Size.Width, meta.Size.Height, meta.Type, nil
 }
 
-func (vipsTransformer) Transform(src []byte, opts Options) ([]byte, string, error) {
+func (t vipsTransformer) Transform(src []byte, opts Options) ([]byte, string, error) {
+	if !t.CanEncode(opts.Format) {
+		opts.Format = FormatJPEG
+	}
 	o := bimg.Options{Quality: opts.Quality}
 
 	switch opts.Format {

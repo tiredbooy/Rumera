@@ -133,3 +133,28 @@ export function uploadOwnerImage(
     onProgress,
   );
 }
+
+/** Releases an explicitly cancelled ownerless upload. Referenced keys are a no-op. */
+export async function releaseUpload(
+  key: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch("/api/admin/admin/uploads/release", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key }),
+    cache: "no-store",
+    keepalive: true,
+    signal,
+  });
+  if (response.ok) return;
+
+  const body = parseUploadEnvelope(await response.text());
+  const error = body && "error" in body ? body.error : undefined;
+  throw new UploadApiError(
+    response.status,
+    error?.code ?? "RELEASE_FAILED",
+    error?.message ?? "پاک‌سازی تصویر لغوشده ناموفق بود",
+    error?.fields,
+  );
+}

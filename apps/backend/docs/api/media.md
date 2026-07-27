@@ -16,9 +16,10 @@ See [Authentication](../authentication.md) for trust tiers and
 | POST   | `/admin/products/:id/images`               | Admin  | Available | Upload and attach a product image            |
 | POST   | `/admin/products/:id/images/url`           | Admin  | Available | Attach a product image URL                   |
 | POST   | `/admin/uploads`                           | Admin  | Legacy    | Upload without durable owner attachment      |
+| POST   | `/admin/uploads/release`                   | Admin  | Available | Release a cancelled standalone upload        |
 | POST   | `/admin/uploads/:ownerType/:ownerID/:role` | Admin  | Available | Upload and attach owner media                |
 
-The three admin paths above are relative to `/api/v1`. For example, a local
+The admin paths above are relative to `/api/v1`. For example, a local
 owner-aware request will use
 `http://localhost:8080/api/v1/admin/uploads/recipes/19/cover`.
 
@@ -61,6 +62,13 @@ Content-Type: multipart/form-data
 The working product route validates the image, stores an original, creates a
 `product_images` row, and returns its canonical URL, storage key, dimensions,
 ordering, and primary state in the standard `201 Created` envelope.
+
+The backend trusts decoded bytes, not the multipart filename or declared MIME
+type. JPEG, PNG, WebP, and AVIF require their real container signatures and the
+decoder must agree with that signature. By default, compressed files are limited
+to 15 MiB, either source axis to 12,000 pixels, and total source pixels to 40
+million. Multipart framing has a separate bounded allowance and does not reduce
+the configured file-byte limit.
 
 ```json
 {
@@ -117,6 +125,32 @@ This route stores a blob but does not attach it to an owner row. It remains for
 category compatibility; hero-slide, recipe, and journal forms use the
 owner-aware contract.
 
+An explicitly cancelled standalone upload is released with:
+
+```http
+POST /api/v1/admin/uploads/release
+Content-Type: application/json
+
+{"key":"categories/550e8400-e29b-41d4-a716-446655440000.webp"}
+```
+
+Only `categories/` and `uploads/` keys are accepted. The operation is idempotent
+and checks all live database references immediately before deletion; an already
+attached key is retained. Browser crashes and abandoned forms that cannot issue
+this request are handled by age-gated reconciliation.
+
+Product aggregate creates use the `uploads/` namespace as retry-safe staging.
+The browser uploads each local file once, includes its `storage_key` in the
+aggregate product snapshot, and retains both that immutable operation body and
+its prepared blobs until the result is known, including across a page reload.
+Attachment and standalone release share a per-key PostgreSQL
+advisory lock, so a release either deletes the still-ownerless object before the
+aggregate validates it or observes the committed reference and keeps it; it can
+never delete a blob underneath a committed image row. A completed aggregate
+operation can be replayed after the staged object is later detached and cleaned.
+Lock holders are bounded relative to the database pool, reserving capacity for
+the transaction/reference queries needed to complete and release those locks.
+
 ## Owner-Aware Upload Contract
 
 ```http
@@ -143,10 +177,36 @@ owner. Its response uses the same `url`, `key`, `width`, and `height` fields as
 the legacy standalone upload.
 
 URL, key, and supplied alt text are written to the owner in one database
-statement. A missing or soft-deleted owner returns `404`; unsupported owner/role
+transaction. A missing or soft-deleted owner returns `404`; unsupported owner/role
 pairs return `400`.
-Replacing a slot does not delete its old blob in this task; Task 057c owns that
-lifecycle cleanup.
+Replacing a slot detaches the old key atomically, then best-effort removes its
+original and every rendered derivative after confirming no live row still
+references it. A cleanup failure never rolls back the successful owner write;
+reconciliation retries it later.
+
+## Reconciliation
+
+`media-reconcile` inventories the authoritative originals against explicit key
+columns and canonical `/media/...` URL references. It reports old orphan
+candidates, referenced files missing from disk, sizes, timestamps, actions, and
+a unique run ID as JSON. Dry run is the default:
+
+```bash
+./media-reconcile --min-age=24h
+./media-reconcile --apply --cutoff=2026-07-25T12:00:00Z
+```
+
+Apply mode acquires a PostgreSQL advisory lock so only one replica runs, observes
+the reviewed dry-run cutoff, and rechecks each candidate immediately before
+deletion. Copy the `cutoff` value from the retained dry-run report into
+`--cutoff`; without that flag the command derives a new cutoff from `--min-age`.
+In Docker use `make dev-media-reconcile` or
+`make prod-media-reconcile`; pass flags through `ARGS`.
+
+Rendered files use a source-addressable `render-v2/<source-hash>/...` namespace,
+so deleting an original purges all of its variants. The previous irreversible
+`render/` namespace is discarded at backend startup. The original is always
+verified before a cached derivative can be served.
 
 ### Hero Drafts
 
@@ -225,8 +285,6 @@ migration connection.
   content owners with explicit ownership attachment.
 - Task 057c owns replacement/deletion cleanup, rendered-variant cleanup, orphan
   reconciliation, cache invalidation, and local storage operations guidance.
-- Task 057d owns multipart-overhead correction, decoded pixel/dimension limits,
-  file-signature hardening, and upload/serve/path-safety integration tests.
 - Task 061d owns frontend/backend origin resolution. Persisted values stay
   origin-free; clients resolve `/media/...` against the configured media/API
   origin when the two applications run on different origins.

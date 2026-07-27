@@ -17,7 +17,7 @@ export class HeroSlideApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
-    public readonly fields?: ApiFieldErrors
+    public readonly fields?: ApiFieldErrors,
   ) {
     super(message)
     this.name = "HeroSlideApiError"
@@ -26,7 +26,7 @@ export class HeroSlideApiError extends Error {
 
 async function heroSlideRequest<T>(
   path: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
 ): Promise<T> {
   const response = await fetch(`/api/admin/${path}`, {
     ...init,
@@ -45,7 +45,7 @@ async function heroSlideRequest<T>(
       response.status,
       error?.code ?? "UNKNOWN",
       error?.message ?? response.statusText,
-      error?.fields
+      error?.fields,
     )
   }
 
@@ -57,8 +57,12 @@ export function listAdminHeroSlides(): Promise<AdminHeroSlide[]> {
   return heroSlideRequest<AdminHeroSlide[]>("admin/hero-slides")
 }
 
+export function getAdminHeroSlide(id: number): Promise<AdminHeroSlide> {
+  return heroSlideRequest<AdminHeroSlide>(`admin/hero-slides/${id}`)
+}
+
 export function createHeroSlide(
-  input: CreateHeroSlideInput
+  input: CreateHeroSlideInput,
 ): Promise<AdminHeroSlide> {
   return heroSlideRequest<AdminHeroSlide>("admin/hero-slides", {
     method: "POST",
@@ -68,11 +72,18 @@ export function createHeroSlide(
 
 export function updateHeroSlide(
   id: number,
-  input: UpdateHeroSlideInput
+  input: UpdateHeroSlideInput,
 ): Promise<AdminHeroSlide> {
   return heroSlideRequest<AdminHeroSlide>(`admin/hero-slides/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  })
+}
+
+export function reorderHeroSlides(ids: number[]): Promise<void> {
+  return heroSlideRequest<void>("admin/hero-slides/order", {
+    method: "PUT",
+    body: JSON.stringify({ ids }),
   })
 }
 

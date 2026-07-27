@@ -8,6 +8,12 @@ func ToProductDetail(
 	images []models.ImageResponse,
 	variants []models.VariantResponse,
 ) *models.ProductDetail {
+	if images == nil {
+		images = []models.ImageResponse{}
+	}
+	if variants == nil {
+		variants = []models.VariantResponse{}
+	}
 	return &models.ProductDetail{
 		ID:              p.ID,
 		Title:           p.Title,
@@ -23,6 +29,7 @@ func ToProductDetail(
 		MetaTitle:       p.MetaTitle,
 		MetaDescription: p.MetaDescription,
 		MetaTags:        p.MetaTags,
+		UpdatedAt:       p.UpdatedAt,
 		Tags:            tags,
 		Images:          images,
 		Variants:        variants,
@@ -35,6 +42,12 @@ func ToVariantResponse(
 	images []models.ImageResponse,
 	availableStock *int,
 ) models.VariantResponse {
+	if options == nil {
+		options = []models.OptionValueResponse{}
+	}
+	if images == nil {
+		images = []models.ImageResponse{}
+	}
 	return models.VariantResponse{
 		ID:             v.ID,
 		SKU:            v.SKU,

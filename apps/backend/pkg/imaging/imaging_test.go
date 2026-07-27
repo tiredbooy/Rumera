@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image"
 	"image/color"
+	_ "image/jpeg"
 	"image/png"
 	"testing"
 )
@@ -77,7 +78,7 @@ func TestStdlibTransform_ResizeAndProbe(t *testing.T) {
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(out))
 	if err != nil {
-		t.Fatalf("decode output: %v", err)
+		t.Fatalf("decode output (%q, prefix %x): %v", ct, out[:min(len(out), 16)], err)
 	}
 	if cfg.Width != 400 || cfg.Height != 300 {
 		t.Fatalf("output = %dx%d; want 400x300", cfg.Width, cfg.Height)
@@ -98,5 +99,37 @@ func TestStdlibTransform_AVIFFallsBackToJPEG(t *testing.T) {
 	}
 	if _, format, _ := image.DecodeConfig(bytes.NewReader(out)); format != "jpeg" {
 		t.Fatalf("fallback output format = %q; want jpeg", format)
+	}
+}
+
+func TestTransformOutputSignatureMatchesReportedContentType(t *testing.T) {
+	tr := New()
+	source := samplePNG(t, 32, 24)
+	for _, requested := range []Format{FormatJPEG, FormatPNG, FormatWebP, FormatAVIF} {
+		t.Run(string(requested), func(t *testing.T) {
+			out, contentType, err := tr.Transform(source, Options{Format: requested, Quality: 80, Width: 16})
+			if err != nil {
+				t.Fatalf("transform: %v", err)
+			}
+			detected, err := DetectFormat(out)
+			if err != nil {
+				t.Fatalf("detect transformed output: %v", err)
+			}
+			want := FormatJPEG
+			switch contentType {
+			case "image/png":
+				want = FormatPNG
+			case "image/webp":
+				want = FormatWebP
+			case "image/avif":
+				want = FormatAVIF
+			case "image/jpeg":
+			default:
+				t.Fatalf("unexpected content type %q", contentType)
+			}
+			if detected != want {
+				t.Fatalf("signature/content type = %q/%q; want %q", detected, contentType, want)
+			}
+		})
 	}
 }

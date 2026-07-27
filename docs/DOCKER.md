@@ -84,6 +84,11 @@ docker compose -f docker-compose.dev.yml down              # stop
 docker compose -f docker-compose.dev.yml down -v           # stop + wipe data
 ```
 
+The `media_data` volume contains authoritative originals under `/data/media` and
+a disposable render cache under `/data/media-cache`. `down -v` deletes both, not
+just the databases. Local non-Docker defaults under `apps/backend/storage/` are
+git-ignored.
+
 ---
 
 ## Production stack — small, secure, reliable
@@ -139,6 +144,28 @@ backend's tooling (see `apps/backend/Makefile`), e.g.:
 docker compose -f docker-compose.prod.yml exec backend ./server   # if your boot runs them
 # or run goose migrations from the backend Makefile against the DB
 ```
+
+### Media persistence and recovery
+
+The backend stores originals and rendered variants on the `media_data` named
+volume. Back up `/data/media` together with the matching PostgreSQL snapshot;
+exclude `/data/media-cache`, which is rebuilt on demand. Quiesce admin/media
+writes for the shared snapshot window. After restore, clear the render cache,
+ensure files are owned by UID/GID `1001`, and run:
+
+```bash
+make prod-media-reconcile
+```
+
+This is a dry run. Review its JSON report before using
+`make prod-media-reconcile ARGS="--apply --cutoff=<report-cutoff>"`. Full
+commands and restore ordering are documented in
+[`apps/backend/docs/operations.md`](../apps/backend/docs/operations.md#local-media-lifecycle).
+
+The shipped Compose stack is single-node. Multiple backend processes may share
+the same mounted POSIX volume, but replicas on separate node-local volumes are
+unsupported. Multiple Next.js processes also require a shared cache/tag
+coordination handler before on-demand hero/category invalidation is consistent.
 
 ---
 

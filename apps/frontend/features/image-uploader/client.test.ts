@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { uploadOwnerImage } from "./client";
+import { releaseUpload, uploadOwnerImage } from "./client";
 
 class FakeXMLHttpRequest {
   static latest: FakeXMLHttpRequest;
@@ -90,5 +90,22 @@ describe("uploadOwnerImage", () => {
 
     const body = FakeXMLHttpRequest.latest.body as FormData;
     expect(body.get("alt_text")).toBe("Bottle on a table");
+  });
+
+  it("releases a cancelled standalone upload", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await releaseUpload("categories/cancelled.webp");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/admin/uploads/release",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ key: "categories/cancelled.webp" }),
+      }),
+    );
   });
 });

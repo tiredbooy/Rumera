@@ -37,21 +37,21 @@ type HeroSlide struct {
 // ── Requests ──────────────────────────────────────────────────────────────────
 
 type HeroSlideReq struct {
-	Eyebrow  *string `json:"eyebrow" validate:"omitempty,max=120"`
-	Title    string  `json:"title" validate:"required,max=255"`
+	Eyebrow  *string `json:"eyebrow"`
+	Title    string  `json:"title"`
 	Subtitle *string `json:"subtitle"`
-	Badge    *string `json:"badge" validate:"omitempty,max=120"`
+	Badge    *string `json:"badge"`
 
-	ImageURL       *string `json:"image_url" validate:"omitempty,max=2048"`
-	MobileImageURL *string `json:"mobile_image_url" validate:"omitempty,max=2048"`
-	ImageAlt       *string `json:"image_alt" validate:"omitempty,max=255"`
+	ImageURL       *string `json:"image_url"`
+	MobileImageURL *string `json:"mobile_image_url"`
+	ImageAlt       *string `json:"image_alt"`
 
-	CTALabel          *string `json:"cta_label" validate:"omitempty,max=120"`
-	CTAHref           *string `json:"cta_href" validate:"omitempty,max=255"`
-	SecondaryCTALabel *string `json:"secondary_cta_label" validate:"omitempty,max=120"`
-	SecondaryCTAHref  *string `json:"secondary_cta_href" validate:"omitempty,max=255"`
+	CTALabel          *string `json:"cta_label"`
+	CTAHref           *string `json:"cta_href"`
+	SecondaryCTALabel *string `json:"secondary_cta_label"`
+	SecondaryCTAHref  *string `json:"secondary_cta_href"`
 
-	Theme     *string `json:"theme" validate:"omitempty,oneof=light dark"`
+	Theme     *string `json:"theme"`
 	SortOrder *int    `json:"sort_order"`
 	IsActive  *bool   `json:"is_active"`
 
@@ -60,10 +60,10 @@ type HeroSlideReq struct {
 }
 
 type HeroSlideUpdateReq struct {
-	Eyebrow  *string `json:"eyebrow" validate:"omitempty,max=120"`
-	Title    *string `json:"title" validate:"omitempty,max=255"`
-	Subtitle *string `json:"subtitle"`
-	Badge    *string `json:"badge" validate:"omitempty,max=120"`
+	Eyebrow  NullablePatch[string] `json:"eyebrow"`
+	Title    *string               `json:"title"`
+	Subtitle NullablePatch[string] `json:"subtitle"`
+	Badge    NullablePatch[string] `json:"badge"`
 
 	ImageURL               NullablePatch[string] `json:"image_url"`
 	MobileImageURL         NullablePatch[string] `json:"mobile_image_url"`
@@ -71,17 +71,17 @@ type HeroSlideUpdateReq struct {
 	ExpectedImageURL       NullablePatch[string] `json:"-"`
 	ExpectedMobileImageURL NullablePatch[string] `json:"-"`
 
-	CTALabel          *string `json:"cta_label" validate:"omitempty,max=120"`
-	CTAHref           *string `json:"cta_href" validate:"omitempty,max=255"`
-	SecondaryCTALabel *string `json:"secondary_cta_label" validate:"omitempty,max=120"`
-	SecondaryCTAHref  *string `json:"secondary_cta_href" validate:"omitempty,max=255"`
+	CTALabel          NullablePatch[string] `json:"cta_label"`
+	CTAHref           NullablePatch[string] `json:"cta_href"`
+	SecondaryCTALabel NullablePatch[string] `json:"secondary_cta_label"`
+	SecondaryCTAHref  NullablePatch[string] `json:"secondary_cta_href"`
 
-	Theme     *string `json:"theme" validate:"omitempty,oneof=light dark"`
+	Theme     *string `json:"theme"`
 	SortOrder *int    `json:"sort_order"`
 	IsActive  *bool   `json:"is_active"`
 
-	StartsAt *time.Time `json:"starts_at"`
-	EndsAt   *time.Time `json:"ends_at"`
+	StartsAt NullablePatch[time.Time] `json:"starts_at"`
+	EndsAt   NullablePatch[time.Time] `json:"ends_at"`
 }
 
 // ── Responses ─────────────────────────────────────────────────────────────────

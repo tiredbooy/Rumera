@@ -48,6 +48,7 @@ type Deps struct {
 	Product  *services.ProductService
 	Media    *services.MediaService
 	Variant  *services.VariantService
+	Option   *services.OptionService
 	Category services.CategoryService
 	Brand    services.BrandService
 	Tag      *services.TagService

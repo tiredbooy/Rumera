@@ -10,14 +10,16 @@ import (
 // sane value, so each test can flip exactly one field to assert it's caught.
 func validConfig() Config {
 	return Config{
-		OTELSamplerRatio:      1.0,
-		CacheBreakerThreshold: 5,
-		CacheBreakerCooldown:  10 * time.Second,
-		DBRetryMaxAttempts:    3,
-		DBRetryBaseBackoff:    50 * time.Millisecond,
-		MediaDefaultQuality:   80,
-		MediaMaxUploadMB:      15,
-		MediaMaxDimension:     4000,
+		OTELSamplerRatio:        1.0,
+		CacheBreakerThreshold:   5,
+		CacheBreakerCooldown:    10 * time.Second,
+		DBRetryMaxAttempts:      3,
+		DBRetryBaseBackoff:      50 * time.Millisecond,
+		MediaDefaultQuality:     80,
+		MediaMaxUploadMB:        15,
+		MediaMaxDimension:       4000,
+		MediaMaxSourceDimension: 12000,
+		MediaMaxSourcePixels:    40_000_000,
 	}
 }
 
@@ -43,6 +45,8 @@ func TestConfig_Validate_Rejects(t *testing.T) {
 		{"media quality above 100", func(c *Config) { c.MediaDefaultQuality = 101 }},
 		{"media max upload < 1", func(c *Config) { c.MediaMaxUploadMB = 0 }},
 		{"media max dimension < 1", func(c *Config) { c.MediaMaxDimension = 0 }},
+		{"media max source dimension < 1", func(c *Config) { c.MediaMaxSourceDimension = 0 }},
+		{"media max source pixels < 1", func(c *Config) { c.MediaMaxSourcePixels = 0 }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

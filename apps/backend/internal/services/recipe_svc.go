@@ -35,12 +35,13 @@ type RecipeService interface {
 }
 
 type recipeService struct {
-	repo repositories.RecipeRepository
-	db   pgxBeginner
+	repo  repositories.RecipeRepository
+	db    pgxBeginner
+	media *MediaLifecycleService
 }
 
-func NewRecipeService(repo repositories.RecipeRepository, db pgxBeginner) RecipeService {
-	return &recipeService{repo: repo, db: db}
+func NewRecipeService(repo repositories.RecipeRepository, db pgxBeginner, media *MediaLifecycleService) RecipeService {
+	return &recipeService{repo: repo, db: db, media: media}
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
@@ -181,6 +182,7 @@ func (s *recipeService) Create(ctx context.Context, req *models.RecipeReq) (*mod
 }
 
 func (s *recipeService) Update(ctx context.Context, id int64, req *models.RecipeUpdateReq) (*models.RecipeDetailResponse, error) {
+	var mediaBefore *models.Recipe
 	if req.ImageURL.Set || req.ImageAlt.Set || req.OGImageURL.Set {
 		current, err := s.repo.GetByID(ctx, id)
 		if err != nil {
@@ -189,6 +191,7 @@ func (s *recipeService) Update(ctx context.Context, id int64, req *models.Recipe
 			}
 			return nil, fmt.Errorf("recipeService.Update media preflight: %w", err)
 		}
+		mediaBefore = current
 		if req.ImageURL.Set || req.ImageAlt.Set {
 			req.ExpectedImageURL = mediaExpectation(current.ImageURL)
 		}
@@ -280,17 +283,33 @@ func (s *recipeService) Update(ctx context.Context, id int64, req *models.Recipe
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("recipeService.Update: commit: %w", err)
 	}
+	if mediaBefore != nil {
+		if !sameMediaURL(mediaBefore.ImageURL, recipe.ImageURL) {
+			s.media.CleanupURLs(ctx, mediaBefore.ImageURL)
+		}
+		if !sameMediaURL(mediaBefore.OGImageURL, recipe.OGImageURL) {
+			s.media.CleanupURLs(ctx, mediaBefore.OGImageURL)
+		}
+	}
 
 	return s.hydrate(ctx, func() (*models.Recipe, error) { return recipe, nil })
 }
 
 func (s *recipeService) Delete(ctx context.Context, id int64) error {
+	current, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
+		return fmt.Errorf("recipeService.Delete media: %w", err)
+	}
 	if err := s.repo.Delete(ctx, id); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return apperr.ErrNotFound
 		}
 		return fmt.Errorf("recipeService.Delete: %w", err)
 	}
+	s.media.CleanupURLs(ctx, current.ImageURL, current.OGImageURL)
 	return nil
 }
 

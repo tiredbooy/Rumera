@@ -84,6 +84,65 @@ The `ETag` is a strong validator (a quoted FNV-1a 64 hash of the payload). Clien
 echo it back in `If-None-Match`; on a match the handler returns `304` with no body.
 Behaviour is covered by `pkg/response/cache_test.go`.
 
+### Local media lifecycle
+
+Original uploads under `MEDIA_ROOT` are authoritative. `MEDIA_CACHE_DIR` contains
+only reproducible rendered variants and must never be included in backups. Media
+replacement/removal and product or variant cascades detach database ownership
+first, then best-effort delete the original plus its source-addressable render
+namespace. A reference check protects historical/shared URLs.
+
+Run orphan reconciliation in dry-run mode first and retain its JSON report:
+
+```bash
+./media-reconcile --min-age=24h > media-reconcile-dry-run.json
+# Review the report, then copy its RFC3339 `cutoff` value exactly.
+./media-reconcile --apply --cutoff=2026-07-25T12:00:00Z > media-reconcile-apply.json
+```
+
+The job uses a PostgreSQL advisory lock across the complete inventory/apply run,
+so multiple backend processes cannot delete the same candidate concurrently.
+New uploads younger than the cutoff are retained, covering active forms,
+ambiguous database outcomes, and interrupted clients.
+
+#### Backup and restore
+
+Back up PostgreSQL and `MEDIA_ROOT` in the same quiesced write window. For the
+production Compose stack, stop frontend/backend writes while leaving PostgreSQL
+running, then capture both artifacts:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml stop frontend backend
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T postgres \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > rumera-db.dump
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm --no-deps \
+  --entrypoint tar backend -C /data -czf - media > rumera-media.tgz
+docker compose --env-file .env.prod -f docker-compose.prod.yml start backend frontend
+```
+
+Restore the database and originals from the same backup set while writes remain
+stopped. Restore files under `/data/media`, ensure ownership is UID/GID `1001`,
+delete `/data/media-cache`, start the backend, and run a reconciliation dry run.
+Never restore a database snapshot and media archive from different write windows
+without expecting the report to show missing references or orphans.
+
+`docker compose down -v` destroys `media_data` as well as database volumes. It is
+not a normal reset command when uploaded media must survive.
+
+#### Process topology
+
+Multiple backend processes are safe only when they mount the same POSIX
+filesystem for both media directories; immutable writes are atomic and
+reconciliation is globally locked in PostgreSQL. The bundled Compose topology is
+single-node. Independent node-local volumes are unsupported because a request may
+land on a process that cannot see the original. Use shared POSIX storage before
+adding backend replicas; do not add object storage in this deployment.
+
+Next.js cache-tag invalidation is process-local by default. The bundled frontend
+is one process. Before horizontally scaling it, configure a shared Next cache and
+`updateTags`/`refreshTags` coordination (for example through Redis), otherwise
+replicas can serve different hero/category ISR generations after an admin write.
+
 ---
 
 ## Metrics & observability
@@ -222,5 +281,11 @@ All via environment variables (see `configs/config.go`).
 | `REDIS_ADDR` / `REDIS_PASSWORD` / `REDIS_DB` | `localhost:6379` / – / `0` | Cache backend |
 | `CORS_ALLOWED_ORIGINS` | `*` | Browser origin allow-list (set explicitly in prod) |
 | `METRICS_ENABLED` | `true` | Expose the Prometheus `/metrics` endpoint + request metrics middleware (keep internal-only) |
+| `MEDIA_ROOT` | `./storage/media` | Authoritative uploaded originals; persist and back up |
+| `MEDIA_CACHE_DIR` | `./storage/media-cache` | Disposable rendered variants; safe to clear |
+| `MEDIA_MAX_UPLOAD_MB` | `15` | Maximum compressed source file size |
+| `MEDIA_MAX_DIMENSION` | `4000` | Maximum requested transform width or height |
+| `MEDIA_MAX_SOURCE_DIMENSION` | `12000` | Maximum decoded source width or height |
+| `MEDIA_MAX_SOURCE_PIXELS` | `40000000` | Maximum decoded source pixel count |
 
 > Cron schedules are 6-field (`sec min hour dom mon dow`) and evaluated in UTC.

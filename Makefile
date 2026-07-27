@@ -126,6 +126,14 @@ db-shell: ## Open a psql prompt on the dev main database
 seed: $(DEV_ENV) ## Seed realistic Persian storefront test data (idempotent — safe to re-run)
 	$(DEV) exec backend go run ./cmd/seed
 
+.PHONY: dev-media-reconcile
+dev-media-reconcile: $(DEV_ENV) ## Audit local media orphans; pass ARGS="--apply --min-age=24h" to delete
+	$(DEV) exec backend go run ./cmd/media-reconcile $(ARGS)
+
+.PHONY: prod-media-reconcile
+prod-media-reconcile: $(PROD_ENV) ## Audit production media orphans; pass ARGS="--apply --min-age=24h" to delete
+	$(PROD) exec backend ./media-reconcile $(ARGS)
+
 ## ── Housekeeping ──────────────────────────────────────────────────────────────
 
 .PHONY: clean

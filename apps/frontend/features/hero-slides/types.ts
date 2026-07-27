@@ -39,17 +39,17 @@ export interface CreateHeroSlideInput {
   cta_href?: string | null;
   secondary_cta_label?: string | null;
   secondary_cta_href?: string | null;
-  theme?: HeroTheme | null;
-  sort_order?: number | null;
-  is_active?: boolean | null;
+  theme?: HeroTheme;
+  sort_order?: number;
+  is_active?: boolean;
   starts_at?: string | null;
   ends_at?: string | null;
 }
 
-/** Null pointer fields currently have omission semantics in the Go repository. */
+/** Omitted fields stay unchanged; explicit null clears nullable fields. */
 export interface UpdateHeroSlideInput {
   eyebrow?: string | null;
-  title?: string | null;
+  title?: string;
   subtitle?: string | null;
   badge?: string | null;
   image_url?: string | null;
@@ -59,9 +59,9 @@ export interface UpdateHeroSlideInput {
   cta_href?: string | null;
   secondary_cta_label?: string | null;
   secondary_cta_href?: string | null;
-  theme?: HeroTheme | null;
-  sort_order?: number | null;
-  is_active?: boolean | null;
+  theme?: HeroTheme;
+  sort_order?: number;
+  is_active?: boolean;
   starts_at?: string | null;
   ends_at?: string | null;
 }

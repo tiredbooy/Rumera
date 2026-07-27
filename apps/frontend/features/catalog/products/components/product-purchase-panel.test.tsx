@@ -238,7 +238,15 @@ describe("ProductPurchasePanel", () => {
             price: 120_000,
             is_active: true,
             available_stock: 0,
-            options: [{ id: 1, option_type: "حجم", value: "   " }],
+            options: [
+              {
+                id: 1,
+                option_type_id: 1,
+                option_type_title: "volume",
+                option_type: "حجم",
+                value: "   ",
+              },
+            ],
           },
         ])}
       />,

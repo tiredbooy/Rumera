@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SmartImage } from "@/components/smart-image";
 import { cn } from "@/lib/utils";
-import { uploadImage, uploadOwnerImage } from "./client";
+import { releaseUpload, uploadImage, uploadOwnerImage } from "./client";
 import { ACCEPT, MAX_MB, validateImageURL } from "./constants";
 import type {
   ContentMediaTarget,
@@ -94,6 +94,8 @@ export const ImageInput = React.forwardRef<
   const baselineURLRef = React.useRef(value.trim());
   const flushRef = React.useRef<Promise<UploadedImage | null> | null>(null);
   const selectionErrorRef = React.useRef<string | null>(null);
+  const uploadAbortRef = React.useRef<AbortController | null>(null);
+  const pendingLegacyUploadRef = React.useRef<UploadedImage | null>(null);
   const [uploading, setUploading] = React.useState(false);
   const [progress, setProgress] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
@@ -131,8 +133,18 @@ export const ImageInput = React.forwardRef<
     if (restorePreview) onPreviewChange?.(valueRef.current);
   }
 
+  function releasePendingLegacyUpload() {
+    const pending = pendingLegacyUploadRef.current;
+    if (!pending) return;
+    pendingLegacyUploadRef.current = null;
+    void releaseUpload(pending.key).catch(() => {
+      // Reconciliation is the durable fallback for failed best-effort release.
+    });
+  }
+
   React.useEffect(
     () => () => {
+      uploadAbortRef.current?.abort();
       const current = stagedRef.current;
       if (current) URL.revokeObjectURL(current.previewUrl);
     },
@@ -208,12 +220,27 @@ export const ImageInput = React.forwardRef<
       return;
     }
 
+    const previousUpload = pendingLegacyUploadRef.current;
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
     try {
-      await runUpload((onProgress) =>
-        uploadImage(file, { folder: legacyFolder }, onProgress),
+      const result = await runUpload((onProgress) =>
+        uploadImage(
+          file,
+          { folder: legacyFolder, signal: controller.signal },
+          onProgress,
+        ),
       );
+      pendingLegacyUploadRef.current = result;
+      if (previousUpload && previousUpload.key !== result.key) {
+        void releaseUpload(previousUpload.key).catch(() => {
+          // Reconciliation cleans a release that cannot complete now.
+        });
+      }
     } catch {
       // runUpload keeps the actionable error in the field.
+    } finally {
+      if (uploadAbortRef.current === controller) uploadAbortRef.current = null;
     }
   }
 
@@ -242,14 +269,16 @@ export const ImageInput = React.forwardRef<
         return Promise.reject(ownerError);
       }
 
+      const controller = new AbortController();
+      uploadAbortRef.current = controller;
       const operation = runUpload((onProgress) =>
         uploadOwnerImage(
           current.file,
           { ...owner, ownerId: targetOwnerId },
           altValue === undefined ||
             (owner.ownerType === "recipes" && owner.role === "og")
-            ? {}
-            : { altText: altValue },
+            ? { signal: controller.signal }
+            : { altText: altValue, signal: controller.signal },
           onProgress,
         ),
       )
@@ -258,6 +287,8 @@ export const ImageInput = React.forwardRef<
           return result;
         })
         .finally(() => {
+          if (uploadAbortRef.current === controller)
+            uploadAbortRef.current = null;
           flushRef.current = null;
         });
       flushRef.current = operation;
@@ -294,6 +325,7 @@ export const ImageInput = React.forwardRef<
           disabled={unavailable}
           onChange={(event) => {
             clearStaged(false);
+            if (!owner) releasePendingLegacyUpload();
             selectionErrorRef.current = null;
             setError(null);
             onChange(event.target.value);
@@ -435,6 +467,7 @@ export const ImageInput = React.forwardRef<
               if (stagedRef.current) {
                 clearStaged(true);
               } else {
+                if (!owner) releasePendingLegacyUpload();
                 baselineURLRef.current = "";
                 onChange("");
                 onPreviewChange?.("");

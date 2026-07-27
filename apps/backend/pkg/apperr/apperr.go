@@ -13,6 +13,28 @@ func New(code, message string) *AppError {
 	return &AppError{Code: code, Message: message}
 }
 
+// FieldAppError adds request-field detail while preserving the underlying
+// AppError code/status mapping through errors.As and errors.Is.
+type FieldAppError struct {
+	Cause  *AppError
+	Fields map[string][]string
+}
+
+func (e *FieldAppError) Error() string { return e.Cause.Error() }
+func (e *FieldAppError) Unwrap() error { return e.Cause }
+
+func WithFields(cause *AppError, fields map[string][]string) error {
+	return &FieldAppError{Cause: cause, Fields: fields}
+}
+
+func Fields(err error) (map[string][]string, bool) {
+	var fieldErr *FieldAppError
+	if !errors.As(err, &fieldErr) {
+		return nil, false
+	}
+	return fieldErr.Fields, true
+}
+
 var (
 	// Generic / System
 	ErrInternal       = New("INTERNAL_ERROR", "an unexpected error occurred")

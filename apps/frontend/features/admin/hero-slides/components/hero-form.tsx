@@ -20,6 +20,8 @@ import type {
   UploadedImage,
 } from "@/features/image-uploader/types";
 import {
+  heroDateTimeInputValue,
+  heroDateTimeISO,
   heroSlideFormSchema,
   type HeroSlideFormValues,
 } from "@/features/hero-slides/validations";
@@ -49,6 +51,8 @@ function defaults(slide?: AdminHeroSlide): HeroSlideFormValues {
     cta_href: slide?.cta_href ?? "",
     secondary_cta_label: slide?.secondary_cta_label ?? "",
     secondary_cta_href: slide?.secondary_cta_href ?? "",
+    starts_at: heroDateTimeInputValue(slide?.starts_at),
+    ends_at: heroDateTimeInputValue(slide?.ends_at),
     theme: slide?.theme ?? "dark",
     sort_order: slide?.sort_order != null ? String(slide.sort_order) : "0",
     is_active: slide?.is_active ?? true,
@@ -69,6 +73,8 @@ const FIELD_MAP: Record<string, keyof HeroSlideFormValues> = {
   cta_href: "cta_href",
   secondary_cta_label: "secondary_cta_label",
   secondary_cta_href: "secondary_cta_href",
+  starts_at: "starts_at",
+  ends_at: "ends_at",
   theme: "theme",
   sort_order: "sort_order",
   is_active: "is_active",
@@ -91,6 +97,9 @@ export function HeroForm({
   const [desktopPreview, setDesktopPreview] = React.useState(
     slide?.image_url ?? "",
   );
+  const [mobilePreview, setMobilePreview] = React.useState(
+    slide?.mobile_image_url ?? "",
+  );
 
   const {
     register,
@@ -111,10 +120,28 @@ export function HeroForm({
   const subtitle = watch("subtitle");
   const badge = watch("badge");
   const ctaLabel = watch("cta_label");
+  const ctaHref = watch("cta_href");
   const secondaryCtaLabel = watch("secondary_cta_label");
+  const secondaryCtaHref = watch("secondary_cta_href");
   const imageAlt = watch("image_alt");
+  const theme = watch("theme");
+  const isActive = watch("is_active");
+  const startsAt = watch("starts_at");
+  const endsAt = watch("ends_at");
 
   function toPayload(v: HeroSlideFormValues): CreateHeroSlideInput {
+    const startsAtUnchanged =
+      mode === "edit" &&
+      slide &&
+      v.starts_at === heroDateTimeInputValue(slide.starts_at);
+    const endsAtUnchanged =
+      mode === "edit" &&
+      slide &&
+      v.ends_at === heroDateTimeInputValue(slide.ends_at);
+    const sortOrder = v.sort_order.trim() === "" ? 0 : Number(v.sort_order);
+    const sortOrderUnchanged =
+      mode === "edit" && slide && sortOrder === slide.sort_order;
+
     return {
       title: v.title.trim(),
       eyebrow: strOrNull(v.eyebrow),
@@ -127,8 +154,10 @@ export function HeroForm({
       cta_href: strOrNull(v.cta_href),
       secondary_cta_label: strOrNull(v.secondary_cta_label),
       secondary_cta_href: strOrNull(v.secondary_cta_href),
+      ...(startsAtUnchanged ? {} : { starts_at: heroDateTimeISO(v.starts_at) }),
+      ...(endsAtUnchanged ? {} : { ends_at: heroDateTimeISO(v.ends_at) }),
       theme: v.theme,
-      sort_order: v.sort_order.trim() === "" ? 0 : Number(v.sort_order),
+      ...(sortOrderUnchanged ? {} : { sort_order: sortOrder }),
       is_active: v.is_active,
     };
   }
@@ -212,25 +241,30 @@ export function HeroForm({
     }
   }
 
-  const dark = watch("theme") === "dark";
   const preview: HeroPreviewValues = {
-    imageUrl: desktopPreview,
+    desktopImageUrl: desktopPreview,
+    mobileImageUrl: mobilePreview,
     imageAlt,
     title,
     eyebrow,
     subtitle,
     badge,
     ctaLabel,
+    ctaHref,
     secondaryCtaLabel,
-    dark,
+    secondaryCtaHref,
+    theme,
+    isActive,
+    startsAt,
+    endsAt,
   };
 
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="grid gap-6 lg:grid-cols-[1fr_minmax(320px,400px)]"
+      className="grid min-w-0 gap-6 lg:grid-cols-[1fr_minmax(320px,400px)]"
     >
-      <div className="flex flex-col gap-6">
+      <div className="flex min-w-0 flex-col gap-6">
         <HeroContentFields register={register} errors={errors} />
         <HeroResponsiveMediaFields
           control={control}
@@ -245,6 +279,7 @@ export function HeroForm({
             })
           }
           onDesktopPreviewChange={setDesktopPreview}
+          onMobilePreviewChange={setMobilePreview}
           imageAlt={imageAlt}
           disabled={isSubmitting}
         />

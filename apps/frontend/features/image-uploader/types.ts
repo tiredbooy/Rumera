@@ -1,4 +1,5 @@
 import type { ApiErrorEnvelope, ApiSuccess } from "@/lib/api/types";
+import type { ProductImage } from "@/features/catalog/products/types";
 
 export type ProductMediaTarget = {
   ownerType: "products";
@@ -52,6 +53,34 @@ export type ImageUploaderHandle<TResult = void> = {
   validate: () => string | null;
   /** Resolves only after all staged media changes are durable. */
   flush: (ownerId?: number) => Promise<TResult>;
+};
+
+export type PreparedProductImage =
+  | {
+      id: number;
+      alt_text: string | null;
+      is_primary: boolean;
+    }
+  | {
+      storage_key: string;
+      alt_text: string | null;
+      is_primary: boolean;
+    }
+  | {
+      image_url: string;
+      alt_text: string | null;
+      is_primary: boolean;
+    };
+
+export type ProductImageUploaderHandle = ImageUploaderHandle<void> & {
+  /** Uploads new local files once and returns the complete desired gallery. */
+  prepare: () => Promise<PreparedProductImage[]>;
+  /** Keeps prepared ownerless files alive while an ambiguous save is recoverable. */
+  preservePrepared: (preserve: boolean) => void;
+  /** Releases rejected prepared files so the next aggregate attempt re-uploads them. */
+  discardPrepared: () => void;
+  /** Reconciles local state with the committed aggregate response. */
+  commit: (images: ProductImage[]) => void;
 };
 
 export type UploadImageSuccessEnvelope = ApiSuccess<UploadedImage>;

@@ -312,7 +312,7 @@ func TestContentMediaRepositoryAttachesEveryOwnerSlot(t *testing.T) {
 			if tt.role != "og" {
 				alt = mediaValuePatch(tt.name + " alt")
 			}
-			if err := repo.Attach(ctx, tt.ownerType, tt.role, tt.ownerID, mediaURL, tt.key, alt); err != nil {
+			if _, err := repo.Attach(ctx, tt.ownerType, tt.role, tt.ownerID, mediaURL, tt.key, alt); err != nil {
 				t.Fatalf("Attach: %v", err)
 			}
 			assertColumnString(t, tt.table, tt.column, tt.ownerID, &tt.key)
@@ -328,11 +328,15 @@ func TestContentMediaRepositoryAttachesEveryOwnerSlot(t *testing.T) {
 	}
 	replacementKey := "recipes/1/cover-550e8400-e29b-41d4-a716-446655440099.webp"
 	replacementAlt := mediaValuePatch("replacement alt")
-	if err := repo.Attach(ctx, "recipes", "cover", recipeID, "/media/"+replacementKey, replacementKey, replacementAlt); err != nil {
+	attachment, err := repo.Attach(ctx, "recipes", "cover", recipeID, "/media/"+replacementKey, replacementKey, replacementAlt)
+	if err != nil {
 		t.Fatalf("attach replacement recipe cover: %v", err)
 	}
+	if attachment.DetachedKey == nil || *attachment.DetachedKey != tests[2].key || attachment.OwnerSlug != "media-recipe" {
+		t.Fatalf("replacement attachment = %+v; want detached key and recipe slug", attachment)
+	}
 	staleAlt := mediaValuePatch("stale alt")
-	_, err := repositories.NewRecipeRepository(testPool).Update(ctx, recipeID, &models.RecipeUpdateReq{
+	_, err = repositories.NewRecipeRepository(testPool).Update(ctx, recipeID, &models.RecipeUpdateReq{
 		ImageAlt:         staleAlt,
 		ExpectedImageURL: mediaValuePatch(oldRecipeURL),
 	})
@@ -351,7 +355,7 @@ func TestContentMediaRepositoryAttachesEveryOwnerSlot(t *testing.T) {
 	if exists, err := repo.OwnerExists(ctx, "journal", blogID); err != nil || exists {
 		t.Fatalf("deleted journal OwnerExists = %v, %v; want false, nil", exists, err)
 	}
-	if err := repo.Attach(ctx, "journal", "cover", blogID, "/media/journal/new.webp", "journal/new.webp", models.NullablePatch[string]{}); !errors.Is(err, models.ErrNotFound) {
+	if _, err := repo.Attach(ctx, "journal", "cover", blogID, "/media/journal/new.webp", "journal/new.webp", models.NullablePatch[string]{}); !errors.Is(err, models.ErrNotFound) {
 		t.Fatalf("attach deleted journal error = %v; want ErrNotFound", err)
 	}
 }

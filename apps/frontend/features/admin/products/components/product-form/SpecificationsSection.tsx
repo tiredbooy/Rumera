@@ -15,7 +15,15 @@ export function SpecificationsSection({
   errors: FieldErrors<ProductFormValues>;
 }) {
   return (
-    <FormSection title="مشخصات" icon={<FlaskConical />}>
+    <FormSection
+      sectionId="product-specifications"
+      title="مشخصات"
+      description="اطلاعات فیزیکی و مشخصات نوشیدنی"
+      icon={<FlaskConical />}
+      collapsible
+      defaultOpen={false}
+      hasError={Boolean(errors.abv || errors.weight)}
+    >
       <FormField
         id="abv"
         label="درصد الکل"

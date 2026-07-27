@@ -235,6 +235,9 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 
 	// Products
 	a.GET("/products", h.ListAdminProducts)
+	a.GET("/products/:id", h.GetAdminProduct)
+	a.POST("/products/aggregate", h.CreateProductAggregate)
+	a.PUT("/products/:id/aggregate", h.UpdateProductAggregate)
 	a.POST("/products", h.CreateProduct)
 	a.PATCH("/products/:id", h.UpdateProduct)
 	a.DELETE("/products/:id", h.DeleteProduct)
@@ -255,12 +258,26 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	// Legacy standalone uploads remain for categories. Content owners use the
 	// explicit owner/role route so URL and storage key attach in one DB write.
 	a.POST("/uploads", h.UploadImage)
+	a.POST("/uploads/release", h.ReleaseStandaloneUpload)
 	a.POST("/uploads/:ownerType/:ownerID/:role", h.UploadOwnerImage)
 
 	// Variants
 	a.PATCH("/variants/:id", h.UpdateVariant)
 	a.DELETE("/variants/:id", h.DeleteVariant)
 	a.POST("/variants/:id/options", h.AttachVariantOptions)
+	a.PUT("/variants/:id/options", h.ReplaceVariantOptions)
+
+	// Reusable product option catalogue
+	a.GET("/option-types", h.ListOptionTypes)
+	a.POST("/option-types", h.CreateOptionType)
+	a.GET("/option-types/:optionTypeID", h.GetOptionType)
+	a.PATCH("/option-types/:optionTypeID", h.UpdateOptionType)
+	a.DELETE("/option-types/:optionTypeID", h.DeleteOptionType)
+	a.GET("/option-types/:optionTypeID/values", h.ListOptionValues)
+	a.POST("/option-types/:optionTypeID/values", h.CreateOptionValue)
+	a.GET("/option-values/:optionValueID", h.GetOptionValue)
+	a.PATCH("/option-values/:optionValueID", h.UpdateOptionValue)
+	a.DELETE("/option-values/:optionValueID", h.DeleteOptionValue)
 
 	// Categories
 	a.POST("/categories", h.CreateCategory)
@@ -321,6 +338,7 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	// Hero slides
 	a.GET("/hero-slides", h.ListHeroSlidesAdmin)
 	a.POST("/hero-slides", h.CreateHeroSlide)
+	a.PUT("/hero-slides/order", h.ReorderHeroSlides)
 	a.GET("/hero-slides/:id", h.GetHeroSlide)
 	a.PATCH("/hero-slides/:id", h.UpdateHeroSlide)
 	a.DELETE("/hero-slides/:id", h.DeleteHeroSlide)

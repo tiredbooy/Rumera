@@ -65,6 +65,7 @@ export async function apiFetch<T>(
       res.status,
       error?.code ?? "UNKNOWN",
       error?.message ?? res.statusText,
+      error?.fields,
     );
   }
 

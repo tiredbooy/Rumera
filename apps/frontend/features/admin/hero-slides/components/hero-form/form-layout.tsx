@@ -18,12 +18,12 @@ export function FormSection({
   children: ReactNode;
 }) {
   return (
-    <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
+    <fieldset className="border-hairline min-w-0 rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
       <legend className="px-1 font-serif text-base">{title}</legend>
       {description ? (
         <p className="-mt-0.5 text-xs text-muted-foreground">{description}</p>
       ) : null}
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">{children}</div>
+      <div className="mt-4 grid min-w-0 gap-4 sm:grid-cols-2">{children}</div>
     </fieldset>
   );
 }
@@ -44,16 +44,27 @@ export function FormField({
   full?: boolean;
 }) {
   return (
-    <div className={cn("flex flex-col gap-2", full && "sm:col-span-2")}>
+    <div className={cn("flex min-w-0 flex-col gap-2", full && "sm:col-span-2")}>
       <Label htmlFor={id}>{label}</Label>
       <FieldControl id={id} error={error} description={Boolean(hint && !error)}>
         {children as ReactElement}
       </FieldControl>
       {hint && !error ? (
-        <p id={fieldDescriptionId(id)} className="text-xs text-muted-foreground">{hint}</p>
+        <p
+          id={fieldDescriptionId(id)}
+          className="text-xs text-muted-foreground"
+        >
+          {hint}
+        </p>
       ) : null}
       {error ? (
-        <p id={fieldErrorId(id)} role="alert" className="text-xs text-destructive">{error}</p>
+        <p
+          id={fieldErrorId(id)}
+          role="alert"
+          className="text-xs text-destructive"
+        >
+          {error}
+        </p>
       ) : null}
     </div>
   );

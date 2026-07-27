@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -200,6 +201,126 @@ func (s *LocalStorage) Delete(ctx context.Context, key string) error {
 
 	if err := root.Remove(rel); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("storage: delete: %w", err)
+	}
+	return nil
+}
+
+// List walks regular objects below prefix without following symlinks. Empty
+// prefix means the complete storage namespace and is used by reconciliation.
+func (s *LocalStorage) List(ctx context.Context, prefix string) ([]ObjectInfo, error) {
+	rel := "."
+	if prefix != "" {
+		var err error
+		rel, err = s.resolve(prefix)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	root, err := os.OpenRoot(s.root)
+	if err != nil {
+		return nil, fmt.Errorf("storage: open root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
+	info, err := root.Lstat(rel)
+	if errors.Is(err, os.ErrNotExist) {
+		return []ObjectInfo{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("storage: list prefix: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("storage: list prefix symlink: %w", ErrInvalidKey)
+	}
+	if !info.IsDir() {
+		if !info.Mode().IsRegular() || prefix == "" {
+			return nil, fmt.Errorf("storage: list non-regular object: %w", ErrInvalidKey)
+		}
+		return []ObjectInfo{{Key: prefix, Size: info.Size(), ModTime: info.ModTime()}}, nil
+	}
+
+	objects := make([]ObjectInfo, 0)
+	var walk func(string) error
+	walk = func(dir string) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		opened, err := root.Open(dir)
+		if err != nil {
+			return fmt.Errorf("storage: open list directory: %w", err)
+		}
+		entries, readErr := opened.ReadDir(-1)
+		closeErr := opened.Close()
+		if readErr != nil {
+			return fmt.Errorf("storage: read list directory: %w", readErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("storage: close list directory: %w", closeErr)
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+
+		for _, entry := range entries {
+			child := filepath.Join(dir, entry.Name())
+			childInfo, err := root.Lstat(child)
+			if err != nil {
+				return fmt.Errorf("storage: inspect listed object: %w", err)
+			}
+			if childInfo.Mode()&os.ModeSymlink != 0 {
+				return fmt.Errorf("storage: listed symlink %q: %w", filepath.ToSlash(child), ErrInvalidKey)
+			}
+			if childInfo.IsDir() {
+				if err := walk(child); err != nil {
+					return err
+				}
+				continue
+			}
+			if !childInfo.Mode().IsRegular() {
+				return fmt.Errorf("storage: listed non-regular object %q: %w", filepath.ToSlash(child), ErrInvalidKey)
+			}
+			key := filepath.ToSlash(child)
+			if err := ValidateKey(key); err != nil {
+				// In-progress sibling temp files are not published storage objects.
+				if strings.HasPrefix(entry.Name(), ".tmp-") {
+					continue
+				}
+				return fmt.Errorf("storage: listed invalid key %q: %w", key, err)
+			}
+			objects = append(objects, ObjectInfo{Key: key, Size: childInfo.Size(), ModTime: childInfo.ModTime()})
+		}
+		return nil
+	}
+
+	if err := walk(rel); err != nil {
+		return nil, err
+	}
+	sort.Slice(objects, func(i, j int) bool { return objects[i].Key < objects[j].Key })
+	return objects, nil
+}
+
+// DeletePrefix removes a validated non-empty namespace. Listing first rejects
+// symlinks or special files before any destructive operation begins.
+func (s *LocalStorage) DeletePrefix(ctx context.Context, prefix string) error {
+	if err := ValidateKey(prefix); err != nil {
+		return err
+	}
+	if _, err := s.List(ctx, prefix); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	rel, err := s.resolve(prefix)
+	if err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(s.root)
+	if err != nil {
+		return fmt.Errorf("storage: open root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+	if err := root.RemoveAll(rel); err != nil {
+		return fmt.Errorf("storage: delete prefix: %w", err)
 	}
 	return nil
 }

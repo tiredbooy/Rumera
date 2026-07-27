@@ -10,6 +10,7 @@ import (
 	"io"
 	"path"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -74,6 +75,13 @@ func hasWindowsDrivePrefix(key string) bool {
 	return key[0] >= 'a' && key[0] <= 'z' || key[0] >= 'A' && key[0] <= 'Z'
 }
 
+// ObjectInfo describes one immutable object returned by Storage.List.
+type ObjectInfo struct {
+	Key     string
+	Size    int64
+	ModTime time.Time
+}
+
 // Storage persists and retrieves opaque blobs addressed by a forward-slash key
 // such as "products/9f8c…d2.webp". Implementations must treat keys as untrusted
 // input and never let one escape the backend's namespace.
@@ -93,6 +101,14 @@ type Storage interface {
 
 	// Delete removes key. It is not an error to delete a key that is absent.
 	Delete(ctx context.Context, key string) error
+
+	// List returns regular objects below prefix. An empty prefix lists the whole
+	// storage namespace. Implementations must not follow symlinks while walking.
+	List(ctx context.Context, prefix string) ([]ObjectInfo, error)
+
+	// DeletePrefix removes every object and directory below a non-empty prefix.
+	// It is intended for disposable namespaces such as rendered derivatives.
+	DeletePrefix(ctx context.Context, prefix string) error
 }
 
 // WriteOnceStorage adds atomic, no-clobber publication for immutable objects.

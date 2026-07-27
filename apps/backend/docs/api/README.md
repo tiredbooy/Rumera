@@ -114,14 +114,16 @@ All conventions (response envelope, errors, pagination, validation) are describe
 |--------|------|------|
 | GET | `/admin/users` · `/admin/users/:userID` | 🛡️ |
 | PATCH·DELETE | `/admin/users/:userID` | 🛡️ |
-| POST·PATCH·DELETE | `/admin/products` … | 🛡️ |
+| GET·POST·PATCH·DELETE | `/admin/products` … | 🛡️ |
+| POST·PUT | `/admin/products/aggregate` · `/admin/products/:id/aggregate` | 🛡️ |
 | POST/PUT/DELETE | `/admin/products/:id/tags` | 🛡️ |
 | POST | `/admin/products/:id/variants` | 🛡️ |
 | POST | `/admin/products/:id/images/url` | 🛡️ |
 | POST | `/admin/uploads` | 🛡️ |
 | POST | `/admin/uploads/:ownerType/:ownerID/:role` | 🛡️ |
 | PATCH·DELETE | `/admin/variants/:id` | 🛡️ |
-| POST | `/admin/variants/:id/options` | 🛡️ |
+| POST·PUT | `/admin/variants/:id/options` | 🛡️ |
+| GET·POST·PATCH·DELETE | `/admin/option-types` · `/admin/option-values` … | 🛡️ |
 | POST·PATCH·DELETE | `/admin/categories` … | 🛡️ |
 | POST·PATCH·DELETE | `/admin/brands` · `/admin/tags` … | 🛡️ |
 | GET | `/admin/orders` · `/admin/orders/:id` | 🛡️ |
@@ -133,7 +135,7 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | GET·POST·PATCH | `/admin/inventory/...` | 🛡️ |
 | POST·GET·PATCH·DELETE | `/admin/blogs` · `/admin/blog-categories` … | 🛡️ |
 | GET·POST·PATCH·DELETE | `/admin/recipes` · `/admin/recipes/:id` | 🛡️ |
-| GET·POST·PATCH·DELETE | `/admin/hero-slides` · `/admin/hero-slides/:id` | 🛡️ |
+| GET·POST·PUT·PATCH·DELETE | `/admin/hero-slides` · `/admin/hero-slides/order` · `/admin/hero-slides/:id` | 🛡️ |
 | GET·PUT | `/admin/settings` | 🛡️ |
 | GET | `/admin/analytics/...` | 🛡️ |
 

@@ -60,6 +60,23 @@ func (h *Handler) CreateHeroSlide(c *gin.Context) {
 	response.Created(c, mappers.ToAdminHeroSlideResponse(slide))
 }
 
+type reorderHeroSlidesReq struct {
+	IDs []int64 `json:"ids" validate:"required,min=1,dive,gt=0"`
+}
+
+// ReorderHeroSlides — PUT /admin/hero-slides/order
+func (h *Handler) ReorderHeroSlides(c *gin.Context) {
+	var req reorderHeroSlidesReq
+	if !h.bindJSON(c, &req) {
+		return
+	}
+	if err := h.HeroSlide.Reorder(c.Request.Context(), req.IDs); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.NoContent(c)
+}
+
 // UpdateHeroSlide — PATCH /admin/hero-slides/:id
 func (h *Handler) UpdateHeroSlide(c *gin.Context) {
 	id, ok := h.paramInt64(c, "id")

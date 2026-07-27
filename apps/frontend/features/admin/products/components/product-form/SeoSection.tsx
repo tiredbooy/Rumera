@@ -1,30 +1,34 @@
 "use client";
 
 import { Search } from "lucide-react";
-import type { Control, FieldErrors, UseFormRegister } from "react-hook-form";
+import type { FieldErrors, UseFormRegister } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField, FormSection } from "./FormLayout";
-import type { ProductTag } from "@/features/catalog/tags/types";
 import type { ProductFormValues } from "../../validations";
-import { TagSelector } from "./TagSelector";
 
 export function SeoSection({
   register,
-  control,
   errors,
-  initialTags,
-  disabled,
 }: {
   register: UseFormRegister<ProductFormValues>;
-  control: Control<ProductFormValues>;
   errors: FieldErrors<ProductFormValues>;
-  initialTags?: ProductTag[];
-  disabled?: boolean;
 }) {
+  const hasError = Boolean(
+    errors.meta_title || errors.meta_description || errors.meta_tags,
+  );
+
   return (
-    <FormSection title="سئو و متادیتا" icon={<Search />}>
+    <FormSection
+      sectionId="product-seo"
+      title="سئو و متادیتا"
+      description="نمایش محصول در موتورهای جست‌وجو"
+      icon={<Search />}
+      collapsible
+      defaultOpen={false}
+      hasError={hasError}
+    >
       <FormField
         id="meta_title"
         label="عنوان سئو"
@@ -57,11 +61,6 @@ export function SeoSection({
           {...register("meta_tags")}
         />
       </FormField>
-      <TagSelector
-        control={control}
-        initialTags={initialTags}
-        disabled={disabled}
-      />
     </FormSection>
   );
 }

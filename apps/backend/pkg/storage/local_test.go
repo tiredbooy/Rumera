@@ -64,6 +64,70 @@ func TestLocalStorage_OpenMissing(t *testing.T) {
 	}
 }
 
+func TestLocalStorage_ListAndDeletePrefix(t *testing.T) {
+	s, err := NewLocalStorage(t.TempDir())
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	ctx := context.Background()
+	for key, value := range map[string]string{
+		"render-v2/aa/source/one.webp": "one",
+		"render-v2/aa/source/two.webp": "two",
+		"render-v2/bb/other/one.webp":  "other",
+		"products/1/image.webp":        "original",
+	} {
+		if err := s.Put(ctx, key, strings.NewReader(value)); err != nil {
+			t.Fatalf("put %q: %v", key, err)
+		}
+	}
+
+	objects, err := s.List(ctx, "render-v2/aa/source")
+	if err != nil {
+		t.Fatalf("list prefix: %v", err)
+	}
+	if len(objects) != 2 || objects[0].Key != "render-v2/aa/source/one.webp" || objects[1].Key != "render-v2/aa/source/two.webp" {
+		t.Fatalf("listed objects = %+v", objects)
+	}
+	if objects[0].Size != 3 || objects[0].ModTime.IsZero() {
+		t.Fatalf("listed metadata = %+v", objects[0])
+	}
+
+	if err := s.DeletePrefix(ctx, "render-v2/aa/source"); err != nil {
+		t.Fatalf("delete prefix: %v", err)
+	}
+	remaining, err := s.List(ctx, "")
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	if len(remaining) != 2 || remaining[0].Key != "products/1/image.webp" || remaining[1].Key != "render-v2/bb/other/one.webp" {
+		t.Fatalf("remaining objects = %+v", remaining)
+	}
+	if err := s.DeletePrefix(ctx, "render-v2/aa/source"); err != nil {
+		t.Fatalf("delete missing prefix: %v", err)
+	}
+}
+
+func TestLocalStorage_ListRejectsSymlink(t *testing.T) {
+	root := t.TempDir()
+	s, err := NewLocalStorage(root)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "render-v2"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(root, "render-v2", "escape")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if _, err := s.List(context.Background(), "render-v2"); !errors.Is(err, ErrInvalidKey) {
+		t.Fatalf("list symlink error = %v; want ErrInvalidKey", err)
+	}
+	if err := s.DeletePrefix(context.Background(), "render-v2"); !errors.Is(err, ErrInvalidKey) {
+		t.Fatalf("delete symlink prefix error = %v; want ErrInvalidKey", err)
+	}
+}
+
 func TestValidateKey(t *testing.T) {
 	valid := []string{
 		"products/550e8400-e29b-41d4-a716-446655440000.webp",

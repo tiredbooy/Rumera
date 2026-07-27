@@ -17,8 +17,9 @@ FROM golang:1.25-alpine AS builder
 WORKDIR /app
 
 # build-base + vips-dev: the image pipeline uses libvips (cgo) under the `vips`
-# build tag for AVIF/WebP/JPEG/PNG transforms.
-RUN apk add --no-cache git build-base vips-dev
+# build tag for AVIF/WebP/JPEG/PNG transforms. Alpine 3.22+ splits HEIF and
+# its AV1 codec into plugins, so both are explicit build dependencies.
+RUN apk add --no-cache git build-base vips-dev vips-heif libheif-aom
 
 # Module proxy is overridable so builds behind a region-restricted network can
 # point at a reachable mirror (e.g. --build-arg GOPROXY=https://<mirror>,direct).
@@ -38,7 +39,8 @@ COPY . .
 ENV CGO_ENABLED=1 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -trimpath -tags vips -ldflags="-s -w" -o /app/server ./cmd/server/main.go
+    go build -trimpath -tags vips -ldflags="-s -w" -o /app/server ./cmd/server/main.go \
+ && go build -trimpath -tags vips -ldflags="-s -w" -o /app/media-reconcile ./cmd/media-reconcile
 
 # ── runner ────────────────────────────────────────────────────────────────────
 FROM alpine:3.21 AS runner
@@ -48,7 +50,7 @@ WORKDIR /app
 # the libvips runtime the cgo binary links against. /data holds uploaded
 # originals + the rendered cache and must be writable by the unprivileged user
 # (a fresh named volume inherits this ownership on first mount).
-RUN apk add --no-cache ca-certificates tzdata vips \
+RUN apk add --no-cache ca-certificates tzdata vips vips-heif \
  && addgroup --system --gid 1001 rumera \
  && adduser --system --uid 1001 --ingroup rumera rumera \
  && mkdir -p /data/media /data/media-cache \
@@ -56,6 +58,7 @@ RUN apk add --no-cache ca-certificates tzdata vips \
 
 # Binary + migrations only. No .env, no source.
 COPY --from=builder --chown=rumera:rumera /app/server ./server
+COPY --from=builder --chown=rumera:rumera /app/media-reconcile ./media-reconcile
 COPY --from=builder --chown=rumera:rumera /app/migrations ./migrations
 
 USER rumera

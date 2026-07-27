@@ -19,7 +19,10 @@ export function HeroAppearanceFields({
   errors: FieldErrors<HeroSlideFormValues>;
 }) {
   return (
-    <FormSection title="نمایش و ترتیب">
+    <FormSection
+      title="انتشار و نمایش"
+      description="بازهٔ زمانی اختیاری است و بر اساس منطقهٔ زمانی دستگاه شما ذخیره می‌شود."
+    >
       <FormField
         id="sort_order"
         label="ترتیب نمایش"
@@ -78,6 +81,38 @@ export function HeroAppearanceFields({
           )}
         />
       </div>
+
+      <FormField
+        id="starts_at"
+        label="شروع نمایش"
+        hint="خالی یعنی نمایش بدون زمان شروع."
+        error={errors.starts_at?.message}
+      >
+        <Input
+          id="starts_at"
+          type="datetime-local"
+          step={1}
+          dir="ltr"
+          aria-invalid={!!errors.starts_at}
+          {...register("starts_at")}
+        />
+      </FormField>
+
+      <FormField
+        id="ends_at"
+        label="پایان نمایش"
+        hint="خالی یعنی نمایش بدون زمان پایان."
+        error={errors.ends_at?.message}
+      >
+        <Input
+          id="ends_at"
+          type="datetime-local"
+          step={1}
+          dir="ltr"
+          aria-invalid={!!errors.ends_at}
+          {...register("ends_at")}
+        />
+      </FormField>
 
       <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/20 px-4 py-3 sm:col-span-2">
         <div>

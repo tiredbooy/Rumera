@@ -1,10 +1,12 @@
 "use client";
 
+import * as React from "react";
 import { ImageIcon } from "lucide-react";
-import type { Ref } from "react";
 import { ImageUploader } from "@/features/image-uploader/ImageUploader";
-import type { ImageUploaderHandle } from "@/features/image-uploader/types";
+import type { ProductImageUploaderHandle } from "@/features/image-uploader/types";
+import type { ProductGallerySnapshot } from "@/features/image-uploader/product-types";
 import type { ProductImage } from "@/features/catalog/products/types";
+import { FormSection } from "./FormLayout";
 
 export function ImagesSection({
   uploaderRef,
@@ -12,29 +14,53 @@ export function ImagesSection({
   mode,
   initialImages,
   disabled,
+  error,
+  onDirtyChange,
+  onGalleryChange,
 }: {
-  uploaderRef: Ref<ImageUploaderHandle<void>>;
+  uploaderRef: React.Ref<ProductImageUploaderHandle>;
   productId: number | null | undefined;
   mode: "create" | "edit";
   initialImages: ProductImage[];
   disabled?: boolean;
+  error?: string | null;
+  onDirtyChange?: (dirty: boolean) => void;
+  onGalleryChange?: (gallery: ProductGallerySnapshot) => void;
 }) {
+  const [gallery, setGallery] = React.useState<ProductGallerySnapshot>(() => {
+    const primary =
+      initialImages.find((image) => image.is_primary) ?? initialImages[0];
+    return { count: initialImages.length, primaryUrl: primary?.image_url };
+  });
+  const handleGalleryChange = React.useCallback(
+    (next: ProductGallerySnapshot) => {
+      setGallery(next);
+      onGalleryChange?.(next);
+    },
+    [onGalleryChange],
+  );
+
   return (
-    <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
-      <legend className="flex items-center gap-2 px-1 font-serif text-base">
-        <ImageIcon className="size-4 text-muted-foreground" />
-        تصاویر محصول
-      </legend>
-      {mode === "create" ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          تصاویر پس از ذخیرهٔ محصول بارگذاری می‌شوند.
-        </p>
-      ) : (
-        <p className="mt-1 text-xs text-muted-foreground">
-          تغییرات تصاویر در همین بخش بلافاصله ذخیره می‌شوند.
-        </p>
-      )}
-      <div className="mt-4">
+    <FormSection
+      sectionId="product-images"
+      title="تصاویر محصول"
+      description="تغییرات تصاویر همراه با ذخیرهٔ محصول ثبت می‌شوند"
+      icon={<ImageIcon />}
+      collapsible
+      defaultOpen={gallery.count > 0}
+      hasError={Boolean(error)}
+      summary={
+        gallery.count > 0
+          ? `${gallery.count.toLocaleString("fa-IR")} تصویر`
+          : "بدون تصویر"
+      }
+    >
+      <div className="sm:col-span-2">
+        {error ? (
+          <p role="alert" className="mb-3 text-xs text-destructive">
+            {error}
+          </p>
+        ) : null}
         <ImageUploader
           ref={uploaderRef}
           owner={{
@@ -42,10 +68,13 @@ export function ImagesSection({
             role: "gallery",
             ownerId: mode === "edit" ? productId : null,
           }}
+          deferred
           initialImages={initialImages}
           disabled={disabled}
+          onDirtyChange={onDirtyChange}
+          onGalleryChange={handleGalleryChange}
         />
       </div>
-    </fieldset>
+    </FormSection>
   );
 }

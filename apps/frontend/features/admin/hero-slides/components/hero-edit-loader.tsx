@@ -7,20 +7,31 @@ import { AlertCircle, RotateCw, SearchX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listAdminHeroSlides } from "@/features/hero-slides/api/client";
+import {
+  getAdminHeroSlide,
+  HeroSlideApiError,
+} from "@/features/hero-slides/api/client";
 import { HeroForm } from "@/features/admin/hero-slides/components/hero-form";
 
 /**
- * Client-side loader for the hero-slide editor. Fetches the admin slide list
- * through the authenticated BFF proxy (the single-slide GET isn't exposed on the
- * browser client) and resolves the requested slide by id, so inactive/scheduled
- * slides edit correctly. Renders loading / not-found / error states before the
- * form mounts with real defaults.
+ * Client-side loader for the hero-slide editor. Fetches the requested admin
+ * projection through the authenticated BFF and renders explicit loading,
+ * not-found, and retryable error states before mounting the form.
  */
 export function HeroEditLoader({ id }: { id: number }) {
-  const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["admin", "hero-slides"],
-    queryFn: listAdminHeroSlides,
+  const {
+    data: slide,
+    error,
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["admin", "hero-slides", id],
+    queryFn: () => getAdminHeroSlide(id),
+    retry: (failureCount, requestError) =>
+      !(
+        requestError instanceof HeroSlideApiError && requestError.status === 404
+      ) && failureCount < 3,
   });
 
   if (isPending) {
@@ -32,6 +43,30 @@ export function HeroEditLoader({ id }: { id: number }) {
           ))}
         </div>
         <Skeleton className="h-80 w-full" />
+      </div>
+    );
+  }
+
+  const notFound =
+    (isError && error instanceof HeroSlideApiError && error.status === 404) ||
+    (!isPending && !isError && !slide);
+
+  if (notFound) {
+    return (
+      <div
+        role="status"
+        className="border-hairline flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-12 text-center"
+      >
+        <span className="flex size-12 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground ring-1 ring-border/60">
+          <SearchX className="size-6" />
+        </span>
+        <p className="font-serif text-base">اسلاید پیدا نشد</p>
+        <p className="text-sm text-muted-foreground">
+          ممکن است این اسلاید حذف شده باشد.
+        </p>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/admin/hero-slides">بازگشت به فهرست</Link>
+        </Button>
       </div>
     );
   }
@@ -54,23 +89,8 @@ export function HeroEditLoader({ id }: { id: number }) {
     );
   }
 
-  const slide = data?.find((s) => s.id === id);
-
   if (!slide) {
-    return (
-      <div className="border-hairline flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-12 text-center">
-        <span className="flex size-12 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground ring-1 ring-border/60">
-          <SearchX className="size-6" />
-        </span>
-        <p className="font-serif text-base">اسلاید پیدا نشد</p>
-        <p className="text-sm text-muted-foreground">
-          ممکن است این اسلاید حذف شده باشد.
-        </p>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/admin/hero-slides">بازگشت به فهرست</Link>
-        </Button>
-      </div>
-    );
+    return null;
   }
 
   return <HeroForm mode="edit" slide={slide} submitLabel="ذخیرهٔ تغییرات" />;

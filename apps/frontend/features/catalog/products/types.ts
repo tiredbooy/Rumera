@@ -19,6 +19,8 @@ export interface ProductImage {
 
 export interface ProductOptionValue {
   id: number;
+  option_type_id: number;
+  option_type_title: string; // stable administrative name
   option_type: string; // e.g. "Color"
   value: string; // e.g. "Red"
 }
@@ -69,6 +71,7 @@ export interface ProductDetail {
   meta_title?: string;
   meta_description?: string;
   meta_tags?: string[];
+  updated_at?: string;
   tags?: ProductTag[];
   images?: ProductImage[];
   variants?: ProductVariant[];

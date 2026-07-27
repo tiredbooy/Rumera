@@ -1,0 +1,51 @@
+import { describe, expect, it } from "vitest";
+
+import { CATEGORY_DIRECTORY_CACHE_TAG } from "./cache-tags";
+import { getAdminRevalidationPlan } from "./admin-revalidation";
+
+describe("getAdminRevalidationPlan", () => {
+  it("invalidates home and product surfaces after product image writes", () => {
+    const plan = getAdminRevalidationPlan(
+      ["admin", "products", "12", "images"],
+      "POST",
+      201,
+    );
+
+    expect(plan.paths).toContainEqual({ path: "/" });
+    expect(plan.paths).toContainEqual({
+      path: "/products/[slug]",
+      type: "page",
+    });
+  });
+
+  it("expires category tags and the uncached hero route only after successful writes", () => {
+    expect(
+      getAdminRevalidationPlan(["admin", "categories", "4"], "PATCH", 200).tags,
+    ).toEqual([CATEGORY_DIRECTORY_CACHE_TAG]);
+    expect(
+      getAdminRevalidationPlan(
+        ["admin", "uploads", "hero-slides", "4", "desktop"],
+        "POST",
+        201,
+      ),
+    ).toEqual({ tags: [], paths: [{ path: "/" }] });
+    expect(
+      getAdminRevalidationPlan(["admin", "categories", "4"], "PATCH", 500),
+    ).toEqual({ tags: [], paths: [] });
+    expect(
+      getAdminRevalidationPlan(["admin", "hero-slides", "order"], "PUT", 204),
+    ).toEqual({
+      tags: [],
+      paths: [{ path: "/" }],
+    });
+  });
+
+  it("does not invalidate for an unattached upload or its release", () => {
+    expect(getAdminRevalidationPlan(["admin", "uploads"], "POST", 201)).toEqual(
+      { tags: [], paths: [] },
+    );
+    expect(
+      getAdminRevalidationPlan(["admin", "uploads", "release"], "POST", 204),
+    ).toEqual({ tags: [], paths: [] });
+  });
+});

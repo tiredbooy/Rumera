@@ -25,11 +25,12 @@ type CategoryService interface {
 }
 
 type categoryService struct {
-	repo repositories.CategoryRepository
+	repo  repositories.CategoryRepository
+	media *MediaLifecycleService
 }
 
-func NewCategoryService(repo repositories.CategoryRepository) CategoryService {
-	return &categoryService{repo: repo}
+func NewCategoryService(repo repositories.CategoryRepository, media *MediaLifecycleService) CategoryService {
+	return &categoryService{repo: repo, media: media}
 }
 
 // ── Writes ────────────────────────────────────────────────────────────────────
@@ -96,7 +97,8 @@ func (s *categoryService) Create(ctx context.Context, req models.CreateCategoryR
 
 func (s *categoryService) Update(ctx context.Context, id int64, req models.UpdateCategoryReq) (*models.Category, error) {
 	// Ensure the category being updated actually exists
-	if _, err := s.repo.GetByID(ctx, id); err != nil {
+	current, err := s.repo.GetByID(ctx, id)
+	if err != nil {
 		return nil, fmt.Errorf("categoryService.Update: %w", err)
 	}
 
@@ -157,6 +159,9 @@ func (s *categoryService) Update(ctx context.Context, id int64, req models.Updat
 	if err != nil {
 		return nil, fmt.Errorf("categoryService.Update: %w", err)
 	}
+	if !sameMediaURL(current.ImageURL, category.ImageURL) {
+		s.media.CleanupURLs(ctx, current.ImageURL)
+	}
 	return category, nil
 }
 
@@ -170,10 +175,15 @@ func (s *categoryService) Delete(ctx context.Context, id int64) error {
 	if len(children) > 0 {
 		return models.ErrHasChildren
 	}
+	current, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("categoryService.Delete: load media: %w", err)
+	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("categoryService.Delete: %w", err)
 	}
+	s.media.CleanupURLs(ctx, current.ImageURL)
 	return nil
 }
 

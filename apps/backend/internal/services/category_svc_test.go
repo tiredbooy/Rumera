@@ -47,7 +47,7 @@ func TestCategoryServiceGetBySlugNormalizesCanonicalSlug(t *testing.T) {
 	slug := "exact-slug"
 	repo := &categoryServiceRepo{category: &models.Category{ID: 9, Slug: &slug}}
 
-	category, err := NewCategoryService(repo).GetBySlug(context.Background(), "  Exact--Slug  ")
+	category, err := NewCategoryService(repo, nil).GetBySlug(context.Background(), "  Exact--Slug  ")
 	if err != nil {
 		t.Fatalf("get by slug: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestCategoryServiceCreateNormalizesAndGuardsSlugIdentity(t *testing.T) {
 	repo := &categoryServiceRepo{category: &models.Category{ID: 12}}
 	rawSlug := "  Whisky / Single--Malt?  "
 
-	if _, err := NewCategoryService(repo).Create(context.Background(), models.CreateCategoryReq{
+	if _, err := NewCategoryService(repo, nil).Create(context.Background(), models.CreateCategoryReq{
 		Title: "  Whisky  ",
 		Slug:  &rawSlug,
 	}); err != nil {
@@ -83,7 +83,7 @@ func TestCategoryServiceCreateNormalizesAndGuardsSlugIdentity(t *testing.T) {
 	}
 
 	conflictRepo := &categoryServiceRepo{slugExists: true}
-	if _, err := NewCategoryService(conflictRepo).Create(context.Background(), models.CreateCategoryReq{
+	if _, err := NewCategoryService(conflictRepo, nil).Create(context.Background(), models.CreateCategoryReq{
 		Title: "Another",
 		Slug:  &rawSlug,
 	}); !errors.Is(err, models.ErrAlreadyExists) {
@@ -96,7 +96,7 @@ func TestCategoryServiceCreateNormalizesAndGuardsSlugIdentity(t *testing.T) {
 
 func TestCategoryServiceGetBySlugMapsMissingAndBlankToNotFound(t *testing.T) {
 	repo := &categoryServiceRepo{slugErr: models.ErrNotFound}
-	svc := NewCategoryService(repo)
+	svc := NewCategoryService(repo, nil)
 
 	if _, err := svc.GetBySlug(context.Background(), "missing"); !errors.Is(err, apperr.ErrNotFound) {
 		t.Fatalf("missing error = %v; want ErrNotFound", err)
@@ -112,7 +112,7 @@ func TestCategoryServiceGetBySlugMapsMissingAndBlankToNotFound(t *testing.T) {
 func TestCategoryServiceGetBySlugMapsRepositoryFailure(t *testing.T) {
 	repo := &categoryServiceRepo{slugErr: errors.New("database unavailable")}
 
-	if _, err := NewCategoryService(repo).GetBySlug(context.Background(), "spirits"); !errors.Is(err, apperr.ErrInternal) {
+	if _, err := NewCategoryService(repo, nil).GetBySlug(context.Background(), "spirits"); !errors.Is(err, apperr.ErrInternal) {
 		t.Fatalf("repository error = %v; want ErrInternal", err)
 	}
 }

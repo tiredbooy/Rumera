@@ -34,6 +34,13 @@ func TestSetupRegistersWithoutPanic(t *testing.T) {
 		"GET /api/v1/categories/slug/:slug":                    false,
 		"GET /api/v1/categories/:id":                           false,
 		"GET /api/v1/products/slug/:slug":                      false,
+		"GET /api/v1/admin/products/:id":                       false,
+		"POST /api/v1/admin/products/aggregate":                false,
+		"PUT /api/v1/admin/products/:id/aggregate":             false,
+		"GET /api/v1/admin/option-types":                       false,
+		"POST /api/v1/admin/option-types/:optionTypeID/values": false,
+		"PUT /api/v1/admin/variants/:id/options":               false,
+		"PUT /api/v1/admin/hero-slides/order":                  false,
 		"POST /api/v1/admin/uploads/:ownerType/:ownerID/:role": false,
 		"POST /api/v1/admin/products/:id/images/url":           false,
 	}

@@ -17,14 +17,23 @@
  * Unlike `/api/store`, this preserves `multipart/form-data` bodies verbatim so
  * image uploads pass through with their boundary intact.
  */
-import { NextResponse, type NextRequest } from "next/server"
-import { getToken } from "next-auth/jwt"
+import { NextResponse, type NextRequest } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { getToken } from "next-auth/jwt";
 
-import { auth } from "@/lib/auth/auth"
-import { isStaff } from "@/lib/rbac/roles"
-import { API_BASE } from "@/lib/api/client"
+import { auth } from "@/lib/auth/auth";
+import { isStaff } from "@/lib/rbac/roles";
+import { API_BASE } from "@/lib/api/client";
+import { getAdminRevalidationPlan } from "@/lib/admin-revalidation";
 
-const ALLOW = new Set(["admin", "products", "categories", "brands", "tags", "hero-slides"])
+const ALLOW = new Set([
+  "admin",
+  "products",
+  "categories",
+  "brands",
+  "tags",
+  "hero-slides",
+]);
 
 /**
  * Read the *raw* next-auth JWT (which carries the server-only `refreshToken`)
@@ -34,13 +43,13 @@ const ALLOW = new Set(["admin", "products", "categories", "brands", "tags", "her
  * Docker, and prod (where the `__Secure-` prefix is used).
  */
 async function readRefreshToken(req: NextRequest): Promise<string | undefined> {
-  const secureCookie = req.nextUrl.protocol === "https:"
+  const secureCookie = req.nextUrl.protocol === "https:";
   const token = await getToken({
     req,
     secret: process.env.AUTH_SECRET,
     secureCookie,
-  })
-  return (token?.refreshToken as string | undefined) ?? undefined
+  });
+  return (token?.refreshToken as string | undefined) ?? undefined;
 }
 
 /**
@@ -49,19 +58,21 @@ async function readRefreshToken(req: NextRequest): Promise<string | undefined> {
  * caller should surface the original 401 — the client-side SessionGuard then
  * signs the user out).
  */
-async function refreshAccessToken(refreshToken: string): Promise<string | undefined> {
+async function refreshAccessToken(
+  refreshToken: string,
+): Promise<string | undefined> {
   try {
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
       cache: "no-store",
-    })
-    if (!res.ok) return undefined
-    const { data } = await res.json()
-    return (data?.access_token as string | undefined) ?? undefined
+    });
+    if (!res.ok) return undefined;
+    const { data } = await res.json();
+    return (data?.access_token as string | undefined) ?? undefined;
   } catch {
-    return undefined
+    return undefined;
   }
 }
 
@@ -69,93 +80,120 @@ async function handle(req: NextRequest, segments: string[]) {
   if (!segments.length || !ALLOW.has(segments[0])) {
     return NextResponse.json(
       { error: { code: "FORBIDDEN_PATH", message: "path not allowed" } },
-      { status: 403 }
-    )
+      { status: 403 },
+    );
   }
 
-  const session = await auth()
+  const session = await auth();
   if (!session?.user || !isStaff(session.role)) {
     return NextResponse.json(
       { error: { code: "FORBIDDEN", message: "staff access required" } },
-      { status: 403 }
-    )
+      { status: 403 },
+    );
   }
 
-  const target = `${API_BASE}/${segments.join("/")}${req.nextUrl.search}`
-  const method = req.method
-  const hasBody = method !== "GET" && method !== "HEAD" && method !== "DELETE"
-  const contentType = req.headers.get("content-type") ?? ""
-  const isMultipart = contentType.startsWith("multipart/form-data")
+  const target = `${API_BASE}/${segments.join("/")}${req.nextUrl.search}`;
+  const method = req.method;
+  const hasBody = method !== "GET" && method !== "HEAD" && method !== "DELETE";
+  const contentType = req.headers.get("content-type") ?? "";
+  const isMultipart = contentType.startsWith("multipart/form-data");
 
-  let body: BodyInit | undefined
+  let body: BodyInit | undefined;
   const forwardHeaders: Record<string, string> = {
-    ...(session.accessToken ? { Authorization: `Bearer ${session.accessToken}` } : {}),
-  }
+    ...(session.accessToken
+      ? { Authorization: `Bearer ${session.accessToken}` }
+      : {}),
+  };
 
   if (hasBody) {
     if (isMultipart) {
       // Preserve the multipart payload (and its boundary) untouched.
-      body = Buffer.from(await req.arrayBuffer())
-      forwardHeaders["Content-Type"] = contentType
+      body = Buffer.from(await req.arrayBuffer());
+      forwardHeaders["Content-Type"] = contentType;
     } else {
-      const text = await req.text()
+      const text = await req.text();
       if (text) {
-        body = text
-        forwardHeaders["Content-Type"] = "application/json"
+        body = text;
+        forwardHeaders["Content-Type"] = "application/json";
       }
     }
   }
 
   const sendUpstream = (headers: Record<string, string>) =>
-    fetch(target, { method, headers, body, cache: "no-store" })
+    fetch(target, {
+      method,
+      headers,
+      body,
+      cache: "no-store",
+      signal: req.signal,
+    });
 
-  let res: Response
+  let res: Response;
   try {
-    res = await sendUpstream(forwardHeaders)
+    res = await sendUpstream(forwardHeaders);
 
     // The access token may have expired mid-request. Try ONE silent refresh +
     // retry so a transient expiry doesn't surface to the user. If the refresh
     // fails we fall through and return the original 401, and the client-side
     // SessionGuard signs the user out.
     if (res.status === 401) {
-      const refreshToken = await readRefreshToken(req)
+      const refreshToken = await readRefreshToken(req);
       if (refreshToken) {
-        const fresh = await refreshAccessToken(refreshToken)
+        const fresh = await refreshAccessToken(refreshToken);
         if (fresh) {
-          res = await sendUpstream({ ...forwardHeaders, Authorization: `Bearer ${fresh}` })
+          res = await sendUpstream({
+            ...forwardHeaders,
+            Authorization: `Bearer ${fresh}`,
+          });
         }
       }
     }
   } catch {
     return NextResponse.json(
-      { error: { code: "UPSTREAM_UNAVAILABLE", message: "could not reach API" } },
-      { status: 502 }
-    )
+      {
+        error: { code: "UPSTREAM_UNAVAILABLE", message: "could not reach API" },
+      },
+      { status: 502 },
+    );
   }
 
-  if (res.status === 204) return new NextResponse(null, { status: 204 })
+  if (res.ok) {
+    try {
+      const plan = getAdminRevalidationPlan(segments, method, res.status);
+      for (const tag of plan.tags) revalidateTag(tag, { expire: 0 });
+      for (const entry of plan.paths) revalidatePath(entry.path, entry.type);
+    } catch (error) {
+      // The mutation already succeeded upstream; stale-cache cleanup must not
+      // turn that success into a misleading client error.
+      console.error("admin storefront cache revalidation failed", error);
+    }
+  }
 
-  const text = await res.text()
+  if (res.status === 204) return new NextResponse(null, { status: 204 });
+
+  const text = await res.text();
   return new NextResponse(text, {
     status: res.status,
-    headers: { "Content-Type": res.headers.get("content-type") ?? "application/json" },
-  })
+    headers: {
+      "Content-Type": res.headers.get("content-type") ?? "application/json",
+    },
+  });
 }
 
-type Ctx = { params: Promise<{ path: string[] }> }
+type Ctx = { params: Promise<{ path: string[] }> };
 
 export async function GET(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path)
+  return handle(req, (await ctx.params).path);
 }
 export async function POST(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path)
+  return handle(req, (await ctx.params).path);
 }
 export async function PATCH(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path)
+  return handle(req, (await ctx.params).path);
 }
 export async function PUT(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path)
+  return handle(req, (await ctx.params).path);
 }
 export async function DELETE(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path)
+  return handle(req, (await ctx.params).path);
 }

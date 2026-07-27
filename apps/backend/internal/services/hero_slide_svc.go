@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -18,15 +19,17 @@ type HeroSlideService interface {
 	GetByID(ctx context.Context, id int64) (*models.HeroSlide, error)
 	Create(ctx context.Context, req *models.HeroSlideReq) (*models.HeroSlide, error)
 	Update(ctx context.Context, id int64, req *models.HeroSlideUpdateReq) (*models.HeroSlide, error)
+	Reorder(ctx context.Context, ids []int64) error
 	Delete(ctx context.Context, id int64) error
 }
 
 type heroSlideService struct {
-	repo repositories.HeroSlideRepository
+	repo  repositories.HeroSlideRepository
+	media *MediaLifecycleService
 }
 
-func NewHeroSlideService(repo repositories.HeroSlideRepository) HeroSlideService {
-	return &heroSlideService{repo: repo}
+func NewHeroSlideService(repo repositories.HeroSlideRepository, media *MediaLifecycleService) HeroSlideService {
+	return &heroSlideService{repo: repo, media: media}
 }
 
 func (s *heroSlideService) GetActive(ctx context.Context) ([]*models.HeroSlide, error) {
@@ -54,73 +57,115 @@ func (s *heroSlideService) GetByID(ctx context.Context, id int64) (*models.HeroS
 }
 
 func (s *heroSlideService) Create(ctx context.Context, req *models.HeroSlideReq) (*models.HeroSlide, error) {
-	if err := normalizeCreateMediaURL(&req.ImageURL); err != nil {
+	if err := normalizeAndValidateHeroSlideCreate(req); err != nil {
 		return nil, err
-	}
-	if err := normalizeCreateMediaURL(&req.MobileImageURL); err != nil {
-		return nil, err
-	}
-	if err := normalizeCreateImageAlt(&req.ImageAlt); err != nil {
-		return nil, err
-	}
-	active := req.IsActive == nil || *req.IsActive
-	if active && !hasHeroImage(req.ImageURL) {
-		return nil, apperr.ErrInvalidRequest
 	}
 	slide, err := s.repo.Create(ctx, req)
 	if err != nil {
+		if validationErr := heroSlidePersistenceValidationError(err); validationErr != nil {
+			return nil, validationErr
+		}
 		return nil, fmt.Errorf("heroSlideService.Create: %w", err)
 	}
 	return slide, nil
 }
 
 func (s *heroSlideService) Update(ctx context.Context, id int64, req *models.HeroSlideUpdateReq) (*models.HeroSlide, error) {
-	if req.ImageURL.Set || req.MobileImageURL.Set || req.ImageAlt.Set || req.IsActive != nil {
-		current, err := s.repo.GetByID(ctx, id)
-		if err != nil {
-			return nil, fmt.Errorf("heroSlideService.Update preflight: %w", err)
-		}
-		if req.ImageURL.Set || req.ImageAlt.Set {
-			req.ExpectedImageURL = mediaExpectation(current.ImageURL)
-		}
-		if req.MobileImageURL.Set {
-			req.ExpectedMobileImageURL = mediaExpectation(current.MobileImageURL)
-		}
-		if err := normalizeMediaURLPatch(&req.ImageURL, current.ImageURL); err != nil {
-			return nil, err
-		}
-		if err := normalizeMediaURLPatch(&req.MobileImageURL, current.MobileImageURL); err != nil {
-			return nil, err
-		}
-		if err := normalizeImageAltPatch(&req.ImageAlt); err != nil {
-			return nil, err
-		}
-		imageURL := current.ImageURL
-		if req.ImageURL.Set {
-			imageURL = req.ImageURL.Value
-		}
-		active := current.IsActive
-		if req.IsActive != nil {
-			active = *req.IsActive
-		}
-		if active && !hasHeroImage(imageURL) {
-			return nil, apperr.ErrInvalidRequest
-		}
+	current, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("heroSlideService.Update preflight: %w", err)
+	}
+	if req.ImageURL.Set || req.ImageAlt.Set {
+		req.ExpectedImageURL = mediaExpectation(current.ImageURL)
+	}
+	if req.MobileImageURL.Set {
+		req.ExpectedMobileImageURL = mediaExpectation(current.MobileImageURL)
+	}
+	if err := normalizeAndValidateHeroSlideUpdate(req, current); err != nil {
+		return nil, err
 	}
 	slide, err := s.repo.Update(ctx, id, req)
 	if err != nil {
+		if validationErr := heroSlidePersistenceValidationError(err); validationErr != nil {
+			return nil, validationErr
+		}
 		return nil, fmt.Errorf("heroSlideService.Update: %w", err)
 	}
+	if s.media != nil {
+		if !sameMediaURL(current.ImageURL, slide.ImageURL) {
+			s.media.CleanupURLs(ctx, current.ImageURL)
+		}
+		if !sameMediaURL(current.MobileImageURL, slide.MobileImageURL) {
+			s.media.CleanupURLs(ctx, current.MobileImageURL)
+		}
+	}
 	return slide, nil
+}
+
+func heroSlidePersistenceValidationError(err error) error {
+	switch {
+	case errors.Is(err, models.ErrHeroSchedule):
+		return apperr.WithFields(apperr.ErrValidation, map[string][]string{
+			"ends_at": {"must be after starts_at"},
+		})
+	case errors.Is(err, models.ErrHeroPrimaryCTA):
+		return apperr.WithFields(apperr.ErrValidation, map[string][]string{
+			"cta_href": {"must complete a safe primary CTA pair"},
+		})
+	case errors.Is(err, models.ErrHeroSecondaryCTA):
+		return apperr.WithFields(apperr.ErrValidation, map[string][]string{
+			"secondary_cta_href": {"must complete a safe secondary CTA pair"},
+		})
+	default:
+		return nil
+	}
 }
 
 func hasHeroImage(value *string) bool {
 	return value != nil && strings.TrimSpace(*value) != ""
 }
 
+func (s *heroSlideService) Reorder(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return apperr.WithFields(apperr.ErrValidation, map[string][]string{
+			"ids": {"must contain every hero slide ID"},
+		})
+	}
+	seen := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return apperr.WithFields(apperr.ErrValidation, map[string][]string{
+				"ids": {"must contain only positive IDs"},
+			})
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return apperr.WithFields(apperr.ErrValidation, map[string][]string{
+				"ids": {"must not contain duplicate IDs"},
+			})
+		}
+		seen[id] = struct{}{}
+	}
+	if err := s.repo.Reorder(ctx, ids); err != nil {
+		if errors.Is(err, models.ErrInvalidState) {
+			return apperr.WithFields(apperr.ErrValidation, map[string][]string{
+				"ids": {"must contain every hero slide ID exactly once"},
+			})
+		}
+		return fmt.Errorf("heroSlideService.Reorder: %w", err)
+	}
+	return nil
+}
+
 func (s *heroSlideService) Delete(ctx context.Context, id int64) error {
+	current, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("heroSlideService.Delete media: %w", err)
+	}
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("heroSlideService.Delete: %w", err)
+	}
+	if s.media != nil {
+		s.media.CleanupURLs(ctx, current.ImageURL, current.MobileImageURL)
 	}
 	return nil
 }

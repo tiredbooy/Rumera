@@ -1,6 +1,11 @@
 "use client";
 
-import type { ApiErrorEnvelope, ApiSuccess, Paginated } from "@/lib/api/types";
+import type {
+  ApiErrorEnvelope,
+  ApiFieldErrors,
+  ApiSuccess,
+  Paginated,
+} from "@/lib/api/types";
 import { buildQueryString } from "@/lib/utils/api-helpers";
 import type { PublicProductListQuery } from "@/features/catalog/products/queries";
 import type {
@@ -8,12 +13,17 @@ import type {
   ProductListItem,
   ProductVariant,
 } from "@/features/catalog/products/types";
+import type {
+  AdminProductDetail,
+  SaveProductAggregateInput,
+} from "@/features/admin/products/types";
 
 export class ProductClientError extends Error {
   constructor(
     public readonly status: number,
     public readonly code: string,
     message: string,
+    public readonly fields?: ApiFieldErrors,
   ) {
     super(message);
     this.name = "ProductClientError";
@@ -39,10 +49,25 @@ async function productRequest<T>(
       response.status,
       error?.code ?? "UNKNOWN",
       error?.message ?? response.statusText,
+      error?.fields,
     );
   }
 
   return ((body as ApiSuccess<T> | null)?.data ?? body) as T;
+}
+
+export function saveProductAggregate(
+  productId: number | null,
+  payload: SaveProductAggregateInput,
+): Promise<AdminProductDetail> {
+  const path =
+    productId === null
+      ? "admin/products/aggregate"
+      : `admin/products/${productId}/aggregate`;
+  return productRequest<AdminProductDetail>(path, {
+    method: productId === null ? "POST" : "PUT",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function listSelectableProducts(

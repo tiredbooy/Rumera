@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
 )
@@ -19,6 +20,7 @@ type HeroSlideRepository interface {
 	GetByID(ctx context.Context, id int64) (*models.HeroSlide, error)
 	Create(ctx context.Context, req *models.HeroSlideReq) (*models.HeroSlide, error)
 	Update(ctx context.Context, id int64, req *models.HeroSlideUpdateReq) (*models.HeroSlide, error)
+	Reorder(ctx context.Context, ids []int64) error
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -106,51 +108,60 @@ func (r *heroSlideRepository) Create(ctx context.Context, req *models.HeroSlideR
 		req.CTALabel, req.CTAHref, req.SecondaryCTALabel, req.SecondaryCTAHref,
 		req.Theme, req.SortOrder, req.IsActive, req.StartsAt, req.EndsAt,
 	), s); err != nil {
-		return nil, fmt.Errorf("creating hero slide: %w", err)
+		return nil, fmt.Errorf("creating hero slide: %w", heroSlideConstraintError(err))
 	}
 	return s, nil
 }
 
 func (r *heroSlideRepository) Update(ctx context.Context, id int64, req *models.HeroSlideUpdateReq) (*models.HeroSlide, error) {
 	query := `UPDATE hero_slides SET
-			      eyebrow             = COALESCE($2, eyebrow),
-			      title               = COALESCE($3, title),
-			      subtitle            = COALESCE($4, subtitle),
-			      badge               = COALESCE($5, badge),
+			      eyebrow             = CASE WHEN $2::boolean THEN $3::text ELSE eyebrow END,
+			      title               = COALESCE($4::text, title),
+			      subtitle            = CASE WHEN $5::boolean THEN $6::text ELSE subtitle END,
+			      badge               = CASE WHEN $7::boolean THEN $8::text ELSE badge END,
 			      image_storage_key   = CASE
-			          WHEN $6::boolean AND $7::text IS DISTINCT FROM image_url THEN NULL
+			          WHEN $9::boolean AND $10::text IS DISTINCT FROM image_url THEN NULL
 			          ELSE image_storage_key
 			      END,
-			      image_url           = CASE WHEN $6::boolean THEN $7::text ELSE image_url END,
+			      image_url           = CASE WHEN $9::boolean THEN $10::text ELSE image_url END,
 			      mobile_image_storage_key = CASE
-			          WHEN $8::boolean AND $9::text IS DISTINCT FROM mobile_image_url THEN NULL
+			          WHEN $11::boolean AND $12::text IS DISTINCT FROM mobile_image_url THEN NULL
 			          ELSE mobile_image_storage_key
 			      END,
-			      mobile_image_url    = CASE WHEN $8::boolean THEN $9::text ELSE mobile_image_url END,
-			      image_alt           = CASE WHEN $10::boolean THEN $11::text ELSE image_alt END,
-			      cta_label           = COALESCE($12, cta_label),
-			      cta_href            = COALESCE($13, cta_href),
-			      secondary_cta_label = COALESCE($14, secondary_cta_label),
-			      secondary_cta_href  = COALESCE($15, secondary_cta_href),
-			      theme               = COALESCE($16, theme),
-			      sort_order          = COALESCE($17, sort_order),
-			      is_active           = COALESCE($18, is_active),
-			      starts_at           = COALESCE($19, starts_at),
-			      ends_at             = COALESCE($20, ends_at),
+			      mobile_image_url    = CASE WHEN $11::boolean THEN $12::text ELSE mobile_image_url END,
+			      image_alt           = CASE WHEN $13::boolean THEN $14::text ELSE image_alt END,
+			      cta_label           = CASE WHEN $15::boolean THEN $16::text ELSE cta_label END,
+			      cta_href            = CASE WHEN $17::boolean THEN $18::text ELSE cta_href END,
+			      secondary_cta_label = CASE WHEN $19::boolean THEN $20::text ELSE secondary_cta_label END,
+			      secondary_cta_href  = CASE WHEN $21::boolean THEN $22::text ELSE secondary_cta_href END,
+			      theme               = COALESCE($23::text, theme),
+			      sort_order          = COALESCE($24::integer, sort_order),
+			      is_active           = COALESCE($25::boolean, is_active),
+			      starts_at           = CASE WHEN $26::boolean THEN $27::timestamptz ELSE starts_at END,
+			      ends_at             = CASE WHEN $28::boolean THEN $29::timestamptz ELSE ends_at END,
 			      updated_at          = NOW()
 			  WHERE id = $1
-			    AND (NOT $21::boolean OR image_url IS NOT DISTINCT FROM $22::text)
-			    AND (NOT $23::boolean OR mobile_image_url IS NOT DISTINCT FROM $24::text)
+			    AND (NOT $30::boolean OR image_url IS NOT DISTINCT FROM $31::text)
+			    AND (NOT $32::boolean OR mobile_image_url IS NOT DISTINCT FROM $33::text)
 			  RETURNING ` + heroSlideColumns
 
 	s := &models.HeroSlide{}
 	if err := scanHeroSlide(r.db.QueryRow(ctx, query,
-		id, req.Eyebrow, req.Title, req.Subtitle, req.Badge,
+		id,
+		req.Eyebrow.Set, req.Eyebrow.Value,
+		req.Title,
+		req.Subtitle.Set, req.Subtitle.Value,
+		req.Badge.Set, req.Badge.Value,
 		req.ImageURL.Set, req.ImageURL.Value,
 		req.MobileImageURL.Set, req.MobileImageURL.Value,
 		req.ImageAlt.Set, req.ImageAlt.Value,
-		req.CTALabel, req.CTAHref, req.SecondaryCTALabel, req.SecondaryCTAHref,
-		req.Theme, req.SortOrder, req.IsActive, req.StartsAt, req.EndsAt,
+		req.CTALabel.Set, req.CTALabel.Value,
+		req.CTAHref.Set, req.CTAHref.Value,
+		req.SecondaryCTALabel.Set, req.SecondaryCTALabel.Value,
+		req.SecondaryCTAHref.Set, req.SecondaryCTAHref.Value,
+		req.Theme, req.SortOrder, req.IsActive,
+		req.StartsAt.Set, req.StartsAt.Value,
+		req.EndsAt.Set, req.EndsAt.Value,
 		req.ExpectedImageURL.Set, req.ExpectedImageURL.Value,
 		req.ExpectedMobileImageURL.Set, req.ExpectedMobileImageURL.Value,
 	), s); err != nil {
@@ -160,9 +171,85 @@ func (r *heroSlideRepository) Update(ctx context.Context, id int64, req *models.
 			}
 			return nil, fmt.Errorf("hero slide not found: %d: %w", id, models.ErrNotFound)
 		}
-		return nil, fmt.Errorf("updating hero slide: %w", err)
+		return nil, fmt.Errorf("updating hero slide: %w", heroSlideConstraintError(err))
 	}
 	return s, nil
+}
+
+func heroSlideConstraintError(err error) error {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return err
+	}
+	switch pgErr.ConstraintName {
+	case "hero_slides_schedule_ordered":
+		return fmt.Errorf("%s: %w", pgErr.ConstraintName, models.ErrHeroSchedule)
+	case "hero_slides_primary_cta_complete", "hero_slides_primary_cta_safe":
+		return fmt.Errorf("%s: %w", pgErr.ConstraintName, models.ErrHeroPrimaryCTA)
+	case "hero_slides_secondary_cta_complete", "hero_slides_secondary_cta_safe":
+		return fmt.Errorf("%s: %w", pgErr.ConstraintName, models.ErrHeroSecondaryCTA)
+	default:
+		return err
+	}
+}
+
+func (r *heroSlideRepository) Reorder(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return models.ErrInvalidState
+	}
+	seen := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return models.ErrInvalidState
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return models.ErrInvalidState
+		}
+		seen[id] = struct{}{}
+	}
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("heroSlideRepository.Reorder begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// A table lock prevents inserts or deletes from changing the required
+	// permutation between validation and the batch update.
+	if _, err := tx.Exec(ctx, `LOCK TABLE hero_slides IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		return fmt.Errorf("heroSlideRepository.Reorder lock: %w", err)
+	}
+	var matches bool
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*) = $2
+		   AND count(*) = (SELECT count(*) FROM hero_slides)
+		FROM hero_slides
+		WHERE id = ANY($1::bigint[])`, ids, len(ids)).Scan(&matches); err != nil {
+		return fmt.Errorf("heroSlideRepository.Reorder validate: %w", err)
+	}
+	if !matches {
+		return models.ErrInvalidState
+	}
+
+	orders := make([]int32, len(ids))
+	for i := range ids {
+		orders[i] = int32(i)
+	}
+	tag, err := tx.Exec(ctx, `
+		UPDATE hero_slides AS slide
+		SET sort_order = ordered.position, updated_at = NOW()
+		FROM unnest($1::bigint[], $2::integer[]) AS ordered(id, position)
+		WHERE slide.id = ordered.id`, ids, orders)
+	if err != nil {
+		return fmt.Errorf("heroSlideRepository.Reorder update: %w", err)
+	}
+	if tag.RowsAffected() != int64(len(ids)) {
+		return models.ErrInvalidState
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("heroSlideRepository.Reorder commit: %w", err)
+	}
+	return nil
 }
 
 func (r *heroSlideRepository) Delete(ctx context.Context, id int64) error {

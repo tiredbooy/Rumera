@@ -15,9 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProductFormValues } from "../validations";
 
 const mocks = vi.hoisted(() => ({
-  createProduct: vi.fn(),
-  updateProduct: vi.fn(),
-  syncTags: vi.fn(),
+  saveProductAggregate: vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
 }));
@@ -30,16 +28,12 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock("@/features/admin/products/actions/product", () => ({
-  createProduct: mocks.createProduct,
-  updateProduct: mocks.updateProduct,
-  createVariant: vi.fn(),
-  updateVariant: vi.fn(),
-  deleteVariant: vi.fn(),
+vi.mock("@/features/admin/products/api/client", () => ({
+  ProductClientError: class ProductClientError extends Error {},
+  saveProductAggregate: mocks.saveProductAggregate,
 }));
 
 vi.mock("@/features/admin/tags/api", () => ({
-  syncProductTags: mocks.syncTags,
   useAllTags: () => ({
     data: [
       {
@@ -97,6 +91,7 @@ const product = {
   id: 42,
   title: "محصول",
   is_active: true,
+  updated_at: "2026-07-26T12:00:00Z",
   tags: [{ id: 1, title: "قدیمی" }],
   variants: [],
   images: [],
@@ -106,32 +101,29 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.createProduct.mockResolvedValue({ id: 84 });
-  mocks.updateProduct.mockResolvedValue(product);
-  mocks.syncTags.mockResolvedValue(undefined);
+  mocks.saveProductAggregate.mockResolvedValue(product);
 });
 
 describe("ProductForm tag integration", () => {
-  it("syncs selected tags after creating the product", async () => {
+  it("submits selected tags with the product create", async () => {
     render(<ProductForm mode="create" categories={[]} brands={[]} />);
 
     fireEvent.change(screen.getByLabelText("نام محصول"), {
       target: { value: "محصول تازه" },
     });
+    fireEvent.click(screen.getByRole("button", { name: /برچسب‌های فروشگاهی/ }));
     fireEvent.click(screen.getByRole("button", { name: "تازه" }));
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
-    await waitFor(() => expect(mocks.syncTags).toHaveBeenCalledTimes(1));
-    expect(mocks.createProduct.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({ title: "محصول تازه", tag_ids: [2] }),
+    await waitFor(() =>
+      expect(mocks.saveProductAggregate).toHaveBeenCalledTimes(1),
     );
-    expect(mocks.syncTags).toHaveBeenCalledWith(84, { tag_ids: [2] });
-    expect(mocks.createProduct.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.syncTags.mock.invocationCallOrder[0],
+    expect(mocks.saveProductAggregate.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ title: "محصول تازه", tag_ids: [2] }),
     );
   });
 
-  it("persists selected IDs through the supported tag sync", async () => {
+  it("submits selected tags with the product update", async () => {
     render(
       <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
     );
@@ -143,13 +135,11 @@ describe("ProductForm tag integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "تازه" }));
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
-    await waitFor(() => expect(mocks.syncTags).toHaveBeenCalledTimes(1));
-    expect(mocks.updateProduct.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ tag_ids: [1, 2] }),
+    await waitFor(() =>
+      expect(mocks.saveProductAggregate).toHaveBeenCalledTimes(1),
     );
-    expect(mocks.syncTags).toHaveBeenCalledWith(42, { tag_ids: [1, 2] });
-    expect(mocks.updateProduct.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.syncTags.mock.invocationCallOrder[0],
+    expect(mocks.saveProductAggregate.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ tag_ids: [1, 2] }),
     );
   });
 
@@ -161,23 +151,22 @@ describe("ProductForm tag integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "قدیمی" }));
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
-    await waitFor(() => expect(mocks.syncTags).toHaveBeenCalledTimes(1));
-    expect(mocks.updateProduct.mock.calls[0]?.[1]).toEqual(
+    await waitFor(() =>
+      expect(mocks.saveProductAggregate).toHaveBeenCalledTimes(1),
+    );
+    expect(mocks.saveProductAggregate.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({ tag_ids: [] }),
     );
-    expect(mocks.syncTags).toHaveBeenCalledWith(42, { tag_ids: [] });
   });
 
-  it("reports which later product changes remain unsaved after tag failure", async () => {
-    mocks.syncTags.mockRejectedValue(new Error("شبکه قطع است"));
+  it("reports product update failures", async () => {
+    mocks.saveProductAggregate.mockRejectedValueOnce(new Error("شبکه قطع است"));
     render(
       <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "اطلاعات پایهٔ محصول ذخیره شد، اما برچسب‌ها، گونه‌ها و تصاویر ذخیره نشدند: شبکه قطع است",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("شبکه قطع است");
   });
 });

@@ -15,7 +15,12 @@ import (
 // every query remains static so path parameters can never become SQL identifiers.
 type ContentMediaRepository interface {
 	OwnerExists(ctx context.Context, ownerType string, ownerID int64) (bool, error)
-	Attach(ctx context.Context, ownerType, role string, ownerID int64, url, key string, alt models.NullablePatch[string]) error
+	Attach(ctx context.Context, ownerType, role string, ownerID int64, url, key string, alt models.NullablePatch[string]) (*ContentMediaAttachment, error)
+}
+
+type ContentMediaAttachment struct {
+	DetachedKey *string
+	OwnerSlug   string
 }
 
 type contentMediaRepository struct{ db *pgxpool.Pool }
@@ -50,55 +55,81 @@ func (r *contentMediaRepository) Attach(
 	ownerID int64,
 	url, key string,
 	alt models.NullablePatch[string],
-) error {
+) (*ContentMediaAttachment, error) {
 	var (
-		query string
-		args  []any
+		selectQuery string
+		updateQuery string
+		args        []any
 	)
 	switch {
 	case ownerType == "hero-slides" && role == "desktop":
-		query = `UPDATE hero_slides
+		selectQuery = `SELECT image_storage_key, '' FROM hero_slides WHERE id = $1 FOR UPDATE`
+		updateQuery = `UPDATE hero_slides
 			SET image_url = $2, image_storage_key = $3,
 			    image_alt = CASE WHEN $4 THEN $5::text ELSE image_alt END,
 			    updated_at = NOW()
-			WHERE id = $1 RETURNING id`
+			WHERE id = $1`
 		args = []any{ownerID, url, key, alt.Set, alt.Value}
 	case ownerType == "hero-slides" && role == "mobile":
-		query = `UPDATE hero_slides
+		selectQuery = `SELECT mobile_image_storage_key, '' FROM hero_slides WHERE id = $1 FOR UPDATE`
+		updateQuery = `UPDATE hero_slides
 			SET mobile_image_url = $2, mobile_image_storage_key = $3,
 			    image_alt = CASE WHEN $4 THEN $5::text ELSE image_alt END,
 			    updated_at = NOW()
-			WHERE id = $1 RETURNING id`
+			WHERE id = $1`
 		args = []any{ownerID, url, key, alt.Set, alt.Value}
 	case ownerType == "recipes" && role == "cover":
-		query = `UPDATE recipes
+		selectQuery = `SELECT image_storage_key, slug FROM recipes WHERE id = $1 FOR UPDATE`
+		updateQuery = `UPDATE recipes
 			SET image_url = $2, image_storage_key = $3,
 			    image_alt = CASE WHEN $4 THEN $5::text ELSE image_alt END,
 			    updated_at = NOW()
-			WHERE id = $1 RETURNING id`
+			WHERE id = $1`
 		args = []any{ownerID, url, key, alt.Set, alt.Value}
 	case ownerType == "recipes" && role == "og":
-		query = `UPDATE recipes
+		selectQuery = `SELECT og_image_storage_key, slug FROM recipes WHERE id = $1 FOR UPDATE`
+		updateQuery = `UPDATE recipes
 			SET og_image_url = $2, og_image_storage_key = $3, updated_at = NOW()
-			WHERE id = $1 RETURNING id`
+			WHERE id = $1`
 		args = []any{ownerID, url, key}
 	case ownerType == "journal" && role == "cover":
-		query = `UPDATE blogs
+		selectQuery = `SELECT image_storage_key, slug FROM blogs
+			WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`
+		updateQuery = `UPDATE blogs
 			SET image_url = $2, image_storage_key = $3,
 			    image_alt = CASE WHEN $4 THEN $5::text ELSE image_alt END,
 			    updated_at = NOW()
-			WHERE id = $1 AND deleted_at IS NULL RETURNING id`
+			WHERE id = $1 AND deleted_at IS NULL`
 		args = []any{ownerID, url, key, alt.Set, alt.Value}
 	default:
-		return fmt.Errorf("content media: unsupported owner/role %q/%q", ownerType, role)
+		return nil, fmt.Errorf("content media: unsupported owner/role %q/%q", ownerType, role)
 	}
 
-	var attachedID int64
-	if err := r.db.QueryRow(ctx, query, args...).Scan(&attachedID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return models.ErrNotFound
-		}
-		return fmt.Errorf("content media: attach %s/%s: %w", ownerType, role, err)
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("content media: begin attach %s/%s: %w", ownerType, role, err)
 	}
-	return nil
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	attachment := &ContentMediaAttachment{}
+	if err := tx.QueryRow(ctx, selectQuery, ownerID).Scan(&attachment.DetachedKey, &attachment.OwnerSlug); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("content media: lock %s/%s owner: %w", ownerType, role, err)
+	}
+	result, err := tx.Exec(ctx, updateQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("content media: attach %s/%s: %w", ownerType, role, err)
+	}
+	if result.RowsAffected() == 0 {
+		return nil, models.ErrNotFound
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("content media: commit %s/%s: %w", ownerType, role, err)
+	}
+	if attachment.DetachedKey != nil && *attachment.DetachedKey == key {
+		attachment.DetachedKey = nil
+	}
+	return attachment, nil
 }

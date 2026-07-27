@@ -60,16 +60,39 @@ func (r *productImageRepository) Create(ctx context.Context, img *models.Product
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	productID := *img.ProductID
+	if img.ProductVariantID != nil {
+		var ownsVariant bool
+		if err := tx.QueryRow(ctx,
+			`SELECT EXISTS(
+				SELECT 1 FROM product_variants WHERE id = $1 AND product_id = $2
+			)`,
+			*img.ProductVariantID, productID,
+		).Scan(&ownsVariant); err != nil {
+			return nil, fmt.Errorf("productImageRepository.Create variant owner: %w", err)
+		}
+		if !ownsVariant {
+			return nil, models.ErrInvalidState
+		}
+	}
+	lockKey := fmt.Sprintf("product-images:%d", productID)
+	if img.ProductVariantID != nil {
+		lockKey = fmt.Sprintf("product-variant-images:%d", *img.ProductVariantID)
+	}
 	if _, err := tx.Exec(ctx,
-		`SELECT pg_advisory_xact_lock(hashtextextended('product-images:' || ($1::bigint)::text, 0))`,
-		productID,
+		`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
+		lockKey,
 	); err != nil {
 		return nil, fmt.Errorf("productImageRepository.Create lock: %w", err)
 	}
+	if err := touchProductGraphTx(ctx, tx, productID); err != nil {
+		return nil, err
+	}
 	var nextOrder int
 	if err := tx.QueryRow(ctx,
-		`SELECT COALESCE(MAX(sort_order) + 1, 0) FROM product_images WHERE product_id = $1`,
-		productID,
+		`SELECT COALESCE(MAX(sort_order) + 1, 0)
+		 FROM product_images
+		 WHERE product_id = $1 AND product_variant_id IS NOT DISTINCT FROM $2`,
+		productID, img.ProductVariantID,
 	).Scan(&nextOrder); err != nil {
 		return nil, fmt.Errorf("productImageRepository.Create order: %w", err)
 	}
@@ -77,8 +100,10 @@ func (r *productImageRepository) Create(ctx context.Context, img *models.Product
 	if primary {
 		if _, err := tx.Exec(ctx,
 			`UPDATE product_images SET is_primary = false, updated_at = NOW()
-			 WHERE product_id = $1 AND is_primary`,
-			productID,
+			 WHERE product_id = $1
+			   AND product_variant_id IS NOT DISTINCT FROM $2
+			   AND is_primary`,
+			productID, img.ProductVariantID,
 		); err != nil {
 			return nil, fmt.Errorf("productImageRepository.Create clear primary: %w", err)
 		}
@@ -139,7 +164,8 @@ func (r *productImageRepository) GetByID(ctx context.Context, id int64) (*models
 
 func (r *productImageRepository) ListByProduct(ctx context.Context, productID int64) ([]*models.ProductImage, error) {
 	const q = `SELECT ` + productImageCols + `
-		FROM product_images WHERE product_id = $1
+		FROM product_images
+		WHERE product_id = $1 AND product_variant_id IS NULL
 		ORDER BY sort_order ASC, is_primary DESC, id ASC`
 	rows, err := r.db.Query(ctx, q, productID)
 	if err != nil {
@@ -159,14 +185,47 @@ func (r *productImageRepository) ListByProduct(ctx context.Context, productID in
 }
 
 func (r *productImageRepository) UpdateAlt(ctx context.Context, id int64, alt *string) (*models.ProductImage, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("productImageRepository.UpdateAlt begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	var productID *int64
+	var variantID *int64
+	if err := tx.QueryRow(ctx,
+		`SELECT product_id, product_variant_id FROM product_images WHERE id = $1`, id,
+	).Scan(&productID, &variantID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("productImageRepository.UpdateAlt owner: %w", err)
+	}
+	if productID == nil {
+		return nil, models.ErrInvalidState
+	}
+	lockKey := fmt.Sprintf("product-images:%d", *productID)
+	if variantID != nil {
+		lockKey = fmt.Sprintf("product-variant-images:%d", *variantID)
+	}
+	if _, err := tx.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, lockKey,
+	); err != nil {
+		return nil, fmt.Errorf("productImageRepository.UpdateAlt lock: %w", err)
+	}
+	if err := touchProductGraphTx(ctx, tx, *productID); err != nil {
+		return nil, err
+	}
 	const q = `UPDATE product_images SET alt_text = $2, updated_at = NOW()
 		WHERE id = $1 RETURNING ` + productImageCols
-	img, err := scanProductImage(r.db.QueryRow(ctx, q, id, alt))
+	img, err := scanProductImage(tx.QueryRow(ctx, q, id, alt))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("productImageRepository.UpdateAlt: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("productImageRepository.UpdateAlt commit: %w", err)
 	}
 	return img, nil
 }
@@ -185,9 +244,15 @@ func (r *productImageRepository) SetPrimary(ctx context.Context, productID, id i
 	); err != nil {
 		return fmt.Errorf("productImageRepository.SetPrimary lock: %w", err)
 	}
+	if err := touchProductGraphTx(ctx, tx, productID); err != nil {
+		return err
+	}
 	var exists bool
 	if err := tx.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM product_images WHERE product_id = $1 AND id = $2)`,
+		`SELECT EXISTS(
+			SELECT 1 FROM product_images
+			WHERE product_id = $1 AND product_variant_id IS NULL AND id = $2
+		)`,
 		productID, id,
 	).Scan(&exists); err != nil {
 		return fmt.Errorf("productImageRepository.SetPrimary target: %w", err)
@@ -197,14 +262,14 @@ func (r *productImageRepository) SetPrimary(ctx context.Context, productID, id i
 	}
 	if _, err := tx.Exec(ctx,
 		`UPDATE product_images SET is_primary = false, updated_at = NOW()
-		 WHERE product_id = $1 AND is_primary`,
+		 WHERE product_id = $1 AND product_variant_id IS NULL AND is_primary`,
 		productID,
 	); err != nil {
 		return fmt.Errorf("productImageRepository.SetPrimary clear: %w", err)
 	}
 	tag, err := tx.Exec(ctx,
 		`UPDATE product_images SET is_primary = true, updated_at = NOW()
-		 WHERE product_id = $1 AND id = $2`,
+		 WHERE product_id = $1 AND product_variant_id IS NULL AND id = $2`,
 		productID, id,
 	)
 	if err != nil {
@@ -236,13 +301,21 @@ func (r *productImageRepository) Reorder(ctx context.Context, productID int64, i
 	); err != nil {
 		return fmt.Errorf("productImageRepository.Reorder lock: %w", err)
 	}
+	if err := touchProductGraphTx(ctx, tx, productID); err != nil {
+		return err
+	}
 	var matches bool
 	if err := tx.QueryRow(ctx, `
 		SELECT count(*) = $3
 		   AND count(DISTINCT id) = $3
-		   AND count(*) = (SELECT count(*) FROM product_images WHERE product_id = $1)
+		   AND count(*) = (
+			   SELECT count(*) FROM product_images
+			   WHERE product_id = $1 AND product_variant_id IS NULL
+		   )
 		FROM product_images
-		WHERE product_id = $1 AND id = ANY($2::bigint[])`,
+		WHERE product_id = $1
+		  AND product_variant_id IS NULL
+		  AND id = ANY($2::bigint[])`,
 		productID, ids, len(ids),
 	).Scan(&matches); err != nil {
 		return fmt.Errorf("productImageRepository.Reorder validate: %w", err)
@@ -258,7 +331,9 @@ func (r *productImageRepository) Reorder(ctx context.Context, productID int64, i
 		UPDATE product_images AS pi
 		SET sort_order = v.ord, updated_at = NOW()
 		FROM (SELECT * FROM unnest($2::bigint[], $3::int[]) AS t(id, ord)) AS v
-		WHERE pi.id = v.id AND pi.product_id = $1`
+		WHERE pi.id = v.id
+		  AND pi.product_id = $1
+		  AND pi.product_variant_id IS NULL`
 	if _, err := tx.Exec(ctx, q, productID, ids, orders); err != nil {
 		return fmt.Errorf("productImageRepository.Reorder: %w", err)
 	}
@@ -280,11 +355,14 @@ func (r *productImageRepository) Delete(ctx context.Context, productID, id int64
 	); err != nil {
 		return fmt.Errorf("productImageRepository.Delete lock: %w", err)
 	}
+	if err := touchProductGraphTx(ctx, tx, productID); err != nil {
+		return err
+	}
 
 	var wasPrimary bool
 	if err := tx.QueryRow(ctx,
 		`DELETE FROM product_images
-		 WHERE product_id = $1 AND id = $2
+		 WHERE product_id = $1 AND product_variant_id IS NULL AND id = $2
 		 RETURNING is_primary`,
 		productID, id,
 	).Scan(&wasPrimary); err != nil {
@@ -298,7 +376,7 @@ func (r *productImageRepository) Delete(ctx context.Context, productID, id int64
 		WITH ranked AS (
 			SELECT id, row_number() OVER (ORDER BY sort_order ASC, id ASC) - 1 AS position
 			FROM product_images
-			WHERE product_id = $1
+			WHERE product_id = $1 AND product_variant_id IS NULL
 		)
 		UPDATE product_images AS image
 		SET sort_order = ranked.position, updated_at = NOW()
@@ -314,7 +392,7 @@ func (r *productImageRepository) Delete(ctx context.Context, productID, id int64
 			SET is_primary = true, updated_at = NOW()
 			WHERE id = (
 				SELECT id FROM product_images
-				WHERE product_id = $1
+				WHERE product_id = $1 AND product_variant_id IS NULL
 				ORDER BY sort_order ASC, id ASC
 				LIMIT 1
 			)`, productID); err != nil {

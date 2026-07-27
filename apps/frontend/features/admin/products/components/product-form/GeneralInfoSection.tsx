@@ -10,6 +10,7 @@ import {
 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { fieldErrorId } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -78,7 +79,11 @@ export function GeneralInfoSection({
         />
       </FormField>
 
-      <FormField id="category_id" label="دسته‌بندی">
+      <FormField
+        id="category_id"
+        label="دسته‌بندی"
+        error={errors.category_id?.message}
+      >
         <Controller
           control={control}
           name="category_id"
@@ -87,7 +92,14 @@ export function GeneralInfoSection({
               value={field.value || "none"}
               onValueChange={(val) => field.onChange(val === "none" ? "" : val)}
             >
-              <SelectTrigger id="category_id" className="w-full">
+              <SelectTrigger
+                id="category_id"
+                className="w-full"
+                aria-invalid={Boolean(errors.category_id)}
+                aria-describedby={
+                  errors.category_id ? fieldErrorId("category_id") : undefined
+                }
+              >
                 <SelectValue placeholder="انتخاب دسته" />
               </SelectTrigger>
               <SelectContent>
@@ -103,7 +115,11 @@ export function GeneralInfoSection({
         />
       </FormField>
 
-      <FormField id="brand_id" label="برند / سازنده">
+      <FormField
+        id="brand_id"
+        label="برند / سازنده"
+        error={errors.brand_id?.message}
+      >
         <Controller
           control={control}
           name="brand_id"
@@ -112,7 +128,14 @@ export function GeneralInfoSection({
               value={field.value || "none"}
               onValueChange={(val) => field.onChange(val === "none" ? "" : val)}
             >
-              <SelectTrigger id="brand_id" className="w-full">
+              <SelectTrigger
+                id="brand_id"
+                className="w-full"
+                aria-invalid={Boolean(errors.brand_id)}
+                aria-describedby={
+                  errors.brand_id ? fieldErrorId("brand_id") : undefined
+                }
+              >
                 <SelectValue placeholder="انتخاب برند" />
               </SelectTrigger>
               <SelectContent>

@@ -17,7 +17,10 @@ import (
 
 type ProductRepository interface {
 	Create(ctx context.Context, req models.CreateProductReq) (*models.Product, error)
+	FindAggregateOperation(ctx context.Context, operationID, requestHash string) (*models.ProductAggregateWriteResult, error)
+	SaveAggregate(ctx context.Context, productID int64, requestHash string, req models.SaveProductAggregateReq) (*models.ProductAggregateWriteResult, error)
 	GetByID(ctx context.Context, id int64) (*models.Product, error)
+	GetByIDForAdmin(ctx context.Context, id int64) (*models.Product, error)
 	GetBySlug(ctx context.Context, slug string) (*models.Product, error)
 	GetAll(ctx context.Context, filter models.ProductFilter) ([]*models.ProductListItem, int64, error)
 	Update(ctx context.Context, id int64, req models.UpdateProductReq) (*models.Product, error)
@@ -35,11 +38,13 @@ type ProductRepository interface {
 
 	// Variants
 	GetVariants(ctx context.Context, productID int64) ([]*models.ProductVariant, error)
+	GetVariantOptions(ctx context.Context, productID int64) (map[int64][]models.OptionValueResponse, error)
+	GetVariantImages(ctx context.Context, productID int64) (map[int64][]*models.ProductImage, error)
 	GetVariantAvailableStock(ctx context.Context, productID int64) (map[int64]int, error)
 
 	ExistsByID(ctx context.Context, id int64) (bool, error)
-	ExistsBySlug(ctx context.Context, slug string) (bool, error)
-	ExistsByCode(ctx context.Context, code string) (bool, error)
+	ExistsBySlug(ctx context.Context, slug string, excludeID int64) (bool, error)
+	ExistsByCode(ctx context.Context, code string, excludeID int64) (bool, error)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -112,6 +117,9 @@ func (r *productRepository) Create(ctx context.Context, req models.CreateProduct
 			return nil, fmt.Errorf("productRepository.Create variant %d: %w", i, err)
 		}
 	}
+	if err := insertProductTagsTx(ctx, tx, product.ID, req.TagIDs); err != nil {
+		return nil, fmt.Errorf("productRepository.Create tags: %w", err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("productRepository.Create commit: %w", err)
@@ -137,24 +145,20 @@ func insertVariantTx(ctx context.Context, tx pgx.Tx, productID int64, req models
 
 	var variantID int64
 	if err := tx.QueryRow(ctx, q, args).Scan(&variantID); err != nil {
+		if isUniqueViolation(err) {
+			return models.ErrConflict
+		}
+		if isOptionForeignKeyViolation(err) {
+			return models.ErrNotFound
+		}
 		return fmt.Errorf("insert variant: %w", err)
 	}
 
-	if len(req.OptionValueIDs) > 0 {
-		optRows := make([]string, len(req.OptionValueIDs))
-		optArgs := pgx.NamedArgs{"variant_id": variantID}
-		for i, oid := range req.OptionValueIDs {
-			key := fmt.Sprintf("opt_%d", i)
-			optRows[i] = fmt.Sprintf("(@variant_id, @%s)", key)
-			optArgs[key] = oid
-		}
-		optQ := fmt.Sprintf(`
-			INSERT INTO product_variants_options (product_variant_id, variant_option_id)
-			VALUES %s`, strings.Join(optRows, ", "),
-		)
-		if _, err := tx.Exec(ctx, optQ, optArgs); err != nil {
-			return fmt.Errorf("attach options: %w", err)
-		}
+	if err := insertVariantOptionsTx(ctx, tx, variantID, req.OptionValueIDs, false); err != nil {
+		return fmt.Errorf("attach options: %w", err)
+	}
+	if err := ensureUniqueVariantCombinationTx(ctx, tx, productID, variantID); err != nil {
+		return fmt.Errorf("validate combination: %w", err)
 	}
 
 	return nil
@@ -178,6 +182,25 @@ func (r *productRepository) GetByID(ctx context.Context, id int64) (*models.Prod
 			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("productRepository.GetByID scan: %w", err)
+	}
+	return &product, nil
+}
+
+// GetByIDForAdmin intentionally includes inactive products. Public reads must
+// continue through GetByID or GetBySlug so drafts remain undiscoverable.
+func (r *productRepository) GetByIDForAdmin(ctx context.Context, id int64) (*models.Product, error) {
+	const q = `SELECT * FROM products WHERE id = $1`
+
+	rows, err := r.db.Query(ctx, q, id)
+	if err != nil {
+		return nil, fmt.Errorf("productRepository.GetByIDForAdmin: %w", err)
+	}
+	product, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Product])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("productRepository.GetByIDForAdmin scan: %w", err)
 	}
 	return &product, nil
 }
@@ -373,7 +396,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		SELECT id, image_url, storage_key, alt_text, width, height,
 			sort_order, COALESCE(is_primary, FALSE) AS is_primary
         FROM product_images pi
-        WHERE pi.product_id = p.id
+        WHERE pi.product_id = p.id AND pi.product_variant_id IS NULL
         ORDER BY pi.is_primary DESC, pi.sort_order ASC
         LIMIT 1	
     ) img ON TRUE
@@ -540,7 +563,7 @@ func (r *productRepository) Update(ctx context.Context, id int64, req models.Upd
 	}
 
 	if len(sets) == 0 {
-		return r.GetByID(ctx, id)
+		return r.GetByIDForAdmin(ctx, id)
 	}
 
 	q := fmt.Sprintf(`
@@ -590,25 +613,19 @@ func (r *productRepository) AttachTags(ctx context.Context, productID int64, tag
 	if len(tagIDs) == 0 {
 		return nil
 	}
-
-	// Build multi-row insert — one round trip for N tags
-	rows := make([]string, len(tagIDs))
-	args := pgx.NamedArgs{"product_id": productID}
-	for i, id := range tagIDs {
-		key := fmt.Sprintf("tag_%d", i)
-		rows[i] = fmt.Sprintf("(@product_id, @%s)", key)
-		args[key] = id
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("productRepository.AttachTags begin: %w", err)
 	}
-
-	q := fmt.Sprintf(`
-		INSERT INTO product_tags (product_id, tag_id)
-		VALUES %s
-		ON CONFLICT DO NOTHING`,
-		strings.Join(rows, ", "),
-	)
-
-	if _, err := r.db.Exec(ctx, q, args); err != nil {
-		return fmt.Errorf("productRepository.AttachTags: %w", err)
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := touchProductGraphTx(ctx, tx, productID); err != nil {
+		return err
+	}
+	if err := insertProductTagsTx(ctx, tx, productID, tagIDs); err != nil {
+		return fmt.Errorf("productRepository.AttachTags insert: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("productRepository.AttachTags commit: %w", err)
 	}
 	return nil
 }
@@ -618,9 +635,22 @@ func (r *productRepository) DetachTags(ctx context.Context, productID int64, tag
 		return nil
 	}
 
-	const q = `DELETE FROM product_tags WHERE product_id = $1 AND tag_id = ANY($2)`
-	if _, err := r.db.Exec(ctx, q, productID, tagIDs); err != nil {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("productRepository.DetachTags begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := touchProductGraphTx(ctx, tx, productID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM product_tags WHERE product_id = $1 AND tag_id = ANY($2)`,
+		productID, tagIDs,
+	); err != nil {
 		return fmt.Errorf("productRepository.DetachTags: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("productRepository.DetachTags commit: %w", err)
 	}
 	return nil
 }
@@ -633,6 +663,9 @@ func (r *productRepository) SyncTags(ctx context.Context, productID int64, tagID
 		return fmt.Errorf("productRepository.SyncTags begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
+	if err := touchProductGraphTx(ctx, tx, productID); err != nil {
+		return err
+	}
 
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM product_tags WHERE product_id = $1`, productID,
@@ -640,25 +673,38 @@ func (r *productRepository) SyncTags(ctx context.Context, productID int64, tagID
 		return fmt.Errorf("productRepository.SyncTags delete: %w", err)
 	}
 
-	if len(tagIDs) > 0 {
-		rows := make([]string, len(tagIDs))
-		args := pgx.NamedArgs{"product_id": productID}
-		for i, id := range tagIDs {
-			key := fmt.Sprintf("tag_%d", i)
-			rows[i] = fmt.Sprintf("(@product_id, @%s)", key)
-			args[key] = id
-		}
-		q := fmt.Sprintf(
-			`INSERT INTO product_tags (product_id, tag_id) VALUES %s`,
-			strings.Join(rows, ", "),
-		)
-		if _, err := tx.Exec(ctx, q, args); err != nil {
-			return fmt.Errorf("productRepository.SyncTags insert: %w", err)
-		}
+	if err := insertProductTagsTx(ctx, tx, productID, tagIDs); err != nil {
+		return fmt.Errorf("productRepository.SyncTags insert: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("productRepository.SyncTags commit: %w", err)
+	}
+	return nil
+}
+
+func insertProductTagsTx(ctx context.Context, tx pgx.Tx, productID int64, tagIDs []int64) error {
+	if len(tagIDs) == 0 {
+		return nil
+	}
+	const q = `
+		INSERT INTO product_tags (product_id, tag_id)
+		SELECT $1, submitted.tag_id
+		FROM (SELECT DISTINCT unnest($2::bigint[]) AS tag_id) submitted
+		ON CONFLICT DO NOTHING`
+	_, err := tx.Exec(ctx, q, productID, tagIDs)
+	return err
+}
+
+func touchProductGraphTx(ctx context.Context, tx pgx.Tx, productID int64) error {
+	tag, err := tx.Exec(ctx,
+		`UPDATE products SET updated_at = updated_at WHERE id = $1`, productID,
+	)
+	if err != nil {
+		return fmt.Errorf("touch product graph revision: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return models.ErrNotFound
 	}
 	return nil
 }
@@ -696,7 +742,7 @@ func (r *productRepository) GetTags(ctx context.Context, productID int64) ([]*mo
 func (r *productRepository) GetImages(ctx context.Context, productID int64) ([]*models.ProductImage, error) {
 	const q = `
 		SELECT * FROM product_images
-		WHERE product_id = $1
+		WHERE product_id = $1 AND product_variant_id IS NULL
 		ORDER BY sort_order ASC, is_primary DESC`
 
 	rows, err := r.db.Query(ctx, q, productID)
@@ -745,6 +791,85 @@ func (r *productRepository) GetVariants(ctx context.Context, productID int64) ([
 	return result, nil
 }
 
+func (r *productRepository) GetVariantOptions(
+	ctx context.Context,
+	productID int64,
+) (map[int64][]models.OptionValueResponse, error) {
+	const q = `
+		SELECT
+			pv.id,
+			ov.id,
+			ov.option_type_id,
+			ot.title,
+			ot.display_name,
+			ov.value
+		FROM product_variants pv
+		INNER JOIN product_variants_options pvo ON pvo.product_variant_id = pv.id
+		INNER JOIN option_values ov ON ov.id = pvo.variant_option_id
+		INNER JOIN option_types ot ON ot.id = ov.option_type_id
+		WHERE pv.product_id = $1
+		ORDER BY pv.created_at, pv.id, ot.display_name, ov.sort_order, ov.value, ov.id`
+
+	rows, err := r.db.Query(ctx, q, productID)
+	if err != nil {
+		return nil, fmt.Errorf("productRepository.GetVariantOptions: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[int64][]models.OptionValueResponse)
+	for rows.Next() {
+		var variantID int64
+		var option models.OptionValueResponse
+		if err := rows.Scan(
+			&variantID,
+			&option.ID,
+			&option.OptionTypeID,
+			&option.OptionTypeTitle,
+			&option.OptionType,
+			&option.Value,
+		); err != nil {
+			return nil, fmt.Errorf("productRepository.GetVariantOptions scan: %w", err)
+		}
+		result[variantID] = append(result[variantID], option)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("productRepository.GetVariantOptions rows: %w", err)
+	}
+	return result, nil
+}
+
+func (r *productRepository) GetVariantImages(
+	ctx context.Context,
+	productID int64,
+) (map[int64][]*models.ProductImage, error) {
+	const q = `
+		SELECT pi.*
+		FROM product_images pi
+		INNER JOIN product_variants pv ON pv.id = pi.product_variant_id
+		WHERE pv.product_id = $1
+		ORDER BY pv.created_at, pv.id, pi.sort_order, pi.is_primary DESC, pi.id`
+
+	rows, err := r.db.Query(ctx, q, productID)
+	if err != nil {
+		return nil, fmt.Errorf("productRepository.GetVariantImages: %w", err)
+	}
+	defer rows.Close()
+
+	images, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.ProductImage])
+	if err != nil {
+		return nil, fmt.Errorf("productRepository.GetVariantImages scan: %w", err)
+	}
+	result := make(map[int64][]*models.ProductImage)
+	for i := range images {
+		if images[i].ProductVariantID == nil {
+			continue
+		}
+		variantID := *images[i].ProductVariantID
+		result[variantID] = append(result[variantID], &images[i])
+	}
+	return result, nil
+}
+
 // GetVariantAvailableStock hydrates every variant in one inventory query. A
 // missing inventory row is sold out, and inconsistent negative availability is
 // clamped at zero at the database boundary.
@@ -786,7 +911,7 @@ func (r *productRepository) GetVariantAvailableStock(ctx context.Context, produc
 // ─────────────────────────────────────────────────────────────
 
 func (r *productRepository) ExistsByID(ctx context.Context, id int64) (bool, error) {
-	const q = `SELECT EXISTS(SELECT 1 FROM products WHERE id = $1 AND is_active = true)`
+	const q = `SELECT EXISTS(SELECT 1 FROM products WHERE id = $1)`
 	var exists bool
 	if err := r.db.QueryRow(ctx, q, id).Scan(&exists); err != nil {
 		return false, fmt.Errorf("productRepository.ExistsByID: %w", err)
@@ -808,19 +933,19 @@ func (r *productRepository) GetMediaIdentity(ctx context.Context, productID int6
 	return slug, nil
 }
 
-func (r *productRepository) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
-	const q = `SELECT EXISTS(SELECT 1 FROM products WHERE slug = $1)`
+func (r *productRepository) ExistsBySlug(ctx context.Context, slug string, excludeID int64) (bool, error) {
+	const q = `SELECT EXISTS(SELECT 1 FROM products WHERE slug = $1 AND id <> $2)`
 	var exists bool
-	if err := r.db.QueryRow(ctx, q, slug).Scan(&exists); err != nil {
+	if err := r.db.QueryRow(ctx, q, slug, excludeID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("productRepository.ExistsBySlug: %w", err)
 	}
 	return exists, nil
 }
 
-func (r *productRepository) ExistsByCode(ctx context.Context, code string) (bool, error) {
-	const q = `SELECT EXISTS(SELECT 1 FROM products WHERE code = $1)`
+func (r *productRepository) ExistsByCode(ctx context.Context, code string, excludeID int64) (bool, error) {
+	const q = `SELECT EXISTS(SELECT 1 FROM products WHERE code = $1 AND id <> $2)`
 	var exists bool
-	if err := r.db.QueryRow(ctx, q, code).Scan(&exists); err != nil {
+	if err := r.db.QueryRow(ctx, q, code, excludeID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("productRepository.ExistsByCode: %w", err)
 	}
 	return exists, nil

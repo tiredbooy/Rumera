@@ -16,6 +16,7 @@ import type {
   ImageUploaderHandle,
   UploadedImage,
 } from "@/features/image-uploader/types";
+import type { AdminHeroSlide } from "@/features/hero-slides/types";
 
 type ContentImageHandle = ImageUploaderHandle<UploadedImage | null>;
 
@@ -57,7 +58,16 @@ vi.mock("./hero-form/content-fields", () => ({
 
 vi.mock("./hero-form/cta-fields", () => ({ HeroCtaFields: () => null }));
 vi.mock("./hero-form/appearance-fields", () => ({
-  HeroAppearanceFields: () => null,
+  HeroAppearanceFields: ({
+    register,
+  }: {
+    register: (name: "starts_at" | "ends_at") => object;
+  }) => (
+    <>
+      <input aria-label="شروع نمایش" {...register("starts_at")} />
+      <input aria-label="پایان نمایش" {...register("ends_at")} />
+    </>
+  ),
 }));
 
 vi.mock("./hero-form/responsive-media-fields", () => ({
@@ -142,6 +152,12 @@ describe("HeroForm owner-aware media", () => {
     fireEvent.change(screen.getByLabelText("عنوان"), {
       target: { value: "اسلاید محلی" },
     });
+    fireEvent.change(screen.getByLabelText("شروع نمایش"), {
+      target: { value: "2026-08-01T09:30:00" },
+    });
+    fireEvent.change(screen.getByLabelText("پایان نمایش"), {
+      target: { value: "2026-08-15T18:45:00" },
+    });
     await screen.findByText("فایل دسکتاپ آماده است");
     fireEvent.click(screen.getByRole("button", { name: "ذخیره" }));
 
@@ -151,6 +167,8 @@ describe("HeroForm owner-aware media", () => {
         title: "اسلاید محلی",
         image_url: null,
         is_active: false,
+        starts_at: new Date("2026-08-01T09:30:00").toISOString(),
+        ends_at: new Date("2026-08-15T18:45:00").toISOString(),
       }),
     );
     expect(desktopFlushMock).toHaveBeenCalledWith(41);
@@ -158,5 +176,39 @@ describe("HeroForm owner-aware media", () => {
       is_active: true,
     });
     expect(pushMock).toHaveBeenCalledWith("/admin/hero-slides");
+  });
+
+  it("omits unchanged schedule fields so DST offsets are preserved on edit", async () => {
+    const slide: AdminHeroSlide = {
+      id: 41,
+      title: "اسلاید موجود",
+      eyebrow: null,
+      subtitle: null,
+      badge: null,
+      image_url: "/media/hero.webp",
+      mobile_image_url: null,
+      image_alt: null,
+      cta_label: null,
+      cta_href: null,
+      secondary_cta_label: null,
+      secondary_cta_href: null,
+      theme: "dark",
+      sort_order: 0,
+      is_active: true,
+      starts_at: "2026-11-01T06:30:00.000Z",
+      ends_at: "2026-11-02T06:30:00.000Z",
+      created_at: "2026-07-27T00:00:00.000Z",
+      updated_at: "2026-07-27T00:00:00.000Z",
+    };
+    render(<HeroForm mode="edit" slide={slide} submitLabel="ذخیرهٔ تغییرات" />);
+    await screen.findByText("فایل دسکتاپ آماده است");
+
+    fireEvent.click(screen.getByRole("button", { name: "ذخیرهٔ تغییرات" }));
+
+    await waitFor(() => expect(updateHeroSlideMock).toHaveBeenCalledTimes(1));
+    const payload = updateHeroSlideMock.mock.calls[0]?.[1];
+    expect(payload).not.toHaveProperty("starts_at");
+    expect(payload).not.toHaveProperty("ends_at");
+    expect(payload).not.toHaveProperty("sort_order");
   });
 });

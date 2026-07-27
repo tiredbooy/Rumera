@@ -34,6 +34,7 @@ export async function HomeView() {
 
   return (
     <>
+      <h1 className="sr-only">فروشگاه رومرا</h1>
       <HeroCarousel slides={heroSlides} />
       <PerksSection />
       <ForYouRail />

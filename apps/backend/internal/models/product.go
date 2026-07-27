@@ -63,8 +63,8 @@ type CreateProductReq struct {
 	MetaTitle       *string            `json:"meta_title"        validate:"omitempty,max=225"`
 	MetaDescription *string            `json:"meta_description"`
 	MetaTags        []string           `json:"meta_tags"`
-	TagIDs          []int64            `json:"tag_ids"`  // junction — handled in service
-	Variants        []CreateVariantReq `json:"variants"` // created together with product
+	TagIDs          []int64            `json:"tag_ids"`                  // junction — handled in service
+	Variants        []CreateVariantReq `json:"variants" validate:"dive"` // created together with product
 }
 
 type UpdateProductReq struct {

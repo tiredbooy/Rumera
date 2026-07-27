@@ -5,9 +5,14 @@ import type { Paginated } from "@/lib/api/types";
 import { buildQueryString } from "@/lib/utils/api-helpers";
 import type {
   CreateProductInput,
+  AdminProductDetail,
   UpdateProductInput,
   CreateProductVariantInput,
   UpdateProductVariantInput,
+  ProductVariantOptionIdsInput,
+  ProductOptionType,
+  ProductOptionValueDefinition,
+  ProductOptionGroup,
   ReorderProductImagesInput,
   UpdateProductImageInput,
 } from "../types";
@@ -31,9 +36,8 @@ export function fetchAdminProducts(
   );
 }
 
-/** The backend exposes product detail through the public read route only. */
-export function getProductForAdmin(id: number): Promise<ProductDetail> {
-  return apiFetch<ProductDetail>(`/products/${id}`);
+export function getProductForAdmin(id: number): Promise<AdminProductDetail> {
+  return apiFetch<AdminProductDetail>(`/admin/products/${id}`);
 }
 
 // ─────────────────────────────────────────────
@@ -96,6 +100,42 @@ export function deleteVariant(variantId: number): Promise<void> {
   return apiFetch<void>(`/admin/variants/${variantId}`, {
     method: "DELETE",
   });
+}
+
+export function replaceVariantOptions(
+  variantId: number,
+  optionValueIds: number[],
+): Promise<void> {
+  const payload: ProductVariantOptionIdsInput = {
+    option_value_ids: optionValueIds,
+  };
+  return apiFetch<void>(`/admin/variants/${variantId}/options`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listProductOptionTypes(): Promise<ProductOptionType[]> {
+  return apiFetch<ProductOptionType[]>("/admin/option-types");
+}
+
+export function listProductOptionValues(
+  optionTypeId: number,
+): Promise<ProductOptionValueDefinition[]> {
+  return apiFetch<ProductOptionValueDefinition[]>(
+    `/admin/option-types/${optionTypeId}/values`,
+  );
+}
+
+export async function getProductOptionCatalog(): Promise<ProductOptionGroup[]> {
+  const optionTypes = await listProductOptionTypes();
+  const values = await Promise.all(
+    optionTypes.map((optionType) => listProductOptionValues(optionType.id)),
+  );
+  return optionTypes.map((optionType, index) => ({
+    ...optionType,
+    values: values[index] ?? [],
+  }));
 }
 
 // ─────────────────────────────────────────────

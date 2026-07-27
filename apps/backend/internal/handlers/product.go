@@ -33,7 +33,7 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	detail, err := h.buildProductDetail(ctx, product.ID)
+	detail, err := h.buildAdminProductDetail(ctx, product.ID)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -128,9 +128,36 @@ func (h *Handler) GetProductBySlug(c *gin.Context) {
 	response.CachedJSON(c, data, productCacheTTL)
 }
 
+// GetAdminProduct returns the hydrated editable projection without applying the
+// public is_active filter. It is intentionally not stored in the public cache.
+func (h *Handler) GetAdminProduct(c *gin.Context) {
+	id, ok := h.paramInt64(c, "id")
+	if !ok {
+		return
+	}
+	detail, err := h.buildAdminProductDetail(c.Request.Context(), id)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.OK(c, detail)
+}
+
 // buildProductDetail assembles the hydrated product view from the service layer.
 func (h *Handler) buildProductDetail(ctx context.Context, id int64) (*models.ProductDetail, error) {
-	product, err := h.Product.GetByID(ctx, id)
+	return h.buildProductDetailWith(ctx, id, h.Product.GetByID)
+}
+
+func (h *Handler) buildAdminProductDetail(ctx context.Context, id int64) (*models.ProductDetail, error) {
+	return h.buildProductDetailWith(ctx, id, h.Product.GetByIDForAdmin)
+}
+
+func (h *Handler) buildProductDetailWith(
+	ctx context.Context,
+	id int64,
+	getProduct func(context.Context, int64) (*models.Product, error),
+) (*models.ProductDetail, error) {
+	product, err := getProduct(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +170,14 @@ func (h *Handler) buildProductDetail(ctx context.Context, id int64) (*models.Pro
 		return nil, err
 	}
 	variants, err := h.Product.GetVariants(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	variantOptions, err := h.Product.GetVariantOptions(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	variantImages, err := h.Product.GetVariantImages(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +197,17 @@ func (h *Handler) buildProductDetail(ctx context.Context, id int64) (*models.Pro
 	varResp := make([]models.VariantResponse, len(variants))
 	for i, v := range variants {
 		stock := availableStock[v.ID]
-		varResp[i] = mappers.ToVariantResponse(v, nil, nil, &stock)
+		images := variantImages[v.ID]
+		imageResponses := make([]models.ImageResponse, len(images))
+		for imageIndex, image := range images {
+			imageResponses[imageIndex] = mappers.ToImageResponse(image)
+		}
+		varResp[i] = mappers.ToVariantResponse(
+			v,
+			variantOptions[v.ID],
+			imageResponses,
+			&stock,
+		)
 	}
 
 	return mappers.ToProductDetail(product, tagResp, imgResp, varResp), nil
@@ -186,7 +231,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 	h.invalidate(ctx, cache.KeyProduct(id))
 	// Re-hydrate so the response matches GetProduct (REST json field names,
 	// fresh tags/images/variants) rather than the raw DB model.
-	detail, err := h.buildProductDetail(ctx, id)
+	detail, err := h.buildAdminProductDetail(ctx, id)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -214,6 +259,10 @@ func (h *Handler) ProductTags(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if _, err := h.Product.GetByID(c.Request.Context(), id); err != nil {
+		h.handleError(c, err)
+		return
+	}
 	tags, err := h.Product.GetTags(c.Request.Context(), id)
 	if err != nil {
 		h.handleError(c, err)
@@ -232,6 +281,10 @@ func (h *Handler) ProductImages(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if _, err := h.Product.GetByID(c.Request.Context(), id); err != nil {
+		h.handleError(c, err)
+		return
+	}
 	images, err := h.Product.GetImages(c.Request.Context(), id)
 	if err != nil {
 		h.handleError(c, err)
@@ -248,6 +301,10 @@ func (h *Handler) ProductImages(c *gin.Context) {
 func (h *Handler) ProductVariants(c *gin.Context) {
 	id, ok := h.paramInt64(c, "id")
 	if !ok {
+		return
+	}
+	if _, err := h.Product.GetByID(c.Request.Context(), id); err != nil {
+		h.handleError(c, err)
 		return
 	}
 	variants, err := h.Product.GetVariants(c.Request.Context(), id)

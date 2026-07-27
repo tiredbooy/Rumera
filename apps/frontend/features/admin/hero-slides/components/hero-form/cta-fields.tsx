@@ -14,7 +14,7 @@ export function HeroCtaFields({
   return (
     <FormSection
       title="دکمه‌های فراخوان"
-      description="نشانی‌ها را به‌صورت مسیر داخلی وارد کنید (مثلاً ‎/products)."
+      description="نشانی را به‌صورت مسیر داخلی (مثلاً ‎/products) یا پیوند امن HTTPS وارد کنید."
     >
       <FormField
         id="cta_label"

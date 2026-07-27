@@ -109,12 +109,14 @@ type Config struct {
 	// resized/recompressed on the fly via GET /media/{key}. Rendered variants are
 	// cached under MediaCacheDir. Persisted upload URLs are always canonical,
 	// environment-independent /media/... paths.
-	MediaRoot           string   `envconfig:"MEDIA_ROOT" default:"./storage/media"`
-	MediaCacheDir       string   `envconfig:"MEDIA_CACHE_DIR" default:"./storage/media-cache"`
-	MediaMaxUploadMB    int      `envconfig:"MEDIA_MAX_UPLOAD_MB" default:"15"`
-	MediaAllowedFormats []string `envconfig:"MEDIA_ALLOWED_FORMATS" default:"avif,webp,jpeg,png"`
-	MediaDefaultQuality int      `envconfig:"MEDIA_DEFAULT_QUALITY" default:"80"`
-	MediaMaxDimension   int      `envconfig:"MEDIA_MAX_DIMENSION" default:"4000"`
+	MediaRoot               string   `envconfig:"MEDIA_ROOT" default:"./storage/media"`
+	MediaCacheDir           string   `envconfig:"MEDIA_CACHE_DIR" default:"./storage/media-cache"`
+	MediaMaxUploadMB        int      `envconfig:"MEDIA_MAX_UPLOAD_MB" default:"15"`
+	MediaAllowedFormats     []string `envconfig:"MEDIA_ALLOWED_FORMATS" default:"avif,webp,jpeg,png"`
+	MediaDefaultQuality     int      `envconfig:"MEDIA_DEFAULT_QUALITY" default:"80"`
+	MediaMaxDimension       int      `envconfig:"MEDIA_MAX_DIMENSION" default:"4000"`
+	MediaMaxSourceDimension int      `envconfig:"MEDIA_MAX_SOURCE_DIMENSION" default:"12000"`
+	MediaMaxSourcePixels    int64    `envconfig:"MEDIA_MAX_SOURCE_PIXELS" default:"40000000"`
 
 	// ── Meilisearch ───────────────────────────────────────────────────────────
 	MeiliHost   string `envconfig:"MEILI_HOST" default:"http://localhost:7700"`
@@ -254,6 +256,12 @@ func (c *Config) Validate() error {
 	}
 	if c.MediaMaxDimension < 1 {
 		return fmt.Errorf("MEDIA_MAX_DIMENSION must be >= 1, got %d", c.MediaMaxDimension)
+	}
+	if c.MediaMaxSourceDimension < 1 {
+		return fmt.Errorf("MEDIA_MAX_SOURCE_DIMENSION must be >= 1, got %d", c.MediaMaxSourceDimension)
+	}
+	if c.MediaMaxSourcePixels < 1 {
+		return fmt.Errorf("MEDIA_MAX_SOURCE_PIXELS must be >= 1, got %d", c.MediaMaxSourcePixels)
 	}
 
 	// Production-only guards against fail-open / insecure defaults that are fine

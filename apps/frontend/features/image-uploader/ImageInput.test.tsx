@@ -12,16 +12,20 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { uploadImageMock, uploadOwnerImageMock } = vi.hoisted(() => ({
-  uploadImageMock: vi.fn(),
-  uploadOwnerImageMock: vi.fn(),
-}));
+const { releaseUploadMock, uploadImageMock, uploadOwnerImageMock } = vi.hoisted(
+  () => ({
+    releaseUploadMock: vi.fn(),
+    uploadImageMock: vi.fn(),
+    uploadOwnerImageMock: vi.fn(),
+  }),
+);
 
 vi.mock("@/components/smart-image", () => ({
   SmartImage: ({ alt }: { alt: string }) => <div role="img" aria-label={alt} />,
 }));
 
 vi.mock("@/features/image-uploader/client", () => ({
+  releaseUpload: releaseUploadMock,
   uploadImage: uploadImageMock,
   uploadOwnerImage: uploadOwnerImageMock,
 }));
@@ -32,6 +36,8 @@ import type { ImageUploaderHandle, UploadedImage } from "./types";
 afterEach(cleanup);
 
 beforeEach(() => {
+  releaseUploadMock.mockReset();
+  releaseUploadMock.mockResolvedValue(undefined);
   uploadImageMock.mockReset();
   uploadOwnerImageMock.mockReset();
   Object.defineProperty(URL, "createObjectURL", {
@@ -103,7 +109,7 @@ describe("ImageInput controls", () => {
     expect(uploadOwnerImageMock).toHaveBeenCalledWith(
       file,
       { ownerType: "recipes", ownerId: 9, role: "cover" },
-      { altText: "  ظرف آماده سرو  " },
+      { altText: "  ظرف آماده سرو  ", signal: expect.any(AbortSignal) },
       expect.any(Function),
     );
     expect(onChange).toHaveBeenCalledWith("/media/recipes/9/cover-owner.webp");
@@ -139,10 +145,47 @@ describe("ImageInput controls", () => {
 
     expect(uploadImageMock).toHaveBeenCalledWith(
       file,
-      { folder: "categories" },
+      { folder: "categories", signal: expect.any(AbortSignal) },
       expect.any(Function),
     );
     expect(onChange).toHaveBeenCalledWith("/media/categories/category.webp");
+  });
+
+  it("releases a cancelled standalone upload", async () => {
+    uploadImageMock.mockResolvedValue({
+      url: "/media/categories/cancelled.webp",
+      key: "categories/cancelled.webp",
+      width: 800,
+      height: 800,
+    });
+    const onChange = vi.fn();
+    function StandaloneHarness() {
+      const [value, setValue] = React.useState("");
+      return (
+        <ImageInput
+          id="category-image"
+          value={value}
+          onChange={(next) => {
+            onChange(next);
+            setValue(next);
+          }}
+          legacyFolder="categories"
+        />
+      );
+    }
+    render(<StandaloneHarness />);
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("انتخاب فایل تصویر"), {
+        target: {
+          files: [new File(["image"], "category.webp", { type: "image/webp" })],
+        },
+      });
+    });
+    fireEvent.click(screen.getByRole("button", { name: "حذف تصویر" }));
+
+    expect(releaseUploadMock).toHaveBeenCalledWith("categories/cancelled.webp");
+    expect(onChange).toHaveBeenLastCalledWith("");
   });
 
   it("rejects unsafe URL schemes before the parent can save", () => {

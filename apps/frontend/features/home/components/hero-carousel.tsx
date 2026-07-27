@@ -1,17 +1,23 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import useEmblaCarousel from "embla-carousel-react"
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react"
+import * as React from "react";
+import Link from "next/link";
+import useEmblaCarousel from "embla-carousel-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Pause,
+  Play,
+} from "lucide-react";
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { SmartImage } from "@/components/smart-image"
-import type { PublicHeroSlide } from "@/features/hero-slides/types"
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import type { PublicHeroSlide } from "@/features/hero-slides/types";
+import { HeroResponsiveImage } from "./hero-responsive-image";
 
-const AUTOPLAY_MS = 6500
+const AUTOPLAY_MS = 6500;
 
 /**
  * HeroCarousel — the storefront's dynamic, admin-managed hero slider.
@@ -19,8 +25,8 @@ const AUTOPLAY_MS = 6500
  * Full-bleed editorial slides backed by the `/hero-slides` API. Built on embla
  * (already a dependency) with a lightweight autoplay loop — no extra plugin — that
  * pauses on hover, focus and pointer interaction, and never runs for
- * `prefers-reduced-motion` users. RTL-aware. Imagery flows through SmartImage so
- * missing placeholder assets degrade to a branded gradient instead of breaking.
+ * `prefers-reduced-motion` users. RTL-aware. Responsive art direction uses the
+ * mobile image when available and retains the branded missing-image fallback.
  *
  * Image spec (drop assets at the slide's image_url — see public/images/README):
  *   desktop  2400×1350  (16:9)   ·   mobile  1080×1350  (4:5)
@@ -30,71 +36,96 @@ export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
     loop: slides.length > 1,
     direction: "rtl",
     align: "start",
-  })
-  const [selected, setSelected] = React.useState(0)
-  const [paused, setPaused] = React.useState(false)
-  const dotScrollerRef = React.useRef<HTMLDivElement>(null)
-  const dotRefs = React.useRef<(HTMLButtonElement | null)[]>([])
-  const initialSelectionRef = React.useRef(true)
+  });
+  const [selected, setSelected] = React.useState(0);
+  const [hovered, setHovered] = React.useState(false);
+  const [focused, setFocused] = React.useState(false);
+  const [interacting, setInteracting] = React.useState(false);
+  const [userPaused, setUserPaused] = React.useState(false);
+  const dotScrollerRef = React.useRef<HTMLDivElement>(null);
+  const dotRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
+  const initialSelectionRef = React.useRef(true);
+  const paused = userPaused || hovered || focused || interacting;
+  const activeTheme = slides[selected]?.theme ?? "dark";
+  const darkControls = activeTheme === "dark";
 
   const onSelect = React.useCallback(() => {
-    if (embla) setSelected(embla.selectedScrollSnap())
-  }, [embla])
+    if (embla) setSelected(embla.selectedScrollSnap());
+  }, [embla]);
 
   React.useEffect(() => {
-    if (!embla) return
+    if (!embla) return;
     // `selected` starts at 0, which already matches the initial snap — so we
     // only need to subscribe; no synchronous setState in the effect body.
-    embla.on("select", onSelect)
-    embla.on("reInit", onSelect)
+    embla.on("select", onSelect);
+    embla.on("reInit", onSelect);
     return () => {
-      embla.off("select", onSelect)
-      embla.off("reInit", onSelect)
-    }
-  }, [embla, onSelect])
+      embla.off("select", onSelect);
+      embla.off("reInit", onSelect);
+    };
+  }, [embla, onSelect]);
 
   React.useEffect(() => {
     if (initialSelectionRef.current) {
-      initialSelectionRef.current = false
-      return
+      initialSelectionRef.current = false;
+      return;
     }
-    const scroller = dotScrollerRef.current
-    const dot = dotRefs.current[selected]
-    if (!scroller || !dot) return
+    const scroller = dotScrollerRef.current;
+    const dot = dotRefs.current[selected];
+    if (!scroller || !dot) return;
 
-    const scrollerRect = scroller.getBoundingClientRect()
-    const dotRect = dot.getBoundingClientRect()
+    const scrollerRect = scroller.getBoundingClientRect();
+    const dotRect = dot.getBoundingClientRect();
     const delta =
       dotRect.left < scrollerRect.left
         ? dotRect.left - scrollerRect.left
         : dotRect.right > scrollerRect.right
           ? dotRect.right - scrollerRect.right
-          : 0
-    if (delta !== 0) scroller.scrollBy?.({ left: delta })
-  }, [selected])
+          : 0;
+    if (delta !== 0) scroller.scrollBy?.({ left: delta });
+  }, [selected]);
 
   // Lightweight autoplay — honours reduced-motion and pauses on interaction.
   React.useEffect(() => {
-    if (!embla || paused || slides.length < 2) return
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    if (reduce) return
-    const id = window.setInterval(() => embla.scrollNext(), AUTOPLAY_MS)
-    return () => window.clearInterval(id)
-  }, [embla, paused, slides.length])
+    if (!embla || paused || slides.length < 2) return;
+    const reduce = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduce) return;
+    const id = window.setInterval(() => embla.scrollNext(), AUTOPLAY_MS);
+    return () => window.clearInterval(id);
+  }, [embla, paused, slides.length]);
 
-  if (slides.length === 0) return null
+  React.useEffect(() => {
+    if (!interacting) return;
+    const finishInteraction = () => setInteracting(false);
+    window.addEventListener("pointerup", finishInteraction);
+    window.addEventListener("pointercancel", finishInteraction);
+    return () => {
+      window.removeEventListener("pointerup", finishInteraction);
+      window.removeEventListener("pointercancel", finishInteraction);
+    };
+  }, [interacting]);
+
+  if (slides.length === 0) return null;
 
   return (
     <section
       className="cellar-glow relative border-b border-border/60"
+      data-theme={activeTheme}
       aria-roledescription="carousel"
       aria-label="پیشنهادهای ویژه"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocusCapture={() => setPaused(true)}
-      onBlurCapture={() => setPaused(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocusCapture={() => setFocused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setFocused(false);
+        }
+      }}
+      onPointerDown={() => setInteracting(true)}
     >
-      <div className="overflow-hidden" ref={emblaRef}>
+      <div className="touch-pan-y overflow-hidden" ref={emblaRef}>
         <div className="flex">
           {slides.map((slide, i) => (
             <HeroSlideView
@@ -112,7 +143,7 @@ export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
       {/* Controls */}
       {slides.length > 1 ? (
         <>
-          <div className="container-px pointer-events-none absolute inset-x-0 bottom-6 z-20 mx-auto flex max-w-7xl items-center justify-between">
+          <div className="container-px pointer-events-none absolute inset-x-0 bottom-6 z-20 mx-auto flex max-w-7xl items-center justify-between gap-3">
             {/* Dots */}
             <div
               ref={dotScrollerRef}
@@ -124,19 +155,29 @@ export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
                 <button
                   key={slide.id}
                   ref={(node) => {
-                    dotRefs.current[i] = node
+                    dotRefs.current[i] = node;
                   }}
                   type="button"
                   onClick={() => embla?.scrollTo(i)}
                   aria-label={`نمایش اسلاید ${i + 1}: ${slide.title}`}
                   aria-current={i === selected}
-                  className="group flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full outline-none focus-visible:bg-black/40 focus-visible:ring-3 focus-visible:ring-white/90"
+                  className={cn(
+                    "group flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full outline-none focus-visible:ring-3",
+                    darkControls
+                      ? "focus-visible:bg-black/40 focus-visible:ring-white/90"
+                      : "focus-visible:bg-white/60 focus-visible:ring-black/70",
+                  )}
                 >
                   <span
                     aria-hidden
                     className={cn(
-                      "h-1.5 rounded-full bg-white/50 transition-all duration-300 group-hover:bg-white/80 motion-reduce:transition-none",
-                      i === selected ? "w-8 bg-white" : "w-1.5"
+                      "h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none",
+                      darkControls
+                        ? "bg-white/50 group-hover:bg-white/80"
+                        : "bg-black/35 group-hover:bg-black/65",
+                      i === selected
+                        ? cn("w-8", darkControls ? "bg-white" : "bg-stone-950")
+                        : "w-1.5",
                     )}
                   />
                 </button>
@@ -144,33 +185,61 @@ export function HeroCarousel({ slides }: { slides: PublicHeroSlide[] }) {
             </div>
 
             {/* Arrows */}
-            <div className="pointer-events-auto hidden items-center gap-2 sm:flex">
+            <div className="pointer-events-auto flex items-center gap-2">
               <Button
                 type="button"
                 size="icon"
                 variant="outline"
-                onClick={() => embla?.scrollPrev()}
-                aria-label="اسلاید قبلی"
-                className="size-11 rounded-full border-white/30 bg-black/20 text-white backdrop-blur-md hover:bg-black/40 hover:text-white focus-visible:border-white focus-visible:ring-white/80"
+                onClick={() => setUserPaused((value) => !value)}
+                aria-label={userPaused ? "شروع پخش خودکار" : "توقف پخش خودکار"}
+                aria-pressed={userPaused}
+                className={cn(
+                  "size-11 shrink-0 rounded-full backdrop-blur-md",
+                  darkControls
+                    ? "border-white/30 bg-black/20 text-white hover:bg-black/40 hover:text-white focus-visible:border-white focus-visible:ring-white/80"
+                    : "border-black/25 bg-white/45 text-stone-950 hover:bg-white/70 hover:text-stone-950 focus-visible:border-black/60 focus-visible:ring-black/60",
+                )}
               >
-                <ChevronRight />
+                {userPaused ? <Play /> : <Pause />}
               </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="outline"
-                onClick={() => embla?.scrollNext()}
-                aria-label="اسلاید بعدی"
-                className="size-11 rounded-full border-white/30 bg-black/20 text-white backdrop-blur-md hover:bg-black/40 hover:text-white focus-visible:border-white focus-visible:ring-white/80"
-              >
-                <ChevronLeft />
-              </Button>
+              <div className="hidden items-center gap-2 sm:flex">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  onClick={() => embla?.scrollPrev()}
+                  aria-label="اسلاید قبلی"
+                  className={cn(
+                    "size-11 rounded-full backdrop-blur-md",
+                    darkControls
+                      ? "border-white/30 bg-black/20 text-white hover:bg-black/40 hover:text-white focus-visible:border-white focus-visible:ring-white/80"
+                      : "border-black/25 bg-white/45 text-stone-950 hover:bg-white/70 hover:text-stone-950 focus-visible:border-black/60 focus-visible:ring-black/60",
+                  )}
+                >
+                  <ChevronRight />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  onClick={() => embla?.scrollNext()}
+                  aria-label="اسلاید بعدی"
+                  className={cn(
+                    "size-11 rounded-full backdrop-blur-md",
+                    darkControls
+                      ? "border-white/30 bg-black/20 text-white hover:bg-black/40 hover:text-white focus-visible:border-white focus-visible:ring-white/80"
+                      : "border-black/25 bg-white/45 text-stone-950 hover:bg-white/70 hover:text-stone-950 focus-visible:border-black/60 focus-visible:ring-black/60",
+                  )}
+                >
+                  <ChevronLeft />
+                </Button>
+              </div>
             </div>
           </div>
         </>
       ) : null}
     </section>
-  )
+  );
 }
 
 function HeroSlideView({
@@ -180,14 +249,13 @@ function HeroSlideView({
   position,
   total,
 }: {
-  slide: PublicHeroSlide
-  priority: boolean
-  active: boolean
-  position: number
-  total: number
+  slide: PublicHeroSlide;
+  priority: boolean;
+  active: boolean;
+  position: number;
+  total: number;
 }) {
-  // "dark" theme = dark image → light text; we render light text on a dark scrim
-  // for both, since a readable scrim keeps any photography legible.
+  const lightText = slide.theme === "dark";
   return (
     <div
       role="group"
@@ -195,40 +263,79 @@ function HeroSlideView({
       aria-label={`${position} از ${total}: ${slide.title}`}
       aria-hidden={active ? undefined : true}
       inert={active ? undefined : true}
+      data-theme={slide.theme}
       className="relative min-w-0 shrink-0 grow-0 basis-full"
     >
       <div className="relative h-[78vh] max-h-[760px] min-h-[460px] w-full">
-        <SmartImage
-          src={slide.image_url}
+        <HeroResponsiveImage
+          desktopSrc={slide.image_url}
+          mobileSrc={slide.mobile_image_url}
           alt={slide.image_alt ?? slide.title}
-          sizes="100vw"
           priority={priority}
-          fallbackClassName="from-card via-card to-background"
         />
-        {/* Legibility scrim — stronger toward the reading (start) edge in RTL. */}
-        <div className="absolute inset-0 bg-gradient-to-l from-black/75 via-black/45 to-black/20" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/15" />
+        <div
+          className={cn(
+            "absolute inset-0 bg-gradient-to-l",
+            lightText
+              ? "from-black/75 via-black/45 to-black/20"
+              : "from-white/85 via-white/55 to-white/15",
+          )}
+        />
+        <div
+          className={cn(
+            "absolute inset-0 bg-gradient-to-t via-transparent",
+            lightText
+              ? "from-black/55 to-black/15"
+              : "from-white/55 to-white/10",
+          )}
+        />
         {/* Seam fade — melts the bottom edge into the page below for a seamless join. */}
         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background to-transparent" />
 
         {/* Content */}
         <div className="container-px absolute inset-0 z-10 mx-auto flex max-w-7xl items-center">
-          <div className="max-w-xl text-start text-white">
-            {slide.eyebrow ? (
-              <p className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+          <div
+            className={cn(
+              "max-w-xl text-start",
+              lightText ? "text-white" : "text-stone-950",
+            )}
+          >
+            {slide.eyebrow || slide.badge ? (
+              <p
+                className={cn(
+                  "mb-4 inline-flex items-center gap-2 text-sm font-semibold",
+                  lightText ? "text-primary" : "text-stone-900",
+                )}
+              >
                 {slide.badge ? (
-                  <Badge className="bg-gold text-gold-foreground">{slide.badge}</Badge>
+                  <Badge className="bg-gold text-gold-foreground">
+                    {slide.badge}
+                  </Badge>
                 ) : null}
-                {slide.eyebrow}
+                {slide.eyebrow ?? null}
               </p>
             ) : null}
 
-            <h1 className="font-serif text-5xl leading-[1.06] text-white [text-shadow:0_2px_24px_rgba(0,0,0,0.45)] sm:text-6xl lg:text-7xl">
+            <h2
+              className={cn(
+                "font-serif text-5xl leading-[1.06] sm:text-6xl lg:text-7xl",
+                lightText
+                  ? "text-white [text-shadow:0_2px_24px_rgba(0,0,0,0.45)]"
+                  : "text-stone-950 [text-shadow:0_1px_20px_rgba(255,255,255,0.7)]",
+              )}
+            >
               {slide.title}
-            </h1>
+            </h2>
 
             {slide.subtitle ? (
-              <p className="mt-5 max-w-md text-base text-white/90 [text-shadow:0_1px_12px_rgba(0,0,0,0.5)] sm:text-lg">
+              <p
+                className={cn(
+                  "mt-5 max-w-md text-base sm:text-lg",
+                  lightText
+                    ? "text-white/90 [text-shadow:0_1px_12px_rgba(0,0,0,0.5)]"
+                    : "text-stone-800 [text-shadow:0_1px_12px_rgba(255,255,255,0.65)]",
+                )}
+              >
                 {slide.subtitle}
               </p>
             ) : null}
@@ -245,10 +352,17 @@ function HeroSlideView({
                 <Button
                   size="lg"
                   variant="outline"
-                  className="h-12 border-white/40 bg-white/10 px-6 text-sm text-white backdrop-blur-md hover:bg-white/20 hover:text-white"
+                  className={cn(
+                    "h-12 px-6 text-sm backdrop-blur-md",
+                    lightText
+                      ? "border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                      : "border-black/25 bg-white/45 text-stone-950 hover:bg-white/70 hover:text-stone-950",
+                  )}
                   asChild
                 >
-                  <Link href={slide.secondary_cta_href}>{slide.secondary_cta_label}</Link>
+                  <Link href={slide.secondary_cta_href}>
+                    {slide.secondary_cta_label}
+                  </Link>
                 </Button>
               ) : null}
             </div>
@@ -256,5 +370,5 @@ function HeroSlideView({
         </div>
       </div>
     </div>
-  )
+  );
 }

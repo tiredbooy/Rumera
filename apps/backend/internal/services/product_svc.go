@@ -12,15 +12,27 @@ import (
 
 type ProductService struct {
 	productRepo repositories.ProductRepository
+	lifecycle   *MediaLifecycleService
+	media       *MediaService
 }
 
-func NewProductService(productRepo repositories.ProductRepository) *ProductService {
-	return &ProductService{productRepo: productRepo}
+func NewProductService(
+	productRepo repositories.ProductRepository,
+	lifecycle *MediaLifecycleService,
+	media *MediaService,
+) *ProductService {
+	return &ProductService{productRepo: productRepo, lifecycle: lifecycle, media: media}
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
 func (s *ProductService) Create(ctx context.Context, req models.CreateProductReq) (*models.Product, error) {
+	for i := range req.Variants {
+		req.Variants[i].SKU = normalizeCreateVariantSKU(req.Variants[i].SKU)
+		if err := validateCreateVariantReq(req.Variants[i]); err != nil {
+			return nil, err
+		}
+	}
 	if err := validateCreateProductReq(req); err != nil {
 		return nil, err
 	}
@@ -28,12 +40,18 @@ func (s *ProductService) Create(ctx context.Context, req models.CreateProductReq
 	// Slug and code are optional (nullable in DB, omitempty in DTO). Only check
 	// uniqueness for whichever is actually provided — dereferencing them
 	// unconditionally panicked when the frontend sent a title-only product.
-	if err := s.assertSlugAndCodeUnique(ctx, derefOr(req.Slug, ""), derefOr(req.Code, "")); err != nil {
+	if err := s.assertSlugAndCodeUnique(ctx, derefOr(req.Slug, ""), derefOr(req.Code, ""), 0); err != nil {
 		return nil, err
 	}
 
 	product, err := s.productRepo.Create(ctx, req)
 	if err != nil {
+		if errors.Is(err, models.ErrConflict) {
+			return nil, apperr.ErrConflict
+		}
+		if errors.Is(err, models.ErrNotFound) || errors.Is(err, models.ErrInvalidState) {
+			return nil, apperr.ErrInvalidRequest
+		}
 		return nil, apperr.ErrInternal
 	}
 
@@ -53,6 +71,20 @@ func (s *ProductService) GetByID(ctx context.Context, id int64) (*models.Product
 		return nil, apperr.ErrInternal
 	}
 
+	return product, nil
+}
+
+func (s *ProductService) GetByIDForAdmin(ctx context.Context, id int64) (*models.Product, error) {
+	if id <= 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+	product, err := s.productRepo.GetByIDForAdmin(ctx, id)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrProductNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
 	return product, nil
 }
 
@@ -99,7 +131,7 @@ func (s *ProductService) Update(ctx context.Context, id int64, req models.Update
 		if *req.Slug == "" {
 			return nil, apperr.ErrInvalidRequest
 		}
-		exists, err := s.productRepo.ExistsBySlug(ctx, *req.Slug)
+		exists, err := s.productRepo.ExistsBySlug(ctx, *req.Slug, id)
 		if err != nil {
 			return nil, apperr.ErrInternal
 		}
@@ -111,7 +143,7 @@ func (s *ProductService) Update(ctx context.Context, id int64, req models.Update
 		if *req.Code == "" {
 			return nil, apperr.ErrInvalidRequest
 		}
-		exists, err := s.productRepo.ExistsByCode(ctx, *req.Code)
+		exists, err := s.productRepo.ExistsByCode(ctx, *req.Code, id)
 		if err != nil {
 			return nil, apperr.ErrInternal
 		}
@@ -127,6 +159,11 @@ func (s *ProductService) Update(ctx context.Context, id int64, req models.Update
 		}
 		return nil, apperr.ErrInternal
 	}
+	if req.TagIDs != nil {
+		if err := s.productRepo.SyncTags(ctx, id, req.TagIDs); err != nil {
+			return nil, apperr.ErrInternal
+		}
+	}
 
 	return product, nil
 }
@@ -136,12 +173,17 @@ func (s *ProductService) Delete(ctx context.Context, id int64) error {
 		return apperr.ErrInvalidRequest
 	}
 
+	keys, err := s.lifecycle.ProductKeys(ctx, id)
+	if err != nil {
+		return apperr.ErrInternal
+	}
 	if err := s.productRepo.Delete(ctx, id); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return apperr.ErrProductNotFound
 		}
 		return apperr.ErrInternal
 	}
+	s.lifecycle.CleanupKeys(ctx, keys...)
 
 	return nil
 }
@@ -251,6 +293,34 @@ func (s *ProductService) GetVariants(ctx context.Context, productID int64) ([]*m
 	return variants, nil
 }
 
+func (s *ProductService) GetVariantOptions(
+	ctx context.Context,
+	productID int64,
+) (map[int64][]models.OptionValueResponse, error) {
+	if productID <= 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+	options, err := s.productRepo.GetVariantOptions(ctx, productID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	return options, nil
+}
+
+func (s *ProductService) GetVariantImages(
+	ctx context.Context,
+	productID int64,
+) (map[int64][]*models.ProductImage, error) {
+	if productID <= 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+	images, err := s.productRepo.GetVariantImages(ctx, productID)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	return images, nil
+}
+
 func (s *ProductService) GetVariantAvailableStock(ctx context.Context, productID int64) (map[int64]int, error) {
 	if productID <= 0 {
 		return nil, apperr.ErrInvalidRequest
@@ -282,9 +352,9 @@ func (s *ProductService) assertProductExists(ctx context.Context, id int64) erro
 // hitting the DB insert, giving clean conflict errors. Slug and code are
 // optional, so an empty value is skipped — multiple products may legitimately
 // have a NULL slug/code.
-func (s *ProductService) assertSlugAndCodeUnique(ctx context.Context, slug, code string) error {
+func (s *ProductService) assertSlugAndCodeUnique(ctx context.Context, slug, code string, excludeID int64) error {
 	if slug != "" {
-		slugExists, err := s.productRepo.ExistsBySlug(ctx, slug)
+		slugExists, err := s.productRepo.ExistsBySlug(ctx, slug, excludeID)
 		if err != nil {
 			return apperr.ErrInternal
 		}
@@ -294,7 +364,7 @@ func (s *ProductService) assertSlugAndCodeUnique(ctx context.Context, slug, code
 	}
 
 	if code != "" {
-		codeExists, err := s.productRepo.ExistsByCode(ctx, code)
+		codeExists, err := s.productRepo.ExistsByCode(ctx, code, excludeID)
 		if err != nil {
 			return apperr.ErrInternal
 		}

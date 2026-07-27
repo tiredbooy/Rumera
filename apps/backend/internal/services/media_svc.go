@@ -24,28 +24,34 @@ import (
 // Media-specific sentinel errors. Handlers map these to 413 / 415 respectively;
 // everything else falls back to the generic error mapping.
 var (
-	ErrImageTooLarge    = errors.New("media: image exceeds maximum upload size")
-	ErrUnsupportedImage = errors.New("media: unsupported or unreadable image")
+	ErrImageTooLarge           = errors.New("media: image exceeds maximum upload size")
+	ErrImageDimensionsTooLarge = errors.New("media: image dimensions exceed configured limits")
+	ErrUnsupportedImage        = errors.New("media: unsupported or unreadable image")
 )
 
-// inputExt maps a probed source format to the extension used for the stored
-// original. It also doubles as the allow-list of accepted upload formats.
-var inputExt = map[string]string{
-	"jpeg": "jpg",
-	"png":  "png",
-	"webp": "webp",
-	"gif":  "gif",
-	"avif": "avif",
-	"heif": "avif",
+// inputExt maps a signature-verified source format to the stored-original
+// extension. It also doubles as the accepted-upload format allow-list.
+var inputExt = map[imaging.Format]string{
+	imaging.FormatJPEG: "jpg",
+	imaging.FormatPNG:  "png",
+	imaging.FormatWebP: "webp",
+	imaging.FormatAVIF: "avif",
 }
+
+const (
+	defaultMaxSourceDimension = 12_000
+	defaultMaxSourcePixels    = int64(40_000_000)
+)
 
 // MediaConfig captures the runtime knobs the media service needs (sourced from
 // configs.Config in bootstrap).
 type MediaConfig struct {
-	MaxUploadBytes int64
-	DefaultQuality int
-	MaxDimension   int
-	AllowedOutput  map[imaging.Format]bool
+	MaxUploadBytes     int64
+	DefaultQuality     int
+	MaxDimension       int
+	MaxSourceDimension int
+	MaxSourcePixels    int64
+	AllowedOutput      map[imaging.Format]bool
 }
 
 type productMediaRepository interface {
@@ -54,7 +60,7 @@ type productMediaRepository interface {
 
 type contentMediaRepository interface {
 	OwnerExists(ctx context.Context, ownerType string, ownerID int64) (bool, error)
-	Attach(ctx context.Context, ownerType, role string, ownerID int64, url, key string, alt models.NullablePatch[string]) error
+	Attach(ctx context.Context, ownerType, role string, ownerID int64, url, key string, alt models.NullablePatch[string]) (*repositories.ContentMediaAttachment, error)
 }
 
 // MediaService stores uploaded product images and serves resized/recompressed
@@ -67,6 +73,7 @@ type MediaService struct {
 	repo  repositories.ProductImageRepository
 	prod  productMediaRepository
 	owner contentMediaRepository
+	life  *MediaLifecycleService
 	tr    imaging.Transformer
 	cfg   MediaConfig
 	log   *zap.Logger
@@ -79,6 +86,7 @@ func NewMediaService(
 	repo repositories.ProductImageRepository,
 	prod productMediaRepository,
 	owner contentMediaRepository,
+	lifecycle *MediaLifecycleService,
 	tr imaging.Transformer,
 	cfg MediaConfig,
 	log *zap.Logger,
@@ -89,12 +97,19 @@ func NewMediaService(
 	if cfg.MaxDimension <= 0 {
 		cfg.MaxDimension = 4000
 	}
+	if cfg.MaxSourceDimension <= 0 {
+		cfg.MaxSourceDimension = defaultMaxSourceDimension
+	}
+	if cfg.MaxSourcePixels <= 0 {
+		cfg.MaxSourcePixels = defaultMaxSourcePixels
+	}
 	return &MediaService{
 		store: store,
 		cache: cache,
 		repo:  repo,
 		prod:  prod,
 		owner: owner,
+		life:  lifecycle,
 		tr:    tr,
 		cfg:   cfg,
 		log:   log,
@@ -158,7 +173,7 @@ func (s *MediaService) Upload(ctx context.Context, productID int64, data []byte,
 	}
 	created, err := s.repo.Create(ctx, img)
 	if err != nil {
-		if isDefinitiveDatabaseRejection(err) {
+		if errors.Is(err, models.ErrNotFound) || isDefinitiveDatabaseRejection(err) {
 			if deleteErr := s.store.Delete(ctx, key); deleteErr != nil {
 				s.log.Warn("media: clean rejected original",
 					zap.String("key", key), zap.Error(deleteErr))
@@ -172,7 +187,7 @@ func (s *MediaService) Upload(ctx context.Context, productID int64, data []byte,
 			s.log.Error("media: create row outcome ambiguous; retained original for reconciliation",
 				zap.String("key", key), zap.Error(err))
 		}
-		if isProductOwnerForeignKeyViolation(err) {
+		if errors.Is(err, models.ErrNotFound) || isProductOwnerForeignKeyViolation(err) {
 			return nil, apperr.ErrProductNotFound
 		}
 		return nil, apperr.ErrInternal
@@ -215,7 +230,7 @@ func (s *MediaService) AddProductImageURL(
 		IsPrimary: isPrimary,
 	})
 	if err != nil {
-		if isProductOwnerForeignKeyViolation(err) {
+		if errors.Is(err, models.ErrNotFound) || isProductOwnerForeignKeyViolation(err) {
 			return nil, apperr.ErrProductNotFound
 		}
 		return nil, apperr.ErrInternal
@@ -226,10 +241,11 @@ func (s *MediaService) AddProductImageURL(
 // UploadResult is the outcome of a standalone (non-product) image upload: a
 // stored original addressable by its public URL.
 type UploadResult struct {
-	URL    string `json:"url"`
-	Key    string `json:"key"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
+	URL       string `json:"url"`
+	Key       string `json:"key"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	OwnerSlug string `json:"-"`
 }
 
 // UploadImage validates and stores a standalone image (hero slides, recipe and
@@ -302,7 +318,8 @@ func (s *MediaService) UploadOwnerImage(
 		return nil, apperr.ErrInternal
 	}
 
-	if err := s.owner.Attach(ctx, ownerType, role, ownerID, mediaURL, key, altText); err != nil {
+	attachment, err := s.owner.Attach(ctx, ownerType, role, ownerID, mediaURL, key, altText)
+	if err != nil {
 		definitive := errors.Is(err, models.ErrNotFound) || isDefinitiveDatabaseRejection(err)
 		if definitive {
 			if deleteErr := s.store.Delete(ctx, key); deleteErr != nil {
@@ -318,26 +335,62 @@ func (s *MediaService) UploadOwnerImage(
 		}
 		return nil, apperr.ErrInternal
 	}
+	if s.life != nil && attachment.DetachedKey != nil {
+		s.life.CleanupKeys(ctx, *attachment.DetachedKey)
+	}
 
-	return &UploadResult{URL: mediaURL, Key: key, Width: w, Height: h}, nil
+	return &UploadResult{
+		URL: mediaURL, Key: key, Width: w, Height: h, OwnerSlug: attachment.OwnerSlug,
+	}, nil
 }
 
 func (s *MediaService) inspectUpload(data []byte) (width, height int, ext string, err error) {
 	if s.cfg.MaxUploadBytes > 0 && int64(len(data)) > s.cfg.MaxUploadBytes {
 		return 0, 0, "", ErrImageTooLarge
 	}
+	return s.inspectImage(data)
+}
+
+func (s *MediaService) inspectImage(data []byte) (width, height int, ext string, err error) {
 	if len(data) == 0 {
 		return 0, 0, "", ErrUnsupportedImage
 	}
-	width, height, format, err := s.tr.Probe(data)
+	detected, err := imaging.DetectFormat(data)
 	if err != nil {
 		return 0, 0, "", ErrUnsupportedImage
 	}
-	ext, ok := inputExt[format]
+	width, height, probed, err := s.tr.Probe(data)
+	if err != nil {
+		return 0, 0, "", ErrUnsupportedImage
+	}
+	probedFormat, ok := normalizeProbedImageFormat(probed)
+	if !ok || probedFormat != detected || width < 1 || height < 1 {
+		return 0, 0, "", ErrUnsupportedImage
+	}
+	if width > s.cfg.MaxSourceDimension || height > s.cfg.MaxSourceDimension ||
+		int64(width) > s.cfg.MaxSourcePixels/int64(height) {
+		return 0, 0, "", ErrImageDimensionsTooLarge
+	}
+	ext, ok = inputExt[detected]
 	if !ok {
 		return 0, 0, "", ErrUnsupportedImage
 	}
 	return width, height, ext, nil
+}
+
+func normalizeProbedImageFormat(value string) (imaging.Format, bool) {
+	switch strings.ToLower(value) {
+	case "jpeg", "jpg":
+		return imaging.FormatJPEG, true
+	case "png":
+		return imaging.FormatPNG, true
+	case "webp":
+		return imaging.FormatWebP, true
+	case "avif", "heif":
+		return imaging.FormatAVIF, true
+	default:
+		return "", false
+	}
 }
 
 func normalizeExternalImageURL(value string) (string, error) {
@@ -362,6 +415,53 @@ func normalizeExternalImageURL(value string) (string, error) {
 		return "", ErrInvalidMediaOwner
 	}
 	return value, nil
+}
+
+// ResolvePreparedProductImage validates an ownerless upload immediately before
+// an aggregate product transaction claims it. The immutable object remains in
+// place on transaction failure so the same operation can be retried safely.
+func (s *MediaService) ResolvePreparedProductImage(
+	ctx context.Context,
+	key string,
+) (string, int, int, error) {
+	key = strings.TrimSpace(key)
+	if !strings.HasPrefix(key, "uploads/") || storage.ValidateKey(key) != nil {
+		return "", 0, 0, apperr.ErrInvalidRequest
+	}
+	exists, err := s.store.Exists(ctx, key)
+	if err != nil {
+		return "", 0, 0, apperr.ErrInternal
+	}
+	if !exists {
+		return "", 0, 0, apperr.ErrInvalidRequest
+	}
+	reader, err := s.store.Open(ctx, key)
+	if err != nil {
+		return "", 0, 0, apperr.ErrInternal
+	}
+	defer reader.Close()
+
+	var source io.Reader = reader
+	if s.cfg.MaxUploadBytes > 0 {
+		source = io.LimitReader(reader, s.cfg.MaxUploadBytes+1)
+	}
+	data, err := io.ReadAll(source)
+	if err != nil {
+		return "", 0, 0, apperr.ErrInternal
+	}
+	width, height, _, err := s.inspectUpload(data)
+	if err != nil {
+		return "", 0, 0, apperr.ErrInvalidRequest
+	}
+	mediaURL, err := canonicalMediaPath(key)
+	if err != nil {
+		return "", 0, 0, apperr.ErrInvalidRequest
+	}
+	return mediaURL, width, height, nil
+}
+
+func (s *MediaService) NormalizeProductImageURL(value string) (string, error) {
+	return normalizeExternalImageURL(value)
 }
 
 const mediaWriteAttempts = 4
@@ -451,6 +551,13 @@ func (s *MediaService) List(ctx context.Context, productID int64) ([]*models.Pro
 	return s.repo.ListByProduct(ctx, productID)
 }
 
+func (s *MediaService) ReleaseStandalone(ctx context.Context, key string) error {
+	if s.life == nil {
+		return apperr.ErrInternal
+	}
+	return s.life.ReleaseStandalone(ctx, key)
+}
+
 func (s *MediaService) UpdateAlt(
 	ctx context.Context,
 	productID, imageID int64,
@@ -463,7 +570,7 @@ func (s *MediaService) UpdateAlt(
 	if err != nil {
 		return nil, err
 	}
-	if image.ProductID == nil || *image.ProductID != productID {
+	if image.ProductID == nil || *image.ProductID != productID || image.ProductVariantID != nil {
 		return nil, models.ErrNotFound
 	}
 	if !alt.Set {
@@ -501,13 +608,19 @@ func (s *MediaService) Delete(ctx context.Context, productID, imageID int64) err
 	if err != nil {
 		return err
 	}
-	if img.ProductID == nil || *img.ProductID != productID {
+	if img.ProductID == nil || *img.ProductID != productID || img.ProductVariantID != nil {
 		return models.ErrNotFound
 	}
 	if err := s.repo.Delete(ctx, productID, imageID); err != nil {
 		return err
 	}
-	if img.StorageKey != nil {
+	if s.life != nil {
+		if img.StorageKey != nil {
+			s.life.CleanupKeys(ctx, *img.StorageKey)
+		} else {
+			s.life.CleanupURLs(ctx, &img.ImageURL)
+		}
+	} else if img.StorageKey != nil {
 		if err := s.store.Delete(ctx, *img.StorageKey); err != nil {
 			s.log.Warn("media: delete original", zap.String("key", *img.StorageKey), zap.Error(err))
 		}
@@ -523,7 +636,7 @@ func (s *MediaService) assertImageBelongs(ctx context.Context, productID, imageI
 	if err != nil {
 		return err
 	}
-	if img.ProductID == nil || *img.ProductID != productID {
+	if img.ProductID == nil || *img.ProductID != productID || img.ProductVariantID != nil {
 		return models.ErrNotFound
 	}
 	return nil
@@ -558,24 +671,37 @@ func (s *MediaService) Transform(ctx context.Context, key string, opts imaging.O
 	if !s.tr.CanEncode(effective) {
 		effective = imaging.FormatJPEG
 	}
+	opts.Format = effective
 	contentType := effective.ContentType()
 	cacheKey := s.cacheKey(key, opts, effective)
 
-	if rc, err := s.cache.Open(ctx, cacheKey); err == nil {
-		defer rc.Close()
-		if cached, err := io.ReadAll(rc); err == nil {
-			return cached, contentType, nil
-		}
-	}
-
+	// Verify the authoritative original before consulting the disposable render
+	// cache. A derivative must never outlive a removed original.
 	rc, err := s.store.Open(ctx, key)
 	if err != nil {
 		return nil, "", models.ErrNotFound
 	}
 	defer rc.Close()
-	src, err := io.ReadAll(rc)
+
+	if cachedReader, err := s.cache.Open(ctx, cacheKey); err == nil {
+		defer cachedReader.Close()
+		if cached, err := io.ReadAll(cachedReader); err == nil {
+			return cached, contentType, nil
+		}
+	}
+	var original io.Reader = rc
+	if s.cfg.MaxUploadBytes > 0 {
+		original = io.LimitReader(rc, s.cfg.MaxUploadBytes+1)
+	}
+	src, err := io.ReadAll(original)
 	if err != nil {
 		return nil, "", apperr.ErrInternal
+	}
+	if s.cfg.MaxUploadBytes > 0 && int64(len(src)) > s.cfg.MaxUploadBytes {
+		return nil, "", ErrImageTooLarge
+	}
+	if _, _, _, err := s.inspectImage(src); err != nil {
+		return nil, "", err
 	}
 
 	out, ct, err := s.tr.Transform(src, opts)
@@ -622,7 +748,7 @@ func (s *MediaService) normalize(opts imaging.Options) imaging.Options {
 
 // cacheKey derives a stable, collision-resistant path for a rendered variant.
 func (s *MediaService) cacheKey(key string, opts imaging.Options, effective imaging.Format) string {
-	canonical := key + "|" + string(effective) +
+	canonical := string(effective) +
 		"|q" + strconv.Itoa(opts.Quality) +
 		"|w" + strconv.Itoa(opts.Width) +
 		"|h" + strconv.Itoa(opts.Height) +
@@ -638,5 +764,5 @@ func (s *MediaService) cacheKey(key string, opts imaging.Options, effective imag
 	case imaging.FormatPNG:
 		ext = "png"
 	}
-	return "render/" + h[:2] + "/" + h + "." + ext
+	return mediaDerivativePrefix(key) + "/" + h + "." + ext
 }

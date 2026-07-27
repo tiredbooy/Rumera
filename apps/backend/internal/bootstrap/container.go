@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -48,13 +49,15 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		passwordResetRepo = repositories.NewPasswordResetRepository(db)
 		addressRepo       = repositories.NewAddressRepository(db)
 
-		productRepo      = repositories.NewProductRepository(db)
-		productImageRepo = repositories.NewProductImageRepository(db)
-		contentMediaRepo = repositories.NewContentMediaRepository(db)
-		variantRepo      = repositories.NewVariantRepository(db)
-		categoryRepo     = repositories.NewCategoryRepository(db)
-		brandRepo        = repositories.NewBrandRepository(db)
-		tagRepo          = repositories.NewTagRepository(db)
+		productRepo        = repositories.NewProductRepository(db)
+		productImageRepo   = repositories.NewProductImageRepository(db)
+		contentMediaRepo   = repositories.NewContentMediaRepository(db)
+		mediaLifecycleRepo = repositories.NewMediaLifecycleRepository(db)
+		variantRepo        = repositories.NewVariantRepository(db)
+		optionRepo         = repositories.NewOptionRepository(db)
+		categoryRepo       = repositories.NewCategoryRepository(db)
+		brandRepo          = repositories.NewBrandRepository(db)
+		tagRepo            = repositories.NewTagRepository(db)
 
 		orderRepo       = repositories.NewOrderRepository(db)
 		orderItemRepo   = repositories.NewOrderItemRepository(db)
@@ -114,6 +117,14 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	if err != nil {
 		log.Fatal("media cache init", zap.Error(err))
 	}
+	// The pre-057c render namespace cannot be mapped back to source objects, so it
+	// is discarded once. Current source-addressable derivatives use render-v2.
+	if err := mediaCache.DeletePrefix(context.Background(), "render"); err != nil {
+		log.Warn("media legacy cache cleanup", zap.Error(err))
+	}
+	mediaLifecycleService := services.NewMediaLifecycleService(
+		mediaStore, mediaCache, mediaLifecycleRepo, log,
+	)
 	allowedFormats := make(map[imaging.Format]bool, len(cfg.MediaAllowedFormats))
 	for _, f := range cfg.MediaAllowedFormats {
 		if fm, e := imaging.ParseFormat(strings.TrimSpace(f)); e == nil {
@@ -121,12 +132,15 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		}
 	}
 	mediaService := services.NewMediaService(
-		mediaStore, mediaCache, productImageRepo, productRepo, contentMediaRepo, imaging.New(),
+		mediaStore, mediaCache, productImageRepo, productRepo, contentMediaRepo,
+		mediaLifecycleService, imaging.New(),
 		services.MediaConfig{
-			MaxUploadBytes: int64(cfg.MediaMaxUploadMB) * 1024 * 1024,
-			DefaultQuality: cfg.MediaDefaultQuality,
-			MaxDimension:   cfg.MediaMaxDimension,
-			AllowedOutput:  allowedFormats,
+			MaxUploadBytes:     int64(cfg.MediaMaxUploadMB) * 1024 * 1024,
+			DefaultQuality:     cfg.MediaDefaultQuality,
+			MaxDimension:       cfg.MediaMaxDimension,
+			MaxSourceDimension: cfg.MediaMaxSourceDimension,
+			MaxSourcePixels:    cfg.MediaMaxSourcePixels,
+			AllowedOutput:      allowedFormats,
 		}, log)
 
 	// Analytics roll-up and recommendation services are pulled into named vars so
@@ -172,10 +186,11 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		Address:       services.NewAddressService(addressRepo),
 		TasteProfile:  services.NewTasteProfileService(tasteRepo),
 
-		Product:  services.NewProductService(productRepo),
+		Product:  services.NewProductService(productRepo, mediaLifecycleService, mediaService),
 		Media:    mediaService,
-		Variant:  services.NewVariantService(variantRepo),
-		Category: services.NewCategoryService(categoryRepo),
+		Variant:  services.NewVariantService(variantRepo, mediaLifecycleService),
+		Option:   services.NewOptionService(optionRepo),
+		Category: services.NewCategoryService(categoryRepo, mediaLifecycleService),
 		Brand:    services.NewBrandService(brandRepo),
 		Tag:      services.NewTagService(tagRepo),
 
@@ -194,14 +209,14 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		Payment:      paymentService,
 		Inventory:    inventoryService,
 
-		Blog:         services.NewBlogService(blogRepo, db),
+		Blog:         services.NewBlogService(blogRepo, db, mediaLifecycleService),
 		BlogCategory: services.NewBlogCategoryService(blogCategoryRepo),
 
-		HeroSlide: services.NewHeroSlideService(heroSlideRepo),
+		HeroSlide: services.NewHeroSlideService(heroSlideRepo, mediaLifecycleService),
 
 		SiteSettings: services.NewSiteSettingsService(siteSettingsRepo),
 
-		Recipe:         services.NewRecipeService(recipeRepo, db),
+		Recipe:         services.NewRecipeService(recipeRepo, db, mediaLifecycleService),
 		Recommendation: recommendationService,
 
 		Event:         eventService,

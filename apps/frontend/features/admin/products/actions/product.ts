@@ -19,6 +19,7 @@ import {
   createVariant as _createVariant,
   updateVariant as _updateVariant,
   deleteVariant as _deleteVariant,
+  replaceVariantOptions as _replaceVariantOptions,
 } from "@/features/admin/products/api/server";
 
 // Wrap each as an explicit async function
@@ -55,4 +56,11 @@ export async function updateVariant(
 
 export async function deleteVariant(variantId: number): Promise<void> {
   return _deleteVariant(variantId);
+}
+
+export async function replaceVariantOptions(
+  variantId: number,
+  optionValueIds: number[],
+): Promise<void> {
+  return _replaceVariantOptions(variantId, optionValueIds);
 }

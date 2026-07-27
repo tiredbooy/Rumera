@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/imaging"
 	"github.com/tiredbooy/pkg/storage"
@@ -32,6 +33,7 @@ func TestMediaUploadUsesStableProductOwnerAndRetriesCollision(t *testing.T) {
 		images,
 		products,
 		&contentMediaRepositoryStub{},
+		nil,
 		imaging.New(),
 		MediaConfig{MaxUploadBytes: 1 << 20},
 		zap.NewNop(),
@@ -113,6 +115,7 @@ func TestMediaUploadRetainsBlobForAmbiguousDatabaseFailure(t *testing.T) {
 				images,
 				&productMediaRepositoryStub{slug: "draft-product"},
 				&contentMediaRepositoryStub{},
+				nil,
 				imaging.New(),
 				MediaConfig{},
 				zap.NewNop(),
@@ -141,6 +144,7 @@ func TestMediaUploadDeletesBlobForDefinitiveDatabaseRejection(t *testing.T) {
 		images,
 		&productMediaRepositoryStub{slug: "draft-product"},
 		&contentMediaRepositoryStub{},
+		nil,
 		imaging.New(),
 		MediaConfig{},
 		zap.NewNop(),
@@ -165,6 +169,7 @@ func TestMediaUploadRejectsMissingProductOwner(t *testing.T) {
 		&mediaImageRepositoryStub{},
 		&productMediaRepositoryStub{err: models.ErrNotFound},
 		&contentMediaRepositoryStub{},
+		nil,
 		imaging.New(),
 		MediaConfig{},
 		zap.NewNop(),
@@ -183,6 +188,7 @@ func TestMediaStandaloneUploadReturnsCanonicalLegacyPath(t *testing.T) {
 		&mediaImageRepositoryStub{},
 		&productMediaRepositoryStub{},
 		&contentMediaRepositoryStub{},
+		nil,
 		imaging.New(),
 		MediaConfig{},
 		zap.NewNop(),
@@ -222,6 +228,7 @@ func TestMediaOwnerUploadAttachesEverySupportedSlot(t *testing.T) {
 				&mediaImageRepositoryStub{},
 				&productMediaRepositoryStub{},
 				owner,
+				nil,
 				imaging.New(),
 				MediaConfig{},
 				zap.NewNop(),
@@ -277,6 +284,7 @@ func TestMediaOwnerUploadRejectsInvalidOrMissingOwnerBeforeStorage(t *testing.T)
 				&mediaImageRepositoryStub{},
 				&productMediaRepositoryStub{},
 				tt.owner,
+				nil,
 				imaging.New(),
 				MediaConfig{},
 				zap.NewNop(),
@@ -322,6 +330,7 @@ func TestMediaOwnerUploadCompensatesOnlyDefinitiveAttachmentFailures(t *testing.
 				&mediaImageRepositoryStub{},
 				&productMediaRepositoryStub{},
 				owner,
+				nil,
 				imaging.New(),
 				MediaConfig{},
 				zap.NewNop(),
@@ -351,6 +360,7 @@ func TestMediaAddsExternalProductImageWithoutStorageOwnership(t *testing.T) {
 		images,
 		&productMediaRepositoryStub{slug: "product"},
 		&contentMediaRepositoryStub{},
+		nil,
 		imaging.New(),
 		MediaConfig{},
 		zap.NewNop(),
@@ -381,6 +391,7 @@ func TestMediaMapsProductDeletionRaceToNotFound(t *testing.T) {
 		images,
 		&productMediaRepositoryStub{slug: "deleted-product"},
 		&contentMediaRepositoryStub{},
+		nil,
 		imaging.New(),
 		MediaConfig{},
 		zap.NewNop(),
@@ -414,6 +425,7 @@ func TestMediaRejectsUnsafeExternalProductImageURLs(t *testing.T) {
 				images,
 				&productMediaRepositoryStub{slug: "product"},
 				&contentMediaRepositoryStub{},
+				nil,
 				imaging.New(),
 				MediaConfig{},
 				zap.NewNop(),
@@ -443,6 +455,7 @@ func TestMediaTransformKeepsLegacyFlatKeysReadable(t *testing.T) {
 		&mediaImageRepositoryStub{},
 		&productMediaRepositoryStub{},
 		&contentMediaRepositoryStub{},
+		nil,
 		imaging.New(),
 		MediaConfig{},
 		zap.NewNop(),
@@ -494,14 +507,17 @@ func (r *contentMediaRepositoryStub) Attach(
 	ownerID int64,
 	url, key string,
 	alt models.NullablePatch[string],
-) error {
+) (*repositories.ContentMediaAttachment, error) {
 	r.ownerType = ownerType
 	r.role = role
 	r.ownerID = ownerID
 	r.attachedURL = url
 	r.attachedKey = key
 	r.alt = alt
-	return r.attachErr
+	if r.attachErr != nil {
+		return nil, r.attachErr
+	}
+	return &repositories.ContentMediaAttachment{}, nil
 }
 
 func (r *productMediaRepositoryStub) GetMediaIdentity(_ context.Context, productID int64) (string, error) {

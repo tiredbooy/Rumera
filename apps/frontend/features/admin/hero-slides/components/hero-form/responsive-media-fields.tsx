@@ -19,6 +19,7 @@ export function HeroResponsiveMediaFields({
   mobileRef,
   onDesktopStagedChange,
   onDesktopPreviewChange,
+  onMobilePreviewChange,
   imageAlt,
   disabled,
 }: {
@@ -29,6 +30,7 @@ export function HeroResponsiveMediaFields({
   mobileRef: Ref<ImageUploaderHandle<UploadedImage | null>>;
   onDesktopStagedChange: (staged: boolean) => void;
   onDesktopPreviewChange: (url: string) => void;
+  onMobilePreviewChange: (url: string) => void;
   imageAlt: string;
   disabled?: boolean;
 }) {
@@ -119,6 +121,8 @@ export function HeroResponsiveMediaFields({
                   : undefined
               }
               altValue={imageAlt}
+              onPreviewChange={onMobilePreviewChange}
+              previewClassName="aspect-[4/5]"
               disabled={disabled}
             />
           )}

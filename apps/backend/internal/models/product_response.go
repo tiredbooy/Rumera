@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // ─────────────────────────────────────────────────────────────
 // Responses
 // ─────────────────────────────────────────────────────────────
@@ -37,9 +39,10 @@ type ProductDetail struct {
 	MetaTitle       *string           `json:"meta_title,omitempty"`
 	MetaDescription *string           `json:"meta_description,omitempty"`
 	MetaTags        []string          `json:"meta_tags,omitempty"`
+	UpdatedAt       time.Time         `json:"updated_at"`
 	Tags            []TagResponse     `json:"tags,omitempty"`
-	Images          []ImageResponse   `json:"images,omitempty"`
-	Variants        []VariantResponse `json:"variants,omitempty"`
+	Images          []ImageResponse   `json:"images"`
+	Variants        []VariantResponse `json:"variants"`
 }
 
 type TagResponse struct {
@@ -65,14 +68,16 @@ type VariantResponse struct {
 	CompareAtPrice *float64              `json:"compare_at_price,omitempty"`
 	IsActive       bool                  `json:"is_active"`
 	AvailableStock *int                  `json:"available_stock,omitempty"`
-	Options        []OptionValueResponse `json:"options,omitempty"`
-	Images         []ImageResponse       `json:"images,omitempty"`
+	Options        []OptionValueResponse `json:"options"`
+	Images         []ImageResponse       `json:"images"`
 }
 
 type OptionValueResponse struct {
-	ID         int64  `json:"id"`
-	OptionType string `json:"option_type"` // e.g. "Color"
-	Value      string `json:"value"`       // e.g. "Red"
+	ID              int64  `json:"id"`
+	OptionTypeID    int64  `json:"option_type_id"`
+	OptionTypeTitle string `json:"option_type_title"` // stable administrative name
+	OptionType      string `json:"option_type"`       // customer-facing label, e.g. "Color"
+	Value           string `json:"value"`             // e.g. "Red"
 }
 
 // MeiliProduct — the document shape indexed in MeiliSearch.

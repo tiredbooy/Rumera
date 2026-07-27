@@ -91,12 +91,13 @@ type pgxBeginner interface {
 }
 
 type blogService struct {
-	repo repositories.BlogRepository
-	db   pgxBeginner
+	repo  repositories.BlogRepository
+	db    pgxBeginner
+	media *MediaLifecycleService
 }
 
-func NewBlogService(repo repositories.BlogRepository, db pgxBeginner) BlogService {
-	return &blogService{repo: repo, db: db}
+func NewBlogService(repo repositories.BlogRepository, db pgxBeginner, media *MediaLifecycleService) BlogService {
+	return &blogService{repo: repo, db: db, media: media}
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
@@ -187,6 +188,7 @@ func (s *blogService) Create(ctx context.Context, req *models.BlogReq) (*models.
 }
 
 func (s *blogService) Update(ctx context.Context, id int64, req *models.BlogUpdateReq) (*models.BlogDetailResponse, error) {
+	var mediaBefore *models.Blog
 	if req.ImageURL.Set || req.ImageAlt.Set {
 		current, err := s.repo.GetByID(ctx, id)
 		if err != nil {
@@ -195,6 +197,7 @@ func (s *blogService) Update(ctx context.Context, id int64, req *models.BlogUpda
 			}
 			return nil, fmt.Errorf("blogService.Update media preflight: %w", err)
 		}
+		mediaBefore = current
 		if req.ImageURL.Set || req.ImageAlt.Set {
 			req.ExpectedImageURL = mediaExpectation(current.ImageURL)
 		}
@@ -277,17 +280,28 @@ func (s *blogService) Update(ctx context.Context, id int64, req *models.BlogUpda
 	if err = tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("blogService.Update: commit: %w", err)
 	}
+	if mediaBefore != nil && !sameMediaURL(mediaBefore.ImageURL, blog.ImageURL) {
+		s.media.CleanupURLs(ctx, mediaBefore.ImageURL)
+	}
 
 	return s.hydrate(ctx, func() (*models.Blog, error) { return blog, nil })
 }
 
 func (s *blogService) Delete(ctx context.Context, id int64) error {
+	current, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
+		return fmt.Errorf("blogService.Delete media: %w", err)
+	}
 	if err := s.repo.SoftDelete(ctx, id); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return apperr.ErrNotFound
 		}
 		return fmt.Errorf("blogService.Delete: %w", err)
 	}
+	s.media.CleanupURLs(ctx, current.ImageURL)
 	return nil
 }
 

@@ -55,6 +55,11 @@ func InternalError(c *gin.Context) {
 
 func HandleError(c *gin.Context, err error, fields ...map[string][]string) {
 	if e, ok := apperr.As(err); ok {
+		if len(fields) == 0 {
+			if structured, hasFields := apperr.Fields(err); hasFields {
+				fields = append(fields, structured)
+			}
+		}
 		Error(c, FromAppError(e), fields...)
 		return
 	}

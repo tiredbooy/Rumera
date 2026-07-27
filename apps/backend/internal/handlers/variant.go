@@ -4,11 +4,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/mappers"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/response"
 )
 
 type optionIDsReq struct {
 	OptionValueIDs []int64 `json:"option_value_ids" validate:"required"`
+}
+
+type replaceOptionIDsReq struct {
+	OptionValueIDs *[]int64 `json:"option_value_ids" validate:"required"`
 }
 
 // CreateVariant — POST /admin/products/:id/variants
@@ -26,6 +31,7 @@ func (h *Handler) CreateVariant(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
+	h.invalidate(c.Request.Context(), cache.KeyProduct(productID))
 	response.Created(c, mappers.ToVariantResponse(variant, nil, nil, nil))
 }
 
@@ -71,11 +77,18 @@ func (h *Handler) UpdateVariant(c *gin.Context) {
 	if !h.bindJSON(c, &req) {
 		return
 	}
-	variant, err := h.Variant.Update(c.Request.Context(), id, req)
+	ctx := c.Request.Context()
+	current, err := h.Variant.GetByID(ctx, id)
 	if err != nil {
 		response.HandleError(c, err)
 		return
 	}
+	variant, err := h.Variant.Update(ctx, id, req)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	h.invalidate(ctx, cache.KeyProduct(current.ProductID))
 	response.OK(c, mappers.ToVariantResponse(variant, nil, nil, nil))
 }
 
@@ -85,10 +98,17 @@ func (h *Handler) DeleteVariant(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.Variant.Delete(c.Request.Context(), id); err != nil {
+	ctx := c.Request.Context()
+	variant, err := h.Variant.GetByID(ctx, id)
+	if err != nil {
 		response.HandleError(c, err)
 		return
 	}
+	if err := h.Variant.Delete(ctx, id); err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	h.invalidate(ctx, cache.KeyProduct(variant.ProductID))
 	response.NoContent(c)
 }
 
@@ -102,10 +122,45 @@ func (h *Handler) AttachVariantOptions(c *gin.Context) {
 	if !h.bindJSON(c, &req) {
 		return
 	}
-	if err := h.Variant.AttachOptions(c.Request.Context(), id, req.OptionValueIDs); err != nil {
+	ctx := c.Request.Context()
+	variant, err := h.Variant.GetByID(ctx, id)
+	if err != nil {
 		response.HandleError(c, err)
 		return
 	}
+	if err := h.Variant.AttachOptions(ctx, id, req.OptionValueIDs); err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	h.invalidate(ctx, cache.KeyProduct(variant.ProductID))
+	response.NoContent(c)
+}
+
+// ReplaceVariantOptions — PUT /admin/variants/:id/options.
+func (h *Handler) ReplaceVariantOptions(c *gin.Context) {
+	id, ok := h.paramInt64(c, "id")
+	if !ok {
+		return
+	}
+	var req replaceOptionIDsReq
+	if !h.bindJSON(c, &req) {
+		return
+	}
+	if req.OptionValueIDs == nil {
+		response.Error(c, response.ErrInvalidBody)
+		return
+	}
+	ctx := c.Request.Context()
+	variant, err := h.Variant.GetByID(ctx, id)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	if err := h.Variant.ReplaceOptions(ctx, id, *req.OptionValueIDs); err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	h.invalidate(ctx, cache.KeyProduct(variant.ProductID))
 	response.NoContent(c)
 }
 

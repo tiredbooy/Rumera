@@ -11,8 +11,10 @@ import (
 	"github.com/tiredbooy/internal/mappers"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/services"
+	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/imaging"
 	"github.com/tiredbooy/pkg/response"
+	"github.com/tiredbooy/pkg/storage"
 )
 
 // ── Admin: product image management ─────────────────────────────────────────
@@ -40,6 +42,7 @@ func (h *Handler) UploadProductImage(c *gin.Context) {
 		h.handleMediaError(c, err)
 		return
 	}
+	h.invalidate(c.Request.Context(), cache.KeyProduct(productID))
 	response.Created(c, mappers.ToImageResponse(img))
 }
 
@@ -66,6 +69,7 @@ func (h *Handler) AddProductImageURL(c *gin.Context) {
 		h.handleMediaError(c, err)
 		return
 	}
+	h.invalidate(c.Request.Context(), cache.KeyProduct(productID))
 	response.Created(c, mappers.ToImageResponse(img))
 }
 
@@ -105,6 +109,7 @@ func (h *Handler) ReorderProductImages(c *gin.Context) {
 		h.handleMediaError(c, err)
 		return
 	}
+	h.invalidate(c.Request.Context(), cache.KeyProduct(productID))
 	response.NoContent(c)
 }
 
@@ -122,6 +127,7 @@ func (h *Handler) SetPrimaryProductImage(c *gin.Context) {
 		h.handleMediaError(c, err)
 		return
 	}
+	h.invalidate(c.Request.Context(), cache.KeyProduct(productID))
 	response.NoContent(c)
 }
 
@@ -148,6 +154,7 @@ func (h *Handler) UpdateProductImage(c *gin.Context) {
 		h.handleMediaError(c, err)
 		return
 	}
+	h.invalidate(c.Request.Context(), cache.KeyProduct(productID))
 	response.OK(c, mappers.ToImageResponse(img))
 }
 
@@ -165,6 +172,7 @@ func (h *Handler) DeleteProductImage(c *gin.Context) {
 		h.handleMediaError(c, err)
 		return
 	}
+	h.invalidate(c.Request.Context(), cache.KeyProduct(productID))
 	response.NoContent(c)
 }
 
@@ -174,6 +182,10 @@ var uploadFolders = map[string]bool{
 	"categories": true,
 	"uploads":    true,
 }
+
+// Multipart framing, the file header, and the two small metadata fields need
+// bounded room beyond the configured file-byte limit.
+const mediaMultipartOverheadBytes int64 = 64 << 10
 
 // UploadImage — POST /admin/uploads (multipart: file, folder?)
 //
@@ -199,6 +211,23 @@ func (h *Handler) UploadImage(c *gin.Context) {
 	response.Created(c, res)
 }
 
+type releaseStandaloneUploadReq struct {
+	Key string `json:"key" validate:"required,max=512"`
+}
+
+// ReleaseStandaloneUpload — POST /admin/uploads/release.
+func (h *Handler) ReleaseStandaloneUpload(c *gin.Context) {
+	var req releaseStandaloneUploadReq
+	if !h.bindJSON(c, &req) {
+		return
+	}
+	if err := h.Media.ReleaseStandalone(c.Request.Context(), req.Key); err != nil {
+		h.handleMediaError(c, err)
+		return
+	}
+	response.NoContent(c)
+}
+
 // UploadOwnerImage — POST /admin/uploads/:ownerType/:ownerID/:role.
 func (h *Handler) UploadOwnerImage(c *gin.Context) {
 	ownerID, ok := h.paramInt64(c, "ownerID")
@@ -221,18 +250,28 @@ func (h *Handler) UploadOwnerImage(c *gin.Context) {
 		h.handleMediaError(c, err)
 		return
 	}
+	if c.Param("ownerType") == "recipes" && res.OwnerSlug != "" {
+		h.invalidate(c.Request.Context(), cache.KeyRecipe(res.OwnerSlug))
+	}
 	response.Created(c, res)
 }
 
 func (h *Handler) readImageUpload(c *gin.Context) ([]byte, bool) {
-	// Preserve the existing request limit here. Task 057d owns multipart-overhead
-	// correction and decoded image limits.
 	maxBytes := h.Media.MaxUploadBytes()
 	if maxBytes > 0 {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes+1)
+		requestLimit := maxBytes + mediaMultipartOverheadBytes
+		if requestLimit < maxBytes {
+			requestLimit = maxBytes
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, requestLimit)
 	}
 	file, _, err := c.Request.FormFile("file")
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			response.Error(c, response.ErrFileTooLarge)
+			return nil, false
+		}
 		response.Error(c, response.ErrInvalidRequest)
 		return nil, false
 	}
@@ -244,6 +283,10 @@ func (h *Handler) readImageUpload(c *gin.Context) ([]byte, bool) {
 	}
 	data, err := io.ReadAll(reader)
 	if err != nil {
+		response.Error(c, response.ErrFileTooLarge)
+		return nil, false
+	}
+	if maxBytes > 0 && int64(len(data)) > maxBytes {
 		response.Error(c, response.ErrFileTooLarge)
 		return nil, false
 	}
@@ -348,11 +391,11 @@ func (h *Handler) negotiateFormat(accept string) imaging.Format {
 // the shared error handler for everything else.
 func (h *Handler) handleMediaError(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, services.ErrImageTooLarge):
+	case errors.Is(err, services.ErrImageTooLarge), errors.Is(err, services.ErrImageDimensionsTooLarge):
 		response.Error(c, response.ErrFileTooLarge)
 	case errors.Is(err, services.ErrUnsupportedImage):
 		response.Error(c, response.ErrInvalidFileType)
-	case errors.Is(err, services.ErrInvalidMediaOwner):
+	case errors.Is(err, services.ErrInvalidMediaOwner), errors.Is(err, storage.ErrInvalidKey):
 		response.Error(c, response.ErrInvalidParams)
 	default:
 		h.handleError(c, err)

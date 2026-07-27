@@ -5,6 +5,7 @@ import {
   addProductImageURL,
   uploadProductImage,
 } from "../admin/products/api/client";
+import { releaseUpload, uploadImage as uploadStandaloneImage } from "./client";
 import {
   deleteProductImage,
   reorderProductImages,
@@ -18,6 +19,7 @@ import {
   validateFile,
 } from "./constants";
 import type { ProductImage } from "../catalog/products/types";
+import type { PreparedProductImage, UploadedImage } from "./types";
 import type {
   ProductImageUploaderProps,
   Slot,
@@ -29,14 +31,53 @@ function asError(error: unknown, fallback: string): Error {
   return error instanceof Error ? error : new Error(fallback);
 }
 
+function ensureGalleryPrimary(slots: Slot[]): Slot[] {
+  const hasPrimary = slots.some((slot) =>
+    slot.kind === "uploaded" ? slot.image.is_primary : slot.isPrimary,
+  );
+  if (slots.length === 0 || hasPrimary) return slots;
+
+  return slots.map((slot, index) =>
+    slot.kind === "uploaded"
+      ? { ...slot, image: { ...slot.image, is_primary: index === 0 } }
+      : { ...slot, isPrimary: index === 0 },
+  );
+}
+
+function gallerySignature(slots: Slot[]) {
+  return JSON.stringify(
+    slots.map((slot) =>
+      slot.kind === "uploaded"
+        ? ["uploaded", slot.image.id, slot.alt, slot.image.is_primary]
+        : [
+            "staged",
+            slot.localId,
+            slot.source.kind,
+            slot.source.kind === "url"
+              ? slot.source.url
+              : [
+                  slot.source.file.name,
+                  slot.source.file.size,
+                  slot.source.file.lastModified,
+                ],
+            slot.alt,
+            slot.isPrimary,
+          ],
+    ),
+  );
+}
+
 export function useImageUploader({
   owner,
   initialImages = [],
   maxImages,
+  deferred = false,
   disabled = false,
+  onDirtyChange,
+  onGalleryChange,
 }: ProductImageUploaderProps) {
   const productId = owner.ownerId;
-  const live = typeof productId === "number" && productId > 0;
+  const live = !deferred && typeof productId === "number" && productId > 0;
   const idRef = React.useRef(0);
   const initialSlots = React.useMemo<Slot[]>(
     () =>
@@ -53,9 +94,18 @@ export function useImageUploader({
   );
   const [slots, setSlots] = React.useState<Slot[]>(initialSlots);
   const slotsRef = React.useRef(slots);
+  const [cleanSignature, setCleanSignature] = React.useState(() =>
+    gallerySignature(initialSlots),
+  );
+  const disposedRef = React.useRef(false);
+  const preservePreparedRef = React.useRef(false);
   const objectUrlsRef = React.useRef(new Set<string>());
   const inFlightUploadsRef = React.useRef(
     new Map<string, Promise<ProductImage>>(),
+  );
+  const preparedUploadsRef = React.useRef(new Map<string, UploadedImage>());
+  const inFlightPreparationsRef = React.useRef(
+    new Map<string, Promise<UploadedImage>>(),
   );
   const pendingPersistenceRef = React.useRef(new Set<Promise<void>>());
   const persistenceErrorRef = React.useRef<Error | null>(null);
@@ -64,6 +114,25 @@ export function useImageUploader({
   const [isFlushing, setIsFlushing] = React.useState(false);
   const [limitMessage, setLimitMessage] = React.useState<string | null>(null);
   const [announcement, setAnnouncement] = React.useState("");
+  const isDirty = gallerySignature(slots) !== cleanSignature;
+
+  React.useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  React.useEffect(() => {
+    const primary =
+      slots.find((slot) =>
+        slot.kind === "uploaded" ? slot.image.is_primary : slot.isPrimary,
+      ) ?? slots[0];
+    onGalleryChange?.({
+      count: slots.length,
+      primaryUrl:
+        primary?.kind === "uploaded"
+          ? primary.image.image_url
+          : primary?.previewUrl,
+    });
+  }, [onGalleryChange, slots]);
 
   const announce = React.useCallback((message: string) => {
     setAnnouncement(message);
@@ -84,15 +153,36 @@ export function useImageUploader({
   }, []);
 
   React.useEffect(() => {
+    disposedRef.current = false;
     const objectUrls = objectUrlsRef.current;
+    const preparedUploads = preparedUploadsRef.current;
     return () => {
+      disposedRef.current = true;
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
       objectUrls.clear();
+      if (!preservePreparedRef.current) {
+        preparedUploads.forEach((upload) => {
+          void releaseUpload(upload.key).catch(() => {
+            // Referenced files are retained; reconciliation handles failed release.
+          });
+        });
+      }
+      preparedUploads.clear();
     };
+  }, []);
+
+  const releasePreparedSlot = React.useCallback((localId: string) => {
+    const prepared = preparedUploadsRef.current.get(localId);
+    if (!prepared) return;
+    preparedUploadsRef.current.delete(localId);
+    void releaseUpload(prepared.key).catch(() => {
+      // Reconciliation is the durable fallback for failed best-effort release.
+    });
   }, []);
 
   const patchStaged = React.useCallback(
     (localId: string, next: Partial<StagedSlot>) => {
+      if (disposedRef.current) return;
       replaceSlots((current) =>
         current.map((slot) =>
           slot.localId === localId && slot.kind === "staged"
@@ -339,10 +429,15 @@ export function useImageUploader({
       if (disabled) return;
       if (slot.kind === "staged") {
         if (inFlightUploadsRef.current.has(slot.localId)) return;
+        if (inFlightPreparationsRef.current.has(slot.localId)) return;
+        releasePreparedSlot(slot.localId);
         revokePreview(slot.previewUrl);
-        replaceSlots((current) =>
-          current.filter((currentSlot) => currentSlot.localId !== slot.localId),
-        );
+        replaceSlots((current) => {
+          const remaining = current.filter(
+            (currentSlot) => currentSlot.localId !== slot.localId,
+          );
+          return slot.isPrimary ? ensureGalleryPrimary(remaining) : remaining;
+        });
         announce("تصویر حذف شد.");
         return;
       }
@@ -355,7 +450,12 @@ export function useImageUploader({
         current.filter((currentSlot) => currentSlot.localId !== slot.localId),
       );
       announce("تصویر حذف شد.");
-      if (!live) return;
+      if (!live) {
+        if (wasPrimary) {
+          replaceSlots((current) => ensureGalleryPrimary(current));
+        }
+        return;
+      }
 
       persistenceErrorRef.current = null;
       trackPersistence(
@@ -434,6 +534,7 @@ export function useImageUploader({
       live,
       productId,
       replaceSlots,
+      releasePreparedSlot,
       revokePreview,
       trackPersistence,
     ],
@@ -633,10 +734,10 @@ export function useImageUploader({
     const invalid = slotsRef.current.find(
       (slot): slot is StagedSlot =>
         slot.kind === "staged" &&
-        (slot.validationError || slot.status === "error"),
+        (slot.validationError || (!deferred && slot.status === "error")),
     );
     return invalid?.error ?? null;
-  }, []);
+  }, [deferred]);
 
   const persistDirtyAlts = React.useCallback(
     async (pid: number) => {
@@ -771,6 +872,158 @@ export function useImageUploader({
     ],
   );
 
+  const prepareStagedUpload = React.useCallback(
+    (slot: StagedSlot, file: File): Promise<UploadedImage> => {
+      const prepared = preparedUploadsRef.current.get(slot.localId);
+      if (prepared) return Promise.resolve(prepared);
+      const inFlight = inFlightPreparationsRef.current.get(slot.localId);
+      if (inFlight) return inFlight;
+
+      patchStaged(slot.localId, {
+        status: "uploading",
+        progress: 0,
+        error: undefined,
+      });
+      const operation = uploadStandaloneImage(
+        file,
+        { folder: "uploads" },
+        (progress) => patchStaged(slot.localId, { progress }),
+      )
+        .then(async (result) => {
+          if (disposedRef.current) {
+            await releaseUpload(result.key).catch(() => {
+              // Reconciliation removes ownerless uploads if release fails.
+            });
+            throw new Error("بارگذاری لغو شد");
+          }
+          preparedUploadsRef.current.set(slot.localId, result);
+          patchStaged(slot.localId, { status: "idle", progress: 1 });
+          return result;
+        })
+        .catch((error) => {
+          const uploadError = asError(error, "بارگذاری ناموفق بود");
+          if (!disposedRef.current) {
+            patchStaged(slot.localId, {
+              status: "error",
+              error: uploadError.message,
+            });
+          }
+          throw uploadError;
+        })
+        .finally(() => {
+          inFlightPreparationsRef.current.delete(slot.localId);
+        });
+      inFlightPreparationsRef.current.set(slot.localId, operation);
+      return operation;
+    },
+    [patchStaged],
+  );
+
+  const prepare = React.useCallback(async (): Promise<
+    PreparedProductImage[]
+  > => {
+    if (!deferred) {
+      throw new Error("ذخیره تجمیعی تصاویر فعال نیست");
+    }
+    if (flushingRef.current) {
+      throw new Error("ذخیره تصاویر در حال انجام است");
+    }
+    for (const slot of slotsRef.current) {
+      if (
+        slot.kind === "staged" &&
+        slot.status === "error" &&
+        !slot.validationError
+      ) {
+        patchStaged(slot.localId, { status: "idle", error: undefined });
+      }
+    }
+    const validationError = validate();
+    if (validationError) throw new Error(validationError);
+
+    flushingRef.current = true;
+    setIsFlushing(true);
+    try {
+      const result: PreparedProductImage[] = [];
+      for (const slot of slotsRef.current) {
+        const altText = slot.alt.trim() || null;
+        if (slot.kind === "uploaded") {
+          result.push({
+            id: slot.image.id,
+            alt_text: altText,
+            is_primary: slot.image.is_primary,
+          });
+          continue;
+        }
+        if (slot.source.kind === "url") {
+          result.push({
+            image_url: slot.source.url,
+            alt_text: altText,
+            is_primary: slot.isPrimary,
+          });
+          continue;
+        }
+        const upload = await prepareStagedUpload(slot, slot.source.file);
+        result.push({
+          storage_key: upload.key,
+          alt_text: altText,
+          is_primary: slot.isPrimary,
+        });
+      }
+      return result;
+    } finally {
+      flushingRef.current = false;
+      setIsFlushing(false);
+    }
+  }, [deferred, patchStaged, prepareStagedUpload, validate]);
+
+  const commit = React.useCallback(
+    (images: ProductImage[]) => {
+      for (const slot of slotsRef.current) {
+        if (slot.kind === "staged") revokePreview(slot.previewUrl);
+      }
+      preparedUploadsRef.current.clear();
+      preservePreparedRef.current = false;
+      inFlightPreparationsRef.current.clear();
+      const next: Slot[] = images
+        .slice()
+        .sort((left, right) => left.sort_order - right.sort_order)
+        .map((image) => ({
+          kind: "uploaded",
+          localId: `committed-${image.id}`,
+          image,
+          alt: image.alt_text ?? "",
+        }));
+      setCleanSignature(gallerySignature(next));
+      replaceSlots(() => next);
+      persistenceErrorRef.current = null;
+      setLimitMessage(null);
+    },
+    [replaceSlots, revokePreview],
+  );
+
+  const preservePrepared = React.useCallback((preserve: boolean) => {
+    preservePreparedRef.current = preserve;
+  }, []);
+
+  const discardPrepared = React.useCallback(() => {
+    preservePreparedRef.current = false;
+    const prepared = Array.from(preparedUploadsRef.current.values());
+    preparedUploadsRef.current.clear();
+    for (const upload of prepared) {
+      void releaseUpload(upload.key).catch(() => {
+        // Reconciliation is the durable fallback for failed best-effort release.
+      });
+    }
+    replaceSlots((current) =>
+      current.map((slot) =>
+        slot.kind === "staged" && slot.source.kind === "file"
+          ? { ...slot, status: "idle", progress: 0, error: undefined }
+          : slot,
+      ),
+    );
+    announce("تصاویر ردشده برای بارگذاری دوباره آماده شدند.");
+  }, [announce, replaceSlots]);
+
   return {
     slots,
     isPending:
@@ -793,7 +1046,12 @@ export function useImageUploader({
     moveDown,
     retryUpload,
     flush,
+    prepare,
+    preservePrepared,
+    discardPrepared,
+    commit,
     validate,
+    isDirty,
     hasStaged: slots.some((slot) => slot.kind === "staged"),
   };
 }

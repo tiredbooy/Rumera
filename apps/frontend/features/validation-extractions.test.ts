@@ -7,7 +7,11 @@ import {
 } from "./catalog/brands/validations";
 import { categoryFormSchema } from "./catalog/categories/validations";
 import { customerEditFormSchema } from "./customers/validations";
-import { heroSlideFormSchema } from "./hero-slides/validations";
+import {
+  heroDateTimeInputValue,
+  heroDateTimeISO,
+  heroSlideFormSchema,
+} from "./hero-slides/validations";
 import { profileFormSchema } from "./profile/validations";
 import { recipeFormSchema } from "./recipes/validations";
 import { siteSettingsFormSchema } from "./settings/validations";
@@ -143,6 +147,8 @@ describe("extracted validation contracts", () => {
       cta_href: "",
       secondary_cta_label: "",
       secondary_cta_href: "",
+      starts_at: "",
+      ends_at: "",
       theme: "dark",
       sort_order: "1e2",
       is_active: true,
@@ -164,6 +170,8 @@ describe("extracted validation contracts", () => {
       cta_href: "",
       secondary_cta_label: "",
       secondary_cta_href: "",
+      starts_at: "",
+      ends_at: "",
       theme: "dark" as const,
       sort_order: "0",
       is_active: true,
@@ -177,6 +185,91 @@ describe("extracted validation contracts", () => {
     expect(
       heroSlideFormSchema.safeParse({ ...base, is_active: false }).success,
     ).toBe(true);
+    expect(
+      heroSlideFormSchema.safeParse({
+        ...base,
+        is_active: false,
+        starts_at: "2026-02-30T10:00:00",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("round-trips hero schedules between local controls and API timestamps", () => {
+    const timestamp = "2026-07-27T08:45:30.000Z";
+    const localValue = heroDateTimeInputValue(timestamp);
+
+    expect(heroDateTimeISO(localValue)).toBe(timestamp);
+    expect(heroDateTimeInputValue(null)).toBe("");
+    expect(heroDateTimeISO("")).toBeNull();
+  });
+
+  it("validates hero CTA pairs, safe links, and schedule ordering", () => {
+    const base = {
+      title: "اسلاید",
+      eyebrow: "",
+      subtitle: "",
+      badge: "",
+      image_url: "/media/hero.jpg",
+      mobile_image_url: "",
+      image_alt: "",
+      cta_label: "مشاهده",
+      cta_href: "/products",
+      secondary_cta_label: "",
+      secondary_cta_href: "",
+      starts_at: "2026-08-01T10:00:00",
+      ends_at: "2026-08-02T10:00:00",
+      theme: "dark" as const,
+      sort_order: "0",
+      is_active: true,
+      desktop_file_staged: false,
+    };
+
+    expect(heroSlideFormSchema.safeParse(base).success).toBe(true);
+    expect(
+      heroSlideFormSchema.safeParse({ ...base, cta_href: "" }).success,
+    ).toBe(false);
+    expect(
+      heroSlideFormSchema.safeParse({
+        ...base,
+        cta_href: "javascript:alert(1)",
+      }).success,
+    ).toBe(false);
+    expect(
+      heroSlideFormSchema.safeParse({
+        ...base,
+        cta_href: "/products%5Cunsafe",
+      }).success,
+    ).toBe(false);
+    expect(
+      heroSlideFormSchema.safeParse({
+        ...base,
+        cta_href: "/%2Fexample.com/products",
+      }).success,
+    ).toBe(false);
+    expect(
+      heroSlideFormSchema.safeParse({
+        ...base,
+        cta_href: "https:example.com/products",
+      }).success,
+    ).toBe(false);
+    expect(
+      heroSlideFormSchema.safeParse({
+        ...base,
+        cta_href: "https:/example.com/products",
+      }).success,
+    ).toBe(false);
+    expect(
+      heroSlideFormSchema.safeParse({
+        ...base,
+        cta_href: "HTTPS://example.com/products",
+      }).success,
+    ).toBe(true);
+    expect(
+      heroSlideFormSchema.safeParse({
+        ...base,
+        ends_at: base.starts_at,
+      }).success,
+    ).toBe(false);
   });
 
   it("preserves unrestricted category numeric strings and relative images", () => {

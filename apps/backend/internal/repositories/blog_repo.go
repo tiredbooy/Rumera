@@ -398,7 +398,9 @@ func (r *blogRepository) Update(ctx context.Context, id int64, req *models.BlogU
 
 func (r *blogRepository) SoftDelete(ctx context.Context, id int64) error {
 	ct, err := r.db.Exec(ctx,
-		`UPDATE blogs SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`, id,
+		`UPDATE blogs
+		 SET deleted_at = NOW(), image_url = NULL, image_storage_key = NULL
+		 WHERE id = $1 AND deleted_at IS NULL`, id,
 	)
 	if err != nil {
 		return fmt.Errorf("soft deleting blog: %w", err)
