@@ -22,7 +22,9 @@ The API uses **stateless JWT** access/refresh tokens with **role-based** access 
 1. **Register** (`POST /auth/register`) or **Login** (`POST /auth/login`) → returns a token pair.
 2. Send the access token on every protected request: `Authorization: Bearer <access_token>`.
 3. When the access token expires (`401 INVALID_TOKEN`), call **`POST /auth/refresh`** with the refresh token to get a fresh pair.
-4. The refresh endpoint re-reads the user's current role, so **role changes take effect on the next refresh**.
+4. Every protected request re-reads the user's active status and role, so role or
+   status changes take effect on the **next request**. Refresh also reads the
+   current user before issuing a new pair.
 
 See the [Auth API reference](./api/auth.md) for request/response shapes.
 
@@ -41,7 +43,11 @@ Access tokens are signed with HS256 and carry both user identifiers plus the rol
 }
 ```
 
-Carrying both `uid` and `user_id` means user-scoped endpoints resolve the caller with **zero extra database lookups**. Configured by `JWT_SECRET`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` (TTLs in **minutes**).
+`uid` and `user_id` bind the token to one database row. The role claim is a
+session snapshot only: protected middleware looks up `uid`, verifies that the
+  live UUID matches, rejects inactive or banned accounts, and injects the live `users.role`
+into request context. Configured by `JWT_SECRET`, `JWT_ACCESS_TTL`,
+`JWT_REFRESH_TTL` (TTLs in **minutes**).
 
 ### Refresh-token rotation & revocation (Redis-backed)
 
@@ -49,10 +55,12 @@ When Redis is configured, refresh tokens are backed by a server-side **whitelist
 keyed on their `jti`:
 
 - **Rotation** — every `POST /auth/refresh` invalidates the presented refresh
-  token and issues a new pair. A refresh token is therefore single-use; replaying
-  one returns `401 INVALID_TOKEN`.
+  token and issues a new pair. Concurrent retries within a 10-second replay
+  window receive the same replacement pair; later replays return
+  `401 INVALID_TOKEN`.
 - **Revocation** — `POST /auth/logout` (with the refresh token in the body)
-  deletes its `jti`, immediately killing the session.
+  consumes its replay chain and deletes the active replacement `jti`, immediately
+  killing the refreshable session.
 - **Expiry** — whitelist entries carry the same TTL as the token.
 
 Without Redis the system degrades to plain stateless refresh tokens (no rotation
@@ -71,13 +79,16 @@ Routes are organised into three tiers. Each tier is a Gin route group with its o
 | Tier | Middleware | Who | Examples |
 |------|-----------|-----|----------|
 | **Public** | none | anyone | Browse products, categories, brands, blogs, read reviews |
-| **Customer** | `Auth` | any logged-in user | Orders, addresses, wishlist, wallet, write reviews |
-| **Admin** | `Auth` + `RequireRole("admin")` | role = `admin` | Create/edit catalogue, manage orders, inventory, analytics |
+| **Customer** | `Auth` | any live, active logged-in user | Orders, addresses, wishlist, wallet, write reviews |
+| **Admin** | `Auth` + `RequireRole("admin")` | live `users.role = admin` | Create/edit catalogue, manage orders, inventory, analytics |
 
 ### Middleware
 
-- **`Auth`** — validates the bearer access token, then injects `uid` (int64), `userID` (uuid), and `role` into the request context. Rejects missing/invalid tokens with `401`.
-- **`OptionalAuth`** — populates identity if a valid token is present, but never rejects. For endpoints that personalise output yet stay public.
+- **`Auth`** — validates the bearer access token, loads the user by `uid`, checks
+  the token UUID against the row, rejects inactive, banned, or missing users, then injects
+  the live `uid`, `userID`, and `role`. Database failures fail closed with `500`.
+- **`OptionalAuth`** — performs the same live rehydration when a token is present,
+  but treats stale, inactive, or banned identities as anonymous.
 - **`RequireRole(roles…)`** — must run after `Auth`; rejects callers whose role isn't in the allow-list with `403 INSUFFICIENT_PERMISSIONS`.
 
 Defined in [`internal/middlewares/auth.go`](../internal/middlewares/auth.go).
@@ -92,6 +103,12 @@ Defined in [`internal/middlewares/auth.go`](../internal/middlewares/auth.go).
 
 > **Security:** `POST /auth/register` always forces `role=customer`. An admin account must be provisioned out-of-band (seed/migration) or promoted by an existing admin via `PATCH /admin/users/:userID`.
 
+`users.role` is the sole authorization source. The assignable set is exactly
+`customer`, `vendor`, and `admin`; only `admin` has admin-route access. There are
+no effective permission, multi-role, manager, or support-role assignments. The
+legacy RBAC tables remain in the schema for data preservation but are not read by
+runtime authorization.
+
 ## Password reset flow
 
 Self-service, enumeration-safe:
@@ -101,7 +118,9 @@ Self-service, enumeration-safe:
 3. `GET /auth/password/validate?token=…` → checks the token is still valid.
 4. `POST /auth/password/reset` with `{token, new_password}` → sets the new password.
 
-Passwords are hashed with **bcrypt (cost 12)**; the server never stores or accepts plaintext-equivalent hashes from clients. See [`pkg/crypto`](../pkg/crypto/crypto.go).
+Passwords are hashed with **bcrypt (cost 12)** and are limited to bcrypt's
+72-byte UTF-8 input boundary; the server never stores or accepts
+plaintext-equivalent hashes from clients. See [`pkg/crypto`](../pkg/crypto/crypto.go).
 
 ## Worked example
 

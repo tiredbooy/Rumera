@@ -253,10 +253,13 @@ func (m *ShippingMethodRepo) Delete(context.Context, int64) error { return nil }
 // ── InventoryRepository ──────────────────────────────────────────────────────
 
 type InventoryRepo struct {
-	Tx        pgx.Tx
-	ReserveFn func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
-	ReleaseFn func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
-	DeductFn  func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
+	Tx              pgx.Tx
+	GetByVariantFn  func(ctx context.Context, variantID int64) (*models.Inventory, error)
+	AdjustFn        func(ctx context.Context, tx pgx.Tx, variantID int64, req models.AdjustStockReq, orderID *int64) error
+	ReserveFn       func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
+	ReleaseFn       func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
+	DeductFn        func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
+	UpdateReorderFn func(ctx context.Context, variantID int64, req models.UpdateReorderReq) (*models.Inventory, error)
 }
 
 func (m *InventoryRepo) BeginTx(context.Context) (pgx.Tx, error) { return txOr(m.Tx), nil }
@@ -278,28 +281,47 @@ func (m *InventoryRepo) Deduct(ctx context.Context, tx pgx.Tx, variantID int64, 
 	}
 	return nil
 }
-func (m *InventoryRepo) Adjust(context.Context, pgx.Tx, int64, models.AdjustStockReq, *int64) error {
+
+func (m *InventoryRepo) Adjust(ctx context.Context, tx pgx.Tx, variantID int64, req models.AdjustStockReq, orderID *int64) error {
+	if m.AdjustFn != nil {
+		return m.AdjustFn(ctx, tx, variantID, req, orderID)
+	}
 	return nil
 }
-func (m *InventoryRepo) GetByVariantID(context.Context, int64) (*models.Inventory, error) {
+func (m *InventoryRepo) GetByVariantID(ctx context.Context, variantID int64) (*models.Inventory, error) {
+	if m.GetByVariantFn != nil {
+		return m.GetByVariantFn(ctx, variantID)
+	}
 	return nil, nil
 }
 func (m *InventoryRepo) GetAll(context.Context, models.InventoryFilter) ([]*models.Inventory, int64, error) {
 	return nil, 0, nil
 }
 func (m *InventoryRepo) GetLowStock(context.Context) ([]*models.Inventory, error) { return nil, nil }
-func (m *InventoryRepo) UpdateReorder(context.Context, int64, models.UpdateReorderReq) (*models.Inventory, error) {
+func (m *InventoryRepo) UpdateReorder(ctx context.Context, variantID int64, req models.UpdateReorderReq) (*models.Inventory, error) {
+	if m.UpdateReorderFn != nil {
+		return m.UpdateReorderFn(ctx, variantID, req)
+	}
 	return nil, nil
 }
 
 // ── MovementRepository ───────────────────────────────────────────────────────
 
-type MovementRepo struct{}
+type MovementRepo struct {
+	GetAllFn       func(context.Context, models.MovementFilter) ([]*models.InventoryMovement, int64, error)
+	GetByVariantFn func(context.Context, int64) ([]*models.InventoryMovement, error)
+}
 
-func (m *MovementRepo) GetAll(context.Context, models.MovementFilter) ([]*models.InventoryMovement, int64, error) {
+func (m *MovementRepo) GetAll(ctx context.Context, filter models.MovementFilter) ([]*models.InventoryMovement, int64, error) {
+	if m.GetAllFn != nil {
+		return m.GetAllFn(ctx, filter)
+	}
 	return nil, 0, nil
 }
-func (m *MovementRepo) GetByVariantID(context.Context, int64) ([]*models.InventoryMovement, error) {
+func (m *MovementRepo) GetByVariantID(ctx context.Context, variantID int64) ([]*models.InventoryMovement, error) {
+	if m.GetByVariantFn != nil {
+		return m.GetByVariantFn(ctx, variantID)
+	}
 	return nil, nil
 }
 

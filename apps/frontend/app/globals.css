@@ -117,9 +117,15 @@
   --sidebar-ring: oklch(0.66 0.13 72);
 
   /* Warm, ink-tinted elevation for the parchment theme. */
-  --elev-1: 0 1px 2px -1px oklch(0.22 0.02 55 / 0.10), 0 2px 8px -3px oklch(0.22 0.02 55 / 0.10);
-  --elev-2: 0 4px 12px -4px oklch(0.22 0.02 55 / 0.12), 0 10px 24px -8px oklch(0.22 0.02 55 / 0.12);
-  --elev-3: 0 8px 20px -6px oklch(0.22 0.02 55 / 0.14), 0 24px 48px -14px oklch(0.22 0.02 55 / 0.16);
+  --elev-1:
+    0 1px 2px -1px oklch(0.22 0.02 55 / 0.1),
+    0 2px 8px -3px oklch(0.22 0.02 55 / 0.1);
+  --elev-2:
+    0 4px 12px -4px oklch(0.22 0.02 55 / 0.12),
+    0 10px 24px -8px oklch(0.22 0.02 55 / 0.12);
+  --elev-3:
+    0 8px 20px -6px oklch(0.22 0.02 55 / 0.14),
+    0 24px 48px -14px oklch(0.22 0.02 55 / 0.16);
   --elev-glow: 0 12px 40px -8px oklch(0.66 0.13 72 / 0.28);
 }
 
@@ -164,9 +170,15 @@
   --sidebar-ring: oklch(0.8 0.13 78);
 
   /* Deeper, near-black elevation for the cellar theme — depth without grey haze. */
-  --elev-1: 0 1px 2px -1px oklch(0.08 0.01 50 / 0.55), 0 2px 10px -4px oklch(0.06 0.01 50 / 0.5);
-  --elev-2: 0 6px 16px -6px oklch(0.06 0.01 50 / 0.6), 0 14px 32px -10px oklch(0.05 0.01 50 / 0.55);
-  --elev-3: 0 10px 26px -8px oklch(0.05 0.01 50 / 0.65), 0 30px 60px -16px oklch(0.04 0.01 50 / 0.6);
+  --elev-1:
+    0 1px 2px -1px oklch(0.08 0.01 50 / 0.55),
+    0 2px 10px -4px oklch(0.06 0.01 50 / 0.5);
+  --elev-2:
+    0 6px 16px -6px oklch(0.06 0.01 50 / 0.6),
+    0 14px 32px -10px oklch(0.05 0.01 50 / 0.55);
+  --elev-3:
+    0 10px 26px -8px oklch(0.05 0.01 50 / 0.65),
+    0 30px 60px -16px oklch(0.04 0.01 50 / 0.6);
   --elev-glow: 0 14px 48px -10px oklch(0.82 0.13 80 / 0.34);
 }
 
@@ -176,7 +188,9 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "liga" 1, "calt" 1;
+    font-feature-settings:
+      "liga" 1,
+      "calt" 1;
   }
   html {
     @apply font-sans;
@@ -187,7 +201,11 @@
     uppercase both break that joining, so headings keep natural spacing and we
     never use `uppercase`/`tracking-*` on Persian copy anywhere in the app.
   */
-  h1, h2, h3, h4, .font-heading {
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-heading {
     @apply font-serif;
     letter-spacing: normal;
   }
@@ -202,8 +220,16 @@
   /* Warm radial spotlight for hero / feature sections */
   .cellar-glow {
     background:
-      radial-gradient(60% 80% at 50% -10%, color-mix(in oklch, var(--gold) 22%, transparent), transparent 70%),
-      radial-gradient(50% 60% at 85% 110%, color-mix(in oklch, var(--wine) 28%, transparent), transparent 70%);
+      radial-gradient(
+        60% 80% at 50% -10%,
+        color-mix(in oklch, var(--gold) 22%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        50% 60% at 85% 110%,
+        color-mix(in oklch, var(--wine) 28%, transparent),
+        transparent 70%
+      );
   }
 
   /* Gold-foil gradient text for the wordmark and display numbers */
@@ -332,10 +358,26 @@
     @apply border-s-2 border-primary/40 ps-5 font-serif text-xl italic text-foreground/80;
   }
   .prose-rumera img {
-    @apply my-8 rounded-2xl;
+    @apply my-8 h-auto max-w-full rounded-2xl;
   }
   .prose-rumera hr {
     @apply my-12 border-border/60;
+  }
+  .prose-rumera pre {
+    @apply max-w-full overflow-x-auto rounded-2xl bg-muted p-4 text-sm;
+  }
+  .prose-rumera table {
+    @apply block max-w-full overflow-x-auto border-collapse text-sm;
+  }
+  .prose-rumera th,
+  .prose-rumera td {
+    @apply border border-border px-3 py-2 text-start;
+  }
+  .prose-rumera figure {
+    @apply my-8 max-w-full;
+  }
+  .prose-rumera figcaption {
+    @apply mt-2 text-center text-sm text-muted-foreground;
   }
 
   /* In-editor preview typography for the admin recipe rich-text editor. Mirrors

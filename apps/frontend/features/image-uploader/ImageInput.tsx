@@ -44,6 +44,7 @@ export type ImageInputProps = ImageInputPersistence & {
   altDescription?: string;
   altPlaceholder?: string;
   altError?: string;
+  altInputRef?: React.Ref<HTMLInputElement>;
   onAltChange?: (alt: string) => void;
   onAltBlur?: () => void;
   name?: string;
@@ -81,6 +82,7 @@ export const ImageInput = React.forwardRef<
     altDescription,
     altPlaceholder = "تصویر را کوتاه و دقیق توصیف کنید",
     altError,
+    altInputRef,
     onAltChange,
     onAltBlur,
     name,
@@ -382,6 +384,7 @@ export const ImageInput = React.forwardRef<
             <p className="text-xs text-muted-foreground">{altDescription}</p>
           ) : null}
           <Input
+            ref={altInputRef}
             id={altInputId}
             value={altValue ?? ""}
             maxLength={255}

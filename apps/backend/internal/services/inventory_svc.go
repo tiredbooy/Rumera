@@ -84,6 +84,9 @@ func (s *inventoryService) GetMovements(ctx context.Context, filter models.Movem
 }
 
 func (s *inventoryService) GetMovementsByVariant(ctx context.Context, variantID int64) ([]*models.InventoryMovement, error) {
+	if _, err := s.inventoryRepo.GetByVariantID(ctx, variantID); err != nil {
+		return nil, fmt.Errorf("inventoryService.GetMovementsByVariant inventory: %w", err)
+	}
 	movements, err := s.movementRepo.GetByVariantID(ctx, variantID)
 	if err != nil {
 		return nil, fmt.Errorf("inventoryService.GetMovementsByVariant: %w", err)
@@ -94,6 +97,9 @@ func (s *inventoryService) GetMovementsByVariant(ctx context.Context, variantID 
 // ── Admin writes ──────────────────────────────────────────────────────────────
 
 func (s *inventoryService) AdjustStock(ctx context.Context, variantID int64, req models.AdjustStockReq, orderID *int64) error {
+	if !validInventoryAdjustment(req) {
+		return fmt.Errorf("inventoryService.AdjustStock: %w", models.ErrInvalidInventoryAdjustment)
+	}
 	tx, err := s.inventoryRepo.BeginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("inventoryService.AdjustStock: begin tx: %w", err)
@@ -108,6 +114,19 @@ func (s *inventoryService) AdjustStock(ctx context.Context, variantID int64, req
 		return fmt.Errorf("inventoryService.AdjustStock: commit: %w", err)
 	}
 	return nil
+}
+
+func validInventoryAdjustment(req models.AdjustStockReq) bool {
+	switch req.Type {
+	case models.MovementTypeAdjustment:
+		return req.Quantity != 0
+	case models.MovementTypeRestock, models.MovementTypeRefund:
+		return req.Quantity > 0
+	case models.MovementTypePurchase, models.MovementTypeDamage:
+		return req.Quantity < 0
+	default:
+		return false
+	}
 }
 
 func (s *inventoryService) UpdateReorder(ctx context.Context, variantID int64, req models.UpdateReorderReq) (*models.Inventory, error) {
@@ -157,7 +176,8 @@ func (s *inventoryService) ReserveForOrderTx(ctx context.Context, tx pgx.Tx, ord
 	return nil
 }
 
-// ReleaseForOrder moves stock back from committed → available.
+// ReleaseForOrder moves stock back from committed → available without changing
+// physical stock.
 // Called when an order is cancelled before payment.
 func (s *inventoryService) ReleaseForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) error {
 	tx, err := s.inventoryRepo.BeginTx(ctx)
@@ -178,9 +198,7 @@ func (s *inventoryService) ReleaseForOrder(ctx context.Context, orderID int64, i
 	return nil
 }
 
-// DeductForOrder clears committed stock once payment is confirmed.
-// stock_on_hand was already decremented at Reserve time, so we only
-// drain committed_stock here.
+// DeductForOrder removes paid units from physical and committed stock together.
 func (s *inventoryService) DeductForOrder(ctx context.Context, orderID int64, items []models.OrderItemResponse) (err error) {
 	tx, err := s.inventoryRepo.BeginTx(ctx)
 	if err != nil {

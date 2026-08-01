@@ -1,36 +1,40 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { signIn } from "next-auth/react"
-import { AlertCircle, Loader2 } from "lucide-react"
+import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
+import { AlertCircle, Loader2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { focusFormControl } from "@/components/ui/field"
-import {
-  AuthClientError,
-  registerAccount,
-} from "@/features/auth/api/client"
-import type { SignUpInput } from "@/features/auth/types"
-import { safeCallbackUrl } from "@/features/auth/redirects"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { focusFormControl } from "@/components/ui/field";
+import { AuthClientError, registerAccount } from "@/features/auth/api/client";
+import type { SignUpInput } from "@/features/auth/types";
+import { safeCallbackUrl } from "@/features/auth/redirects";
+import { passwordFitsBcrypt } from "@/features/auth/password";
 
 export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
-  const router = useRouter()
-  const returnTo = safeCallbackUrl(callbackUrl)
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
+  const router = useRouter();
+  const returnTo = safeCallbackUrl(callbackUrl);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const formElement = e.currentTarget
-    setError(null)
-    setLoading(true)
-    const form = new FormData(e.currentTarget)
-    const email = String(form.get("email") ?? "").trim()
-    const password = String(form.get("password") ?? "")
+    e.preventDefault();
+    const formElement = e.currentTarget;
+    setError(null);
+    setLoading(true);
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("email") ?? "").trim();
+    const password = String(form.get("password") ?? "");
+    if (!passwordFitsBcrypt(password)) {
+      setError("گذرواژه باید حداکثر ۷۲ بایت باشد.");
+      setLoading(false);
+      focusFormControl(formElement, "password");
+      return;
+    }
 
     try {
       const input: SignUpInput = {
@@ -38,16 +42,20 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
         password,
         first_name: String(form.get("first_name") ?? "").trim(),
         last_name: String(form.get("last_name") ?? "").trim(),
-      }
-      await registerAccount(input)
+      };
+      await registerAccount(input);
       // Account created → sign in immediately for a seamless first session.
-      const signed = await signIn("credentials", { email, password, redirect: false })
+      const signed = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
       if (!signed || signed.error) {
-        router.push(`/login?callbackUrl=${encodeURIComponent(returnTo)}`)
-        return
+        router.push(`/login?callbackUrl=${encodeURIComponent(returnTo)}`);
+        return;
       }
-      router.push(returnTo)
-      router.refresh()
+      router.push(returnTo);
+      router.refresh();
     } catch (error) {
       setError(
         error instanceof AuthClientError
@@ -55,9 +63,9 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
             ? "این ایمیل قبلاً ثبت شده است."
             : "ثبت‌نام ناموفق بود. ورودی‌ها را بررسی کنید."
           : "ارتباط با سرور برقرار نشد.",
-      )
-      setLoading(false)
-      focusFormControl(formElement, "email")
+      );
+      setLoading(false);
+      focusFormControl(formElement, "email");
     }
   }
 
@@ -115,12 +123,14 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
             minLength={8}
             dir="ltr"
             autoComplete="new-password"
-            aria-describedby={error ? "password-hint register-error" : "password-hint"}
+            aria-describedby={
+              error ? "password-hint register-error" : "password-hint"
+            }
             aria-invalid={!!error}
             className="h-11 text-start"
           />
           <p id="password-hint" className="text-xs text-muted-foreground">
-            حداقل ۸ کاراکتر.
+            حداقل ۸ کاراکتر و حداکثر ۷۲ بایت.
           </p>
         </div>
 
@@ -135,7 +145,12 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
           </p>
         ) : null}
 
-        <Button type="submit" size="lg" className="mt-1 h-11" disabled={loading}>
+        <Button
+          type="submit"
+          size="lg"
+          className="mt-1 h-11"
+          disabled={loading}
+        >
           {loading ? <Loader2 className="animate-spin" /> : null}
           ساخت حساب
         </Button>
@@ -151,5 +166,5 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
         </Link>
       </p>
     </div>
-  )
+  );
 }

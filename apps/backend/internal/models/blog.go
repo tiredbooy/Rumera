@@ -66,10 +66,17 @@ type BlogTag struct {
 // ── Requests ──────────────────────────────────────────────────────────────────
 
 type BlogCategoryReq struct {
-	Name        string  `json:"name"`
+	Name        string  `json:"name"        validate:"required,max=255"`
 	Description *string `json:"description"`
-	Slug        *string `json:"slug"`
-	ParentID    *int64  `json:"parent_id"`
+	Slug        *string `json:"slug"        validate:"omitempty,max=255"`
+	ParentID    *int64  `json:"parent_id"   validate:"omitempty,min=1"`
+}
+
+type BlogCategoryUpdateReq struct {
+	Name        *string               `json:"name"        validate:"omitempty,min=1,max=255"`
+	Description NullablePatch[string] `json:"description"`
+	Slug        NullablePatch[string] `json:"slug"`
+	ParentID    NullablePatch[int64]  `json:"parent_id"`
 }
 
 type BlogReq struct {
@@ -92,22 +99,22 @@ type BlogReq struct {
 }
 
 type BlogUpdateReq struct {
-	Title            *string               `json:"title"            validate:"omitempty,max=255"`
-	Slug             *string               `json:"slug"             validate:"omitempty,max=255"`
-	Content          *string               `json:"content"`
-	Excerpt          *string               `json:"excerpt"`
-	ImageURL         NullablePatch[string] `json:"image_url"`
-	ImageAlt         NullablePatch[string] `json:"image_alt"`
-	ExpectedImageURL NullablePatch[string] `json:"-"`
-	TimeToRead       *int                  `json:"time_to_read"     validate:"omitempty,min=1"`
-	Status           *BlogStatus           `json:"status"           validate:"omitempty,oneof=draft published archived"`
-	IsFeatured       *bool                 `json:"is_featured"`
-	MetaTitle        *string               `json:"meta_title"       validate:"omitempty,max=255"`
-	MetaDescription  *string               `json:"meta_description"`
-	PublishedAt      *time.Time            `json:"published_at"`
-	CategoryIDs      []int64               `json:"category_ids"`
-	ProductIDs       []int64               `json:"product_ids"`
-	TagIDs           []int64               `json:"tag_ids"`
+	Title            *string                  `json:"title"            validate:"omitempty,max=255"`
+	Slug             *string                  `json:"slug"             validate:"omitempty,max=255"`
+	Content          *string                  `json:"content"`
+	Excerpt          NullablePatch[string]    `json:"excerpt"`
+	ImageURL         NullablePatch[string]    `json:"image_url"`
+	ImageAlt         NullablePatch[string]    `json:"image_alt"`
+	ExpectedImageURL NullablePatch[string]    `json:"-"`
+	TimeToRead       *int                     `json:"time_to_read"     validate:"omitempty,min=1"`
+	Status           *BlogStatus              `json:"status"           validate:"omitempty,oneof=draft published archived"`
+	IsFeatured       *bool                    `json:"is_featured"`
+	MetaTitle        NullablePatch[string]    `json:"meta_title"`
+	MetaDescription  NullablePatch[string]    `json:"meta_description"`
+	PublishedAt      NullablePatch[time.Time] `json:"published_at"`
+	CategoryIDs      []int64                  `json:"category_ids"`
+	ProductIDs       []int64                  `json:"product_ids"`
+	TagIDs           []int64                  `json:"tag_ids"`
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
@@ -118,6 +125,8 @@ type BlogFilter struct {
 	IsFeatured *bool       `query:"is_featured"`
 	// CategoryID restricts the public listing to posts assigned to a category.
 	CategoryID *int64 `query:"category_id"`
+	// ExcludeID keeps a separately rendered editorial lead out of pagination.
+	ExcludeID *int64 `query:"exclude_id"`
 }
 
 func (f *BlogFilter) Defaults() {

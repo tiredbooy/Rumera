@@ -21,13 +21,15 @@ cd apps/backend
 # 1. throwaway Postgres
 docker run -d --name pg -e POSTGRES_PASSWORD=test -e POSTGRES_USER=test \
     -e POSTGRES_DB=rumera_test -p 55432:5432 postgres:17-alpine
+docker run -d --name redis-test -p 56379:6379 redis:8-alpine
 
 # 2. point the suite at it and run (make target already exists)
 export TEST_DATABASE_URL='postgres://test:test@localhost:55432/rumera_test?sslmode=disable'
+export TEST_REDIS_ADDR='localhost:56379'
 make test-integration         # go test -tags=integration -count=1 ./tests/integration/...
 
 # 3. cleanup
-docker rm -f pg
+docker rm -f pg redis-test
 ```
 
 ## How it works
@@ -45,7 +47,9 @@ docker rm -f pg
 
 Tests build real repositories (`internal/repositories`) and services
 (`internal/services`) over the pool — they exercise production wiring, not a
-re-implementation.
+  re-implementation.
+- Redis-backed tests are optional and skip when `TEST_REDIS_ADDR` is unset. They
+  exercise the production Lua script used for atomic refresh-token replacement.
 
 ## What it covers
 
@@ -54,6 +58,7 @@ re-implementation.
 | `harness_test.go` → `TestMigrationsApply` | the full `migrations/main` schema applies cleanly to an empty DB |
 | `payment_test.go` → `TestPaymentConfirm_DeductsStockAtomically` | `PaymentService.Confirm` marks payment succeeded + order paid **and** drains committed stock in one transaction; a replayed callback neither re-confirms nor double-deducts |
 | `coupon_test.go` → `TestCouponUsageLimit_HoldsUnderConcurrency` | two concurrent redemptions of a `max_uses=1` coupon record **exactly one** usage (the `LockByID` + `CountUsagesTx` row-lock re-check closes the TOCTOU race) |
+| `user_admin_test.go` | the single-role schema, inactive-aware admin reads, server-hashed creation, duplicate identity conflicts, self-lockout guards, transactional actor revalidation, and redacted newest-first audit history |
 
 ## Notes
 

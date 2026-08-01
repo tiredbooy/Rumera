@@ -12,7 +12,10 @@ import (
 )
 
 type GiftCardRepository interface {
-	Create(ctx context.Context, code string, amount decimal.Decimal) (*models.GiftCard, error)
+	// CreateBatch inserts the complete issuance in one transaction. A collision or
+	// scan/commit failure rolls the whole batch back so callers never receive a
+	// misleading partial result.
+	CreateBatch(ctx context.Context, codes []string, amount decimal.Decimal) ([]models.GiftCard, error)
 	// Redeem atomically flips an active card to redeemed and returns its amount.
 	// Returns models.ErrNotFound when the code is unknown or already used.
 	Redeem(ctx context.Context, code string, userID int64) (decimal.Decimal, error)
@@ -28,23 +31,44 @@ func NewGiftCardRepository(db *pgxpool.Pool) GiftCardRepository {
 	return &giftCardRepository{db: db}
 }
 
-func (r *giftCardRepository) Create(ctx context.Context, code string, amount decimal.Decimal) (*models.GiftCard, error) {
+func (r *giftCardRepository) CreateBatch(ctx context.Context, codes []string, amount decimal.Decimal) ([]models.GiftCard, error) {
+	if len(codes) == 0 {
+		return []models.GiftCard{}, nil
+	}
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("giftCardRepository.CreateBatch begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	const q = `
-		INSERT INTO gift_cards (code, initial_amount) VALUES ($1, $2)
-		ON CONFLICT (code) DO NOTHING
+		INSERT INTO gift_cards (code, initial_amount)
+		SELECT code, $2
+		FROM unnest($1::text[]) WITH ORDINALITY AS input(code, ord)
+		ORDER BY ord
 		RETURNING *`
-	rows, err := r.db.Query(ctx, q, code, amount)
+	rows, err := tx.Query(ctx, q, codes, amount)
 	if err != nil {
-		return nil, fmt.Errorf("giftCardRepository.Create: %w", err)
-	}
-	gc, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.GiftCard])
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, models.ErrConflict // code collision — caller retries
+		if isUniqueViolation(err) {
+			return nil, models.ErrConflict
 		}
-		return nil, fmt.Errorf("giftCardRepository.Create scan: %w", err)
+		return nil, fmt.Errorf("giftCardRepository.CreateBatch: %w", err)
 	}
-	return &gc, nil
+	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.GiftCard])
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, models.ErrConflict
+		}
+		return nil, fmt.Errorf("giftCardRepository.CreateBatch scan: %w", err)
+	}
+	if len(cards) != len(codes) {
+		return nil, fmt.Errorf("giftCardRepository.CreateBatch: inserted %d of %d cards", len(cards), len(codes))
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("giftCardRepository.CreateBatch commit: %w", err)
+	}
+	return cards, nil
 }
 
 func (r *giftCardRepository) Redeem(ctx context.Context, code string, userID int64) (decimal.Decimal, error) {

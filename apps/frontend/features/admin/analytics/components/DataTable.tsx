@@ -148,7 +148,7 @@ export function DataTable<T>({
                 value={query}
                 onChange={(e) => setQueryReset(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="h-9 ps-9 pe-9"
+                className="h-11 ps-9 pe-11"
                 aria-label="جستجو"
               />
               {query ? (
@@ -156,7 +156,7 @@ export function DataTable<T>({
                   type="button"
                   onClick={() => setQueryReset("")}
                   aria-label="پاک کردن جستجو"
-                  className="absolute inset-y-0 end-2.5 my-auto flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="absolute inset-y-0 end-0 my-auto flex size-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   <X className="size-3.5" />
                 </button>
@@ -170,13 +170,15 @@ export function DataTable<T>({
               value={facets[f.id] ?? "all"}
               onValueChange={(v) => setFacetReset(f.id, v)}
             >
-              <SelectTrigger size="sm" className="h-9 w-auto min-w-36">
+              <SelectTrigger size="sm" className="min-h-11 w-auto min-w-36">
                 <SelectValue placeholder={f.label} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{f.label}: همه</SelectItem>
+                <SelectItem value="all" className="min-h-11">
+                  {f.label}: همه
+                </SelectItem>
                 {f.options.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
+                  <SelectItem key={o.value} value={o.value} className="min-h-11">
                     {o.label}
                   </SelectItem>
                 ))}
@@ -208,6 +210,13 @@ export function DataTable<T>({
                 return (
                   <TableHead
                     key={col.id}
+                    aria-sort={
+                      active
+                        ? sort?.dir === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : undefined
+                    }
                     className={cn(
                       "h-10 text-xs font-medium text-muted-foreground",
                       alignCls,
@@ -219,7 +228,7 @@ export function DataTable<T>({
                         type="button"
                         onClick={() => toggleSort(col.id)}
                         className={cn(
-                          "-mx-1 inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 transition-colors hover:text-foreground",
+                          "-mx-1 inline-flex min-h-11 min-w-11 cursor-pointer items-center gap-1 rounded px-1 py-0.5 transition-colors hover:text-foreground",
                           active ? "text-foreground" : "text-muted-foreground"
                         )}
                       >
@@ -279,7 +288,7 @@ export function DataTable<T>({
                           {isPrimaryLink ? (
                             <Link
                               href={href}
-                              className="-m-1 block rounded-md p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                              className="-m-1 flex min-h-11 items-center rounded-md p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                             >
                               {content}
                             </Link>
@@ -307,7 +316,7 @@ export function DataTable<T>({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1"
+              className="h-11 gap-1"
               disabled={current === 0}
               onClick={() => setPage(current - 1)}
             >
@@ -316,7 +325,7 @@ export function DataTable<T>({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1"
+              className="h-11 gap-1"
               disabled={current >= pageCount - 1}
               onClick={() => setPage(current + 1)}
             >

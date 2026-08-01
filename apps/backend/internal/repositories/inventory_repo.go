@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -49,6 +50,9 @@ const inventoryProjection = `
 
 const inventoryJoins = `
 	FROM inventory i
+	` + inventoryRelations
+
+const inventoryRelations = `
 	JOIN product_variants pv ON pv.id = i.product_variant_id
 	JOIN products p ON p.id = pv.product_id
 	LEFT JOIN categories c ON c.id = p.category_id`
@@ -92,12 +96,13 @@ func (r *inventoryRepository) GetAll(ctx context.Context, f models.InventoryFilt
 	}
 
 	allowed := map[string]string{
-		"updated_at":      "i.updated_at",
-		"stock_on_hand":   "i.stock_on_hand",
-		"available_stock": "i.stock_on_hand - i.committed_stock",
-		"reorder_point":   "i.reorder_point",
-		"product_title":   "p.title",
-		"sku":             "pv.sku",
+		"id":              "id",
+		"updated_at":      "updated_at",
+		"stock_on_hand":   "stock_on_hand",
+		"available_stock": "available_stock",
+		"reorder_point":   "reorder_point",
+		"product_title":   "product_title",
+		"sku":             "sku",
 	}
 	sortBy := allowed["updated_at"]
 	if column, ok := allowed[f.SortBy]; ok {
@@ -111,12 +116,29 @@ func (r *inventoryRepository) GetAll(ctx context.Context, f models.InventoryFilt
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
 
-	q := fmt.Sprintf(`SELECT %s, COUNT(*) OVER() AS total_count
-		%s
-		WHERE %s
-		ORDER BY %s %s
-		LIMIT @limit OFFSET @offset`,
-		inventoryProjection, inventoryJoins, strings.Join(where, " AND "), sortBy, order,
+	q := fmt.Sprintf(`
+		WITH filtered AS (
+			SELECT %s,
+			       i.stock_on_hand - i.committed_stock AS available_stock
+			%s
+			WHERE %s
+		), page_rows AS (
+			SELECT *
+			FROM filtered
+			ORDER BY %s %s NULLS LAST, id %s
+			LIMIT @limit OFFSET @offset
+		), total AS (
+			SELECT COUNT(*)::bigint AS total_count FROM filtered
+		)
+		SELECT p.id, p.product_variant_id, p.product_id, p.product_title,
+		       p.sku, p.category_title, p.unit_price, p.stock_on_hand,
+		       p.committed_stock, p.reorder_point, p.reorder_quantity,
+		       p.last_restock_at, p.updated_at, total.total_count
+		FROM total
+		LEFT JOIN page_rows p ON TRUE
+		ORDER BY p.%s %s NULLS LAST, p.id %s NULLS LAST`,
+		inventoryProjection, inventoryJoins, strings.Join(where, " AND "),
+		sortBy, order, order, sortBy, order, order,
 	)
 
 	rows, err := r.db.Query(ctx, q, args)
@@ -125,25 +147,53 @@ func (r *inventoryRepository) GetAll(ctx context.Context, f models.InventoryFilt
 	}
 	defer rows.Close()
 
-	var (
-		items []*models.Inventory
-		total int64
-	)
+	items := make([]*models.Inventory, 0)
+	var total int64
 
 	for rows.Next() {
-		var inv models.Inventory
+		var (
+			id               *int64
+			productVariantID *int64
+			productID        *int64
+			productTitle     *string
+			sku              *string
+			categoryTitle    *string
+			unitPrice        *string
+			stockOnHand      *int
+			committedStock   *int
+			reorderPoint     *int
+			reorderQuantity  *int
+			lastRestockAt    *time.Time
+			updatedAt        *time.Time
+			rowTotal         int64
+		)
 		if err := rows.Scan(
-			&inv.ID, &inv.ProductVariantID,
-			&inv.ProductID, &inv.ProductTitle,
-			&inv.SKU, &inv.CategoryTitle, &inv.UnitPrice,
-			&inv.StockOnHand, &inv.CommittedStock,
-			&inv.ReorderPoint, &inv.ReorderQuantity,
-			&inv.LastRestockAt, &inv.UpdatedAt,
-			&total,
+			&id, &productVariantID, &productID, &productTitle,
+			&sku, &categoryTitle, &unitPrice, &stockOnHand, &committedStock,
+			&reorderPoint, &reorderQuantity, &lastRestockAt, &updatedAt,
+			&rowTotal,
 		); err != nil {
 			return nil, 0, fmt.Errorf("inventoryRepository.GetAll scan: %w", err)
 		}
-		items = append(items, &inv)
+		total = rowTotal
+		if id == nil {
+			continue
+		}
+		items = append(items, &models.Inventory{
+			ID:               *id,
+			ProductVariantID: *productVariantID,
+			ProductID:        *productID,
+			ProductTitle:     *productTitle,
+			SKU:              sku,
+			CategoryTitle:    categoryTitle,
+			UnitPrice:        *unitPrice,
+			StockOnHand:      *stockOnHand,
+			CommittedStock:   *committedStock,
+			ReorderPoint:     *reorderPoint,
+			ReorderQuantity:  *reorderQuantity,
+			LastRestockAt:    lastRestockAt,
+			UpdatedAt:        *updatedAt,
+		})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("inventoryRepository.GetAll rows: %w", err)
@@ -186,7 +236,8 @@ func (r *inventoryRepository) Adjust(ctx context.Context, tx pgx.Tx, variantID i
 		        ELSE last_restock_at
 		    END,
 		    updated_at    = NOW()
-		WHERE product_variant_id = @variant_id`
+		WHERE product_variant_id = @variant_id
+		  AND stock_on_hand::bigint + @quantity BETWEEN committed_stock AND 2147483647`
 
 	updateArgs := pgx.NamedArgs{
 		"quantity":      req.Quantity,
@@ -199,22 +250,21 @@ func (r *inventoryRepository) Adjust(ctx context.Context, tx pgx.Tx, variantID i
 		return fmt.Errorf("inventoryRepository.Adjust update: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return models.ErrNotFound
+		return classifyInventoryMutationMiss(ctx, tx, variantID, models.ErrInsufficientStock)
 	}
 
 	return recordMovement(ctx, tx, variantID, req.Quantity, req.Type, orderID, req.Note)
 }
 
 func (r *inventoryRepository) Reserve(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error {
-	// Move from available → committed. The CHECK constraint on stock_on_hand >= 0
-	// will reject this if there's not enough stock — no separate availability check needed.
+	// Reservations move physical stock from available to committed without changing
+	// stock_on_hand. Payment confirmation performs the physical deduction.
 	const q = `
 		UPDATE inventory
-		SET stock_on_hand   = stock_on_hand - @quantity,
-		    committed_stock = committed_stock + @quantity,
-		    updated_at      = NOW()
+		SET committed_stock = committed_stock + @quantity,
+		    updated_at = NOW()
 		WHERE product_variant_id = @variant_id
-		  AND stock_on_hand >= @quantity`
+		  AND stock_on_hand - committed_stock >= @quantity`
 
 	args := pgx.NamedArgs{
 		"variant_id": variantID,
@@ -226,7 +276,7 @@ func (r *inventoryRepository) Reserve(ctx context.Context, tx pgx.Tx, variantID 
 		return fmt.Errorf("inventoryRepository.Reserve: %w", err)
 	}
 	if res.RowsAffected() == 0 {
-		return models.ErrInsufficientStock
+		return classifyInventoryMutationMiss(ctx, tx, variantID, models.ErrInsufficientStock)
 	}
 
 	note := fmt.Sprintf("reserved for order %d", orderID)
@@ -236,18 +286,22 @@ func (r *inventoryRepository) Reserve(ctx context.Context, tx pgx.Tx, variantID 
 func (r *inventoryRepository) Release(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error {
 	const q = `
 		UPDATE inventory
-		SET stock_on_hand   = stock_on_hand + @quantity,
-		    committed_stock = committed_stock - @quantity,
-		    updated_at      = NOW()
-		WHERE product_variant_id = @variant_id`
+		SET committed_stock = committed_stock - @quantity,
+		    updated_at = NOW()
+		WHERE product_variant_id = @variant_id
+		  AND committed_stock >= @quantity`
 
 	args := pgx.NamedArgs{
 		"variant_id": variantID,
 		"quantity":   quantity,
 	}
 
-	if _, err := tx.Exec(ctx, q, args); err != nil {
+	res, err := tx.Exec(ctx, q, args)
+	if err != nil {
 		return fmt.Errorf("inventoryRepository.Release: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return classifyInventoryMutationMiss(ctx, tx, variantID, models.ErrInvalidState)
 	}
 
 	note := fmt.Sprintf("released from order %d", orderID)
@@ -255,21 +309,28 @@ func (r *inventoryRepository) Release(ctx context.Context, tx pgx.Tx, variantID 
 }
 
 func (r *inventoryRepository) Deduct(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error {
-	// At this point stock_on_hand was already decremented during Reserve.
-	// We only clear committed_stock since the sale is now confirmed.
+	// Payment confirmation removes the reserved quantity from both physical and
+	// committed stock, leaving available stock unchanged.
 	const q = `
 		UPDATE inventory
-		SET committed_stock = committed_stock - @quantity,
-		    updated_at      = NOW()
-		WHERE product_variant_id = @variant_id`
+		SET stock_on_hand = stock_on_hand - @quantity,
+		    committed_stock = committed_stock - @quantity,
+		    updated_at = NOW()
+		WHERE product_variant_id = @variant_id
+		  AND stock_on_hand >= @quantity
+		  AND committed_stock >= @quantity`
 
 	args := pgx.NamedArgs{
 		"variant_id": variantID,
 		"quantity":   quantity,
 	}
 
-	if _, err := tx.Exec(ctx, q, args); err != nil {
+	res, err := tx.Exec(ctx, q, args)
+	if err != nil {
 		return fmt.Errorf("inventoryRepository.Deduct: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return classifyInventoryMutationMiss(ctx, tx, variantID, models.ErrInvalidState)
 	}
 
 	note := fmt.Sprintf("confirmed sale for order %d", orderID)
@@ -296,20 +357,30 @@ func (r *inventoryRepository) UpdateReorder(ctx context.Context, variantID int64
 	sets = append(sets, "updated_at = NOW()")
 
 	q := fmt.Sprintf(`
-		UPDATE inventory SET %s
-		WHERE product_variant_id = @variant_id`,
-		strings.Join(sets, ", "),
+		WITH updated AS (
+			UPDATE inventory SET %s
+			WHERE product_variant_id = @variant_id
+			RETURNING *
+		)
+		SELECT %s
+		FROM updated i
+		%s`,
+		strings.Join(sets, ", "), inventoryProjection, inventoryRelations,
 	)
 
-	result, err := r.db.Exec(ctx, q, args)
+	rows, err := r.db.Query(ctx, q, args)
 	if err != nil {
 		return nil, fmt.Errorf("inventoryRepository.UpdateReorder: %w", err)
 	}
-	if result.RowsAffected() == 0 {
-		return nil, models.ErrNotFound
-	}
 
-	return r.GetByVariantID(ctx, variantID)
+	inv, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Inventory])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("inventoryRepository.UpdateReorder scan: %w", err)
+	}
+	return &inv, nil
 }
 
 func recordMovement(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, movType models.MovementType, orderID *int64, note *string) error {
@@ -331,4 +402,18 @@ func recordMovement(ctx context.Context, tx pgx.Tx, variantID int64, quantity in
 		return fmt.Errorf("recordMovement: %w", err)
 	}
 	return nil
+}
+
+func classifyInventoryMutationMiss(ctx context.Context, tx pgx.Tx, variantID int64, existingError error) error {
+	var exists bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM inventory WHERE product_variant_id = $1)`,
+		variantID,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("classify inventory mutation miss: %w", err)
+	}
+	if !exists {
+		return models.ErrNotFound
+	}
+	return existingError
 }

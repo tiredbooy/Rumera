@@ -127,15 +127,18 @@ func (h *Handler) VerifyOTP(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	if !user.IsActive {
+	if !user.IsActive || user.IsBanned {
 		response.Error(c, response.ErrForbidden)
 		return
 	}
 
 	pair, err := h.issueTokens(ctx, user.ID, user.UserID.String(), user.Role)
 	if err != nil {
-		response.InternalError(c)
-		return
+		if pair.Access == "" {
+			response.InternalError(c)
+			return
+		}
+		pair.Refresh = ""
 	}
 
 	// Welcome loyalty bonus on first sign-up (idempotent per user; best-effort).

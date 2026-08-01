@@ -14,7 +14,11 @@ import type {
   AdminUserUpdateInput,
 } from "@/features/customers/types";
 import {
+  apiDateToInputValue,
   customerEditFormSchema,
+  dateInputToApiValue,
+  toAsciiDigits,
+  trimmedOrNull,
   type CustomerEditFormValues,
 } from "@/features/customers/validations";
 import { AccessSection } from "./user-edit-form/AccessSection";
@@ -22,39 +26,13 @@ import { FormActions } from "./user-edit-form/FormActions";
 import { IdentitySummary } from "./user-edit-form/IdentitySummary";
 import { ProfileSection } from "./user-edit-form/ProfileSection";
 
-// ── Validation ────────────────────────────────────────────────────────────────
-// Everything is a string in the form; coerced to the partial-patch API shape on
-// submit. Keys mirror the backend json names so 422 field errors map 1:1.
-
-/** Western/Persian digits → ASCII; strips non-digits for storage. */
-function toAsciiDigits(v: string): string {
-  return v.replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
-}
-
-/** ISO/RFC3339 → `YYYY-MM-DD` for the date input (empty on parse failure). */
-function isoToDateInput(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 10);
-}
-
-/** `YYYY-MM-DD` → RFC3339 at UTC midnight, or null when empty. */
-function dateInputToRfc3339(v: string): string | null {
-  const t = v.trim();
-  if (!t) return null;
-  return `${t}T00:00:00Z`;
-}
-
-const strOrNull = (v: string) => (v.trim() === "" ? null : v.trim());
-
 function defaults(user: AdminUser): CustomerEditFormValues {
   return {
     first_name: user.first_name ?? "",
     last_name: user.last_name ?? "",
     phone: user.phone ?? "",
     national_code: user.national_code ?? "",
-    birth_date: isoToDateInput(user.birth_date),
+    birth_date: apiDateToInputValue(user.birth_date),
     gender: user.gender ?? "",
     role: user.role,
     is_active: user.is_active,
@@ -72,12 +50,14 @@ export function UserEditForm({
   const router = useRouter();
 
   const {
+    clearErrors,
     register,
     handleSubmit,
     control,
     reset,
     setError,
-    formState: { errors, isSubmitting, isDirty },
+    setFocus,
+    formState: { dirtyFields, errors, isSubmitting, isDirty },
   } = useForm<CustomerEditFormValues>({
     resolver: zodResolver(customerEditFormSchema),
     defaultValues: defaults(user),
@@ -88,59 +68,76 @@ export function UserEditForm({
 
   function applyServerErrors(e: unknown) {
     if (e instanceof AdminCustomerApiError) {
-      if (e.status === 403 || e.code === "ACCESS_DENIED") {
-        toast.error("شما اجازهٔ تغییر نقش یا وضعیت این حساب را ندارید.");
-        return;
-      }
-      if (e.status === 404 || e.code === "USER_NOT_FOUND") {
-        toast.error("کاربر یافت نشد؛ ممکن است حذف یا غیرفعال شده باشد.");
-        return;
-      }
-      if (e.fields) {
-        const known = new Set<keyof CustomerEditFormValues>([
-          "first_name",
-          "last_name",
-          "phone",
-          "national_code",
-          "birth_date",
-          "gender",
-          "role",
-          "is_active",
-        ]);
-        Object.entries(e.fields)
-          .filter(([key]) => known.has(key as keyof CustomerEditFormValues))
-          .forEach(([key, msgs], index) => {
-            setError(
-              key as keyof CustomerEditFormValues,
-              { message: msgs[0] },
-              { shouldFocus: index === 0 },
-            );
+      const known = new Set<keyof CustomerEditFormValues>([
+        "first_name",
+        "last_name",
+        "phone",
+        "national_code",
+        "birth_date",
+        "gender",
+        "role",
+        "is_active",
+      ]);
+      const fieldErrors = Object.entries(e.fields ?? {}).filter(
+        ([key, messages]) =>
+          known.has(key as keyof CustomerEditFormValues) && messages.length > 0,
+      );
+      if (fieldErrors.length > 0) {
+        fieldErrors.forEach(([key, messages]) => {
+          setError(key as keyof CustomerEditFormValues, {
+            type: "server",
+            message: messages[0],
           });
+        });
+        const firstField = fieldErrors[0][0] as keyof CustomerEditFormValues;
+        setTimeout(() => setFocus(firstField), 0);
+        toast.error(e.message || "ویرایش کاربر ناموفق بود.");
+        return;
       }
-      toast.error(e.message || "ویرایش کاربر ناموفق بود.");
-    } else {
-      toast.error("خطای غیرمنتظره رخ داد.");
+
+      const message =
+        e.code === "INSUFFICIENT_PERMISSIONS" || e.status === 401
+          ? "دسترسی مدیریتی این نشست لغو یا منقضی شده است. دوباره وارد شوید."
+          : e.code === "ACCESS_DENIED"
+            ? "این تغییر برای حفاظت از دسترسی حساب مجاز نیست."
+            : e.status === 404 || e.code === "USER_NOT_FOUND"
+              ? "کاربر دیگر در دسترس نیست."
+              : e.message || "ویرایش کاربر ناموفق بود.";
+      setError("root.server", { type: "server", message });
+      toast.error(message);
+      return;
     }
+
+    const message = "خطای غیرمنتظره رخ داد. دوباره تلاش کنید.";
+    setError("root.server", { type: "server", message });
+    toast.error(message);
   }
 
   async function onSubmit(v: CustomerEditFormValues) {
-    const input: AdminUserUpdateInput = {
-      first_name: strOrNull(v.first_name),
-      last_name: strOrNull(v.last_name),
-      phone: v.phone.trim() === "" ? null : toAsciiDigits(v.phone.trim()),
-      national_code:
+    const input: AdminUserUpdateInput = {};
+    if (dirtyFields.first_name) input.first_name = trimmedOrNull(v.first_name);
+    if (dirtyFields.last_name) input.last_name = trimmedOrNull(v.last_name);
+    if (dirtyFields.phone) {
+      input.phone =
+        v.phone.trim() === "" ? null : toAsciiDigits(v.phone.trim());
+    }
+    if (dirtyFields.national_code) {
+      input.national_code =
         v.national_code.trim() === ""
           ? null
-          : toAsciiDigits(v.national_code.trim()),
-      birth_date: dateInputToRfc3339(v.birth_date),
-      gender: v.gender === "" ? null : v.gender,
-    };
-    // Role/status are admin-only and locked for self-edits — only send them when
-    // editing someone else, so we never trip the server lock-out guard.
-    if (!isSelf) {
-      input.role = v.role;
-      input.is_active = v.is_active;
+          : toAsciiDigits(v.national_code.trim());
     }
+    if (dirtyFields.birth_date) {
+      input.birth_date = dateInputToApiValue(v.birth_date);
+    }
+    if (dirtyFields.gender) input.gender = v.gender === "" ? null : v.gender;
+    if (!isSelf && dirtyFields.role) input.role = v.role;
+    if (!isSelf && dirtyFields.is_active && !user.is_active && v.is_active) {
+      input.is_active = true;
+    }
+
+    if (Object.keys(input).length === 0) return;
+    clearErrors("root.server");
 
     try {
       const updated = await updateAdminUser(user.user_id, input);
@@ -158,6 +155,7 @@ export function UserEditForm({
       onSubmit={handleSubmit(onSubmit)}
       className="grid gap-6 lg:grid-cols-[1fr_320px]"
       noValidate
+      aria-busy={isSubmitting}
       data-testid="user-edit-form"
     >
       <div className="flex flex-col gap-6">
@@ -166,13 +164,26 @@ export function UserEditForm({
           control={control}
           register={register}
           errors={errors}
+          disabled={isSubmitting}
         />
         <AccessSection
           control={control}
           watchedActive={watchedActive}
           watchedRole={watchedRole}
+          initialActive={user.is_active}
+          isBanned={user.is_banned}
           isSelf={isSelf}
+          errors={errors}
+          disabled={isSubmitting}
         />
+        {errors.root?.server?.message ? (
+          <div
+            className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive ring-1 ring-destructive/20"
+            role="alert"
+          >
+            {errors.root.server.message}
+          </div>
+        ) : null}
       </div>
 
       <aside className="flex flex-col gap-6">

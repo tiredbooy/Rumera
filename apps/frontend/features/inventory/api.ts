@@ -22,12 +22,22 @@ export function listInventory(
 }
 
 export async function listAllInventory(): Promise<InventoryItem[]> {
-  const first = await listInventory({ page: 1, limit: 100 });
+  const first = await listInventory({
+    page: 1,
+    limit: 100,
+    sortBy: "id",
+    orderBy: "asc",
+  });
   if (first.pagination.total_pages <= 1) return first.results;
 
   const remaining = await Promise.all(
     Array.from({ length: first.pagination.total_pages - 1 }, (_, index) =>
-      listInventory({ page: index + 2, limit: 100 }),
+      listInventory({
+        page: index + 2,
+        limit: 100,
+        sortBy: "id",
+        orderBy: "asc",
+      }),
     ),
   );
   return [first, ...remaining].flatMap((page) => page.results);

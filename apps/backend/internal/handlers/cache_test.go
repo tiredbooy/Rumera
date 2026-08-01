@@ -10,11 +10,13 @@ import (
 	"github.com/tiredbooy/pkg/cache"
 )
 
-// fakeCache is a minimal in-memory cache.Store for tests. Only Get/Set carry
-// behaviour; the rest satisfy the interface.
+// fakeCache is a minimal in-memory cache.Store for handler tests.
 type fakeCache struct {
-	mu   sync.Mutex
-	data map[string]string
+	mu                     sync.Mutex
+	data                   map[string]string
+	setErr                 error
+	deleteErr              error
+	revokeAfterMutationErr error
 }
 
 func newFakeCache() *fakeCache { return &fakeCache{data: map[string]string{}} }
@@ -29,9 +31,44 @@ func (f *fakeCache) Get(ctx context.Context, key string) (string, error) {
 	return v, nil
 }
 
+func (f *fakeCache) Rotate(_ context.Context, rotation cache.Rotation) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	current, ok := f.data[rotation.CurrentKey]
+	if !ok || current != rotation.ExpectedValue {
+		return false, nil
+	}
+	delete(f.data, rotation.CurrentKey)
+	f.data[rotation.ReplacementKey] = rotation.ReplacementValue
+	f.data[rotation.ReplayKey] = rotation.ReplayValue
+	return true, nil
+}
+
+func (f *fakeCache) RevokeRotation(_ context.Context, currentKey, replayKey string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.deleteErr != nil {
+		return "", f.deleteErr
+	}
+	replay, ok := f.data[replayKey]
+	delete(f.data, currentKey)
+	if f.revokeAfterMutationErr != nil {
+		err := f.revokeAfterMutationErr
+		f.revokeAfterMutationErr = nil
+		return "", err
+	}
+	if !ok {
+		return "", cache.ErrNotFound
+	}
+	return replay, nil
+}
+
 func (f *fakeCache) Set(ctx context.Context, key, value string, ttl time.Duration) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.setErr != nil {
+		return f.setErr
+	}
 	f.data[key] = value
 	return nil
 }
@@ -39,9 +76,22 @@ func (f *fakeCache) Set(ctx context.Context, key, value string, ttl time.Duratio
 func (f *fakeCache) Incr(ctx context.Context, key string, ttl time.Duration) (int64, error) {
 	return 0, nil
 }
-func (f *fakeCache) Delete(ctx context.Context, keys ...string) error { return nil }
+func (f *fakeCache) Delete(ctx context.Context, keys ...string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	for _, key := range keys {
+		delete(f.data, key)
+	}
+	return nil
+}
 func (f *fakeCache) Exists(ctx context.Context, key string) (bool, error) {
-	return false, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.data[key]
+	return ok, nil
 }
 func (f *fakeCache) TTL(ctx context.Context, key string) (time.Duration, error) {
 	return 0, nil

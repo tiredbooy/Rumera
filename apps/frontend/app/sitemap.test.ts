@@ -4,8 +4,8 @@ const mocks = vi.hoisted(() => ({
   listAllTags: vi.fn(),
   allProductSlugs: vi.fn(),
   listCategories: vi.fn(),
-  listJournalPosts: vi.fn(),
-  listRecipeSlugs: vi.fn(),
+  listAllJournalPosts: vi.fn(),
+  listRecipeSitemapItems: vi.fn(),
 }));
 
 vi.mock("@/features/catalog/products/api/public", () => ({
@@ -18,10 +18,10 @@ vi.mock("@/features/catalog/tags/api/public", () => ({
   listAllTags: mocks.listAllTags,
 }));
 vi.mock("@/features/recipes/api/server", () => ({
-  listRecipeSlugs: mocks.listRecipeSlugs,
+  listRecipeSitemapItems: mocks.listRecipeSitemapItems,
 }));
 vi.mock("@/features/journal/api/server", () => ({
-  listJournalPosts: mocks.listJournalPosts,
+  listAllJournalPosts: mocks.listAllJournalPosts,
 }));
 
 import { absoluteUrl } from "@/lib/site";
@@ -40,8 +40,8 @@ beforeEach(() => {
       updated_at: "2026-07-19T00:00:00Z",
     },
   ]);
-  mocks.listRecipeSlugs.mockResolvedValue([]);
-  mocks.listJournalPosts.mockResolvedValue([]);
+  mocks.listRecipeSitemapItems.mockResolvedValue([]);
+  mocks.listAllJournalPosts.mockResolvedValue([]);
 });
 
 describe("sitemap product discovery", () => {
@@ -118,5 +118,40 @@ describe("sitemap category discovery", () => {
       false,
     );
     expect(mocks.listCategories).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("sitemap editorial discovery", () => {
+  it("uses every encoded recipe and journal slug with edit timestamps", async () => {
+    mocks.listRecipeSitemapItems.mockResolvedValue([
+      {
+        slug: "نوشیدنی / ویژه",
+        updated_at: "2026-07-22T00:00:00Z",
+      },
+    ]);
+    mocks.listAllJournalPosts.mockResolvedValue([
+      {
+        slug: "راهنما / ویژه",
+        updated_at: "2026-07-23T00:00:00Z",
+      },
+    ]);
+
+    const entries = await sitemap();
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        url: absoluteUrl(
+          `/recipes/${encodeURIComponent("نوشیدنی / ویژه")}`,
+        ),
+        lastModified: new Date("2026-07-22T00:00:00Z"),
+      }),
+    );
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        url: absoluteUrl(
+          `/journal/${encodeURIComponent("راهنما / ویژه")}`,
+        ),
+        lastModified: new Date("2026-07-23T00:00:00Z"),
+      }),
+    );
   });
 });

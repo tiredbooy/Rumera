@@ -15,8 +15,8 @@ import (
 // tiers:
 //
 //   - public     — no authentication (catalogue browsing, auth endpoints)
-//   - customer   — any authenticated user (mw.Auth)
-//   - admin      — authenticated + role=admin (mw.Auth + mw.RequireRole)
+//   - customer   — any live authenticated user (mw.Auth)
+//   - admin      — live authenticated users.role=admin (mw.Auth + mw.RequireRole)
 func Setup(r *gin.Engine, h *handlers.Handler, jwt token.Manager, store cache.Store, idempotency gin.HandlerFunc) {
 	r.GET("/health", func(c *gin.Context) {
 		response.OK(c, gin.H{"status": "ok"})
@@ -63,7 +63,7 @@ func registerAuthRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Mana
 	auth.POST("/password/reset", h.ResetPassword)
 
 	me := auth.Group("")
-	me.Use(mw.Auth(jwt))
+	me.Use(mw.Auth(jwt, h.User))
 	me.GET("/me", h.Me)
 	me.PATCH("/me", h.UpdateProfile)
 }
@@ -138,7 +138,7 @@ func registerPublicRoutes(v1 *gin.RouterGroup, h *handlers.Handler) {
 
 func registerCustomerRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Manager) {
 	c := v1.Group("")
-	c.Use(mw.Auth(jwt))
+	c.Use(mw.Auth(jwt, h.User))
 
 	// Cart
 	c.GET("/cart", h.GetCart)
@@ -225,11 +225,14 @@ func registerCustomerRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.
 
 func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Manager) {
 	a := v1.Group("/admin")
-	a.Use(mw.Auth(jwt), mw.RequireRole("admin"))
+	a.Use(mw.Auth(jwt, h.User), mw.RequireRole("admin"))
 
-	// Users
+	// Single-role authorization and audited user administration.
+	a.GET("/roles", h.GetAdminRoles)
 	a.GET("/users", h.ListUsers)
+	a.POST("/users", h.CreateUser)
 	a.GET("/users/:userID", h.GetUser)
+	a.GET("/users/:userID/audit", h.GetUserAudit)
 	a.PATCH("/users/:userID", h.UpdateUser)
 	a.DELETE("/users/:userID", h.DeleteUser)
 
@@ -344,11 +347,14 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	a.DELETE("/hero-slides/:id", h.DeleteHeroSlide)
 
 	// Blog
+	a.GET("/blogs", h.ListBlogsAdmin)
 	a.POST("/blogs", h.CreateBlog)
 	a.GET("/blogs/:id", h.GetBlog)
 	a.PATCH("/blogs/:id", h.UpdateBlog)
 	a.DELETE("/blogs/:id", h.DeleteBlog)
+	a.GET("/blog-categories", h.ListBlogCategories)
 	a.POST("/blog-categories", h.CreateBlogCategory)
+	a.GET("/blog-categories/:id", h.GetBlogCategory)
 	a.PATCH("/blog-categories/:id", h.UpdateBlogCategory)
 	a.DELETE("/blog-categories/:id", h.DeleteBlogCategory)
 

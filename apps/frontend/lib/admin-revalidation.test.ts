@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CATEGORY_DIRECTORY_CACHE_TAG } from "./cache-tags";
+import { CATEGORY_DIRECTORY_CACHE_TAG, JOURNAL_CACHE_TAG } from "./cache-tags";
 import { getAdminRevalidationPlan } from "./admin-revalidation";
 
 describe("getAdminRevalidationPlan", () => {
@@ -47,5 +47,46 @@ describe("getAdminRevalidationPlan", () => {
     expect(
       getAdminRevalidationPlan(["admin", "uploads", "release"], "POST", 204),
     ).toEqual({ tags: [], paths: [] });
+  });
+
+  it("invalidates user detail, list, and live role counts after user writes", () => {
+    expect(
+      getAdminRevalidationPlan(["admin", "users", "user-id"], "PATCH", 200),
+    ).toEqual({
+      tags: [],
+      paths: [
+        { path: "/admin/customers", type: "layout" },
+        { path: "/admin/roles", type: "page" },
+      ],
+    });
+  });
+
+  it("invalidates journal surfaces after article, category, and cover writes", () => {
+    const expected = {
+      tags: [JOURNAL_CACHE_TAG],
+      paths: [
+        { path: "/journal" },
+        { path: "/journal/[slug]", type: "page" as const },
+        { path: "/sitemap.xml" },
+        { path: "/llms.txt" },
+      ],
+    };
+    expect(
+      getAdminRevalidationPlan(["admin", "blogs", "12"], "PATCH", 200),
+    ).toEqual(expected);
+    expect(
+      getAdminRevalidationPlan(
+        ["admin", "blog-categories", "3"],
+        "DELETE",
+        204,
+      ),
+    ).toEqual(expected);
+    expect(
+      getAdminRevalidationPlan(
+        ["admin", "uploads", "journal", "12", "cover"],
+        "POST",
+        201,
+      ),
+    ).toEqual(expected);
   });
 });

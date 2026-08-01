@@ -46,6 +46,7 @@ export interface ProductListItem {
   image_response: ProductImage | null;
   brand?: string; // brand title, joined
   category?: string; // category title, joined
+  tags?: ProductTag[]; // embedded by the list query; omitted when untagged
   is_active: boolean;
   min_price: number; // cheapest variant
   max_price: number; // most expensive variant

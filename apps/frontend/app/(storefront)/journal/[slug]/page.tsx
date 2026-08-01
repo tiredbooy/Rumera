@@ -30,13 +30,26 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const post = await getJournalPostBySlug(slug);
-  if (!post) return buildMetadata({ title: "نوشته یافت نشد", index: false });
+  if (!post)
+    return buildMetadata({
+      title: "نوشته یافت نشد",
+      path: `/journal/${encodeURIComponent(slug)}`,
+      index: false,
+    });
+  const categories = post.categories.map((category) => category.name);
   return buildMetadata({
-    title: post.meta_title ?? post.title,
-    description: post.meta_description ?? post.excerpt ?? undefined,
-    path: `/journal/${post.slug}`,
+    title: post.meta_title?.trim() || post.title,
+    description:
+      post.meta_description?.trim() || post.excerpt?.trim() || undefined,
+    path: `/journal/${encodeURIComponent(post.slug)}`,
     type: "article",
     images: post.image_url ? [post.image_url] : undefined,
+    article: {
+      publishedTime: post.published_at ?? undefined,
+      modifiedTime: post.updated_at,
+      section: categories[0],
+      tags: categories,
+    },
   });
 }
 

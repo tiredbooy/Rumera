@@ -3,6 +3,10 @@ import Link from "next/link";
 import { SmartImage } from "@/components/smart-image";
 import { AddToCartButton } from "@/features/cart/components/add-to-cart-button";
 import type { ShoppableProduct } from "@/features/recipes/types";
+import {
+  formatRecipeProductRole,
+  formatRecipeQuantity,
+} from "@/features/recipes/utils";
 import { formatPrice } from "@/lib/products";
 
 export function ShoppableProductCard({
@@ -10,7 +14,10 @@ export function ShoppableProductCard({
 }: {
   product: ShoppableProduct;
 }) {
-  const pdp = product.product_slug ? `/products/${product.product_slug}` : null;
+  const productSlug = product.product_slug?.trim();
+  const pdp = productSlug
+    ? `/products/${encodeURIComponent(productSlug)}`
+    : null;
   const onSale =
     product.compare_at_price != null &&
     product.compare_at_price > product.price;
@@ -20,39 +27,33 @@ export function ShoppableProductCard({
       <SmartImage
         src={product.image_url}
         alt={product.product_title}
-        sizes="(max-width: 640px) 100vw, 33vw"
+        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
         monogram={product.product_title.charAt(0)}
       />
     </div>
   );
 
   // How much of this product the recipe calls for, e.g. «۶۰ میلی‌لیتر».
-  const measure = [product.quantity, product.unit]
+  const measure = [
+    product.quantity ? formatRecipeQuantity(product.quantity) : undefined,
+    product.unit,
+  ]
     .filter(Boolean)
     .join(" ")
     .trim();
+  const roleLabel = formatRecipeProductRole(product.role);
 
   return (
     <article
       className="border-hairline shadow-e1 flex flex-col gap-4 rounded-3xl bg-card p-5 ring-1 ring-foreground/5 transition-shadow duration-300 hover:shadow-e3"
       data-shoppable-product={product.product_variant_id}
     >
-      {pdp ? (
-        <Link
-          href={pdp}
-          aria-label={product.product_title}
-          className="rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-        >
-          {Image}
-        </Link>
-      ) : (
-        Image
-      )}
+      {Image}
 
       <div className="flex flex-1 flex-col">
-        {product.role ? (
+        {roleLabel ? (
           <span className="text-xs font-medium text-primary">
-            {product.role}
+            {roleLabel}
           </span>
         ) : product.is_primary ? (
           <span className="text-xs font-medium text-primary">پایهٔ اصلی</span>
@@ -81,26 +82,35 @@ export function ShoppableProductCard({
           </p>
         ) : null}
 
-        <div className="mt-3 flex items-baseline gap-2">
-          <span className="font-serif text-xl">
-            {formatPrice(product.price)}
-          </span>
-          {onSale ? (
-            <span className="text-xs text-muted-foreground line-through">
-              {formatPrice(product.compare_at_price!)}
+        {product.price > 0 ? (
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="font-serif text-xl">
+              {formatPrice(product.price)}
             </span>
-          ) : null}
-        </div>
+            {onSale ? (
+              <span className="text-xs text-muted-foreground line-through">
+                {formatPrice(product.compare_at_price!)}
+              </span>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-muted-foreground">
+            قیمت در دسترس نیست
+          </p>
+        )}
 
         <div className="mt-4">
           {product.is_available ? (
             <AddToCartButton
               productVariantId={product.product_variant_id}
               className="w-full"
+              ariaLabel={`افزودن ${product.product_title} به سبد خرید`}
             />
           ) : (
             <p className="rounded-xl bg-secondary/60 px-3 py-2.5 text-center text-sm font-medium text-muted-foreground">
-              ناموجود
+              {product.available_stock === 0
+                ? "ناموجود در حال حاضر"
+                : "فعلاً قابل خرید نیست"}
             </p>
           )}
         </div>

@@ -1,4 +1,7 @@
-import { CATEGORY_DIRECTORY_CACHE_TAG } from "@/lib/cache-tags";
+import {
+  CATEGORY_DIRECTORY_CACHE_TAG,
+  JOURNAL_CACHE_TAG,
+} from "@/lib/cache-tags";
 
 export type RevalidationPath = {
   path: string;
@@ -56,16 +59,30 @@ export function getAdminRevalidationPlan(
       paths: [{ path: "/" }],
     };
   }
+  if (resource === "users") {
+    return {
+      tags: [],
+      paths: [
+        { path: "/admin/customers", type: "layout" },
+        { path: "/admin/roles", type: "page" },
+      ],
+    };
+  }
   if (resource === "recipes") {
     return {
       tags: [],
       paths: [{ path: "/recipes" }, { path: "/recipes/[slug]", type: "page" }],
     };
   }
-  if (resource === "blogs") {
+  if (resource === "blogs" || resource === "blog-categories") {
     return {
-      tags: [],
-      paths: [{ path: "/journal" }, { path: "/journal/[slug]", type: "page" }],
+      tags: [JOURNAL_CACHE_TAG],
+      paths: [
+        { path: "/journal" },
+        { path: "/journal/[slug]", type: "page" },
+        { path: "/sitemap.xml" },
+        { path: "/llms.txt" },
+      ],
     };
   }
   if (resource !== "uploads" || segments.length < 5) return EMPTY_PLAN;
@@ -86,10 +103,12 @@ export function getAdminRevalidationPlan(
       };
     case "journal":
       return {
-        tags: [],
+        tags: [JOURNAL_CACHE_TAG],
         paths: [
           { path: "/journal" },
           { path: "/journal/[slug]", type: "page" },
+          { path: "/sitemap.xml" },
+          { path: "/llms.txt" },
         ],
       };
     default:

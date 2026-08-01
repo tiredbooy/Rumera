@@ -204,6 +204,8 @@ type RecipeFilter struct {
 	// a shoppable product or a linked ingredient).
 	VariantID *int64 `query:"variant_id"`
 	MaxTime   *int   `query:"max_time"` // total_time_minutes <= MaxTime
+	// ExcludeID keeps a separately rendered featured recipe out of pagination.
+	ExcludeID *int64 `query:"exclude_id"`
 }
 
 func (f *RecipeFilter) Defaults() {
@@ -301,6 +303,7 @@ type ShoppableProduct struct {
 	Price            float64          `json:"price"`
 	CompareAtPrice   *float64         `json:"compare_at_price,omitempty"`
 	ImageURL         *string          `json:"image_url,omitempty"`
+	AvailableStock   int              `json:"available_stock"`
 	IsAvailable      bool             `json:"is_available"`
 	Quantity         *decimal.Decimal `json:"quantity,omitempty"`
 	Unit             *string          `json:"unit,omitempty"`
@@ -322,6 +325,7 @@ type ShoppableProductResponse struct {
 	Price            float64  `json:"price"`
 	CompareAtPrice   *float64 `json:"compare_at_price,omitempty"`
 	ImageURL         *string  `json:"image_url,omitempty"`
+	AvailableStock   int      `json:"available_stock"`
 	IsAvailable      bool     `json:"is_available"`
 	Quantity         *string  `json:"quantity,omitempty"`
 	Unit             *string  `json:"unit,omitempty"`

@@ -1,78 +1,90 @@
 import "server-only";
 
 import Link from "next/link";
-import { ArrowRight, Pencil, UserX } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { ArrowRight, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { getAdminUser } from "@/features/customers/api";
+import { getAdminUser, getAdminUserAudit } from "@/features/customers/api";
 import { UserRoleBadge } from "@/features/customers/components/user-role-badge";
 import { UserStatusBadge } from "@/features/customers/components/user-status-badge";
-import type { AdminUser } from "@/features/customers/types";
+import type {
+  AdminUser,
+  AdminUserAuditEvent,
+} from "@/features/customers/types";
+import { AdminDataErrorState } from "@/features/dashboard/components/admin-data-error-state";
 import { PageHeader } from "@/features/dashboard/components/page-header";
-import { ApiError } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/errors";
+import type { Paginated } from "@/lib/api/types";
 import { faDate } from "@/lib/utils/date";
+
+import { UserAccountActions } from "./UserAccountActions";
+import { UserAuditHistory } from "./user-audit-history";
+
+const AUDIT_PAGE_SIZE = 20;
 
 export async function CustomerDetailView({
   id,
-  canWrite,
+  currentUserId,
+  currentUserEmail,
+  auditPage,
 }: {
   id: string;
-  canWrite: boolean;
+  currentUserId?: string;
+  currentUserEmail?: string | null;
+  auditPage: number;
 }) {
-  let user: AdminUser | null = null;
-  let notFoundUser = false;
+  let user: AdminUser;
   try {
     user = await getAdminUser(id);
   } catch (error) {
-    // The admin endpoint filters to active users, so deactivated users return 404.
-    if (error instanceof ApiError && error.status === 404) {
-      notFoundUser = true;
-    } else {
-      throw error;
+    if (
+      error instanceof ApiError &&
+      (error.status === 400 || error.status === 404 || error.status === 422)
+    ) {
+      notFound();
     }
+    throw error;
   }
 
   const backButton = (
-    <Button variant="outline" size="sm" asChild className="cursor-pointer">
+    <Button variant="outline" size="sm" asChild className="h-11 cursor-pointer">
       <Link href="/admin/customers">
-        <ArrowRight className="size-4" /> بازگشت
+        <ArrowRight className="size-4" aria-hidden /> بازگشت
       </Link>
     </Button>
   );
-
-  if (notFoundUser || !user) {
-    return (
-      <>
-        <PageHeader
-          title="مشتری"
-          description="کاربر در دسترس نیست"
-          actions={backButton}
-        />
-        <div className="border-hairline flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-16 text-center ring-1 ring-foreground/[0.04]">
-          <span
-            className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground"
-            aria-hidden
-          >
-            <UserX className="size-6" />
-          </span>
-          <p className="font-serif text-lg">این کاربر یافت نشد</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            ممکن است حساب حذف شده یا غیرفعال شده باشد. حساب‌های غیرفعال در این
-            صفحه قابل مشاهده نیستند.
-          </p>
-          <Button asChild className="mt-2 cursor-pointer">
-            <Link href="/admin/customers">بازگشت به فهرست مشتریان</Link>
-          </Button>
-        </div>
-      </>
-    );
-  }
 
   const fullName = [user.first_name, user.last_name]
     .filter(Boolean)
     .join(" ")
     .trim();
   const displayName = fullName || user.email;
+  const isSelf =
+    (!!currentUserId && currentUserId === user.user_id) ||
+    (!!currentUserEmail && currentUserEmail === user.email);
+  let audit: Paginated<AdminUserAuditEvent> | null = null;
+  try {
+    audit = await getAdminUserAudit(user.user_id, {
+      page: auditPage,
+      limit: AUDIT_PAGE_SIZE,
+    });
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      throw error;
+    }
+    // Keep live identity/actions available if only the audit request fails.
+  }
+  if (audit && auditPage > audit.pagination.total_pages) {
+    redirect(
+      audit.pagination.total_pages > 1
+        ? `/admin/customers/${user.user_id}?audit_page=${audit.pagination.total_pages}`
+        : `/admin/customers/${user.user_id}`,
+    );
+  }
 
   return (
     <>
@@ -86,23 +98,21 @@ export async function CustomerDetailView({
               href="/admin/customers"
               className="transition-colors hover:text-foreground"
             >
-              مشتریان
+              کاربران
             </Link>
             <span aria-hidden>/</span>
-            <span className="text-foreground">{displayName}</span>
+            <span className="break-all text-foreground">{displayName}</span>
           </nav>
         }
         title={displayName}
         description={user.email}
         actions={
           <div className="flex items-center gap-2">
-            {canWrite ? (
-              <Button size="sm" asChild className="cursor-pointer">
-                <Link href={`/admin/customers/${user.user_id}/edit`}>
-                  <Pencil className="size-4" /> ویرایش کاربر
-                </Link>
-              </Button>
-            ) : null}
+            <Button size="sm" asChild className="h-11 cursor-pointer">
+              <Link href={`/admin/customers/${user.user_id}/edit`}>
+                <Pencil className="size-4" aria-hidden /> ویرایش کاربر
+              </Link>
+            </Button>
             {backButton}
           </div>
         }
@@ -111,7 +121,10 @@ export async function CustomerDetailView({
       {/* Live identity sourced from GET /admin/users/:id. */}
       <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/15 font-serif text-xl text-primary">
+          <span
+            className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/15 font-serif text-xl text-primary"
+            aria-hidden
+          >
             {displayName.trim().charAt(0).toUpperCase()}
           </span>
           <dl className="grid flex-1 grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-4">
@@ -134,7 +147,10 @@ export async function CustomerDetailView({
             <div>
               <dt className="text-xs text-muted-foreground">وضعیت</dt>
               <dd className="mt-1">
-                <UserStatusBadge active={user.is_active} />
+                <UserStatusBadge
+                  active={user.is_active}
+                  banned={user.is_banned}
+                />
               </dd>
             </div>
             {user.phone ? (
@@ -153,7 +169,48 @@ export async function CustomerDetailView({
             </div>
           </dl>
         </div>
+
+        <section
+          className="mt-5 flex flex-col gap-4 border-t border-border/50 pt-5 sm:flex-row sm:items-start sm:justify-between"
+          aria-labelledby="account-status-title"
+        >
+          <div className="max-w-xl">
+            <h2 id="account-status-title" className="text-sm font-medium">
+              کنترل وضعیت حساب
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {user.is_banned
+                ? "این حساب مسدود است و حتی در حالت فعال امکان ورود ندارد. رفع مسدودی در قرارداد فعلی مدیریت کاربران پشتیبانی نمی‌شود."
+                : "غیرفعال‌سازی دسترسی ورود را متوقف می‌کند، اما حساب، جزئیات و تاریخچه را حذف نمی‌کند. حساب غیرفعال در همین صفحه قابل مشاهده و فعال‌سازی دوباره است."}
+            </p>
+          </div>
+          <UserAccountActions
+            userID={user.user_id}
+            displayName={displayName}
+            isActive={user.is_active}
+            isBanned={user.is_banned}
+            isSelf={isSelf}
+          />
+        </section>
       </div>
+
+      {audit ? (
+        <UserAuditHistory
+          userID={user.user_id}
+          events={audit.results}
+          pagination={audit.pagination}
+        />
+      ) : (
+        <section className="mt-6" aria-labelledby="user-audit-title">
+          <h2 id="user-audit-title" className="mb-3 font-serif text-lg">
+            تاریخچهٔ مدیریتی
+          </h2>
+          <AdminDataErrorState
+            title="دریافت تاریخچه ناموفق بود"
+            description="هیچ رویداد جایگزینی نمایش داده نشده است. اتصال را بررسی کنید و دوباره تلاش کنید."
+          />
+        </section>
+      )}
     </>
   );
 }

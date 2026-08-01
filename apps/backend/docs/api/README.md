@@ -96,7 +96,7 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | DELETE | `/wishlist/items/:id` | 🔒 |
 | GET | `/wishlist/has/:variantID` | 🔒 |
 | GET | `/wallet` | 🔒 |
-| POST | `/wallet/deposit` · `/wallet/withdraw` | 🔒 |
+| POST | `/wallet/withdraw` | 🔒 |
 | GET | `/wallet/transactions` | 🔒 |
 | POST·GET | `/orders` | 🔒 |
 | GET | `/orders/:id` | 🔒 |
@@ -112,8 +112,10 @@ All conventions (response envelope, errors, pagination, validation) are describe
 ### Admin — `/admin` (requires role `admin`)
 | Method | Path | Tier |
 |--------|------|------|
-| GET | `/admin/users` · `/admin/users/:userID` | 🛡️ |
-| PATCH·DELETE | `/admin/users/:userID` | 🛡️ |
+| GET | `/admin/roles` | 🛡️ |
+| GET·POST | `/admin/users` | 🛡️ |
+| GET·PATCH·DELETE | `/admin/users/:userID` | 🛡️ |
+| GET | `/admin/users/:userID/audit` | 🛡️ |
 | GET·POST·PATCH·DELETE | `/admin/products` … | 🛡️ |
 | POST·PUT | `/admin/products/aggregate` · `/admin/products/:id/aggregate` | 🛡️ |
 | POST/PUT/DELETE | `/admin/products/:id/tags` | 🛡️ |

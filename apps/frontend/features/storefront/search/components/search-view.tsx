@@ -4,7 +4,10 @@ import { ArrowLeft, Search, SearchX, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listCategories } from "@/features/catalog/categories/api";
 import { listProducts } from "@/features/catalog/products/api/public";
-import { ProductCard } from "@/features/catalog/products/components/product-card";
+import {
+  ProductCard,
+  PRODUCT_CARD_GRID_CLASS,
+} from "@/features/catalog/products/components/product-card";
 import { faNum } from "@/lib/products";
 
 type SearchViewProps = {
@@ -41,10 +44,9 @@ export async function SearchView({ searchParams }: SearchViewProps) {
               type="search"
               name="q"
               defaultValue={query}
-              autoFocus
               placeholder="نام محصول، برند یا دسته…"
               aria-label="جستجوی فروشگاه"
-              className="shadow-e2 h-14 w-full rounded-full border border-border/70 bg-background/80 ps-12 pe-28 text-base outline-none backdrop-blur-sm transition-all placeholder:text-muted-foreground/80 focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+              className="shadow-e2 h-14 w-full rounded-full border border-border/70 bg-background/80 ps-12 pe-28 text-base outline-none backdrop-blur-sm transition-[border-color,box-shadow] placeholder:text-muted-foreground/80 focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20"
             />
             <Button
               type="submit"
@@ -56,7 +58,7 @@ export async function SearchView({ searchParams }: SearchViewProps) {
         </div>
       </section>
 
-      <section className="container-px mx-auto max-w-7xl py-12 sm:py-14">
+      <section className="container-px mx-auto w-full max-w-7xl py-12 sm:py-14">
         {query && results.length ? (
           <>
             <p className="text-muted-foreground">
@@ -64,7 +66,7 @@ export async function SearchView({ searchParams }: SearchViewProps) {
               <span className="font-medium text-foreground">{query}</span>
               {"»"}
             </p>
-            <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className={`${PRODUCT_CARD_GRID_CLASS} mt-8`}>
               {results.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}

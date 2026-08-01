@@ -8,6 +8,7 @@ var (
 	ErrAlreadyExists = errors.New("record already exists")
 	ErrInvalidState  = errors.New("record is in an invalid state")
 	ErrConflict      = errors.New("conflict")
+	ErrAccessDenied  = errors.New("access denied")
 
 	// Hero slides
 	ErrHeroSchedule     = errors.New("hero slide schedule is invalid")
@@ -15,8 +16,9 @@ var (
 	ErrHeroSecondaryCTA = errors.New("hero slide secondary CTA is invalid")
 
 	// Stock / funds
-	ErrInsufficientStock = errors.New("insufficient stock")
-	ErrInsufficientFunds = errors.New("insufficient funds")
+	ErrInsufficientStock          = errors.New("insufficient stock")
+	ErrInsufficientFunds          = errors.New("insufficient funds")
+	ErrInvalidInventoryAdjustment = errors.New("invalid inventory adjustment")
 
 	// Cart
 	ErrCartEmpty = errors.New("cart is empty")
@@ -33,7 +35,8 @@ var (
 	ErrCouponUserLimitReached  = errors.New("coupon has reached its per-user usage limit")
 
 	// Category
-	ErrHasChildren = errors.New("category has children and cannot be deleted")
+	ErrHasChildren    = errors.New("category has children and cannot be deleted")
+	ErrHierarchyCycle = errors.New("category hierarchy would contain a cycle")
 )
 
 // TaxRate is applied to the post-discount subtotal.

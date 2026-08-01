@@ -96,7 +96,7 @@ func (r *wishlistRepository) GetItems(ctx context.Context, wishlistID int64) ([]
 				LIMIT  1
 			)                                       AS image_url,
 			COALESCE((
-				SELECT inv.stock_on_hand > 0
+				SELECT inv.stock_on_hand - inv.committed_stock > 0
 				FROM   inventory inv
 				WHERE  inv.product_variant_id = pv.id
 				LIMIT  1

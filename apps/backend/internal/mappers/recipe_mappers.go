@@ -127,6 +127,7 @@ func ToShoppableProductResponses(products []*models.ShoppableProduct) []models.S
 			Price:            p.Price,
 			CompareAtPrice:   p.CompareAtPrice,
 			ImageURL:         p.ImageURL,
+			AvailableStock:   p.AvailableStock,
 			IsAvailable:      p.IsAvailable,
 			Quantity:         decimalString(p.Quantity),
 			Unit:             p.Unit,

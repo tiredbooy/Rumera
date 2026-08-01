@@ -3,9 +3,7 @@ package handlers
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/mappers"
-	"github.com/tiredbooy/internal/middlewares"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/response"
 )
 
@@ -33,6 +31,34 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 
 // ── Admin ──────────────────────────────────────────────────────────────────
 
+// GetAdminRoles — GET /admin/roles
+func (h *Handler) GetAdminRoles(c *gin.Context) {
+	summary, err := h.User.GetAdminRoles(c.Request.Context())
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	response.OK(c, summary)
+}
+
+// CreateUser — POST /admin/users
+func (h *Handler) CreateUser(c *gin.Context) {
+	actorUserID, ok := h.userUUID(c)
+	if !ok {
+		return
+	}
+	var req models.AdminCreateUserReq
+	if !h.bindJSON(c, &req) {
+		return
+	}
+	user, err := h.User.AdminCreate(c.Request.Context(), actorUserID, req)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	response.Created(c, mappers.MapToAdminUser(user))
+}
+
 // ListUsers — GET /admin/users
 func (h *Handler) ListUsers(c *gin.Context) {
 	var filter models.UserFilter
@@ -46,7 +72,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	response.Paginated(c, mappers.MapToUserListItems(users), paginate(filter.Page, filter.Limit, total))
+	response.Paginated(c, users, paginate(filter.Page, filter.Limit, total))
 }
 
 // GetUser — GET /admin/users/:userID
@@ -55,7 +81,7 @@ func (h *Handler) GetUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, err := h.User.GetByID(c.Request.Context(), id)
+	user, err := h.User.GetByIDIncludingInactive(c.Request.Context(), id)
 	if err != nil {
 		response.HandleError(c, err)
 		return
@@ -65,13 +91,15 @@ func (h *Handler) GetUser(c *gin.Context) {
 
 // UpdateUser — PATCH /admin/users/:userID
 //
-// Admin-only edit of another user. Beyond the profile fields editable on
-// /auth/me, this route accepts the privileged role and is_active fields. A guard
-// stops an admin from demoting or deactivating their OWN account, which would
-// otherwise let an admin lock themselves (and potentially every admin) out of
-// the console.
+// Admin-only edit of a user, including nullable profile fields, role, and status.
+// Self-lockout rules and live actor revalidation are enforced below the HTTP
+// layer by both the service and transactional repository boundary.
 func (h *Handler) UpdateUser(c *gin.Context) {
-	id, ok := h.paramUUID(c, "userID")
+	targetUserID, ok := h.paramUUID(c, "userID")
+	if !ok {
+		return
+	}
+	actorUserID, ok := h.userUUID(c)
 	if !ok {
 		return
 	}
@@ -79,22 +107,9 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	if !h.bindJSON(c, &req) {
 		return
 	}
-	// Password changes go through the dedicated reset flow — never accept a raw
-	// hash from the client here.
-	req.PasswordHash = nil
-
-	// Lock-out protection: an admin may not strip their own admin role or
-	// deactivate themselves.
-	if callerID, ok := middlewares.UserUUID(c); ok && callerID == id {
-		if (req.Role != nil && *req.Role != "admin") || (req.IsActive != nil && !*req.IsActive) {
-			h.handleError(c, apperr.ErrAccessDenied)
-			return
-		}
-	}
-
-	user, err := h.User.AdminUpdate(c.Request.Context(), id, req)
+	user, err := h.User.AdminUpdate(c.Request.Context(), actorUserID, targetUserID, req)
 	if err != nil {
-		h.handleError(c, err)
+		response.HandleError(c, err)
 		return
 	}
 	response.OK(c, mappers.MapToAdminUser(user))
@@ -102,13 +117,36 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 
 // DeleteUser — DELETE /admin/users/:userID
 func (h *Handler) DeleteUser(c *gin.Context) {
-	id, ok := h.paramUUID(c, "userID")
+	targetUserID, ok := h.paramUUID(c, "userID")
 	if !ok {
 		return
 	}
-	if err := h.User.Delete(c.Request.Context(), id); err != nil {
+	actorUserID, ok := h.userUUID(c)
+	if !ok {
+		return
+	}
+	if err := h.User.AdminDeactivate(c.Request.Context(), actorUserID, targetUserID); err != nil {
 		response.HandleError(c, err)
 		return
 	}
 	response.NoContent(c)
+}
+
+// GetUserAudit — GET /admin/users/:userID/audit
+func (h *Handler) GetUserAudit(c *gin.Context) {
+	targetUserID, ok := h.paramUUID(c, "userID")
+	if !ok {
+		return
+	}
+	var filter models.AdminUserAuditFilter
+	if !h.bindQuery(c, &filter) {
+		return
+	}
+	filter.Defaults()
+	events, total, err := h.User.GetAdminAudit(c.Request.Context(), targetUserID, filter)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	response.Paginated(c, events, paginate(filter.Page, filter.Limit, total))
 }

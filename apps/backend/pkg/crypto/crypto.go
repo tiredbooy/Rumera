@@ -8,6 +8,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const BcryptMaxPasswordBytes = 72
+
+func PasswordFitsBcrypt(password string) bool {
+	return len([]byte(password)) <= BcryptMaxPasswordBytes
+}
+
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 12)
 	return string(bytes), err

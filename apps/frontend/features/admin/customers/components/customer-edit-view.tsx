@@ -1,34 +1,37 @@
 import "server-only";
 
 import Link from "next/link";
-import { ArrowRight, UserX } from "lucide-react";
+import { notFound } from "next/navigation";
+import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { getAdminUser } from "@/features/customers/api";
 import type { AdminUser } from "@/features/customers/types";
 import { PageHeader } from "@/features/dashboard/components/page-header";
-import { ApiError } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/errors";
 
 import { UserEditForm } from "./UserEditForm";
 
 export async function CustomerEditView({
   targetUserId,
   currentUserId,
+  currentUserEmail,
 }: {
   targetUserId: string;
   currentUserId?: string;
+  currentUserEmail?: string | null;
 }) {
-  let user: AdminUser | null = null;
-  let notFoundUser = false;
+  let user: AdminUser;
   try {
     user = await getAdminUser(targetUserId);
   } catch (error) {
-    // The admin endpoint filters to active users, so deactivated users return 404.
-    if (error instanceof ApiError && error.status === 404) {
-      notFoundUser = true;
-    } else {
-      throw error;
+    if (
+      error instanceof ApiError &&
+      (error.status === 400 || error.status === 404 || error.status === 422)
+    ) {
+      notFound();
     }
+    throw error;
   }
 
   const backButton = (
@@ -39,35 +42,9 @@ export async function CustomerEditView({
     </Button>
   );
 
-  if (notFoundUser || !user) {
-    return (
-      <>
-        <PageHeader
-          title="ویرایش کاربر"
-          description="کاربر در دسترس نیست"
-          actions={backButton}
-        />
-        <div className="border-hairline flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-16 text-center ring-1 ring-foreground/[0.04]">
-          <span
-            className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground"
-            aria-hidden
-          >
-            <UserX className="size-6" />
-          </span>
-          <p className="font-serif text-lg">این کاربر یافت نشد</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            ممکن است حساب حذف شده یا غیرفعال شده باشد. حساب‌های غیرفعال در این
-            صفحه قابل مشاهده نیستند.
-          </p>
-          <Button asChild className="mt-2">
-            <Link href="/admin/customers">بازگشت به فهرست مشتریان</Link>
-          </Button>
-        </div>
-      </>
-    );
-  }
-
-  const isSelf = !!currentUserId && currentUserId === user.user_id;
+  const isSelf =
+    (!!currentUserId && currentUserId === user.user_id) ||
+    (!!currentUserEmail && currentUserEmail === user.email);
   const fullName = [user.first_name, user.last_name]
     .filter(Boolean)
     .join(" ")
@@ -85,7 +62,7 @@ export async function CustomerEditView({
               href="/admin/customers"
               className="transition-colors hover:text-foreground"
             >
-              مشتریان
+              کاربران
             </Link>
             <span aria-hidden>/</span>
             <span className="text-foreground">{fullName || user.email}</span>

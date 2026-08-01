@@ -2,12 +2,17 @@ package handlers
 
 import (
 	"context"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/mappers"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/response"
 )
+
+const blogReadTimeout = 2 * time.Second
+
+var blogReadSlots = make(chan struct{}, 64)
 
 // ── Blogs ──────────────────────────────────────────────────────────────────
 
@@ -21,6 +26,22 @@ func (h *Handler) ListBlogs(c *gin.Context) {
 
 	published := models.BlogStatusPublished
 	filter.Status = &published // never expose drafts on the storefront
+
+	blogs, total, err := h.Blog.List(c.Request.Context(), filter)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.Paginated(c, mappers.ToBlogListItems(blogs), paginate(filter.Page, filter.Limit, total))
+}
+
+// ListBlogsAdmin — GET /admin/blogs. Includes every publication status.
+func (h *Handler) ListBlogsAdmin(c *gin.Context) {
+	var filter models.BlogFilter
+	if !h.bindQuery(c, &filter) {
+		return
+	}
+	filter.Defaults()
 
 	blogs, total, err := h.Blog.List(c.Request.Context(), filter)
 	if err != nil {
@@ -44,7 +65,17 @@ func (h *Handler) GetBlogBySlug(c *gin.Context) {
 	}
 	// Count the read without blocking the response or tying it to the request
 	// lifetime.
-	go func(id int64) { _ = h.Blog.RecordRead(context.Background(), id) }(blog.ID)
+	select {
+	case blogReadSlots <- struct{}{}:
+		go func(id int64) {
+			defer func() { <-blogReadSlots }()
+			ctx, cancel := context.WithTimeout(context.Background(), blogReadTimeout)
+			defer cancel()
+			_ = h.Blog.RecordRead(ctx, id)
+		}(blog.ID)
+	default:
+		// Read accounting is best-effort and must not create unbounded work.
+	}
 
 	response.OK(c, blog)
 }
@@ -120,7 +151,7 @@ func (h *Handler) DeleteBlog(c *gin.Context) {
 func (h *Handler) ListBlogCategories(c *gin.Context) {
 	cats, err := h.BlogCategory.GetAll(c.Request.Context())
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, mappers.ToBlogCategoryResponses(cats))
@@ -134,7 +165,7 @@ func (h *Handler) GetBlogCategory(c *gin.Context) {
 	}
 	cat, err := h.BlogCategory.GetByID(c.Request.Context(), id)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, mappers.ToBlogCategoryResponse(cat))
@@ -148,7 +179,7 @@ func (h *Handler) CreateBlogCategory(c *gin.Context) {
 	}
 	cat, err := h.BlogCategory.Create(c.Request.Context(), &req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.Created(c, mappers.ToBlogCategoryResponse(cat))
@@ -160,13 +191,13 @@ func (h *Handler) UpdateBlogCategory(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req models.BlogCategoryReq
+	var req models.BlogCategoryUpdateReq
 	if !h.bindJSON(c, &req) {
 		return
 	}
 	cat, err := h.BlogCategory.Update(c.Request.Context(), id, &req)
 	if err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.OK(c, mappers.ToBlogCategoryResponse(cat))
@@ -179,7 +210,7 @@ func (h *Handler) DeleteBlogCategory(c *gin.Context) {
 		return
 	}
 	if err := h.BlogCategory.Delete(c.Request.Context(), id); err != nil {
-		response.HandleError(c, err)
+		h.handleError(c, err)
 		return
 	}
 	response.NoContent(c)

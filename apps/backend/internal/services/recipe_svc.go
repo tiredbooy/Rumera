@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -399,10 +398,6 @@ func validateShoppable(products []*models.RecipeProductReq) error {
 	return nil
 }
 
-var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
-
 func slugify(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	s = slugRe.ReplaceAllString(s, "-")
-	return strings.Trim(s, "-")
+	return normalizePublicSlug(s)
 }

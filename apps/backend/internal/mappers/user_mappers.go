@@ -1,10 +1,6 @@
 package mappers
 
-import (
-	"strings"
-
-	"github.com/tiredbooy/internal/models"
-)
+import "github.com/tiredbooy/internal/models"
 
 func MapToCreateUserReq(input models.SignUpInput) models.CreateUserReq {
 	return models.CreateUserReq{
@@ -51,39 +47,10 @@ func MapToAdminUser(u *models.User) *models.AdminUser {
 		NationalCode:    u.NationalCode,
 		OAuthProvider:   u.OAuthProvider,
 		IsActive:        u.IsActive,
+		IsBanned:        u.IsBanned,
+		BannedAt:        u.BannedAt,
 		EmailVerifiedAt: u.EmailVerifiedAt,
 		LastLoginAt:     u.LastLoginAt,
 		UpdatedAt:       u.UpdatedAt,
 	}
-}
-
-func MapToUserListItem(u *models.User) *models.UserListItem {
-	nameParts := make([]string, 0, 2)
-	if u.FirstName != nil {
-		nameParts = append(nameParts, *u.FirstName)
-	}
-	if u.LastName != nil {
-		nameParts = append(nameParts, *u.LastName)
-	}
-
-	return &models.UserListItem{
-		UserID:   u.UserID,
-		FullName: strings.TrimSpace(strings.Join(nameParts, " ")),
-		Email:    u.Email,
-		Phone:    u.Phone,
-		Role:     u.Role,
-		// The list repository does not aggregate orders yet, so TotalOrders
-		// intentionally remains zero rather than presenting invented data.
-		TotalOrders: 0,
-		IsActive:    u.IsActive,
-		CreatedAt:   u.CreatedAt,
-	}
-}
-
-func MapToUserListItems(users []*models.User) []*models.UserListItem {
-	result := make([]*models.UserListItem, len(users))
-	for i, u := range users {
-		result[i] = MapToUserListItem(u)
-	}
-	return result
 }

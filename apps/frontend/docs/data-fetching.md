@@ -26,16 +26,16 @@ is reading the data** — not by convenience.
 │ Client Component  ("use client")                                │
 │   useQuery / useMutation  ──►  storeRequest("cart")             │
 │        └─► fetch /api/store/cart  ──►  BFF route  ──►  /api/v1  │  (auth, no-store)
-│                                       (adds Bearer token,        │
-│                                        silent refresh on 401)    │
+│                                       (adds Bearer token;        │
+│                                        Auth.js rotates safely)   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-The access token never reaches the browser — the BFF proxy
-(`app/api/store/[...path]/route.ts`) reads it from the next-auth session
-server-side, attaches it as `Authorization: Bearer`, and on a `401` does one
-silent refresh + retry. See `docs/authentication.md` if it exists, or read the
-route.
+The access token never reaches the browser. The BFF proxy
+(`app/api/store/[...path]/route.ts`) is wrapped by Auth.js, reads the token from
+the server-side session, and attaches it as `Authorization: Bearer`. Proactive
+rotation happens only in response-producing route handlers so the replacement
+encrypted cookie is persisted; a BFF never consumes a refresh token on its own.
 
 > Next.js 16 note: `params` and `searchParams` are **async** — always `await`
 > them in Server Components (see `app/(storefront)/products/page.tsx`). Route

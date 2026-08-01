@@ -176,7 +176,7 @@ func (s *CartService) ensureAvailable(ctx context.Context, variantID int64, quan
 		}
 		return apperr.ErrInternal
 	}
-	if inventory.StockOnHand < quantity {
+	if inventory.StockOnHand-inventory.CommittedStock < quantity {
 		return apperr.ErrOutOfStock
 	}
 	return nil

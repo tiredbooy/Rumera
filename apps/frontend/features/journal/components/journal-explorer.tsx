@@ -1,123 +1,165 @@
 "use client";
 
 import * as React from "react";
-import { Search, X, BookOpen } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Search, X } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { JournalCard } from "@/features/journal/components/journal-card";
-import { faNum } from "@/lib/products";
-import type { JournalListItem } from "@/features/journal/types";
+import {
+  JOURNAL_SEARCH_MAX_LENGTH,
+  JOURNAL_SORT_OPTIONS,
+  type JournalRouteQuery,
+} from "@/features/journal/routing";
+import { cn } from "@/lib/utils";
 
-const sorts = [
-  { value: "new", label: "جدیدترین" },
-  { value: "popular", label: "پربازدیدترین" },
-] as const;
+const RESULTS_ID = "journal-results-title";
 
-/**
- * JournalExplorer — instant client-side search + sort over the (already
- * server-rendered) post list. No round-trips; all posts stay in the DOM for SEO.
- */
-export function JournalExplorer({ posts }: { posts: JournalListItem[] }) {
-  const [query, setQuery] = React.useState("");
-  const [sort, setSort] =
-    React.useState<(typeof sorts)[number]["value"]>("new");
+export function JournalExplorer({
+  query,
+}: {
+  query: Pick<JournalRouteQuery, "q" | "sort">;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = React.useTransition();
+  const [value, setValue] = React.useState(query.q ?? "");
+  const committedParams = searchParams.toString();
+  const optimisticParams = React.useRef(committedParams);
+  const searchTimer = React.useRef<number | null>(null);
+  const appliedSearch = React.useRef(query.q ?? "");
 
-  const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const out = posts.filter((p) =>
-      q === ""
-        ? true
-        : p.title.toLowerCase().includes(q) ||
-          (p.excerpt ?? "").toLowerCase().includes(q),
-    );
-    if (sort === "popular") {
-      out.sort((a, b) => b.total_reads - a.total_reads);
+  React.useEffect(() => {
+    optimisticParams.current = committedParams;
+  }, [committedParams]);
+
+  const clearSearchTimer = React.useCallback(() => {
+    if (searchTimer.current !== null) {
+      window.clearTimeout(searchTimer.current);
+      searchTimer.current = null;
     }
-    return out;
-  }, [posts, query, sort]);
+  }, []);
+
+  const apply = React.useCallback(
+    (patch: Record<string, string | null>) => {
+      const params = new URLSearchParams(optimisticParams.current);
+      for (const [key, nextValue] of Object.entries(patch)) {
+        if (!nextValue) params.delete(key);
+        else params.set(key, nextValue);
+      }
+      params.delete("page");
+      const next = params.toString();
+      optimisticParams.current = next;
+      startTransition(() => {
+        router.replace(
+          `${next ? `${pathname}?${next}` : pathname}#${RESULTS_ID}`,
+          { scroll: false },
+        );
+      });
+    },
+    [pathname, router],
+  );
+
+  React.useEffect(() => {
+    const normalized = value.trim();
+    if (normalized === (query.q ?? "") || normalized === appliedSearch.current) {
+      return;
+    }
+    clearSearchTimer();
+    searchTimer.current = window.setTimeout(
+      () => {
+        appliedSearch.current = normalized;
+        apply({ q: normalized || null });
+      },
+      350,
+    );
+    return clearSearchTimer;
+  }, [apply, clearSearchTimer, query.q, value]);
+
+  const applyNow = (patch: Record<string, string | null>) => {
+    clearSearchTimer();
+    const normalized = value.trim();
+    appliedSearch.current = normalized;
+    apply({ ...patch, q: normalized || null });
+  };
 
   return (
-    <div>
-      <div className="border-hairline flex flex-col gap-4 rounded-3xl bg-card/80 p-4 shadow-sm shadow-foreground/5 ring-1 ring-foreground/5 backdrop-blur-sm sm:flex-row sm:items-center sm:p-3">
-        <div className="relative flex-1">
-          <Search
-            className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="جستجو در ژورنال…"
-            className="h-11 ps-9"
-            aria-label="جستجو در ژورنال"
-          />
-          {query ? (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="پاک کردن جستجو"
-              className="absolute top-1/2 end-3 -translate-y-1/2 cursor-pointer rounded text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-            >
-              <X className="size-4" aria-hidden />
-            </button>
-          ) : null}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {sorts.map((s) => {
-            const active = sort === s.value;
-            return (
-              <button
-                key={s.value}
-                type="button"
-                onClick={() => setSort(s.value)}
-                aria-pressed={active}
-                className={cn(
-                  "cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                  active
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground hover:bg-accent",
-                )}
-              >
-                {s.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <p
-        className="mt-6 text-sm text-muted-foreground"
-        aria-live="polite"
-        role="status"
-      >
-        {filtered.length > 0
-          ? `${faNum(filtered.length)} نوشته`
-          : "نوشته‌ای مطابق جستجو نیست"}
-      </p>
-
-      {filtered.length === 0 ? (
-        <div className="border-hairline mt-2 flex flex-col items-center gap-3 rounded-3xl bg-card/50 px-6 py-20 text-center ring-1 ring-foreground/5">
-          <BookOpen className="size-10 text-muted-foreground/50" aria-hidden />
-          <p className="font-serif text-2xl">نوشته‌ای پیدا نشد</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            عبارت دیگری برای جستجو امتحان کنید.
-          </p>
-        </div>
-      ) : (
-        <ul
-          className="mt-2 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3"
-          data-journal-grid
-        >
-          {filtered.map((post, i) => (
-            <li key={post.id} className="contents">
-              <JournalCard post={post} index={i} />
-            </li>
-          ))}
-        </ul>
+    <div
+      className={cn(
+        "border-hairline flex flex-col gap-4 rounded-3xl bg-card/80 p-4 shadow-sm shadow-foreground/5 ring-1 ring-foreground/5 backdrop-blur-sm transition-opacity sm:flex-row sm:items-center sm:p-3",
+        isPending && "opacity-60",
       )}
+      aria-busy={isPending}
+    >
+      <form
+        className="relative flex-1"
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          applyNow({});
+        }}
+      >
+        <Search
+          className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          maxLength={JOURNAL_SEARCH_MAX_LENGTH}
+          placeholder="جستجو در ژورنال…"
+          className="h-11 ps-9 pe-12"
+          aria-label="جستجو در همهٔ نوشته‌های ژورنال"
+        />
+        {value ? (
+          <button
+            type="button"
+            onClick={() => {
+              clearSearchTimer();
+              appliedSearch.current = "";
+              setValue("");
+              apply({ q: null });
+            }}
+            aria-label="پاک کردن جستجو"
+            className="absolute top-1/2 end-0 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        ) : null}
+      </form>
+
+      <div
+        className="flex flex-wrap items-center gap-2"
+        aria-label="مرتب‌سازی ژورنال"
+      >
+        {JOURNAL_SORT_OPTIONS.map((option) => {
+          const active = query.sort === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() =>
+                applyNow({
+                  sort: option.value === "new" ? null : option.value,
+                })
+              }
+              aria-pressed={active}
+              className={cn(
+                "min-h-11 cursor-pointer rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                active
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-secondary-foreground hover:bg-accent",
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      <span className="sr-only" role="status" aria-live="polite">
+        {isPending ? "در حال به‌روزرسانی نوشته‌ها" : "نوشته‌ها به‌روز شدند"}
+      </span>
     </div>
   );
 }

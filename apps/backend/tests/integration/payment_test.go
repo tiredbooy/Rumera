@@ -50,6 +50,9 @@ func TestPaymentConfirm_DeductsStockAtomically(t *testing.T) {
 	if got := committedStock(t, vid); got != 8 {
 		t.Fatalf("committed_stock = %d; want 8 (10 - 2 deducted)", got)
 	}
+	if got := physicalStock(t, vid); got != 98 {
+		t.Fatalf("stock_on_hand = %d; want 98 (100 - 2 sold)", got)
+	}
 	if got := orderStatus(t, oid); got != "paid" {
 		t.Fatalf("order status = %q; want paid", got)
 	}
@@ -61,5 +64,8 @@ func TestPaymentConfirm_DeductsStockAtomically(t *testing.T) {
 	}
 	if got := committedStock(t, vid); got != 8 {
 		t.Fatalf("committed_stock after replay = %d; want 8 (no double deduction)", got)
+	}
+	if got := physicalStock(t, vid); got != 98 {
+		t.Fatalf("stock_on_hand after replay = %d; want 98 (no double deduction)", got)
 	}
 }

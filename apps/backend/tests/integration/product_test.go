@@ -300,10 +300,21 @@ func TestProductRepositoryTagPaginationIsTruthfulAndStable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
+	limitedTag, err := tagRepo.Create(ctx, models.CreateTagReq{Title: "Limited", Slug: "limited"})
+	if err != nil {
+		t.Fatalf("create second tag: %v", err)
+	}
 	for _, productID := range []int64{firstID, secondID} {
-		if err := productRepo.AttachTags(ctx, productID, []int64{tag.ID}); err != nil {
+		tagIDs := []int64{tag.ID}
+		if productID == secondID {
+			tagIDs = append(tagIDs, limitedTag.ID)
+		}
+		if err := productRepo.AttachTags(ctx, productID, tagIDs); err != nil {
 			t.Fatalf("attach product %d tag: %v", productID, err)
 		}
+	}
+	if err := productRepo.AttachTags(ctx, secondID, []int64{tag.ID}); err != nil {
+		t.Fatalf("reattach existing product tag: %v", err)
 	}
 
 	active := true
@@ -320,11 +331,17 @@ func TestProductRepositoryTagPaginationIsTruthfulAndStable(t *testing.T) {
 	if err != nil || total != 2 || len(items) != 1 || items[0].ID != secondID {
 		t.Fatalf("first page = %+v, total %d, err %v", items, total, err)
 	}
+	if got := items[0].Tags; len(got) != 2 || got[0].Title != "Gift" || got[1].Title != "Limited" {
+		t.Fatalf("first page tags = %+v; want Gift and Limited", got)
+	}
 
 	filter.Page = 2
 	items, total, err = productRepo.GetAll(ctx, filter)
 	if err != nil || total != 2 || len(items) != 1 || items[0].ID != firstID {
 		t.Fatalf("second page = %+v, total %d, err %v", items, total, err)
+	}
+	if got := items[0].Tags; len(got) != 1 || got[0].Title != "Gift" {
+		t.Fatalf("second page tags = %+v; want Gift", got)
 	}
 
 	filter.Page = 99

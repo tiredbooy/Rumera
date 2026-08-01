@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
 )
@@ -15,7 +16,7 @@ type BlogCategoryRepository interface {
 	GetByID(ctx context.Context, id int64) (*models.BlogCategory, error)
 	GetAll(ctx context.Context) ([]*models.BlogCategory, error)
 	Create(ctx context.Context, req *models.BlogCategoryReq) (*models.BlogCategory, error)
-	Update(ctx context.Context, id int64, req *models.BlogCategoryReq) (*models.BlogCategory, error)
+	Update(ctx context.Context, id int64, req *models.BlogCategoryUpdateReq) (*models.BlogCategory, error)
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -30,6 +31,7 @@ type BlogRepository interface {
 	SoftDelete(ctx context.Context, id int64) error
 	IncrementReads(ctx context.Context, id int64) error
 	SlugExists(ctx context.Context, slug string) (bool, error)
+	WithTx(tx pgx.Tx) BlogRepository
 
 	// relations
 	AssignCategories(ctx context.Context, blogID int64, categoryIDs []int64) error
@@ -49,6 +51,8 @@ type BlogRepository interface {
 
 type blogCategoryRepository struct{ db *pgxpool.Pool }
 
+const blogCategoryHierarchyLockKey int64 = 7278134300001
+
 func NewBlogCategoryRepository(db *pgxpool.Pool) BlogCategoryRepository {
 	return &blogCategoryRepository{db: db}
 }
@@ -63,7 +67,7 @@ func (r *blogCategoryRepository) GetByID(ctx context.Context, id int64) (*models
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("blog category not found: %d", id)
+			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("getting blog category: %w", err)
 	}
@@ -91,6 +95,22 @@ func (r *blogCategoryRepository) GetAll(ctx context.Context) ([]*models.BlogCate
 	return categories, rows.Err()
 }
 
+func wouldCreateBlogCategoryCycle(ctx context.Context, db blogDB, id, parentID int64) (bool, error) {
+	query := `WITH RECURSIVE descendants AS (
+		SELECT id FROM blog_categories WHERE parent_id = $1
+		UNION
+		SELECT category.id
+		FROM blog_categories AS category
+		JOIN descendants ON category.parent_id = descendants.id
+	)
+	SELECT EXISTS(SELECT 1 FROM descendants WHERE id = $2)`
+	var cycle bool
+	if err := db.QueryRow(ctx, query, id, parentID).Scan(&cycle); err != nil {
+		return false, fmt.Errorf("checking blog category hierarchy: %w", err)
+	}
+	return cycle, nil
+}
+
 func (r *blogCategoryRepository) Create(ctx context.Context, req *models.BlogCategoryReq) (*models.BlogCategory, error) {
 	query := `INSERT INTO blog_categories (name, description, slug, parent_id)
 			  VALUES ($1, $2, $3, $4)
@@ -101,30 +121,79 @@ func (r *blogCategoryRepository) Create(ctx context.Context, req *models.BlogCat
 		&c.ID, &c.Name, &c.Description, &c.Slug, &c.ParentID, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("creating blog category: %w", err)
+		return nil, blogConstraintError("creating blog category", err)
 	}
 	return c, nil
 }
 
-func (r *blogCategoryRepository) Update(ctx context.Context, id int64, req *models.BlogCategoryReq) (*models.BlogCategory, error) {
-	query := `UPDATE blog_categories
-			  SET name        = COALESCE($2, name),
-			      description = COALESCE($3, description),
-			      slug        = COALESCE($4, slug),
-			      parent_id   = COALESCE($5, parent_id),
-			      updated_at  = NOW()
-			  WHERE id = $1
-			  RETURNING id, name, description, slug, parent_id, created_at, updated_at`
+func (r *blogCategoryRepository) Update(ctx context.Context, id int64, req *models.BlogCategoryUpdateReq) (*models.BlogCategory, error) {
+	if !req.ParentID.Set {
+		return updateBlogCategory(ctx, r.db, id, req)
+	}
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("updating blog category: begin hierarchy transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, blogCategoryHierarchyLockKey); err != nil {
+		return nil, fmt.Errorf("updating blog category: lock hierarchy: %w", err)
+	}
+	if req.ParentID.Value != nil {
+		cycle, cycleErr := wouldCreateBlogCategoryCycle(ctx, tx, id, *req.ParentID.Value)
+		if cycleErr != nil {
+			return nil, cycleErr
+		}
+		if cycle {
+			return nil, models.ErrHierarchyCycle
+		}
+	}
+	category, err := updateBlogCategory(ctx, tx, id, req)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("updating blog category: commit hierarchy transaction: %w", err)
+	}
+	return category, nil
+}
+
+func updateBlogCategory(ctx context.Context, db blogDB, id int64, req *models.BlogCategoryUpdateReq) (*models.BlogCategory, error) {
+	sets := []string{"updated_at = NOW()"}
+	args := pgx.NamedArgs{"id": id}
+	if req.Name != nil {
+		sets = append(sets, "name = @name")
+		args["name"] = *req.Name
+	}
+	if req.Description.Set {
+		sets = append(sets, "description = @description")
+		args["description"] = nullableArg(req.Description.Value)
+	}
+	if req.Slug.Set {
+		sets = append(sets, "slug = @slug")
+		args["slug"] = nullableArg(req.Slug.Value)
+	}
+	if req.ParentID.Set {
+		sets = append(sets, "parent_id = @parent_id")
+		args["parent_id"] = nullableArg(req.ParentID.Value)
+	}
+
+	query := fmt.Sprintf(`UPDATE blog_categories
+		SET %s
+		WHERE id = @id
+		RETURNING id, name, description, slug, parent_id, created_at, updated_at`,
+		strings.Join(sets, ", "),
+	)
 
 	c := &models.BlogCategory{}
-	err := r.db.QueryRow(ctx, query, id, req.Name, req.Description, req.Slug, req.ParentID).Scan(
+	err := db.QueryRow(ctx, query, args).Scan(
 		&c.ID, &c.Name, &c.Description, &c.Slug, &c.ParentID, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("blog category not found: %d", id)
+			return nil, models.ErrNotFound
 		}
-		return nil, fmt.Errorf("updating blog category: %w", err)
+		return nil, blogConstraintError("updating blog category", err)
 	}
 	return c, nil
 }
@@ -132,20 +201,31 @@ func (r *blogCategoryRepository) Update(ctx context.Context, id int64, req *mode
 func (r *blogCategoryRepository) Delete(ctx context.Context, id int64) error {
 	ct, err := r.db.Exec(ctx, `DELETE FROM blog_categories WHERE id = $1`, id)
 	if err != nil {
-		return fmt.Errorf("deleting blog category: %w", err)
+		return blogConstraintError("deleting blog category", err)
 	}
 	if ct.RowsAffected() == 0 {
-		return fmt.Errorf("blog category not found: %d", id)
+		return models.ErrNotFound
 	}
 	return nil
 }
 
 // ── Blog ──────────────────────────────────────────────────────────────────────
 
-type blogRepository struct{ db *pgxpool.Pool }
+type blogDB interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+	SendBatch(context.Context, *pgx.Batch) pgx.BatchResults
+}
+
+type blogRepository struct{ db blogDB }
 
 func NewBlogRepository(db *pgxpool.Pool) BlogRepository {
 	return &blogRepository{db: db}
+}
+
+func (r *blogRepository) WithTx(tx pgx.Tx) BlogRepository {
+	return &blogRepository{db: tx}
 }
 
 const blogColumns = `id, author_id, title, slug, content, excerpt, image_url, image_alt, time_to_read,
@@ -236,8 +316,8 @@ func (r *blogRepository) List(ctx context.Context, f models.BlogFilter) ([]*mode
 	args := pgx.NamedArgs{}
 
 	if f.Search != "" {
-		where = append(where, "(b.title ILIKE @search OR b.excerpt ILIKE @search)")
-		args["search"] = "%" + f.Search + "%"
+		where = append(where, `(b.title ILIKE @search ESCAPE E'\\' OR b.excerpt ILIKE @search ESCAPE E'\\')`)
+		args["search"] = "%" + escapeLikePattern(f.Search) + "%"
 	}
 	if f.Status != nil {
 		where = append(where, "b.status = @status")
@@ -253,6 +333,10 @@ func (r *blogRepository) List(ctx context.Context, f models.BlogFilter) ([]*mode
 			WHERE bca.blog_id = b.id AND bca.blog_category_id = @category_id
 		)`)
 		args["category_id"] = *f.CategoryID
+	}
+	if f.ExcludeID != nil {
+		where = append(where, "b.id <> @exclude_id")
+		args["exclude_id"] = *f.ExcludeID
 	}
 
 	allowed := map[string]string{
@@ -271,6 +355,10 @@ func (r *blogRepository) List(ctx context.Context, f models.BlogFilter) ([]*mode
 		order = "ASC"
 	}
 
+	countArgs := pgx.NamedArgs{}
+	for key, value := range args {
+		countArgs[key] = value
+	}
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
 
@@ -303,7 +391,20 @@ func (r *blogRepository) List(ctx context.Context, f models.BlogFilter) ([]*mode
 		}
 		blogs = append(blogs, b)
 	}
-	return blogs, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if len(blogs) == 0 && f.Offset() > 0 {
+		rows.Close()
+		countQuery := fmt.Sprintf(
+			"SELECT COUNT(*) FROM blogs b WHERE %s",
+			strings.Join(where, " AND "),
+		)
+		if err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&total); err != nil {
+			return nil, 0, fmt.Errorf("counting blogs beyond final page: %w", err)
+		}
+	}
+	return blogs, total, nil
 }
 
 func (r *blogRepository) Create(ctx context.Context, req *models.BlogReq) (*models.Blog, error) {
@@ -320,7 +421,7 @@ func (r *blogRepository) Create(ctx context.Context, req *models.BlogReq) (*mode
 		req.Status, req.IsFeatured, req.MetaTitle,
 		req.MetaDescription, req.PublishedAt,
 	), b); err != nil {
-		return nil, fmt.Errorf("creating blog: %w", err)
+		return nil, blogConstraintError("creating blog", err)
 	}
 	return b, nil
 }
@@ -342,8 +443,8 @@ func (r *blogRepository) Update(ctx context.Context, id int64, req *models.BlogU
 	if req.Content != nil {
 		add("content", *req.Content)
 	}
-	if req.Excerpt != nil {
-		add("excerpt", *req.Excerpt)
+	if req.Excerpt.Set {
+		add("excerpt", nullableArg(req.Excerpt.Value))
 	}
 	if req.ImageURL.Set {
 		sets = append(sets,
@@ -363,14 +464,14 @@ func (r *blogRepository) Update(ctx context.Context, id int64, req *models.BlogU
 	if req.IsFeatured != nil {
 		add("is_featured", *req.IsFeatured)
 	}
-	if req.MetaTitle != nil {
-		add("meta_title", *req.MetaTitle)
+	if req.MetaTitle.Set {
+		add("meta_title", nullableArg(req.MetaTitle.Value))
 	}
-	if req.MetaDescription != nil {
-		add("meta_description", *req.MetaDescription)
+	if req.MetaDescription.Set {
+		add("meta_description", nullableArg(req.MetaDescription.Value))
 	}
-	if req.PublishedAt != nil {
-		add("published_at", *req.PublishedAt)
+	if req.PublishedAt.Set {
+		add("published_at", nullableArg(req.PublishedAt.Value))
 	}
 
 	where := "id = @id AND deleted_at IS NULL"
@@ -391,7 +492,7 @@ func (r *blogRepository) Update(ctx context.Context, id int64, req *models.BlogU
 			}
 			return nil, models.ErrNotFound
 		}
-		return nil, fmt.Errorf("updating blog: %w", err)
+		return nil, blogConstraintError("updating blog", err)
 	}
 	return b, nil
 }
@@ -421,12 +522,12 @@ func (r *blogRepository) IncrementReads(ctx context.Context, id int64) error {
 	return nil
 }
 
-// SlugExists reports whether a non-deleted blog already owns the given slug.
-// Used by the service to auto-generate unique slugs and surface clean conflicts.
+// SlugExists reports whether any row owns the globally unique slug. Soft-deleted
+// posts still reserve their slug, matching the database constraint.
 func (r *blogRepository) SlugExists(ctx context.Context, slug string) (bool, error) {
 	var exists bool
 	if err := r.db.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM blogs WHERE slug = $1 AND deleted_at IS NULL)`, slug,
+		`SELECT EXISTS(SELECT 1 FROM blogs WHERE slug = $1)`, slug,
 	).Scan(&exists); err != nil {
 		return false, fmt.Errorf("checking blog slug: %w", err)
 	}
@@ -450,7 +551,7 @@ func (r *blogRepository) AssignCategories(ctx context.Context, blogID int64, cat
 	defer br.Close()
 	for range categoryIDs {
 		if _, err := br.Exec(); err != nil {
-			return fmt.Errorf("assigning category: %w", err)
+			return blogConstraintError("assigning category", err)
 		}
 	}
 	return nil
@@ -499,7 +600,7 @@ func (r *blogRepository) AssignProducts(ctx context.Context, blogID int64, produ
 	defer br.Close()
 	for range productIDs {
 		if _, err := br.Exec(); err != nil {
-			return fmt.Errorf("assigning product: %w", err)
+			return blogConstraintError("assigning product", err)
 		}
 	}
 	return nil
@@ -543,7 +644,7 @@ func (r *blogRepository) AssignTags(ctx context.Context, blogID int64, tagIDs []
 	defer br.Close()
 	for range tagIDs {
 		if _, err := br.Exec(); err != nil {
-			return fmt.Errorf("assigning tag: %w", err)
+			return blogConstraintError("assigning tag", err)
 		}
 	}
 	return nil
@@ -570,4 +671,15 @@ func (r *blogRepository) GetTagIDsByBlogID(ctx context.Context, blogID int64) ([
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+func blogConstraintError(operation string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23505", "23503", "23514":
+			return fmt.Errorf("%s: %w", operation, models.ErrConflict)
+		}
+	}
+	return fmt.Errorf("%s: %w", operation, err)
 }

@@ -1,6 +1,7 @@
 import { Info, ShieldAlert } from "lucide-react";
-import { Controller, type Control } from "react-hook-form";
+import { Controller, type Control, type FieldErrors } from "react-hook-form";
 
+import { fieldErrorId } from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -23,18 +24,29 @@ export function AccessSection({
   control,
   watchedActive,
   watchedRole,
+  initialActive,
+  isBanned,
   isSelf,
+  errors,
+  disabled,
 }: {
   control: Control<CustomerEditFormValues>;
   watchedActive: CustomerEditFormValues["is_active"];
   watchedRole: CustomerEditFormValues["role"];
+  initialActive: boolean;
+  isBanned: boolean;
   isSelf: boolean;
+  errors: FieldErrors<CustomerEditFormValues>;
+  disabled: boolean;
 }) {
   return (
-    <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
+    <fieldset
+      disabled={disabled}
+      className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6 disabled:opacity-70"
+    >
       <legend className="px-1 font-serif text-base">دسترسی و نقش</legend>
       <p className="-mt-0.5 text-xs text-muted-foreground">
-        نقش، سطح دسترسی این کاربر را در پنل تعیین می‌کند.
+        فقط نقش «مدیر کل» اجازهٔ ورود به پنل مدیریت را دارد.
       </p>
 
       {isSelf ? (
@@ -53,10 +65,11 @@ export function AccessSection({
         <Field
           id="role"
           label="نقش کاربر"
+          error={errors.role?.message}
           hint={
             isSelf
               ? undefined
-              : "تغییر نقش دسترسی‌های پنل را بلافاصله جابه‌جا می‌کند."
+              : "نقش‌های مشتری و فروشنده به پنل مدیریت دسترسی ندارند."
           }
         >
           <Controller
@@ -66,12 +79,18 @@ export function AccessSection({
               <Select
                 value={field.value}
                 onValueChange={field.onChange}
-                disabled={isSelf}
+                disabled={isSelf || disabled}
               >
                 <SelectTrigger
                   id="role"
+                  ref={field.ref}
+                  onBlur={field.onBlur}
                   className="w-full"
                   aria-label="نقش کاربر"
+                  aria-invalid={errors.role ? true : undefined}
+                  aria-describedby={
+                    errors.role ? fieldErrorId("role") : undefined
+                  }
                 >
                   <SelectValue placeholder="انتخاب نقش" />
                 </SelectTrigger>
@@ -92,7 +111,7 @@ export function AccessSection({
           <div
             className={cn(
               "flex min-h-9 items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-3.5 py-2",
-              isSelf && "opacity-60",
+              (isSelf || initialActive || isBanned) && "opacity-60",
             )}
           >
             <span
@@ -119,17 +138,40 @@ export function AccessSection({
               render={({ field }) => (
                 <Switch
                   id="is_active"
+                  ref={field.ref}
+                  name={field.name}
                   checked={field.value}
                   onCheckedChange={field.onChange}
-                  disabled={isSelf}
+                  onBlur={field.onBlur}
+                  disabled={isSelf || initialActive || isBanned || disabled}
                   aria-label="وضعیت فعال‌بودن حساب کاربر"
+                  aria-invalid={errors.is_active ? true : undefined}
+                  aria-describedby={
+                    errors.is_active ? fieldErrorId("is_active") : undefined
+                  }
                 />
               )}
             />
           </div>
-          {!isSelf ? (
+          {errors.is_active?.message ? (
+            <p
+              id={fieldErrorId("is_active")}
+              className="text-xs text-destructive"
+              role="alert"
+            >
+              {errors.is_active.message}
+            </p>
+          ) : isBanned ? (
+            <p className="text-xs text-destructive">
+              حساب مسدود است و از این بخش قابل فعال‌سازی نیست.
+            </p>
+          ) : !isSelf && !initialActive ? (
             <p className="text-xs text-muted-foreground">
-              کاربر غیرفعال نمی‌تواند وارد حساب شود.
+              برای فعال‌سازی دوباره، وضعیت را روشن و تغییرات را ذخیره کنید.
+            </p>
+          ) : !isSelf ? (
+            <p className="text-xs text-muted-foreground">
+              غیرفعال‌سازی فقط از صفحهٔ جزئیات و پس از تأیید انجام می‌شود.
             </p>
           ) : null}
         </div>

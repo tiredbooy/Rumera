@@ -26,6 +26,15 @@ func TestProductListItemPurchasableVariantIDJSON(t *testing.T) {
 	if !strings.Contains(string(withVariant), `"purchasable_variant_id":42`) {
 		t.Fatalf("variant id must be serialized: %s", withVariant)
 	}
+
+	item.Tags = []TagResponse{{ID: 7, Title: "Gift"}}
+	withTags, err := json.Marshal(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(withTags), `"tags":[{"id":7,"title":"Gift"}]`) {
+		t.Fatalf("product-list tags must be serialized: %s", withTags)
+	}
 }
 
 func TestVariantResponseAvailableStockJSON(t *testing.T) {

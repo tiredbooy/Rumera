@@ -164,9 +164,27 @@ func (b *breaker) Get(ctx context.Context, key string) (string, error) {
 	return v, err
 }
 
+func (b *breaker) Rotate(ctx context.Context, rotation Rotation) (bool, error) {
+	if !b.allow() {
+		return false, ErrUnavailable
+	}
+	rotated, err := b.store.Rotate(ctx, rotation)
+	b.record(err != nil)
+	return rotated, err
+}
+
+func (b *breaker) RevokeRotation(ctx context.Context, currentKey, replayKey string) (string, error) {
+	if !b.allow() {
+		return "", ErrUnavailable
+	}
+	replay, err := b.store.RevokeRotation(ctx, currentKey, replayKey)
+	b.record(isFailure(err))
+	return replay, err
+}
+
 func (b *breaker) Set(ctx context.Context, key, value string, ttl time.Duration) error {
 	if !b.allow() {
-		return nil // best-effort write skipped while open
+		return ErrUnavailable
 	}
 	err := b.store.Set(ctx, key, value, ttl)
 	b.record(err != nil)
@@ -184,7 +202,7 @@ func (b *breaker) Incr(ctx context.Context, key string, ttl time.Duration) (int6
 
 func (b *breaker) Delete(ctx context.Context, keys ...string) error {
 	if !b.allow() {
-		return nil // best-effort delete skipped while open
+		return ErrUnavailable
 	}
 	err := b.store.Delete(ctx, keys...)
 	b.record(err != nil)

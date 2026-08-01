@@ -359,6 +359,8 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		COALESCE(pr.active_variant_count, 0) AS active_variant_count,
 		COALESCE(pr.available_variant_count, 0) AS available_variant_count,
 		pr.purchasable_variant_id,
+		COALESCE(tag_data.ids, ARRAY[]::BIGINT[]) AS tag_ids,
+		COALESCE(tag_data.titles, ARRAY[]::TEXT[]) AS tag_titles,
 		img.id AS image_id, img.image_url, img.storage_key, img.alt_text, img.width, img.height,
 		img.sort_order, img.is_primary,
 		product_total.total_count
@@ -392,6 +394,14 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		LEFT JOIN inventory i ON i.product_variant_id = pv.id
 		WHERE pv.product_id = p.id AND pv.is_active
 	) pr ON TRUE
+	LEFT JOIN LATERAL (
+		SELECT
+			ARRAY_AGG(t.id ORDER BY t.title, t.id) AS ids,
+			ARRAY_AGG(t.title ORDER BY t.title, t.id) AS titles
+		FROM product_tags pt
+		INNER JOIN tags t ON t.id = pt.tag_id
+		WHERE pt.product_id = p.id
+	) tag_data ON TRUE
     LEFT JOIN LATERAL (
 		SELECT id, image_url, storage_key, alt_text, width, height,
 			sort_order, COALESCE(is_primary, FALSE) AS is_primary
@@ -434,6 +444,8 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 			activeCount    int
 			availableCount int
 			purchasableID  *int64
+			tagIDs         []int64
+			tagTitles      []string
 			imgID          *int64
 			imgURL         *string
 			imgStorageKey  *string
@@ -448,6 +460,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 			&productID, &title, &code, &slug, &isActive,
 			&brand, &category, &minPrice, &maxPrice,
 			&activeCount, &availableCount, &purchasableID,
+			&tagIDs, &tagTitles,
 			&imgID, &imgURL, &imgStorageKey, &imgAltText, &imgWidth, &imgHeight,
 			&imgSortOrder, &imgIsPrimary,
 			&total,
@@ -460,6 +473,13 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		if title == nil || isActive == nil {
 			return nil, 0, fmt.Errorf("productRepository.GetAll scan: product %d missing required fields", *productID)
 		}
+		if len(tagIDs) != len(tagTitles) {
+			return nil, 0, fmt.Errorf("productRepository.GetAll scan: product %d has mismatched tag projection", *productID)
+		}
+		tags := make([]models.TagResponse, len(tagIDs))
+		for i := range tagIDs {
+			tags[i] = models.TagResponse{ID: tagIDs[i], Title: tagTitles[i]}
+		}
 
 		it := &models.ProductListItem{
 			ID:                    *productID,
@@ -468,6 +488,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 			Slug:                  slug,
 			Brand:                 brand,
 			Category:              category,
+			Tags:                  tags,
 			IsActive:              *isActive,
 			MinPrice:              minPrice,
 			MaxPrice:              maxPrice,

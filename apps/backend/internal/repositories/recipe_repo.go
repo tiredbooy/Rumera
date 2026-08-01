@@ -131,8 +131,8 @@ func (r *recipeRepository) List(ctx context.Context, f models.RecipeFilter) ([]*
 	args := pgx.NamedArgs{}
 
 	if f.Search != "" {
-		where = append(where, "(r.title ILIKE @search OR r.excerpt ILIKE @search)")
-		args["search"] = "%" + f.Search + "%"
+		where = append(where, `(r.title ILIKE @search ESCAPE E'\\' OR r.excerpt ILIKE @search ESCAPE E'\\')`)
+		args["search"] = "%" + escapeLikePattern(f.Search) + "%"
 	}
 	if f.Status != nil {
 		where = append(where, "r.status = @status")
@@ -163,6 +163,10 @@ func (r *recipeRepository) List(ctx context.Context, f models.RecipeFilter) ([]*
 		)`)
 		args["variant_id"] = *f.VariantID
 	}
+	if f.ExcludeID != nil {
+		where = append(where, "r.id <> @exclude_id")
+		args["exclude_id"] = *f.ExcludeID
+	}
 
 	allowed := map[string]string{
 		"published_at": "r.published_at",
@@ -181,6 +185,10 @@ func (r *recipeRepository) List(ctx context.Context, f models.RecipeFilter) ([]*
 		order = "ASC"
 	}
 
+	countArgs := pgx.NamedArgs{}
+	for key, value := range args {
+		countArgs[key] = value
+	}
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
 
@@ -213,7 +221,20 @@ func (r *recipeRepository) List(ctx context.Context, f models.RecipeFilter) ([]*
 		}
 		recipes = append(recipes, rec)
 	}
-	return recipes, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if len(recipes) == 0 && f.Offset() > 0 {
+		rows.Close()
+		countQuery := fmt.Sprintf(
+			"SELECT COUNT(*) FROM recipes r WHERE %s",
+			strings.Join(where, " AND "),
+		)
+		if err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&total); err != nil {
+			return nil, 0, fmt.Errorf("counting recipes beyond final page: %w", err)
+		}
+	}
+	return recipes, total, nil
 }
 
 func (r *recipeRepository) Create(ctx context.Context, req *models.RecipeReq) (*models.Recipe, error) {
@@ -576,7 +597,19 @@ func (r *recipeRepository) GetShoppableProducts(ctx context.Context, recipeID in
 			pv.price,
 			pv.compare_at_price,
 			img.image_url,
-			(pv.is_active AND p.is_active) AS is_available,
+			GREATEST(
+				COALESCE(i.stock_on_hand, 0) - COALESCE(i.committed_stock, 0),
+				0
+			) AS available_stock,
+			(
+				pv.is_active
+				AND p.is_active
+				AND pv.price > 0
+				AND GREATEST(
+					COALESCE(i.stock_on_hand, 0) - COALESCE(i.committed_stock, 0),
+					0
+				) > 0
+			) AS is_available,
 			rp.quantity,
 			rp.unit,
 			rp.sort_order,
@@ -586,9 +619,11 @@ func (r *recipeRepository) GetShoppableProducts(ctx context.Context, recipeID in
 		JOIN product_variants pv ON pv.id = rp.product_variant_id
 		JOIN products p          ON p.id = pv.product_id
 		LEFT JOIN brands b       ON b.id = p.brand_id
+		LEFT JOIN inventory i    ON i.product_variant_id = pv.id
 		LEFT JOIN LATERAL (
 			SELECT image_url FROM product_images pi
-			WHERE pi.product_variant_id = pv.id OR pi.product_id = p.id
+			WHERE pi.product_variant_id = pv.id
+				OR (pi.product_variant_id IS NULL AND pi.product_id = p.id)
 			ORDER BY (pi.product_variant_id = pv.id) DESC, pi.is_primary DESC, pi.sort_order ASC
 			LIMIT 1
 		) img ON TRUE
@@ -607,7 +642,7 @@ func (r *recipeRepository) GetShoppableProducts(ctx context.Context, recipeID in
 		if err := rows.Scan(
 			&p.RecipeProductID, &p.ProductVariantID, &p.ProductID, &p.ProductTitle,
 			&p.ProductSlug, &p.Brand, &p.SKU, &p.Price, &p.CompareAtPrice,
-			&p.ImageURL, &p.IsAvailable, &p.Quantity, &p.Unit,
+			&p.ImageURL, &p.AvailableStock, &p.IsAvailable, &p.Quantity, &p.Unit,
 			&p.SortOrder, &p.IsPrimary, &p.Role,
 		); err != nil {
 			return nil, fmt.Errorf("scanning shoppable product: %w", err)

@@ -41,14 +41,14 @@ type InventoryMovement struct {
 }
 
 type AdjustStockReq struct {
-	Quantity int          `json:"quantity" validate:"required"`
-	Type     MovementType `json:"type"     validate:"required,oneof=purchase restock refund adjustment reservation release damage"`
+	Quantity int          `json:"quantity" validate:"required,min=-2147483648,max=2147483647"`
+	Type     MovementType `json:"type"     validate:"required,oneof=purchase restock refund adjustment damage"`
 	Note     *string      `json:"note"`
 }
 
 type UpdateReorderReq struct {
-	ReorderPoint    *int `json:"reorder_point"    validate:"omitempty,min=0"`
-	ReorderQuantity *int `json:"reorder_quantity" validate:"omitempty,min=0"`
+	ReorderPoint    *int `json:"reorder_point"    validate:"omitempty,min=0,max=2147483647"`
+	ReorderQuantity *int `json:"reorder_quantity" validate:"omitempty,min=0,max=2147483647"`
 }
 
 type InventoryResponse struct {
@@ -89,9 +89,9 @@ func (f *InventoryFilter) Defaults() {
 
 type MovementFilter struct {
 	BaseFilter
-	ProductVariantID *int64        `query:"product_variant_id"`
-	Type             *MovementType `query:"type"`
-	OrderID          *int64        `query:"order_id"`
+	ProductVariantID *int64        `query:"product_variant_id" validate:"omitempty,min=1"`
+	Type             *MovementType `query:"type" validate:"omitempty,oneof=purchase restock refund adjustment reservation release damage"`
+	OrderID          *int64        `query:"order_id" validate:"omitempty,min=1"`
 }
 
 func (f *MovementFilter) Defaults() {

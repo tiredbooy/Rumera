@@ -99,12 +99,12 @@ func (r *cartRepository) AddItem(ctx context.Context, cartID int64, req models.A
 		SELECT @cart_id, @variant_id, @quantity, @unit_price_snapshot
 		FROM inventory i
 		WHERE i.product_variant_id = @variant_id
-		  AND i.stock_on_hand >= @quantity
+		  AND i.stock_on_hand - i.committed_stock >= @quantity
 		ON CONFLICT (cart_id, product_variant_id) DO UPDATE
 			SET quantity   = cart_items.quantity + EXCLUDED.quantity,
 			    updated_at = NOW()
 			WHERE cart_items.quantity + EXCLUDED.quantity <= (
-				SELECT i.stock_on_hand
+				SELECT i.stock_on_hand - i.committed_stock
 				FROM inventory i
 				WHERE i.product_variant_id = EXCLUDED.product_variant_id
 			)
@@ -141,7 +141,7 @@ func (r *cartRepository) UpdateItem(ctx context.Context, cartID int64, itemID in
 		WHERE ci.id      = @id
 		  AND ci.cart_id = @cart_id
 		  AND i.product_variant_id = ci.product_variant_id
-		  AND i.stock_on_hand >= @quantity
+		  AND i.stock_on_hand - i.committed_stock >= @quantity
 		RETURNING ci.*`
 
 	args := pgx.NamedArgs{

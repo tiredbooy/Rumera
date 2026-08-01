@@ -1,15 +1,31 @@
 import { CustomerDetailView } from "@/features/admin/customers/components/customer-detail-view";
+import type { UserDetailSearchParams } from "@/features/customers/types";
+import { notFound } from "next/navigation";
+import {
+  parseAdminUserID,
+  parseUserAuditPage,
+} from "@/features/customers/validations";
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { can } from "@/lib/rbac/can";
 
 export default async function AdminCustomerDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<UserDetailSearchParams>;
 }) {
   const session = await requirePermission(PERMISSIONS.CUSTOMERS_READ);
   const { id } = await params;
-  const canWrite = can(session, PERMISSIONS.CUSTOMERS_WRITE);
-  return <CustomerDetailView id={id} canWrite={canWrite} />;
+  const userID = parseAdminUserID(id);
+  if (!userID) notFound();
+  const auditPage = parseUserAuditPage(await searchParams);
+  return (
+    <CustomerDetailView
+      id={userID}
+      currentUserId={session.user?.id}
+      currentUserEmail={session.user?.email}
+      auditPage={auditPage}
+    />
+  );
 }

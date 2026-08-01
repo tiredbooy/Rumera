@@ -11,6 +11,11 @@ import {
   TableSkeleton,
   ListSkeleton,
 } from "@/features/admin/analytics/components/skeleton";
+import {
+  AdminModuleOverview,
+  AdminModuleOverviewSkeleton,
+} from "@/features/dashboard/components/admin-module-overview";
+import { permissionsForRole } from "@/lib/rbac/roles";
 
 export default function AdminDashboard() {
   return (
@@ -22,6 +27,11 @@ export default function AdminDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Suspense fallback={<StatCardSkeleton count={4} />}>
           <RevenueCards />
+        </Suspense>
+      </div>
+      <div className="mt-6">
+        <Suspense fallback={<AdminModuleOverviewSkeleton />}>
+          <AdminModuleOverview permissions={permissionsForRole("admin")} />
         </Suspense>
       </div>
       <div className="mt-6 grid gap-6 lg:grid-cols-3">

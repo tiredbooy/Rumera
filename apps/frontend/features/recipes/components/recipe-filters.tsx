@@ -1,143 +1,191 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Search, X } from "lucide-react"
+import * as React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Search, X } from "lucide-react";
 
-import { cn } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
+import { Input } from "@/components/ui/input";
 import {
   NativeSelect,
   NativeSelectOption,
-} from "@/components/ui/native-select"
-import { difficultyFa } from "@/features/recipes/utils"
-import type { RecipeDifficulty } from "@/features/recipes/types"
+} from "@/components/ui/native-select";
+import {
+  RECIPE_SEARCH_MAX_LENGTH,
+  RECIPE_SORT_OPTIONS,
+  type RecipeRouteQuery,
+} from "@/features/recipes/routing";
+import type { RecipeDifficulty } from "@/features/recipes/types";
+import { difficultyFa } from "@/features/recipes/utils";
+import { cn } from "@/lib/utils";
 
+const RESULTS_ID = "recipe-results-title";
 const difficulties: { value: RecipeDifficulty | ""; label: string }[] = [
   { value: "", label: "همه" },
   { value: "easy", label: difficultyFa.easy },
   { value: "medium", label: difficultyFa.medium },
   { value: "hard", label: difficultyFa.hard },
-]
+];
 
-const sorts: { value: string; label: string }[] = [
-  { value: "new", label: "جدیدترین" },
-  { value: "popular", label: "محبوب‌ترین" },
-  { value: "quick", label: "سریع‌ترین" },
-]
+export function RecipeFilters({
+  query,
+}: {
+  query: Pick<RecipeRouteQuery, "q" | "difficulty" | "sort">;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = React.useTransition();
+  const [value, setValue] = React.useState(query.q ?? "");
+  const committedParams = searchParams.toString();
+  const optimisticParams = React.useRef(committedParams);
+  const searchTimer = React.useRef<number | null>(null);
+  const appliedSearch = React.useRef(query.q ?? "");
 
-/**
- * Recipe filter bar — search + difficulty + sort, synced to the URL so results
- * are shareable and SEO-friendly. Uppdates run inside a transition for a smooth,
- * non-blocking feel; the search input is debounced.
- */
-export function RecipeFilters() {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const [isPending, startTransition] = React.useTransition()
+  React.useEffect(() => {
+    optimisticParams.current = committedParams;
+  }, [committedParams]);
 
-  const q = searchParams.get("q") ?? ""
-  const difficulty = searchParams.get("difficulty") ?? ""
-  const sort = searchParams.get("sort") ?? "new"
-
-  // Local input state, kept in sync with the URL value via the render-time
-  // adjustment pattern (so external changes — clear button, back/forward —
-  // reflect immediately without a setState-in-effect).
-  const [query, setQuery] = React.useState(q)
-  const [prevQ, setPrevQ] = React.useState(q)
-  if (q !== prevQ) {
-    setPrevQ(q)
-    setQuery(q)
-  }
+  const clearSearchTimer = React.useCallback(() => {
+    if (searchTimer.current !== null) {
+      window.clearTimeout(searchTimer.current);
+      searchTimer.current = null;
+    }
+  }, []);
 
   const apply = React.useCallback(
     (patch: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString())
-      for (const [key, value] of Object.entries(patch)) {
-        if (value === null || value === "") params.delete(key)
-        else params.set(key, value)
+      const params = new URLSearchParams(optimisticParams.current);
+      for (const [key, nextValue] of Object.entries(patch)) {
+        if (!nextValue) params.delete(key);
+        else params.set(key, nextValue);
       }
-      // Any filter change resets pagination.
-      params.delete("page")
-      const qs = params.toString()
-      startTransition(() => router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false }))
+      params.delete("page");
+      const next = params.toString();
+      optimisticParams.current = next;
+      startTransition(() => {
+        router.replace(
+          `${next ? `${pathname}?${next}` : pathname}#${RESULTS_ID}`,
+          { scroll: false },
+        );
+      });
     },
-    [pathname, router, searchParams]
-  )
+    [pathname, router],
+  );
 
-  // Debounce free-text search.
   React.useEffect(() => {
-    if (query === q) return
-    const id = window.setTimeout(() => apply({ q: query || null }), 350)
-    return () => window.clearTimeout(id)
-  }, [query, q, apply])
+    const normalized = value.trim();
+    if (normalized === (query.q ?? "") || normalized === appliedSearch.current) {
+      return;
+    }
+    clearSearchTimer();
+    searchTimer.current = window.setTimeout(
+      () => {
+        appliedSearch.current = normalized;
+        apply({ q: normalized || null });
+      },
+      350,
+    );
+    return clearSearchTimer;
+  }, [apply, clearSearchTimer, query.q, value]);
 
-  const hasFilters = q !== "" || difficulty !== "" || sort !== "new"
+  const applyNow = (patch: Record<string, string | null>) => {
+    clearSearchTimer();
+    const normalized = value.trim();
+    appliedSearch.current = normalized;
+    apply({ ...patch, q: normalized || null });
+  };
+
+  const hasFilters =
+    Boolean(query.q) || Boolean(query.difficulty) || query.sort !== "new";
 
   return (
     <div
       className={cn(
-        "border-hairline flex flex-col gap-4 rounded-3xl bg-card/80 p-4 shadow-sm shadow-foreground/5 ring-1 ring-foreground/5 backdrop-blur-sm transition-opacity sm:flex-row sm:items-center sm:p-3",
-        isPending && "opacity-60"
+        "border-hairline flex flex-col gap-4 rounded-3xl bg-card/90 p-4 shadow-sm shadow-foreground/5 ring-1 ring-foreground/5 backdrop-blur-sm transition-opacity sm:flex-row sm:items-center sm:p-3",
+        isPending && "opacity-60",
       )}
+      aria-busy={isPending}
     >
-      {/* Search */}
-      <div className="relative flex-1">
-        <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground" />
+      <form
+        className="relative flex-1"
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          applyNow({});
+        }}
+      >
+        <Search
+          className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
         <Input
           type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          maxLength={RECIPE_SEARCH_MAX_LENGTH}
           placeholder="جستجوی دستور… (مثلاً موخیتو)"
-          className="h-11 ps-9"
+          className="h-11 ps-9 pe-12"
           aria-label="جستجوی دستورها"
         />
-        {query ? (
+        {value ? (
           <button
             type="button"
-            onClick={() => setQuery("")}
+            onClick={() => {
+              clearSearchTimer();
+              appliedSearch.current = "";
+              setValue("");
+              apply({ q: null });
+            }}
             aria-label="پاک کردن جستجو"
-            className="absolute top-1/2 end-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            className="absolute top-1/2 end-0 flex size-11 -translate-y-1/2 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
-            <X className="size-4" />
+            <X className="size-4" aria-hidden="true" />
           </button>
         ) : null}
-      </div>
+      </form>
 
-      {/* Difficulty chips */}
-      <div className="flex flex-wrap items-center gap-2">
-        {difficulties.map((d) => {
-          const active = difficulty === d.value
+      <div
+        className="flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label="فیلتر سختی دستور"
+      >
+        {difficulties.map((difficulty) => {
+          const active = (query.difficulty ?? "") === difficulty.value;
           return (
             <button
-              key={d.value || "all"}
+              key={difficulty.value || "all"}
               type="button"
-              onClick={() => apply({ difficulty: d.value || null })}
+              onClick={() =>
+                applyNow({ difficulty: difficulty.value || null })
+              }
               aria-pressed={active}
               className={cn(
-                "cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                "min-h-11 cursor-pointer rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                 active
                   ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-secondary-foreground hover:bg-accent"
+                  : "bg-secondary text-secondary-foreground hover:bg-accent",
               )}
             >
-              {d.label}
+              {difficulty.label}
             </button>
-          )
+          );
         })}
       </div>
 
-      {/* Sort */}
       <div className="flex items-center gap-2">
         <NativeSelect
-          aria-label="مرتب‌سازی"
-          value={sort}
-          onChange={(e) => apply({ sort: e.target.value === "new" ? null : e.target.value })}
+          aria-label="مرتب‌سازی دستورها"
+          value={query.sort}
+          onChange={(event) =>
+            applyNow({
+              sort: event.target.value === "new" ? null : event.target.value,
+            })
+          }
+          className="[&_select]:h-11"
         >
-          {sorts.map((s) => (
-            <NativeSelectOption key={s.value} value={s.value}>
-              {s.label}
+          {RECIPE_SORT_OPTIONS.map((sort) => (
+            <NativeSelectOption key={sort.value} value={sort.value}>
+              {sort.label}
             </NativeSelectOption>
           ))}
         </NativeSelect>
@@ -145,13 +193,21 @@ export function RecipeFilters() {
         {hasFilters ? (
           <button
             type="button"
-            onClick={() => startTransition(() => router.replace(pathname, { scroll: false }))}
-            className="cursor-pointer rounded-md px-1 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            onClick={() => {
+              clearSearchTimer();
+              appliedSearch.current = "";
+              setValue("");
+              apply({ q: null, difficulty: null, sort: null });
+            }}
+            className="min-h-11 cursor-pointer rounded-xl px-3 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             پاک‌سازی
           </button>
         ) : null}
       </div>
+      <span className="sr-only" role="status" aria-live="polite">
+        {isPending ? "در حال به‌روزرسانی دستورها" : "دستورها به‌روز شدند"}
+      </span>
     </div>
-  )
+  );
 }

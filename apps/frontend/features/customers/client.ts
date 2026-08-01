@@ -5,7 +5,11 @@ import type {
   ApiFieldErrors,
   ApiSuccess,
 } from "@/lib/api/types";
-import type { AdminUser, AdminUserUpdateInput } from "./types";
+import type {
+  AdminUser,
+  AdminUserCreateInput,
+  AdminUserUpdateInput,
+} from "./types";
 
 export class AdminCustomerApiError extends Error {
   constructor(
@@ -30,6 +34,9 @@ async function customerRequest<T>(
       ...init.headers,
     },
   });
+
+  if (response.status === 204) return undefined as T;
+
   const body: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
@@ -45,6 +52,15 @@ async function customerRequest<T>(
   return ((body as ApiSuccess<T> | null)?.data ?? body) as T;
 }
 
+export function createAdminUser(
+  input: AdminUserCreateInput,
+): Promise<AdminUser> {
+  return customerRequest<AdminUser>("admin/users", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function updateAdminUser(
   userID: string,
   input: AdminUserUpdateInput,
@@ -52,5 +68,11 @@ export function updateAdminUser(
   return customerRequest<AdminUser>(`admin/users/${userID}`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+export function deactivateAdminUser(userID: string): Promise<void> {
+  return customerRequest<void>(`admin/users/${userID}`, {
+    method: "DELETE",
   });
 }

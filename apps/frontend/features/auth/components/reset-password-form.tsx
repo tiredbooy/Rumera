@@ -1,42 +1,48 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { AlertCircle, Loader2, ShieldX } from "lucide-react"
+import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { AlertCircle, Loader2, ShieldX } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { focusFormControl } from "@/components/ui/field"
-import { resetPassword } from "@/features/auth/api/client"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { focusFormControl } from "@/components/ui/field";
+import { resetPassword } from "@/features/auth/api/client";
+import { passwordFitsBcrypt } from "@/features/auth/password";
 
 export function ResetPasswordForm({ token }: { token: string }) {
-  const router = useRouter()
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
+  const router = useRouter();
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const formElement = e.currentTarget
-    setError(null)
-    const form = new FormData(e.currentTarget)
-    const password = String(form.get("password") ?? "")
+    e.preventDefault();
+    const formElement = e.currentTarget;
+    setError(null);
+    const form = new FormData(e.currentTarget);
+    const password = String(form.get("password") ?? "");
+    if (!passwordFitsBcrypt(password)) {
+      setError("گذرواژه باید حداکثر ۷۲ بایت باشد.");
+      focusFormControl(formElement, "password");
+      return;
+    }
     if (password !== String(form.get("confirm") ?? "")) {
-      setError("گذرواژه‌ها یکسان نیستند.")
-      focusFormControl(formElement, "confirm")
-      return
+      setError("گذرواژه‌ها یکسان نیستند.");
+      focusFormControl(formElement, "confirm");
+      return;
     }
-    setLoading(true)
+    setLoading(true);
     try {
-      await resetPassword({ token, new_password: password })
+      await resetPassword({ token, new_password: password });
     } catch {
-      setError("لینک بازیابی نامعتبر یا منقضی شده است.")
-      setLoading(false)
-      focusFormControl(formElement, "password")
-      return
+      setError("لینک بازیابی نامعتبر یا منقضی شده است.");
+      setLoading(false);
+      focusFormControl(formElement, "password");
+      return;
     }
-    router.push("/login")
+    router.push("/login");
   }
 
   if (!token) {
@@ -53,7 +59,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
           <Link href="/forgot-password">درخواست لینک جدید</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -107,11 +113,16 @@ export function ResetPasswordForm({ token }: { token: string }) {
           </p>
         ) : null}
 
-        <Button type="submit" size="lg" className="mt-1 h-11" disabled={loading}>
+        <Button
+          type="submit"
+          size="lg"
+          className="mt-1 h-11"
+          disabled={loading}
+        >
           {loading ? <Loader2 className="animate-spin" /> : null}
           ذخیرهٔ گذرواژه
         </Button>
       </form>
     </div>
-  )
+  );
 }

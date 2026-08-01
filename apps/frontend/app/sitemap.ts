@@ -4,8 +4,8 @@ import { absoluteUrl } from "@/lib/site";
 import { allProductSlugs } from "@/features/catalog/products/api/public";
 import { listCategories } from "@/features/catalog/categories/api";
 import { getCategoryHref } from "@/features/catalog/categories/utils";
-import { listRecipeSlugs } from "@/features/recipes/api/server";
-import { listJournalPosts } from "@/features/journal/api/server";
+import { listRecipeSitemapItems } from "@/features/recipes/api/server";
+import { listAllJournalPosts } from "@/features/journal/api/server";
 import { listAllTags } from "@/features/catalog/tags/api/public";
 
 /**
@@ -18,13 +18,13 @@ import { listAllTags } from "@/features/catalog/tags/api/public";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
-  const [productSlugs, categories, tags, recipeSlugs, journalPosts] =
+  const [productSlugs, categories, tags, recipeItems, journalPosts] =
     await Promise.all([
       allProductSlugs(),
       listCategories(),
       listAllTags(),
-      listRecipeSlugs(),
-      listJournalPosts(100),
+      listRecipeSitemapItems(),
+      listAllJournalPosts(),
     ]);
 
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -108,16 +108,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  const recipeRoutes: MetadataRoute.Sitemap = recipeSlugs.map((slug) => ({
-    url: absoluteUrl(`/recipes/${slug}`),
-    lastModified: now,
+  const recipeRoutes: MetadataRoute.Sitemap = recipeItems.map((recipe) => ({
+    url: absoluteUrl(`/recipes/${encodeURIComponent(recipe.slug)}`),
+    lastModified: new Date(recipe.updated_at),
     changeFrequency: "monthly",
     priority: 0.5,
   }));
 
   const journalRoutes: MetadataRoute.Sitemap = journalPosts.map((p) => ({
-    url: absoluteUrl(`/journal/${p.slug}`),
-    lastModified: new Date(p.published_at ?? p.updated_at),
+    url: absoluteUrl(`/journal/${encodeURIComponent(p.slug)}`),
+    lastModified: new Date(p.updated_at),
     changeFrequency: "monthly",
     priority: 0.5,
   }));

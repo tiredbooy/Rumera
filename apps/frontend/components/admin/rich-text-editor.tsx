@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useEditor, EditorContent, type Editor } from "@tiptap/react"
-import StarterKit from "@tiptap/starter-kit"
-import Underline from "@tiptap/extension-underline"
-import Link from "@tiptap/extension-link"
+import * as React from "react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Underline from "@tiptap/extension-underline";
+import Link from "@tiptap/extension-link";
 import {
   Bold,
   Italic,
@@ -18,9 +18,9 @@ import {
   Undo2,
   Redo2,
   type LucideIcon,
-} from "lucide-react"
+} from "lucide-react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 /**
  * Premium, RTL-aware rich-text editor for recipe content, built on Tiptap.
@@ -31,14 +31,16 @@ import { cn } from "@/lib/utils"
  */
 
 type ToolButton = {
-  icon: LucideIcon
-  label: string
-  isActive?: (e: Editor) => boolean
-  run: (e: Editor) => void
-  disabled?: (e: Editor) => boolean
-}
+  icon: LucideIcon;
+  label: string;
+  isActive?: (e: Editor) => boolean;
+  run: (e: Editor) => void;
+  disabled?: (e: Editor) => boolean;
+};
 
-function buildTools(promptLink: (e: Editor) => void): (ToolButton | "divider")[] {
+function buildTools(
+  promptLink: (e: Editor) => void,
+): (ToolButton | "divider")[] {
   return [
     {
       icon: Bold,
@@ -109,7 +111,7 @@ function buildTools(promptLink: (e: Editor) => void): (ToolButton | "divider")[]
       run: (e) => e.chain().focus().redo().run(),
       disabled: (e) => !e.can().redo(),
     },
-  ]
+  ];
 }
 
 export function RichTextEditor({
@@ -118,23 +120,33 @@ export function RichTextEditor({
   id,
   ariaInvalid,
   ariaDescribedBy,
+  inputRef,
+  disabled = false,
   placeholder = "روش تهیه را گام‌به‌گام بنویسید…",
+  ariaLabel = "محتوای دستور",
 }: {
-  value: string
-  onChange: (html: string) => void
-  id?: string
-  ariaInvalid?: boolean
-  ariaDescribedBy?: string
-  placeholder?: string
+  value: string;
+  onChange: (html: string) => void;
+  id?: string;
+  ariaInvalid?: boolean;
+  ariaDescribedBy?: string;
+  inputRef?: (element: HTMLElement | null) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  ariaLabel?: string;
 }) {
   const editor = useEditor({
     immediatelyRender: false,
+    editable: !disabled,
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3] } }),
       Underline,
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { rel: "noopener noreferrer", class: "text-primary underline" },
+        HTMLAttributes: {
+          rel: "noopener noreferrer",
+          class: "text-primary underline",
+        },
       }),
     ],
     content: value || "",
@@ -144,7 +156,7 @@ export function RichTextEditor({
         id: id ?? "",
         role: "textbox",
         "aria-multiline": "true",
-        "aria-label": "محتوای دستور",
+        "aria-label": ariaLabel,
         ...(ariaInvalid ? { "aria-invalid": "true" } : {}),
         ...(ariaDescribedBy ? { "aria-describedby": ariaDescribedBy } : {}),
         class:
@@ -153,41 +165,62 @@ export function RichTextEditor({
       },
     },
     onUpdate: ({ editor: e }) => {
-      const html = e.getHTML()
+      const html = e.getHTML();
       // Tiptap emits "<p></p>" for an empty doc; normalise to "" so required-validation works.
-      onChange(html === "<p></p>" ? "" : html)
+      onChange(html === "<p></p>" ? "" : html);
     },
-  })
+  });
+
+  React.useEffect(() => {
+    const element = editor?.view.dom ?? null;
+    inputRef?.(element);
+    return () => inputRef?.(null);
+  }, [editor, inputRef]);
+
+  React.useEffect(() => {
+    if (!editor) return;
+    editor.setEditable(!disabled);
+    if (disabled) {
+      editor.view.dom.setAttribute("aria-disabled", "true");
+    } else {
+      editor.view.dom.removeAttribute("aria-disabled");
+    }
+  }, [disabled, editor]);
 
   // Keep the editor in sync when the form resets / loads async defaults.
   React.useEffect(() => {
-    if (!editor) return
-    const current = editor.getHTML()
-    const next = value || ""
+    if (!editor) return;
+    const current = editor.getHTML();
+    const next = value || "";
     if (next !== current && !(next === "" && current === "<p></p>")) {
-      editor.commands.setContent(next, { emitUpdate: false })
+      editor.commands.setContent(next, { emitUpdate: false });
     }
-  }, [value, editor])
+  }, [value, editor]);
 
   const promptLink = React.useCallback((e: Editor) => {
-    const previous = e.getAttributes("link").href as string | undefined
-    const url = window.prompt("نشانی پیوند (URL):", previous ?? "https://")
-    if (url === null) return
+    const previous = e.getAttributes("link").href as string | undefined;
+    const url = window.prompt("نشانی پیوند (URL):", previous ?? "https://");
+    if (url === null) return;
     if (url.trim() === "") {
-      e.chain().focus().extendMarkRange("link").unsetLink().run()
-      return
+      e.chain().focus().extendMarkRange("link").unsetLink().run();
+      return;
     }
-    e.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run()
-  }, [])
+    e.chain()
+      .focus()
+      .extendMarkRange("link")
+      .setLink({ href: url.trim() })
+      .run();
+  }, []);
 
-  const tools = React.useMemo(() => buildTools(promptLink), [promptLink])
+  const tools = React.useMemo(() => buildTools(promptLink), [promptLink]);
 
   return (
     <div
       className={cn(
         "overflow-hidden rounded-xl border bg-input/30 transition-[box-shadow,border-color] duration-200",
         "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
-        ariaInvalid && "border-destructive ring-3 ring-destructive/20"
+        ariaInvalid && "border-destructive ring-3 ring-destructive/20",
+        disabled && "opacity-60",
       )}
     >
       <div
@@ -209,24 +242,30 @@ export function RichTextEditor({
                   key={tool.label}
                   type="button"
                   aria-label={tool.label}
-                  aria-pressed={tool.isActive ? tool.isActive(editor) : undefined}
-                  disabled={tool.disabled ? tool.disabled(editor) : false}
+                  aria-pressed={
+                    tool.isActive ? tool.isActive(editor) : undefined
+                  }
+                  disabled={
+                    disabled || (tool.disabled ? tool.disabled(editor) : false)
+                  }
                   onClick={() => tool.run(editor)}
                   className={cn(
-                    "inline-flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors",
+                    "inline-flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors [@media(any-pointer:coarse)]:size-11",
                     "hover:bg-background hover:text-foreground",
                     "focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none",
                     "disabled:pointer-events-none disabled:opacity-40",
-                    tool.isActive && tool.isActive(editor) && "bg-background text-primary shadow-e1"
+                    tool.isActive &&
+                      tool.isActive(editor) &&
+                      "bg-background text-primary shadow-e1",
                   )}
                 >
                   <tool.icon className="size-4" />
                 </button>
-              )
+              ),
             )
           : null}
       </div>
       <EditorContent editor={editor} />
     </div>
-  )
+  );
 }

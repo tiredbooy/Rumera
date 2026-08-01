@@ -5,7 +5,10 @@ import { ChevronLeft, PackageOpen, Tags } from "lucide-react";
 import { JsonLd } from "@/components/json-ld";
 import { Button } from "@/components/ui/button";
 import { listProducts } from "@/features/catalog/products/api/public";
-import { ProductCard } from "@/features/catalog/products/components/product-card";
+import {
+  ProductCard,
+  PRODUCT_CARD_GRID_CLASS,
+} from "@/features/catalog/products/components/product-card";
 import { getTag } from "@/features/catalog/tags/api/public";
 import { Placeholder } from "@/features/dashboard/components/placeholder";
 import { faNum } from "@/lib/products";
@@ -108,14 +111,14 @@ export async function TagDetailView({
       </section>
 
       <section
-        className="container-px mx-auto max-w-7xl py-12 sm:py-16"
+        className="container-px mx-auto w-full max-w-7xl py-12 sm:py-16"
         aria-labelledby="tag-products-title"
       >
         <h2 id="tag-products-title" className="sr-only">
           محصولات برچسب {tag.title}
         </h2>
         {data.results.length ? (
-          <ul className="grid list-none grid-cols-1 gap-6 p-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className={`${PRODUCT_CARD_GRID_CLASS} list-none p-0`}>
             {data.results.map((product) => (
               <li key={product.id} className="h-full min-w-0">
                 <ProductCard product={product} />

@@ -44,6 +44,12 @@ func (f *fakeStore) Get(_ context.Context, _ string) (string, error) {
 	}
 	return "v", nil
 }
+func (f *fakeStore) Rotate(_ context.Context, _ Rotation) (bool, error) {
+	return true, f.hit()
+}
+func (f *fakeStore) RevokeRotation(_ context.Context, _, _ string) (string, error) {
+	return "replay", f.hit()
+}
 func (f *fakeStore) Set(_ context.Context, _, _ string, _ time.Duration) error { return f.hit() }
 func (f *fakeStore) Incr(_ context.Context, _ string, _ time.Duration) (int64, error) {
 	return 1, f.hit()
@@ -90,7 +96,20 @@ func TestBreaker_OpensAfterThreshold(t *testing.T) {
 	if _, err := b.Get(context.Background(), "k"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("open Get err = %v; want ErrNotFound", err)
 	}
-	// Incr/Exists/Ping report unavailable while open, also without a store call.
+	// Mutations and security-sensitive reads report unavailable while open, also
+	// without a store call.
+	if err := b.Set(context.Background(), "k", "v", 0); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("open Set err = %v; want ErrUnavailable", err)
+	}
+	if _, err := b.Rotate(context.Background(), Rotation{}); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("open Rotate err = %v; want ErrUnavailable", err)
+	}
+	if _, err := b.RevokeRotation(context.Background(), "current", "replay"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("open RevokeRotation err = %v; want ErrUnavailable", err)
+	}
+	if err := b.Delete(context.Background(), "k"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("open Delete err = %v; want ErrUnavailable", err)
+	}
 	if _, err := b.Incr(context.Background(), "k", 0); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("open Incr err = %v; want ErrUnavailable", err)
 	}

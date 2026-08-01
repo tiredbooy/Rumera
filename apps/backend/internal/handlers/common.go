@@ -99,7 +99,8 @@ func (h *Handler) userUUID(c *gin.Context) (uuid.UUID, bool) {
 // bindQuery populates dst from the URL query string using `query` struct tags
 // (and the lower-cased field name when no tag is present). It understands
 // strings, bools, ints, floats, time.Time and pointers to them, recursing into
-// embedded structs such as BaseFilter. Unparseable values yield ErrInvalidQuery.
+// embedded structs such as BaseFilter. Unparseable values or failed validation
+// tags yield ErrInvalidQuery.
 func (h *Handler) bindQuery(c *gin.Context, dst any) bool {
 	v := reflect.ValueOf(dst)
 	if v.Kind() != reflect.Ptr || v.IsNil() {
@@ -108,6 +109,35 @@ func (h *Handler) bindQuery(c *gin.Context, dst any) bool {
 	}
 	if err := bindStruct(c, v.Elem()); err != nil {
 		response.Error(c, response.ErrInvalidQuery)
+		return false
+	}
+	if !validBaseQuery(c) {
+		response.Error(c, response.ErrInvalidQuery)
+		return false
+	}
+	if h.Validator != nil {
+		if _, err := h.Validator.Validate(dst); err != nil {
+			response.Error(c, response.ErrInvalidQuery)
+			return false
+		}
+	}
+	return true
+}
+
+func validBaseQuery(c *gin.Context) bool {
+	if raw, present := c.GetQuery("page"); present && raw != "" {
+		page, err := strconv.Atoi(raw)
+		if err != nil || page < 1 {
+			return false
+		}
+	}
+	if raw, present := c.GetQuery("limit"); present && raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 1 || limit > 100 {
+			return false
+		}
+	}
+	if order, present := c.GetQuery("orderBy"); present && order != "" && order != "asc" && order != "desc" {
 		return false
 	}
 	return true
@@ -207,6 +237,7 @@ var domainErrors = []struct {
 	{models.ErrConflict, response.ErrConflict},
 	{models.ErrInvalidState, response.AppCode{Code: "INVALID_STATE", StatusCode: http.StatusConflict, Message: "resource is in an invalid state"}},
 	{models.ErrInsufficientStock, response.ErrOutOfStock},
+	{models.ErrInvalidInventoryAdjustment, response.ErrValidationError},
 	{models.ErrInsufficientFunds, response.AppCode{Code: "INSUFFICIENT_FUNDS", StatusCode: http.StatusConflict, Message: "insufficient wallet balance"}},
 	{models.ErrCartEmpty, response.ErrCartEmpty},
 	{models.ErrInvalidShippingMethod, response.AppCode{Code: "INVALID_SHIPPING_METHOD", StatusCode: http.StatusBadRequest, Message: "invalid or unavailable shipping method"}},

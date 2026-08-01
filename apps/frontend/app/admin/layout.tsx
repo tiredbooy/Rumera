@@ -1,8 +1,7 @@
 /**
- * Staff console shell. Server-guarded by `requireStaff` (non-staff are bounced
- * to /admin/403, signed-out users to /login) and `noindex`. The sidebar is
- * permission-filtered, so a `support` user and an `admin` see different menus
- * from the same layout.
+ * Admin console shell. `requireStaff` now means exactly `role === "admin"`;
+ * signed-out users go to /login and other roles to /forbidden. Frontend
+ * capabilities organize the sidebar inside that admin-only boundary.
  *
  * `force-dynamic` because everything here is authenticated, per-user, live data.
  */

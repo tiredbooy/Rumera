@@ -44,6 +44,7 @@ The `Recipe` object:
 | `glass_type` | string \| null | e.g. `highball`, `coupe` |
 | `serving_suggestion` | string \| null | |
 | `image_url` | string \| null | |
+| `image_alt` | string \| null | cover-image alternative text |
 | `status` | enum | `draft` \| `published` \| `archived` |
 | `is_featured` | bool | |
 | `published_at` | string (date-time) \| null | auto-stamped on first publish |
@@ -79,8 +80,9 @@ The `ShoppableProduct` object (the sales driver):
 | `price` | number | current variant price |
 | `compare_at_price` | number \| null | |
 | `image_url` | string \| null | |
-| `is_available` | bool | variant & product both active |
-| `quantity` | number \| null | amount used in the recipe |
+| `available_stock` | int | uncommitted stock, clamped at zero |
+| `is_available` | bool | active product/variant with positive price and uncommitted stock |
+| `quantity` | string \| null | exact decimal amount used in the recipe |
 | `unit` | string \| null | |
 | `sort_order` | int | |
 | `is_primary` | bool | the hero bottle |
@@ -96,7 +98,8 @@ GET /recipes
 
 Query parameters (all optional): `page`, `limit` (≤100), `sortBy`
 (`published_at` \| `created_at` \| `updated_at` \| `title` \| `view_count` \|
-`total_time`), `orderBy` (`asc` \| `desc`), `search`, `difficulty`,
+`total_time`), `orderBy` (`asc` \| `desc`), `search` (literal title/excerpt
+search; `%`, `_`, and `\` are not wildcards), `difficulty`,
 `is_featured`, `tag_id`, `variant_id`, `max_time` (max total minutes).
 
 Public listing is always restricted to `status=published`. Returns the

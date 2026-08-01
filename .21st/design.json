@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "project": {
+    "name": "Rumera",
+    "productType": "Premium Persian e-commerce storefront",
+    "stack": ["Next.js 16", "React 19", "Tailwind CSS 4", "shadcn/ui"]
+  },
+  "sources": {
+    "tokens": ["apps/frontend/app/globals.css"],
+    "components": [
+      "apps/frontend/components/ui",
+      "apps/frontend/features/catalog/products/components/product-card.tsx"
+    ],
+    "assets": [],
+    "instructions": ["apps/frontend/AGENTS.md"]
+  },
+  "design": {
+    "colorMode": "light and dark",
+    "colors": {
+      "primary": "aged gold via --primary",
+      "accent": "deep wine via --wine",
+      "surface": "warm parchment/cellar via --background and --card"
+    },
+    "typography": {
+      "display": "project Persian serif via --font-serif",
+      "body": "project Persian sans via --font-sans"
+    },
+    "spacing": {
+      "container": "container-px",
+      "cardGridGap": "1.5rem"
+    },
+    "radius": {
+      "cards": "rounded-3xl / --radius-4xl",
+      "controls": "rounded-2xl"
+    },
+    "shadows": {
+      "scale": "--elev-1 through --elev-3"
+    },
+    "motion": {
+      "microInteraction": "200-320ms with --ease-cellar",
+      "reducedMotion": "required"
+    },
+    "density": "comfortable editorial commerce"
+  },
+  "components": {
+    "installed": ["Card", "Badge", "Button"],
+    "preferredPrimitives": ["Card", "Badge", "Button", "OptimizedImage"],
+    "patterns": [
+      "Image-led commerce cards",
+      "Persistent truthful price and action hierarchy",
+      "Compact backend-derived badges"
+    ]
+  },
+  "constraints": {
+    "must": [
+      "Preserve RTL Persian typography and natural letter joining",
+      "Use backend-supported data and truthful availability states",
+      "Keep 44px touch targets, visible focus, and reduced-motion behavior",
+      "Prevent horizontal overflow at 320px and wider"
+    ],
+    "avoid": [
+      "Generic glassmorphism or decorative gradients outside established tokens",
+      "Fabricated ratings, discounts, tags, or availability",
+      "Client-side per-card data requests",
+      "Hover-only access to primary actions"
+    ]
+  },
+  "decisions": [
+    "Canonical product grids use auto-fill tracks with a mobile-safe 20rem preferred minimum and no four-column squeeze.",
+    "Product cards use a framed square media stage, prominent category and tag context, truthful availability, persistent commerce controls, and a compact price/detail footer.",
+    "21st.dev Product Cards 5650 and 8286 informed the image-led hierarchy and restrained commerce layout; Rumera primitives and live contracts remain authoritative."
+  ],
+  "evidence": [
+    "apps/frontend/app/globals.css",
+    "apps/frontend/components/ui/card.tsx",
+    "apps/frontend/components/ui/badge.tsx",
+    "apps/frontend/components/ui/button.tsx",
+    "apps/frontend/features/catalog/products/components/product-card.tsx"
+  ],
+  "generatedAt": "2026-08-01T16:45:00.000Z"
+}

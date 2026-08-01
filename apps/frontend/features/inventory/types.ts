@@ -38,16 +38,20 @@ export interface InventoryMovement {
 
 export interface AdjustStockInput {
   quantity: number;
-  type: MovementType;
+  type: Extract<
+    MovementType,
+    "purchase" | "restock" | "refund" | "adjustment" | "damage"
+  >;
   note?: string | null;
 }
 
 export interface UpdateReorderThresholdInput {
-  reorder_point?: number | null;
-  reorder_quantity?: number | null;
+  reorder_point?: number;
+  reorder_quantity?: number;
 }
 
 export type InventorySortField =
+  | "id"
   | "updated_at"
   | "stock_on_hand"
   | "available_stock"

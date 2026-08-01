@@ -1,6 +1,10 @@
 "use client";
 
-import type { ApiErrorEnvelope, ApiSuccess } from "@/lib/api/types";
+import type {
+  ApiErrorEnvelope,
+  ApiFieldErrors,
+  ApiSuccess,
+} from "@/lib/api/types";
 
 import type { AdminGiftCard, CreateGiftCardsInput } from "../types";
 
@@ -9,6 +13,7 @@ export class GiftCardApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    public readonly fields?: ApiFieldErrors,
   ) {
     super(message);
     this.name = "GiftCardApiError";
@@ -31,6 +36,7 @@ export async function createGiftCardsClient(
       response.status,
       error?.code ?? "UNKNOWN",
       error?.message ?? response.statusText,
+      error?.fields,
     );
   }
 

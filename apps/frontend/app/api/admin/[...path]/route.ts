@@ -1,29 +1,31 @@
 /**
  * Authenticated BFF proxy for the admin dashboard. Client hooks call
  * `/api/admin/<backend-path>`; this forwards to `${API}/api/v1/<backend-path>`
- * with the caller's bearer token from the next-auth session — so the access
- * token never reaches the browser and admin endpoints work identically in dev,
- * Docker, and prod (where the API is loopback-only behind a reverse proxy).
+ * with the caller's bearer token from the Auth.js session — so the access token
+ * never reaches the browser. `auth()` owns token rotation; this route never
+ * consumes refresh tokens independently.
  *
  * `<backend-path>` is the path *after* `/api/v1`, so admin-namespaced endpoints
  * include the `admin/` segment, e.g. the create-product call hits
  * `/api/admin/admin/products`. Read-only catalogue lookups the form needs
  * (`products/:id`, `categories`, `brands`, `tags`) are reached the same way.
  *
- * Two guards keep this from being an open proxy: the caller must be staff, and
- * the first path segment must be on the allowlist. The backend still enforces
- * per-permission RBAC on top.
+ * Two guards keep this from being an open proxy: the caller must have the admin
+ * role and the first path segment must be on the allowlist. The backend repeats
+ * the admin-role check; it does not authorize these routes per capability.
  *
  * Unlike `/api/store`, this preserves `multipart/form-data` bodies verbatim so
  * image uploads pass through with their boundary intact.
  */
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { getToken } from "next-auth/jwt";
+import type { NextAuthRequest } from "next-auth";
 
 import { auth } from "@/lib/auth/auth";
+import { getLiveAccount } from "@/lib/auth/live-account";
 import { isStaff } from "@/lib/rbac/roles";
 import { API_BASE } from "@/lib/api/client";
+import { buildAdminProxyTarget } from "@/lib/api/admin-proxy-path";
 import { getAdminRevalidationPlan } from "@/lib/admin-revalidation";
 
 const ALLOW = new Set([
@@ -35,64 +37,53 @@ const ALLOW = new Set([
   "hero-slides",
 ]);
 
-/**
- * Read the *raw* next-auth JWT (which carries the server-only `refreshToken`)
- * straight from the encrypted session cookie. Unlike `auth()`, this never goes
- * through the session callback, so the refresh token stays server-side. The
- * cookie name / salt are derived from the request protocol so it works in dev,
- * Docker, and prod (where the `__Secure-` prefix is used).
- */
-async function readRefreshToken(req: NextRequest): Promise<string | undefined> {
-  const secureCookie = req.nextUrl.protocol === "https:";
-  const token = await getToken({
-    req,
-    secret: process.env.AUTH_SECRET,
-    secureCookie,
-  });
-  return (token?.refreshToken as string | undefined) ?? undefined;
-}
-
-/**
- * Exchange the refresh token for a fresh access token via the backend. Returns
- * the new access token, or `undefined` if the refresh failed (in which case the
- * caller should surface the original 401 — the client-side SessionGuard then
- * signs the user out).
- */
-async function refreshAccessToken(
-  refreshToken: string,
-): Promise<string | undefined> {
-  try {
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-      cache: "no-store",
-    });
-    if (!res.ok) return undefined;
-    const { data } = await res.json();
-    return (data?.access_token as string | undefined) ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function handle(req: NextRequest, segments: string[]) {
-  if (!segments.length || !ALLOW.has(segments[0])) {
+async function handle(req: NextAuthRequest, segments: string[]) {
+  const target = buildAdminProxyTarget(API_BASE, segments, req.nextUrl.search);
+  if (!target || !ALLOW.has(target.decodedSegments[0])) {
     return NextResponse.json(
       { error: { code: "FORBIDDEN_PATH", message: "path not allowed" } },
       { status: 403 },
     );
   }
 
-  const session = await auth();
-  if (!session?.user || !isStaff(session.role)) {
+  const session = req.auth;
+  if (!session?.user) {
     return NextResponse.json(
-      { error: { code: "FORBIDDEN", message: "staff access required" } },
+      { error: { code: "UNAUTHORIZED", message: "sign in required" } },
+      { status: 401 },
+    );
+  }
+  if (session.error) {
+    return NextResponse.json(
+      { error: { code: "SESSION_EXPIRED", message: "sign in required" } },
+      { status: 401 },
+    );
+  }
+
+  const live = await getLiveAccount(session.accessToken);
+  if (live.status === "unavailable") {
+    return NextResponse.json(
+      {
+        error: {
+          code: "AUTH_CHECK_UNAVAILABLE",
+          message: "could not verify admin access",
+        },
+      },
+      { status: 502 },
+    );
+  }
+  if (live.status === "revoked" || !isStaff(live.profile.role)) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "INSUFFICIENT_PERMISSIONS",
+          message: "live admin access required",
+        },
+      },
       { status: 403 },
     );
   }
 
-  const target = `${API_BASE}/${segments.join("/")}${req.nextUrl.search}`;
   const method = req.method;
   const hasBody = method !== "GET" && method !== "HEAD" && method !== "DELETE";
   const contentType = req.headers.get("content-type") ?? "";
@@ -119,35 +110,15 @@ async function handle(req: NextRequest, segments: string[]) {
     }
   }
 
-  const sendUpstream = (headers: Record<string, string>) =>
-    fetch(target, {
+  let res: Response;
+  try {
+    res = await fetch(target.url, {
       method,
-      headers,
+      headers: forwardHeaders,
       body,
       cache: "no-store",
       signal: req.signal,
     });
-
-  let res: Response;
-  try {
-    res = await sendUpstream(forwardHeaders);
-
-    // The access token may have expired mid-request. Try ONE silent refresh +
-    // retry so a transient expiry doesn't surface to the user. If the refresh
-    // fails we fall through and return the original 401, and the client-side
-    // SessionGuard signs the user out.
-    if (res.status === 401) {
-      const refreshToken = await readRefreshToken(req);
-      if (refreshToken) {
-        const fresh = await refreshAccessToken(refreshToken);
-        if (fresh) {
-          res = await sendUpstream({
-            ...forwardHeaders,
-            Authorization: `Bearer ${fresh}`,
-          });
-        }
-      }
-    }
   } catch {
     return NextResponse.json(
       {
@@ -159,7 +130,11 @@ async function handle(req: NextRequest, segments: string[]) {
 
   if (res.ok) {
     try {
-      const plan = getAdminRevalidationPlan(segments, method, res.status);
+      const plan = getAdminRevalidationPlan(
+        target.decodedSegments,
+        method,
+        res.status,
+      );
       for (const tag of plan.tags) revalidateTag(tag, { expire: 0 });
       for (const entry of plan.paths) revalidatePath(entry.path, entry.type);
     } catch (error) {
@@ -180,20 +155,21 @@ async function handle(req: NextRequest, segments: string[]) {
   });
 }
 
-type Ctx = { params: Promise<{ path: string[] }> };
+const authenticatedHandler = auth(async (req, ctx) => {
+  const path = (await ctx.params).path;
+  if (!Array.isArray(path)) {
+    return NextResponse.json(
+      { error: { code: "FORBIDDEN_PATH", message: "path not allowed" } },
+      { status: 403 },
+    );
+  }
+  return handle(req, path);
+});
 
-export async function GET(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path);
-}
-export async function POST(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path);
-}
-export async function PATCH(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path);
-}
-export async function PUT(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path);
-}
-export async function DELETE(req: NextRequest, ctx: Ctx) {
-  return handle(req, (await ctx.params).path);
-}
+export {
+  authenticatedHandler as GET,
+  authenticatedHandler as POST,
+  authenticatedHandler as PATCH,
+  authenticatedHandler as PUT,
+  authenticatedHandler as DELETE,
+};

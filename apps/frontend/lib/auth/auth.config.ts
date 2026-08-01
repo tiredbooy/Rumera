@@ -6,11 +6,11 @@
  *
  * This is the standard next-auth v5 "split config" pattern.
  */
-import type { NextAuthConfig } from "next-auth"
+import type { NextAuthConfig } from "next-auth";
 
-import { permissionsForRole, type Role } from "@/lib/rbac/roles"
+import { permissionsForRole, type Role } from "@/lib/rbac/roles";
 
-import "./types"
+import "./types";
 
 export const authConfig = {
   // The login page lives at app/(auth)/login — the (auth) route group adds NO
@@ -20,20 +20,19 @@ export const authConfig = {
   session: { strategy: "jwt" },
   callbacks: {
     /**
-     * Project the token onto the session. `permissions` is derived from the
-     * role here so every consumer (server guards, middleware, client) reads the
-     * same resolved set. Runs in both the Edge and Node instances.
+     * Project the token onto the session. Frontend capability identifiers are
+     * derived here; only `admin` receives them. Runs in Edge and Node.
      */
     session({ session, token }) {
-      const role = (token.role as Role) ?? "customer"
-      session.role = role
-      session.permissions = permissionsForRole(role)
-      session.accessToken = token.accessToken
-      if (token.user?.id) session.user.id = token.user.id
-      if (token.error) session.error = token.error
-      return session
+      const role = (token.role as Role) ?? "customer";
+      session.role = role;
+      session.permissions = permissionsForRole(role);
+      session.accessToken = token.accessToken;
+      if (token.user?.id) session.user.id = token.user.id;
+      if (token.error) session.error = token.error;
+      return session;
     },
   },
   secret: process.env.AUTH_SECRET,
   providers: [],
-} satisfies NextAuthConfig
+} satisfies NextAuthConfig;

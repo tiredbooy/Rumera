@@ -1,6 +1,6 @@
 # Blog
 
-Blog posts and blog categories — public reads by slug/id, admin-only writes.
+Blog posts and blog categories — public storefront reads plus admin-only management.
 
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.
 
@@ -10,11 +10,14 @@ See [Authentication](../authentication.md) for the token model and trust tiers, 
 | GET | `/blogs/:slug` | 🌐 public | Fetch one blog by slug (records a read) |
 | GET | `/blog-categories` | 🌐 public | List all blog categories |
 | GET | `/blog-categories/:id` | 🌐 public | Fetch one blog category |
+| GET | `/admin/blogs` | 🛡️ admin | List blogs across all publication statuses |
 | POST | `/admin/blogs` | 🛡️ admin | Create a blog |
 | GET | `/admin/blogs/:id` | 🛡️ admin | Fetch one blog by numeric id |
 | PATCH | `/admin/blogs/:id` | 🛡️ admin | Update a blog |
 | DELETE | `/admin/blogs/:id` | 🛡️ admin | Delete a blog |
+| GET | `/admin/blog-categories` | 🛡️ admin | List all blog categories |
 | POST | `/admin/blog-categories` | 🛡️ admin | Create a blog category |
+| GET | `/admin/blog-categories/:id` | 🛡️ admin | Fetch one blog category |
 | PATCH | `/admin/blog-categories/:id` | 🛡️ admin | Update a blog category |
 | DELETE | `/admin/blog-categories/:id` | 🛡️ admin | Delete a blog category |
 
@@ -31,6 +34,7 @@ The `Blog` object:
 | `content` | string | |
 | `excerpt` | string \| null | |
 | `image_url` | string \| null | cover image |
+| `image_alt` | string \| null | cover-image alternative text |
 | `time_to_read` | int | minutes |
 | `total_reads` | int64 | read counter |
 | `status` | string | `draft` · `published` · `archived` |
@@ -73,6 +77,8 @@ card (no full `content` body).
 |-------|------|-------------|
 | `is_featured` | bool | Only featured posts |
 | `category_id` | int64 | Only posts assigned to this blog category |
+| `exclude_id` | int64 | Exclude one separately rendered editorial lead from stable pagination |
+| `search` | string | Literal title/excerpt search (`%`, `_`, and `\` are not wildcards) |
 
 > `status` is accepted on the filter but is **overridden to `published`** on this
 > public route — you cannot list drafts here. Admin status filtering is done via
@@ -90,6 +96,7 @@ card (no full `content` body).
       "slug": "tasting-notes-101",
       "excerpt": "A primer on tasting.",
       "image_url": "https://cdn.example.com/blog/1.jpg",
+      "image_alt": "Tasting setup on a table",
       "time_to_read": 6,
       "total_reads": 1280,
       "status": "published",
@@ -132,6 +139,7 @@ Fetches a single published blog by its `slug`. Each successful fetch **records a
     "content": "…",
     "excerpt": "A primer on tasting.",
     "image_url": "https://cdn.example.com/blog/1.jpg",
+    "image_alt": "Tasting setup on a table",
     "time_to_read": 6,
     "total_reads": 1280,
     "status": "published",
@@ -178,6 +186,24 @@ GET /blog-categories/:id
 
 ---
 
+## List blogs (admin)
+
+```
+GET /admin/blogs
+Authorization: Bearer <access_token>
+```
+
+Returns the same paginated `BlogListItem[]` shape as `GET /blogs`, but does not
+force `status=published`. Omit `status` to include every publication state, or
+send `status=draft`, `status=published`, or `status=archived` to filter it. The
+other list query parameters (`page`, `limit`, `sortBy`, `orderBy`, `search`,
+`is_featured`, `category_id`, and `exclude_id`) have the same semantics as the
+public list.
+
+**Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `400 INVALID_PARAMS`.
+
+---
+
 ## Get blog (admin)
 
 ```
@@ -209,6 +235,7 @@ Authorization: Bearer <access_token>
 | `content` | string | required |
 | `excerpt` | string \| null | |
 | `image_url` | string \| null | cover image |
+| `image_alt` | string \| null | cover-image alternative text, max 255 |
 | `time_to_read` | int | minutes; defaults to `1` when ≤ 0 |
 | `status` | string | one of `draft` `published` `archived`; defaults to `draft` |
 | `is_featured` | bool | |
@@ -225,6 +252,8 @@ Authorization: Bearer <access_token>
 > created with `status=published` and no `published_at`, the server stamps
 > `published_at` to now. Slug collisions never fail creation — when `slug` is
 > omitted a unique one is derived from the title (with a numeric suffix if needed).
+> Slugs remain reserved after soft deletion so public links are never silently
+> reassigned to different content.
 
 ```json
 {
@@ -278,6 +307,13 @@ All fields optional; only supplied fields are updated (`BlogUpdateReq`).
 > published (no existing `published_at`) and not sending `published_at` causes the
 > server to stamp `published_at` to now.
 >
+> **Nullable fields.** For `excerpt`, `image_url`, `image_alt`, `meta_title`,
+> `meta_description`, and `published_at`: omit the field to leave it unchanged,
+> send `null` to clear it, or send a value to replace it. A published post cannot
+> remain without a publication timestamp, so clearing `published_at` while its
+> resulting status is `published` restores the original first-published time or
+> stamps the current time if none exists.
+>
 > **Relation semantics.** For `category_ids` / `product_ids` / `tag_ids`: **omit**
 > the field to leave that relation untouched, send `[]` to clear it, or send a list
 > to replace it.
@@ -301,6 +337,33 @@ Authorization: Bearer <access_token>
 
 ---
 
+## List blog categories (admin)
+
+```
+GET /admin/blog-categories
+Authorization: Bearer <access_token>
+```
+
+**Response** `200 OK` — a `data` array of `BlogCategory` objects, matching the
+public category list but protected by the admin authorization boundary.
+
+**Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`.
+
+---
+
+## Get blog category (admin)
+
+```
+GET /admin/blog-categories/:id
+Authorization: Bearer <access_token>
+```
+
+**Response** `200 OK` — a single `BlogCategory` object inside `data`.
+
+**Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `400 INVALID_PARAMS`, `404 NOT_FOUND`.
+
+---
+
 ## Create blog category
 
 ```
@@ -312,7 +375,7 @@ Authorization: Bearer <access_token>
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `name` | string | |
+| `name` | string | required, max 255 |
 | `description` | string \| null | |
 | `slug` | string \| null | |
 | `parent_id` | int64 \| null | parent category for nesting |
@@ -334,7 +397,16 @@ PATCH /admin/blog-categories/:id
 Authorization: Bearer <access_token>
 ```
 
-Same `BlogCategoryReq` body as create.
+All fields are optional; only supplied fields are updated (`BlogCategoryUpdateReq`).
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `name` | string | max 255; cannot be empty |
+| `description` | string \| null | `null` clears the value |
+| `slug` | string \| null | normalised when supplied; `null` clears the value |
+| `parent_id` | int64 \| null | `null` makes the category top-level; cannot reference itself |
+
+Omitting a nullable field leaves its current value unchanged.
 
 **Response** `200 OK` — the updated `BlogCategory` inside `data`.
 

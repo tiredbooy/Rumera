@@ -15,6 +15,7 @@ type ProductListItem struct {
 	Image                 *ImageResponse `json:"image_response"`
 	Brand                 *string        `json:"brand,omitempty"` // brand title, joined
 	Category              *string        `json:"category,omitempty"`
+	Tags                  []TagResponse  `json:"tags,omitempty"`
 	IsActive              bool           `json:"is_active"`
 	MinPrice              float64        `json:"min_price"` // cheapest active variant
 	MaxPrice              float64        `json:"max_price"` // most expensive active variant

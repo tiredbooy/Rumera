@@ -108,12 +108,10 @@ var registry = map[string]AppCode{
 	"INTERNAL_ERROR":   ErrInternalError,
 	"NOT_FOUND":        ErrNotFound,
 	"CONFLICT":         ErrConflict,
-	"ACCESS_DENIED":    ErrForbidden,
+	"ACCESS_DENIED":    ErrAccessDenied,
 	"UNAUTHORIZED":     ErrUnauthorized,
 	"VALIDATION_ERROR": ErrValidationError,
 	"INVALID_REQUEST":  ErrInvalidRequest,
-
-	
 
 	// User
 	"USER_NOT_FOUND":      ErrUserNotFound,

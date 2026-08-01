@@ -1,11 +1,7 @@
 /**
- * Permission catalogue — the single source of truth for what can be done in the
- * app. Mirrors the backend `permissions` table, where every row is a
- * `resource:action` pair (see
- * `apps/backend/migrations/main/20260525210307_create_permissions_table.sql`).
- *
- * The admin surface scales by adding a permission here, gating the page with
- * `requirePermission`, and tagging its nav entry — nothing else.
+ * Frontend capability catalogue used to organize admin navigation and actions.
+ * The backend authorizes the whole admin API by role; these identifiers are UX
+ * gates inside the already admin-only surface, not independent backend grants.
  */
 
 export const PERMISSIONS = {
@@ -13,6 +9,7 @@ export const PERMISSIONS = {
   PRODUCTS_READ: "products:read",
   PRODUCTS_WRITE: "products:write",
   PRODUCTS_DELETE: "products:delete",
+  TAGS_MANAGE: "tags:manage",
   // Inventory & stock
   INVENTORY_READ: "inventory:read",
   INVENTORY_WRITE: "inventory:write",
@@ -20,6 +17,10 @@ export const PERMISSIONS = {
   ORDERS_READ: "orders:read",
   ORDERS_WRITE: "orders:write",
   ORDERS_REFUND: "orders:refund",
+  PAYMENTS_READ: "payments:read",
+  COUPONS_MANAGE: "coupons:manage",
+  SHIPPING_MANAGE: "shipping:manage",
+  GIFT_CARDS_ISSUE: "gift-cards:issue",
   // Customers
   CUSTOMERS_READ: "customers:read",
   CUSTOMERS_WRITE: "customers:write",
@@ -30,6 +31,8 @@ export const PERMISSIONS = {
   // Recipes (editorial)
   RECIPES_READ: "recipes:read",
   RECIPES_WRITE: "recipes:write",
+  JOURNAL_READ: "journal:read",
+  JOURNAL_WRITE: "journal:write",
   // Hero / home carousel (editorial)
   HERO_MANAGE: "hero:manage",
   // Analytics
@@ -37,20 +40,25 @@ export const PERMISSIONS = {
   // Platform administration
   ROLES_MANAGE: "roles:manage",
   SETTINGS_MANAGE: "settings:manage",
-} as const
+} as const;
 
-export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
-/** Persian, human-readable labels for the RBAC admin screen. */
+/** Persian labels for frontend capability identifiers. */
 export const PERMISSION_LABELS: Record<Permission, string> = {
   "products:read": "مشاهدهٔ محصولات",
   "products:write": "ویرایش محصولات",
   "products:delete": "حذف محصولات",
+  "tags:manage": "مدیریت برچسب‌ها",
   "inventory:read": "مشاهدهٔ موجودی",
   "inventory:write": "ویرایش موجودی",
   "orders:read": "مشاهدهٔ سفارش‌ها",
   "orders:write": "مدیریت سفارش‌ها",
   "orders:refund": "بازپرداخت سفارش",
+  "payments:read": "مشاهدهٔ پرداخت‌ها",
+  "coupons:manage": "مدیریت کدهای تخفیف",
+  "shipping:manage": "مدیریت ارسال",
+  "gift-cards:issue": "صدور کارت هدیه",
   "customers:read": "مشاهدهٔ مشتریان",
   "customers:write": "ویرایش مشتریان",
   "customers:ban": "مسدودسازی مشتری",
@@ -58,8 +66,10 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "reviews:moderate": "بازبینی دیدگاه‌ها",
   "recipes:read": "مشاهدهٔ دستورها",
   "recipes:write": "ویرایش دستورها",
+  "journal:read": "مشاهدهٔ ژورنال",
+  "journal:write": "ویرایش ژورنال",
   "hero:manage": "مدیریت بنر هیرو",
   "analytics:read": "مشاهدهٔ تحلیل‌ها",
   "roles:manage": "مدیریت نقش‌ها و دسترسی‌ها",
   "settings:manage": "مدیریت تنظیمات",
-}
+};

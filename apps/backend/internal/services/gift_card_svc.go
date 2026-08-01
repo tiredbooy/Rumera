@@ -20,6 +20,8 @@ type GiftCardService struct {
 	wallet *WalletService
 }
 
+const maxGiftCardBatchSize = 500
+
 func NewGiftCardService(repo repositories.GiftCardRepository, wallet *WalletService) *GiftCardService {
 	return &GiftCardService{repo: repo, wallet: wallet}
 }
@@ -32,31 +34,30 @@ func (s *GiftCardService) Issue(ctx context.Context, amount decimal.Decimal, cou
 	if count <= 0 {
 		count = 1
 	}
-
-	out := make([]models.GiftCardResponse, 0, count)
-	for i := 0; i < count; i++ {
-		gc, err := s.createOne(ctx, amount)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, models.GiftCardResponse{
-			Code:          gc.Code,
-			InitialAmount: gc.InitialAmount,
-			Status:        gc.Status,
-			CreatedAt:     gc.CreatedAt,
-		})
+	if count > maxGiftCardBatchSize {
+		return nil, apperr.ErrInvalidRequest
 	}
-	return out, nil
-}
 
-func (s *GiftCardService) createOne(ctx context.Context, amount decimal.Decimal) (*models.GiftCard, error) {
-	for i := 0; i < 6; i++ {
-		gc, err := s.repo.Create(ctx, genGiftCode(), amount)
+	for attempt := 0; attempt < 6; attempt++ {
+		codes, err := genGiftCodes(count)
+		if err != nil {
+			return nil, apperr.ErrInternal
+		}
+		cards, err := s.repo.CreateBatch(ctx, codes, amount)
 		if err == nil {
-			return gc, nil
+			out := make([]models.GiftCardResponse, len(cards))
+			for i, card := range cards {
+				out[i] = models.GiftCardResponse{
+					Code:          card.Code,
+					InitialAmount: card.InitialAmount,
+					Status:        card.Status,
+					CreatedAt:     card.CreatedAt,
+				}
+			}
+			return out, nil
 		}
 		if errors.Is(err, models.ErrConflict) {
-			continue // code collision — try again
+			continue // one code collided; the repository rolled back the whole batch
 		}
 		return nil, apperr.ErrInternal
 	}
@@ -87,16 +88,35 @@ func (s *GiftCardService) Redeem(ctx context.Context, userID int64, code string)
 	return &models.RedeemGiftCardResult{Amount: amount}, nil
 }
 
+func genGiftCodes(count int) ([]string, error) {
+	codes := make([]string, 0, count)
+	seen := make(map[string]struct{}, count)
+	for len(codes) < count {
+		code, err := genGiftCode()
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := seen[code]; exists {
+			continue
+		}
+		seen[code] = struct{}{}
+		codes = append(codes, code)
+	}
+	return codes, nil
+}
+
 // genGiftCode returns a grouped, unambiguous 16-char code, e.g. ABCD-EFGH-JKLM-NPQR.
-func genGiftCode() string {
+func genGiftCode() (string, error) {
 	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
 	for i := range b {
 		b[i] = alphabet[int(b[i])%len(alphabet)]
 	}
 	s := string(b)
-	return fmt.Sprintf("%s-%s-%s-%s", s[0:4], s[4:8], s[8:12], s[12:16])
+	return fmt.Sprintf("%s-%s-%s-%s", s[0:4], s[4:8], s[8:12], s[12:16]), nil
 }
 
 func normalizeGiftCode(code string) string {

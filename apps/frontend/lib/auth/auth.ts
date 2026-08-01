@@ -8,40 +8,43 @@
  * to read `role` and `exp` — we trust it because we just received it over the
  * wire from our own API in direct response to a credential exchange.
  */
-import NextAuth, { type User } from "next-auth"
-import Credentials from "next-auth/providers/credentials"
-import type { JWT } from "next-auth/jwt"
+import NextAuth, { type NextAuthConfig, type User } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import type { JWT } from "next-auth/jwt";
 
-import { authConfig } from "./auth.config"
+import { authConfig } from "./auth.config";
 import {
   authenticateWithOtp,
   authenticateWithPassword,
   AuthServerError,
   refreshAuthTokens,
-} from "@/features/auth/api/server"
-import type { AccessTokenClaims } from "@/features/auth/types"
-import type { Role } from "@/lib/rbac/roles"
-import "./types"
+  revokeAuthTokens,
+} from "@/features/auth/api/server";
+import type { AccessTokenClaims } from "@/features/auth/types";
+import type { Role } from "@/lib/rbac/roles";
+import "./types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-type DecodedAccess = Partial<AccessTokenClaims>
+type DecodedAccess = Partial<AccessTokenClaims>;
 
 function decodeJwt(token: string): DecodedAccess {
   try {
-    const payload = token.split(".")[1]
-    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as DecodedAccess
+    const payload = token.split(".")[1];
+    return JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    ) as DecodedAccess;
   } catch {
-    return {}
+    return {};
   }
 }
 
 async function rotate(token: JWT): Promise<JWT> {
   try {
-    if (!token.refreshToken) throw new Error("missing refresh token")
+    if (!token.refreshToken) throw new Error("missing refresh token");
 
-    const data = await refreshAuthTokens({ refresh_token: token.refreshToken })
-    const decoded = decodeJwt(data.access_token)
+    const data = await refreshAuthTokens({ refresh_token: token.refreshToken });
+    const decoded = decodeJwt(data.access_token);
 
     return {
       ...token,
@@ -50,115 +53,141 @@ async function rotate(token: JWT): Promise<JWT> {
       accessTokenExpires: (decoded.exp ?? 0) * 1000,
       role: (decoded.role as Role) ?? token.role,
       error: undefined,
-    }
+    };
   } catch (err) {
-    console.error("Token rotation failed:", err)
-    return { ...token, error: "RefreshAccessTokenError" }
+    console.error("Token rotation failed:", err);
+    return { ...token, error: "RefreshAccessTokenError" };
   }
 }
 
+export function nodeAuthConfig(canPersistRotation: boolean): NextAuthConfig {
+  return {
+    ...authConfig,
+    secret: process.env.AUTH_SECRET,
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  ...authConfig,
-  secret: process.env.AUTH_SECRET,
+    providers: [
+      Credentials({
+        credentials: {
+          email: {},
+          password: {},
+        },
+        async authorize(creds): Promise<User | null> {
+          if (!creds?.email || !creds?.password) return null;
 
-  providers: [
-    Credentials({
-      credentials: {
-        email: {},
-        password: {},
-      },
-      async authorize(creds): Promise<User | null> {
-        if (!creds?.email || !creds?.password) return null
+          try {
+            const data = await authenticateWithPassword({
+              email: String(creds.email),
+              password: String(creds.password),
+            });
+            if (!data?.access_token) return null;
 
-        try {
-          const data = await authenticateWithPassword({
-            email: String(creds.email),
-            password: String(creds.password),
-          })
-          if (!data?.access_token) return null
+            const decoded = decodeJwt(data.access_token);
 
-          const decoded = decodeJwt(data.access_token)
+            const fullName = [data.user?.first_name, data.user?.last_name]
+              .filter(Boolean)
+              .join(" ");
 
-          const fullName = [data.user?.first_name, data.user?.last_name]
-            .filter(Boolean)
-            .join(" ")
-
-          return {
-            id: data.user?.user_id ?? decoded.user_id ?? "",
-            name: fullName || data.user?.email,
-            email: data.user?.email,
-            role: (data.user?.role ?? decoded.role ?? "customer") as Role,
-            accessToken: data.access_token,
-            refreshToken: data.refresh_token,
-            accessTokenExpires: (decoded.exp ?? 0) * 1000,
+            return {
+              id: data.user?.user_id ?? decoded.user_id ?? "",
+              name: fullName || data.user?.email,
+              email: data.user?.email,
+              role: (data.user?.role ?? decoded.role ?? "customer") as Role,
+              accessToken: data.access_token,
+              refreshToken: data.refresh_token,
+              accessTokenExpires: (decoded.exp ?? 0) * 1000,
+            };
+          } catch (error) {
+            if (error instanceof AuthServerError) {
+              console.error("Login failed with status:", error.status);
+            } else {
+              console.error("❌ Authorize fetch error:", error);
+            }
+            return null;
           }
-        } catch (error) {
-          if (error instanceof AuthServerError) {
-            console.error("Login failed with status:", error.status)
-          } else {
-            console.error("❌ Authorize fetch error:", error)
+        },
+      }),
+
+      // SMS OTP login. The code was already requested via /auth/otp/request; here we
+      // exchange (phone, code) for a token pair through /auth/otp/verify.
+      Credentials({
+        id: "otp",
+        credentials: { phone: {}, code: {} },
+        async authorize(creds): Promise<User | null> {
+          if (!creds?.phone || !creds?.code) return null;
+
+          try {
+            const data = await authenticateWithOtp({
+              phone: String(creds.phone),
+              code: String(creds.code),
+            });
+            if (!data?.access_token) return null;
+
+            const decoded = decodeJwt(data.access_token);
+            const fullName = [data.user?.first_name, data.user?.last_name]
+              .filter(Boolean)
+              .join(" ");
+
+            return {
+              id: data.user?.user_id ?? decoded.user_id ?? "",
+              name: fullName || data.user?.email,
+              email: data.user?.email,
+              role: (data.user?.role ?? decoded.role ?? "customer") as Role,
+              accessToken: data.access_token,
+              refreshToken: data.refresh_token,
+              accessTokenExpires: (decoded.exp ?? 0) * 1000,
+            };
+          } catch (error) {
+            console.error("❌ OTP authorize fetch error:", error);
+            return null;
           }
-          return null
+        },
+      }),
+    ],
+
+    callbacks: {
+      ...authConfig.callbacks,
+
+      async jwt({ token, user }) {
+        if (user) {
+          token.accessToken = user.accessToken;
+          token.refreshToken = user.refreshToken;
+          token.accessTokenExpires = user.accessTokenExpires;
+          token.role = user.role;
+          token.user = { id: user.id, name: user.name, email: user.email };
+          return token;
         }
-      },
-    }),
 
-    // SMS OTP login. The code was already requested via /auth/otp/request; here we
-    // exchange (phone, code) for a token pair through /auth/otp/verify.
-    Credentials({
-      id: "otp",
-      credentials: { phone: {}, code: {} },
-      async authorize(creds): Promise<User | null> {
-        if (!creds?.phone || !creds?.code) return null
-
-        try {
-          const data = await authenticateWithOtp({
-            phone: String(creds.phone),
-            code: String(creds.code),
-          })
-          if (!data?.access_token) return null
-
-          const decoded = decodeJwt(data.access_token)
-          const fullName = [data.user?.first_name, data.user?.last_name]
-            .filter(Boolean)
-            .join(" ")
-
-          return {
-            id: data.user?.user_id ?? decoded.user_id ?? "",
-            name: fullName || data.user?.email,
-            email: data.user?.email,
-            role: (data.user?.role ?? decoded.role ?? "customer") as Role,
-            accessToken: data.access_token,
-            refreshToken: data.refresh_token,
-            accessTokenExpires: (decoded.exp ?? 0) * 1000,
-          }
-        } catch (error) {
-          console.error("❌ OTP authorize fetch error:", error)
-          return null
+        if (!token.accessToken || !token.accessTokenExpires) {
+          return { ...token, error: "RefreshAccessTokenError" };
         }
+        if (Date.now() < token.accessTokenExpires - 60_000) {
+          return token.error === "RefreshRequired"
+            ? { ...token, error: undefined }
+            : token;
+        }
+
+        // React Server Components can read cookies but cannot persist the
+        // replacement cookie produced by rotation. Route handlers receive a
+        // request and can safely emit Set-Cookie, so only they may consume a
+        // single-use backend refresh token.
+        if (!canPersistRotation) {
+          return { ...token, error: "RefreshRequired" };
+        }
+
+        return rotate(token);
       },
-    }),
-  ],
-
-  callbacks: {
-    ...authConfig.callbacks,
-
-    async jwt({ token, user }) {
-      if (user) {
-        token.accessToken = user.accessToken
-        token.refreshToken = user.refreshToken
-        token.accessTokenExpires = user.accessTokenExpires
-        token.role = user.role
-        token.user = { id: user.id, name: user.name, email: user.email }
-        return token
-      }
-
-      if (token.accessTokenExpires && Date.now() < token.accessTokenExpires - 60_000) {
-        return token
-      }
-
-      return rotate(token)
     },
-  },
-})
+
+    events: {
+      async signOut(message) {
+        if ("token" in message && message.token?.refreshToken) {
+          await revokeAuthTokens({ refresh_token: message.token.refreshToken });
+        }
+      },
+    },
+  };
+}
+
+export const { handlers, auth, signIn, signOut } = NextAuth((request) =>
+  nodeAuthConfig(request !== undefined),
+);

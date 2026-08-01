@@ -3730,3 +3730,430 @@ in `TASKS.md`, `IN_PROGRESS.md`, and this file.
 - The build retains the existing Next.js middleware-deprecation notice and lint
   retains 10 unrelated repository warnings.
 - Task 060a is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 060a - Align Admin Authorization, Users, Roles, And Permissions
+
+**Completed:** 2026-07-28
+
+### Summary
+
+- Made the persisted `users.role` value the single live authorization source,
+  limited the supported contract to `customer`, `vendor`, and `admin`, and made
+  admin middleware reject inactive, banned, deleted, or non-admin accounts.
+- Added real admin user list/detail/create/update/status/delete operations with
+  canonical UUID validation, omission-aware PATCH semantics, audit history,
+  protected last-admin behavior, and database constraints/indexes.
+- Replaced fabricated frontend role/member data with backend-supported role and
+  permission summaries, and added truthful customer creation, editing, banning,
+  deletion, filtering, counts, status, role, and audit experiences.
+- Added request-aware Auth.js refresh rotation, authenticated admin/store BFF
+  forwarding, persisted refresh cookies, atomic Redis token handoff, idempotent
+  replay, retry-safe logout revocation, and a bounded backend logout request.
+- Enforced bcrypt's 72-byte UTF-8 password limit across backend issuance paths
+  and matching frontend forms.
+
+### Files Touched
+
+- User models, repository/service/handler contracts, authorization middleware,
+  token/cache infrastructure, API documentation, migrations, and focused unit
+  and integration coverage under `apps/backend`.
+- Auth.js/session/BFF infrastructure, RBAC navigation, customer and role admin
+  features, validation, documentation, and focused coverage under
+  `apps/frontend`.
+
+### Verification
+
+- Full backend unit tests, `go vet ./...`, and `go build ./...` passed.
+- The tagged integration suite passed against disposable PostgreSQL 17 and
+  Redis 8, including real user administration and atomic refresh rotation;
+  all three Task 060a migrations also rolled back and reapplied successfully.
+- All 350 frontend assertions passed across 99 files; TypeScript validation and
+  lint passed with zero errors and the same 10 unrelated warnings.
+- Strict 21st review reported zero findings across 21 customer/role files, and
+  repository `git diff --check` passed.
+- The Next.js production build compiled and completed TypeScript validation;
+  prerendering could not finish because the existing local backend container was
+  unhealthy after its analytics database connection failed.
+
+### Notes / Follow-Ups
+
+- Access tokens remain stateless and expire normally; logout immediately revokes
+  the active refresh whitelist entry and safely follows concurrent rotations.
+- Short-lived replay edges remain for their existing 10-second TTL so interrupted
+  logout traversal is retryable without extending refresh replay availability.
+- Task 060e is the next unblocked task and is now claimed in `IN_PROGRESS.md`.
+
+## Task 060e - Add Payment Operations And Gift-Card Issuance
+
+**Completed:** 2026-07-29
+**Agent:** Agent A
+
+### Summary
+
+- Added admin-only payment list and detail routes with supported status, order,
+  user, pagination, and sort filters; responsive card/table presentations; exact
+  decimal-string money formatting; loading, empty, stale-data, retry, and
+  not-found states; and semantic links to payment and order detail.
+- Added direct gateway transaction-ID reconciliation with explicit missing/error
+  outcomes and no unsupported payment create, update, refund, or delete controls.
+- Added an accessible staff gift-card issuance workspace with database-bound
+  amount/count validation, pending/error feedback, first-invalid-field focus,
+  one-time result focus, per-code/all-code copying, and CSV export.
+- Made batch issuance atomic behind the existing endpoint: all codes are inserted
+  in one database transaction, collisions roll back and retry the complete batch,
+  oversized service calls are rejected, and cryptographic RNG failures are no
+  longer ignored.
+- Preserved backend field errors in the gift-card browser client so validation
+  failures remain actionable at the corresponding control.
+
+### Files Touched
+
+- Gift-card repository/service atomic issuance and focused unit/integration
+  coverage under `apps/backend/internal` and `apps/backend/tests/integration`.
+- Payment and gift-card admin routes under `apps/frontend/app/admin`.
+- Payment list, lookup, detail, presentation helpers, gift-card issuance,
+  validation, browser transport, and focused tests under
+  `apps/frontend/features`.
+- Workstream trackers under `refactor-workstreams/Refactor-Docs`.
+
+### Verification
+
+- All 370 frontend assertions passed across 106 files; the 20 focused Task 060e
+  assertions also passed after the final responsive adjustments.
+- Frontend TypeScript validation and scoped ESLint passed; full lint completed
+  with zero errors and 11 unrelated existing/concurrent warnings.
+- Full backend `go test ./...`, `go vet ./...`, and `go build ./...` passed;
+  service/repository race tests passed.
+- The atomic rollback/commit regression passed against disposable PostgreSQL 17.
+- Strict 21st review reported zero findings across the new payment/gift-card UI,
+  and `git diff --check` passed.
+- The Next.js production build compiled and completed TypeScript validation; its
+  storefront prerender stopped at `/` because no local API was listening
+  (`ECONNREFUSED`), the same external runtime dependency recorded previously.
+
+### Notes / Follow-Ups
+
+- Payment operations intentionally remain read-only because the backend exposes
+  no supported payment mutations.
+- Gift-card codes remain intentionally recoverable only from the successful issue
+  response; the UI makes immediate copy/export explicit instead of inventing a
+  list endpoint.
+- Task 060i remains responsible for permission-aware navigation and dashboard
+  integration of the completed modules.
+
+## Task 060i - Integrate New Modules Into Admin Navigation And Overview
+
+**Completed:** 2026-07-29
+**Agent:** Agent A
+
+### Summary
+
+- Added permission-aware admin navigation for tags, payments, coupons, shipping,
+  and gift-card issuance using the existing frontend capability model.
+- Added a responsive operational overview that links directly to each supported
+  module and loads user, tag, active-coupon, active-shipping-zone, and
+  pending-payment counts concurrently through domain-owned API readers.
+- Kept count failures truthful and isolated: an unavailable API displays an
+  explicit unavailable state instead of a fabricated zero, while forbidden
+  modules do not issue requests or render cards.
+- Exposed gift-card issuance as a direct action without inventing an unsupported
+  gift-card list/count endpoint.
+- Reused the admin layout's authorization boundary instead of adding a duplicate
+  live-account lookup on the dashboard page.
+
+### Files Touched
+
+- `apps/frontend/app/admin/page.tsx`
+- `apps/frontend/lib/rbac/permissions.ts`
+- `apps/frontend/lib/rbac/nav.ts`
+- `apps/frontend/lib/rbac/nav.test.ts`
+- `apps/frontend/features/coupons/api/server.ts`
+- `apps/frontend/features/shipping/api/server.ts`
+- `apps/frontend/features/dashboard/components/admin-module-overview.tsx`
+- `apps/frontend/features/dashboard/components/admin-module-overview.test.tsx`
+- `apps/frontend/features/dashboard/admin-module-api.test.ts`
+- Workstream trackers under `refactor-workstreams/Refactor-Docs`.
+
+### Verification
+
+- All 434 frontend assertions passed across 127 files; the seven focused
+  navigation, role, domain-reader, and overview assertions passed.
+- Frontend TypeScript validation passed; full lint completed with zero errors and
+  10 unrelated existing/concurrent warnings.
+- Strict 21st review reported zero findings across the dashboard page, operational
+  overview, and navigation; `git diff --check` passed.
+- The Next.js production build compiled and completed TypeScript validation; its
+  storefront prerender stopped at `/` because no local API was listening
+  (`ECONNREFUSED`), the same external runtime dependency recorded previously.
+
+### Notes / Follow-Ups
+
+- The dashboard owns only composition and presentation; coupon, shipping,
+  payment, customer, and tag request contracts remain in their feature domains.
+- Tasks 060f-060h remain unclaimed earlier work in the ordered backlog.
+
+## Task 061e - Repair And Polish The Canonical Product Card
+
+**Completed:** 2026-07-29
+**Agent:** Agent A
+
+### Summary
+
+- Adapted the grounded 21st.dev Product Card 5650 hierarchy through Rumera's
+  existing `Card`, `Badge`, and `Button` primitives instead of installing a
+  duplicate demo card or fabricated commerce state.
+- Rebalanced the canonical card around a 5:4 responsive media frame, restrained
+  hover/focus motion, compact backend-derived tag badges, a persistent full-width
+  detail action, truthful unavailable states, and a complete non-truncating Toman
+  price block.
+- Repaired the actual width constraint: all product, category, tag, and search
+  result sections now fill the storefront flex container, while one shared grid
+  yields 1/1/2/2/3 columns at 320/375/768/1024/1440px without horizontal overflow.
+- Added tags to `ProductListItem` through one lateral aggregate in the existing
+  list query, with no client-side or per-card requests. Added a deduplicating
+  `(product_id, tag_id)` unique index so the aggregate is indexed and additive
+  tag writes remain idempotent.
+- Extended the shared Card primitive with semantic `asChild` composition and
+  removed forced autofocus/broad transition behavior from the touched search
+  surface after strict 21st review.
+- Initialized durable `.21st` design context with Rumera's real RTL, token,
+  primitive, motion, and truthfulness constraints.
+
+### Files Touched
+
+- Product list response, repository query, migration, API documentation, and
+  focused model/integration coverage under `apps/backend`.
+- Canonical product card, list contract, focused tests, and shared Card primitive
+  under `apps/frontend/features/catalog/products` and `apps/frontend/components`.
+- Product-card grids in product, category, tag, and search storefront views plus
+  their affected mocks.
+- `.21st/design.json`, `.21st/DESIGN.md`, and workstream trackers.
+
+### Verification
+
+- All 438 frontend assertions passed across 128 files; TypeScript validation
+  passed, and full lint completed with zero errors and 10 unrelated existing
+  warnings.
+- Full backend `go test ./...` and `go vet ./...` passed. The focused tagged
+  PostgreSQL integration test compiles but was skipped because
+  `TEST_DATABASE_URL` is not configured in this workspace.
+- The Next.js production build passed against a deterministic contract-shaped
+  local API fixture; the repository's existing middleware-deprecation and Node
+  module-register notices remain.
+- Live Chromium measurements at 320, 375, 768, 1024, and 1440px confirmed exact
+  1/1/2/2/3 columns, 5:4 media, full long prices with `تومان`, no page overflow,
+  light/dark rendering, 44px touch targets, focus-revealed quick actions, and
+  reduced-motion transition suppression.
+- Long-tag verification confirmed both badges shrink safely while the `+N`
+  indicator remains visible at narrow width.
+- Strict 21st review reported zero findings. A separate adversarial review found
+  no blockers; all four evidence-backed indexing, identity, badge, and image-size
+  concerns were fixed. Prettier checks for touched frontend/design files and
+  `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Database-backed execution of the new migration/query regression remains
+  environment-blocked only by the absent `TEST_DATABASE_URL`; no application
+  fallback or N+1 path was added.
+- Task 062 retains automated browser accessibility and lifecycle regression
+  coverage across all storefront surfaces.
+
+## Task 056f - Improve The Journal-List Storefront
+
+**Completed:** 2026-07-29
+**Agent:** Agent B
+
+- Added canonical server-backed search, popularity sorting, pagination, invalid-
+  URL normalization, result focus, and distinct empty/no-match/error states.
+- Kept the editorial feature lead outside stable pagination, corrected paginated
+  structured-data positions, made optional feature lookup failure-safe, and
+  preserved semantic one-link cards with responsive image fallbacks.
+- Added complete journal discovery to the sitemap with encoded slugs and edit
+  timestamps instead of truncating discovery at the first 100 entries.
+
+## Task 056g - Improve The Journal-Detail Storefront
+
+**Completed:** 2026-07-29
+**Agent:** Agent B
+
+- Added one semantic article hierarchy, bounded Persian reading width, safe HTML
+  and legacy Markdown rendering, responsive media, article metadata, breadcrumbs,
+  BlogPosting JSON-LD, share controls, and explicit optional-rail failure states.
+- Made embedded commerce truthful: missing catalogue records are distinct from
+  request failures, partial results are announced, displayed price matches the
+  variant added to cart, and multi-variant products require option selection.
+
+## Task 056h - Improve The Recipe-List Storefront
+
+**Completed:** 2026-07-29
+**Agent:** Agent B
+
+- Added canonical search, difficulty, sorting, and pagination URL state with
+  atomic rapid updates, keyboard-operable controls, result focus, and no-match,
+  empty, loading, error, and not-found states.
+- Added a backend-supported featured-recipe exclusion so the spotlight remains
+  outside stable pagination without duplicates or ItemList position collisions.
+- Preserved textual difficulty labels, semantic single-destination cards,
+  responsive fallbacks, dynamic metadata, and encoded sitemap entries.
+
+## Task 056i - Improve The Recipe-Detail Storefront
+
+**Completed:** 2026-07-29
+**Agent:** Agent B
+
+- Added semantic ingredient and instruction sections, exact decimal-string
+  quantity localization, explicit empty states, responsive long-form content,
+  backend-derived metadata, breadcrumbs, and normalized Recipe/HowTo JSON-LD.
+- Rendered live concrete-variant price, stock, required measure, and availability;
+  localized supported product roles, encoded product links, labelled cart actions,
+  truthful bulk outcomes, and optional related-content failure state.
+- Bounded hydrated detail freshness to the backend's 120-second policy, avoiding
+  the production `DYNAMIC_SERVER_USAGE` failure caused by `no-store` on these
+  generated Next.js routes.
+
+## Task Group 056 - Acceptance Verification
+
+**Status:** Complete
+**Date:** 2026-07-29
+**Agent:** Agent B
+
+- All 449 frontend assertions passed across 132 files; TypeScript validation
+  passed, and full lint completed with zero errors and 10 unrelated warnings.
+- Full backend `go test ./...` and `go vet ./...` passed. Focused PostgreSQL
+  integration tests compile but were skipped because `TEST_DATABASE_URL` is not
+  configured.
+- The Next.js production build passed against a populated contract-shaped API
+  fixture, including generated journal and recipe detail routes.
+- Live Chromium checks passed for journal/recipe list and detail routes at 320,
+  375, 768, 1024, and 1440px with no horizontal overflow and visible in-viewport
+  keyboard focus; reduced motion was enabled during the matrix.
+- Strict 21st review reported zero findings across 40 scoped files, and
+  `git diff --check` passed.
+- Cross-origin local media resolution remains exclusively Task 061d; coordinated
+  write-driven cache invalidation remains Task 061b rather than being duplicated
+  in Group 056.
+
+## Task 060f - Add Journal And Journal-Category Administration
+
+**Completed:** 2026-08-01
+**Agent:** `gpt-5.6-sol`
+
+### Summary
+
+- Added permission-aware article and journal-category list, create, edit,
+  publish, archive, and delete routes with responsive Persian RTL boards, forms,
+  loading/error/empty states, field-level validation, and keyboard focus.
+- Added domain-owned admin server/browser APIs, exact request/response contracts,
+  React Query invalidation, product/category/tag relationships, navigation, and
+  storefront cache invalidation for journal, sitemap, and `llms.txt` consumers.
+- Added owner-first cover media persistence: creates establish the article before
+  attaching a cover, while edits attach staged media before committing article
+  metadata so upload failures do not partially PATCH the article.
+- Completed the backend admin read surface and omission-aware PATCH contracts;
+  made article/relation writes transactional and hydrated responses before commit.
+- Preserved Persian slugs, serialized slug allocation and category-hierarchy
+  writes, reserved soft-deleted slugs, rejected hierarchy cycles and oversized
+  SEO titles, bounded asynchronous read accounting, and kept read counts from
+  changing editorial `updated_at` timestamps.
+- Updated the blog API reference and added focused backend/frontend regressions
+  for contracts, publication invariants, transactional rollback, media ordering,
+  cache behavior, validation focus, permissions, and responsive interactions.
+
+### Files Touched
+
+- Blog models, handlers, repositories, services, routes, API documentation,
+  migration, and focused tests under `apps/backend`.
+- Journal admin routes under `apps/frontend/app/admin/journal`.
+- Journal admin components under `apps/frontend/features/admin/journal` and
+  domain API/contracts/validation under `apps/frontend/features/journal`.
+- Shared rich-text/image input focus behavior, RBAC navigation, cache tags, and
+  admin revalidation under `apps/frontend/components`, `features/image-uploader`,
+  and `lib`.
+- Workstream trackers under `refactor-workstreams/Refactor-Docs`.
+
+### Verification
+
+- Full backend `go test ./...`, `go vet ./...`, and `go build ./...` passed.
+- The tagged integration target compiled and passed its environment gate; real
+  PostgreSQL/Redis cases were skipped because `TEST_DATABASE_URL` and
+  `TEST_REDIS_ADDR` are not configured in this workspace.
+- All 468 frontend assertions passed across 137 files; TypeScript validation
+  passed, and full lint completed with zero errors and 10 unrelated warnings.
+- The Next.js production build compiled and completed TypeScript validation; its
+  storefront prerender stopped at `/` because no local API was listening
+  (`ECONNREFUSED`).
+- Live Chromium checks at 320, 375, 768, 1024, and 1440px confirmed RTL layout,
+  no horizontal overflow, reduced-motion behavior, focused rich-text validation,
+  and 44px coarse-pointer targets for toolbar, select, and primary actions.
+- Strict 21st feature and route reviews finished with zero findings after fixes;
+  adversarial review found no remaining blockers, and `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- The new timestamp-trigger migration still needs its normal deployment-time
+  apply/rollback exercise against PostgreSQL because no test database is present.
+- Task 060g is the next unblocked task in the ordered backlog.
+
+## Task 060g - Complete Inventory Operations
+
+**Completed:** 2026-08-01
+**Agent:** `gpt-5.6-sol`
+
+### Summary
+
+- Added permission-aware per-variant inventory detail routes with physical,
+  committed, and sellable stock, movement history, stable pagination, reorder
+  thresholds, loading/error/empty states, and responsive Persian RTL layouts.
+- Replaced stale target-stock behavior with a validated signed-delta adjustment
+  flow, localized numeric input, truthful success/error feedback, keyboard focus,
+  and guarded underflow handling.
+- Made `stock_on_hand` canonical physical stock and `committed_stock` the active
+  reservation subset: reservation/release now change commitments only, while a
+  paid deduction decreases physical and committed stock together.
+- Updated cart and wishlist availability to use uncommitted stock, restricted
+  order-owned movement types from direct adjustment, and added deterministic
+  single-snapshot inventory and movement pagination with validated sort/filter
+  inputs.
+- Added a reversible PostgreSQL migration that locks and normalizes legacy
+  reservation data before enforcing `committed_stock <= stock_on_hand`.
+- Added focused backend, PostgreSQL integration, frontend API/action/validation,
+  component, route, accessibility, and interaction regressions plus canonical
+  inventory API documentation.
+- Corrected shared admin header/table behavior so actions wrap without mobile
+  overflow and all touched interactive controls expose at least 44px targets.
+
+### Files Touched
+
+- Inventory models, handlers, repositories, services, cart/wishlist consumers,
+  migration, API documentation, and focused tests under `apps/backend`.
+- Inventory API, contracts, actions, hooks, validation, list/detail components,
+  route states, and focused tests under `apps/frontend/features/inventory`,
+  `apps/frontend/features/admin/inventory`, and
+  `apps/frontend/app/admin/inventory`.
+- Shared admin `DataTable` sort semantics/touch targets and responsive
+  `PageHeader` action layout.
+- Workstream trackers under `refactor-workstreams/Refactor-Docs`.
+
+### Verification
+
+- Full backend `go test ./...`, `go vet ./...`, and `go build ./...` passed.
+- The full tagged integration suite passed against disposable PostgreSQL, and the
+  inventory migration passed apply, rollback, and re-apply verification.
+- All 490 frontend assertions passed across 145 files; TypeScript validation
+  passed, and full lint completed with zero errors and 10 unrelated warnings.
+- The optimized Next.js production build passed, including the new dynamic
+  `/admin/inventory/[variantID]` route.
+- Live Chromium checks at 320, 375, 768, 1024, and 1440px confirmed no horizontal
+  overflow or undersized touched controls and no console or page errors.
+- Controlled browser checks passed signed adjustment validation and `+2/-2`
+  accounting, preserved commitments, reorder persistence/restoration, search,
+  sorting, and keyboard open/escape focus behavior.
+- Strict 21st review reported zero findings across all 16 scoped route, feature,
+  table, and header files; `git diff --check` passed.
+
+### Notes / Follow-Ups
+
+- Inventory-row creation remains an explicit variant-lifecycle decision; this
+  task does not auto-create rows that would conflict with unused-variant deletion.
+- Task 060h is the next unblocked task in the ordered backlog.

@@ -102,6 +102,16 @@ func committedStock(t *testing.T, variantID int64) int {
 	return n
 }
 
+func physicalStock(t *testing.T, variantID int64) int {
+	t.Helper()
+	var n int
+	if err := testPool.QueryRow(context.Background(),
+		`SELECT stock_on_hand FROM inventory WHERE product_variant_id = $1`, variantID).Scan(&n); err != nil {
+		t.Fatalf("read stock_on_hand: %v", err)
+	}
+	return n
+}
+
 func orderStatus(t *testing.T, orderID int64) string {
 	t.Helper()
 	var s string

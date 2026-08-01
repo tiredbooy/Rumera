@@ -12,7 +12,7 @@ type forgotPasswordReq struct {
 
 type resetPasswordReq struct {
 	Token       string `json:"token"        validate:"required"`
-	NewPassword string `json:"new_password" validate:"required,min=8"`
+	NewPassword string `json:"new_password" validate:"required,min=8,max=72"`
 }
 
 // ForgotPassword starts the reset flow. It always responds 202 regardless of
@@ -49,6 +49,12 @@ func (h *Handler) ValidateResetToken(c *gin.Context) {
 func (h *Handler) ResetPassword(c *gin.Context) {
 	var req resetPasswordReq
 	if !h.bindJSON(c, &req) {
+		return
+	}
+	if !crypto.PasswordFitsBcrypt(req.NewPassword) {
+		response.ValidationError(c, map[string][]string{
+			"new_password": {"password must not exceed 72 UTF-8 bytes"},
+		})
 		return
 	}
 	hash, err := crypto.HashPassword(req.NewPassword)

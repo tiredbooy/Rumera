@@ -1,159 +1,172 @@
 import "server-only";
 
-import { Check, ShieldCheck, Users } from "lucide-react";
+import Link from "next/link";
+import { ShieldCheck, UserCog, Users } from "lucide-react";
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { getAdminRoles } from "@/features/customers/api";
+import type { AdminAuthorizationSummary } from "@/features/customers/types";
+import { AdminDataErrorState } from "@/features/dashboard/components/admin-data-error-state";
 import { PageHeader } from "@/features/dashboard/components/page-header";
+import { ApiError } from "@/lib/api/errors";
 import { faNum } from "@/lib/products";
-import {
-  PERMISSIONS,
-  PERMISSION_LABELS,
-  type Permission,
-} from "@/lib/rbac/permissions";
-import { ROLE_LABELS, ROLE_PERMISSIONS, type Role } from "@/lib/rbac/roles";
+import { ROLE_LABELS, type Role } from "@/lib/rbac/roles";
 import { cn } from "@/lib/utils";
 
-const STAFF_ROLES: Role[] = ["support", "manager", "admin"];
-const ALL_PERMISSIONS = Object.values(PERMISSIONS) as Permission[];
-
-const MEMBER_COUNT: Record<Role, number> = {
-  customer: 0,
-  vendor: 0,
-  support: 3,
-  manager: 2,
-  admin: 1,
-};
-
 const ROLE_DESC: Record<Role, string> = {
-  customer: "",
-  vendor: "",
-  support: "پاسخ‌گویی، مشاهدهٔ سفارش‌ها و بازبینی دیدگاه‌ها.",
-  manager: "مدیریت کاتالوگ، موجودی و سفارش‌ها به‌صورت روزانه.",
-  admin: "دسترسی کامل به همهٔ بخش‌های پلتفرم.",
+  customer: "حساب خرید و خدمات شخصی؛ بدون دسترسی به پنل مدیریت.",
+  vendor: "حساب فروشنده؛ در وضعیت فعلی بدون دسترسی به پنل مدیریت.",
+  admin: "تنها نقش مجاز برای ورود و استفاده از همهٔ بخش‌های پنل مدیریت.",
 };
 
-export function RolesView() {
+export async function RolesView() {
+  let summary: AdminAuthorizationSummary;
+  try {
+    summary = await getAdminRoles();
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      throw error;
+    }
+    return (
+      <>
+        <PageHeader
+          title="نقش‌ها و دسترسی پنل"
+          description="نمای زندهٔ مدل دسترسی و تعداد اعضای هر نقش"
+        />
+        <AdminDataErrorState
+          title="دریافت نقش‌ها ناموفق بود"
+          description="هیچ شمارش یا نقش جایگزینی نمایش داده نشده است. اتصال را بررسی کنید و دوباره تلاش کنید."
+        />
+      </>
+    );
+  }
+
+  const adminRoles = new Set(summary.admin_roles);
+
   return (
     <>
       <PageHeader
-        title="نقش‌ها و دسترسی‌ها"
-        description="ماتریس دسترسی هر نقش. منبع: lib/rbac — هم‌راستا با جدول‌های roles/permissions بک‌اند."
+        title="نقش‌ها و دسترسی پنل"
+        description="نمای زندهٔ مدل دسترسی و تعداد اعضای هر نقش"
       />
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        {STAFF_ROLES.map((role) => {
-          const pct = Math.round(
-            (ROLE_PERMISSIONS[role].length / ALL_PERMISSIONS.length) * 100,
-          );
-          return (
-            <div
-              key={role}
-              className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] transition-colors hover:ring-primary/15"
-            >
-              <div className="flex items-center justify-between">
-                <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10">
-                  <ShieldCheck className="size-4.5" />
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-muted/60 px-2 py-1 text-xs font-medium text-muted-foreground">
-                  <Users className="size-3.5" /> {faNum(MEMBER_COUNT[role])} عضو
-                </span>
-              </div>
-              <p className="mt-3 font-serif text-lg">{ROLE_LABELS[role]}</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                {ROLE_DESC[role]}
-              </p>
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">
-                    <span className="font-medium text-foreground tabular-nums">
-                      {faNum(ROLE_PERMISSIONS[role].length)}
-                    </span>{" "}
-                    از {faNum(ALL_PERMISSIONS.length)} دسترسی
-                  </span>
-                  <span className="tabular-nums text-muted-foreground">
-                    ٪{faNum(pct)}
-                  </span>
-                </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-                  <span
-                    className="block h-full rounded-full bg-primary/70"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <section
+        className="border-hairline mb-6 flex flex-col gap-4 rounded-2xl bg-primary/[0.06] p-5 ring-1 ring-primary/10 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+        aria-labelledby="authorization-model-title"
+      >
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
+            <ShieldCheck className="size-5" aria-hidden />
+          </span>
+          <div>
+            <h2 id="authorization-model-title" className="font-serif text-lg">
+              مدل تک‌نقشی فعال است
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              هر کاربر یک نقش دارد و فقط نقش «مدیر کل» وارد پنل می‌شود. تغییر
+              نقش از صفحهٔ همان کاربر انجام می‌شود و در درخواست محافظت‌شدهٔ بعدی
+              از وضعیت زندهٔ بک‌اند خوانده می‌شود.
+            </p>
+          </div>
+        </div>
+        <Button asChild size="lg" className="cursor-pointer sm:shrink-0">
+          <Link href="/admin/customers">
+            <UserCog className="size-4" aria-hidden />
+            مدیریت نقش کاربران
+          </Link>
+        </Button>
+      </section>
 
-      <h2 className="mb-3 font-serif text-lg">ماتریس دسترسی</h2>
-      <div className="border-hairline overflow-x-auto rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-border/60 bg-muted/30 hover:bg-muted/30">
-              <TableHead className="h-10 text-xs font-medium text-muted-foreground">
-                دسترسی
-              </TableHead>
-              {STAFF_ROLES.map((role) => (
-                <TableHead
-                  key={role}
-                  className="h-10 text-center text-xs font-medium text-muted-foreground"
-                >
-                  {ROLE_LABELS[role]}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {ALL_PERMISSIONS.map((permission) => (
-              <TableRow key={permission} className="border-border/40">
-                <TableCell>
-                  <span className="font-medium">
-                    {PERMISSION_LABELS[permission]}
+      <section aria-labelledby="roles-summary-title">
+        <h2 id="roles-summary-title" className="mb-3 font-serif text-lg">
+          خلاصهٔ نقش‌ها
+        </h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          {summary.roles.map((item) => {
+            const hasAdminAccess =
+              item.admin_access && adminRoles.has(item.role);
+            const unavailableCount = Math.max(
+              0,
+              item.member_count - item.active_member_count,
+            );
+
+            return (
+              <article
+                key={item.role}
+                className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]"
+                aria-labelledby={`role-${item.role}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span
+                    className={cn(
+                      "flex size-9 items-center justify-center rounded-xl ring-1 ring-inset",
+                      hasAdminAccess
+                        ? "bg-primary/10 text-primary ring-primary/15"
+                        : "bg-muted text-muted-foreground ring-border/60",
+                    )}
+                  >
+                    {hasAdminAccess ? (
+                      <ShieldCheck className="size-4.5" aria-hidden />
+                    ) : (
+                      <Users className="size-4.5" aria-hidden />
+                    )}
                   </span>
                   <span
-                    className="ms-2 text-xs text-muted-foreground"
-                    dir="ltr"
+                    className={cn(
+                      "inline-flex min-h-7 items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
+                      hasAdminAccess
+                        ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-400"
+                        : "bg-muted text-muted-foreground ring-border/60",
+                    )}
                   >
-                    {permission}
+                    {hasAdminAccess ? "ورود به پنل مجاز" : "بدون دسترسی به پنل"}
                   </span>
-                </TableCell>
-                {STAFF_ROLES.map((role) => {
-                  const granted = ROLE_PERMISSIONS[role].includes(permission);
-                  return (
-                    <TableCell key={role} className="text-center">
-                      <span
-                        className={cn(
-                          "inline-flex size-6 items-center justify-center rounded-full ring-1 ring-inset",
-                          granted
-                            ? "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400"
-                            : "bg-muted/50 text-muted-foreground/30 ring-border/50",
-                        )}
-                      >
-                        {granted ? (
-                          <Check className="size-3.5" aria-hidden="true" />
-                        ) : (
-                          <span aria-hidden="true">—</span>
-                        )}
-                        <span className="sr-only">
-                          {granted ? "دسترسی دارد" : "دسترسی ندارد"}
-                        </span>
-                      </span>
-                    </TableCell>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+                </div>
+
+                <h3
+                  id={`role-${item.role}`}
+                  className="mt-4 font-serif text-lg"
+                >
+                  {ROLE_LABELS[item.role]}
+                </h3>
+                <p className="mt-1 min-h-10 text-xs leading-relaxed text-muted-foreground">
+                  {ROLE_DESC[item.role]}
+                </p>
+
+                <dl className="mt-5 grid grid-cols-3 gap-2 border-t border-border/50 pt-4 text-center">
+                  <div>
+                    <dt className="text-[0.6875rem] text-muted-foreground">
+                      کل اعضا
+                    </dt>
+                    <dd className="mt-1 font-medium tabular-nums">
+                      {faNum(item.member_count)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[0.6875rem] text-muted-foreground">
+                      فعال
+                    </dt>
+                    <dd className="mt-1 font-medium text-emerald-700 tabular-nums dark:text-emerald-400">
+                      {faNum(item.active_member_count)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[0.6875rem] text-muted-foreground">
+                      غیرفعال/مسدود
+                    </dt>
+                    <dd className="mt-1 font-medium text-muted-foreground tabular-nums">
+                      {faNum(unavailableCount)}
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            );
+          })}
+        </div>
+      </section>
     </>
   );
 }

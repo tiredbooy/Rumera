@@ -13,6 +13,10 @@ func (h *Handler) ListInventory(c *gin.Context) {
 	if !h.bindQuery(c, &filter) {
 		return
 	}
+	if !inventorySortSupported(filter.SortBy) {
+		response.Error(c, response.ErrInvalidQuery)
+		return
+	}
 	filter.Defaults()
 
 	items, total, err := h.Inventory.GetAll(c.Request.Context(), filter)
@@ -96,6 +100,10 @@ func (h *Handler) ListInventoryMovements(c *gin.Context) {
 	if !h.bindQuery(c, &filter) {
 		return
 	}
+	if filter.SortBy != "" && filter.SortBy != "created_at" {
+		response.Error(c, response.ErrInvalidQuery)
+		return
+	}
 	filter.Defaults()
 
 	movements, total, err := h.Inventory.GetMovements(c.Request.Context(), filter)
@@ -108,6 +116,15 @@ func (h *Handler) ListInventoryMovements(c *gin.Context) {
 		out[i] = mappers.ToMovementResponse(m)
 	}
 	response.Paginated(c, out, paginate(filter.Page, filter.Limit, total))
+}
+
+func inventorySortSupported(sortBy string) bool {
+	switch sortBy {
+	case "", "id", "updated_at", "stock_on_hand", "available_stock", "reorder_point", "product_title", "sku":
+		return true
+	default:
+		return false
+	}
 }
 
 // VariantMovements — GET /admin/inventory/variants/:variantID/movements

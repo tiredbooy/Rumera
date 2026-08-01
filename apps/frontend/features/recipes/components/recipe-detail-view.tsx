@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   ArrowLeft,
   Clock,
@@ -13,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { JsonLd } from "@/components/json-ld";
+import { EditorialContent } from "@/components/editorial-content";
 import { SmartImage } from "@/components/smart-image";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/features/motion/components/reveal";
@@ -23,9 +22,13 @@ import {
 import { AddAllIngredientsButton } from "@/features/recipes/components/add-all-button";
 import { RecipeCard } from "@/features/recipes/components/recipe-card";
 import { ShoppableProductCard } from "@/features/recipes/components/shoppable-product-card";
-import { difficultyFa, formatDuration } from "@/features/recipes/utils";
+import {
+  difficultyFa,
+  formatDuration,
+  formatRecipeQuantity,
+} from "@/features/recipes/utils";
 import { faNum } from "@/lib/products";
-import { breadcrumbLd } from "@/lib/seo/jsonld";
+import { breadcrumbLd, recipeDetailLd } from "@/lib/seo/jsonld";
 
 type RecipeDetailViewProps = {
   params: Promise<{ slug: string }>;
@@ -36,19 +39,40 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
   const recipe = await getRecipeBySlug(slug);
   if (!recipe) notFound();
 
-  const related = await listRelatedRecipes(slug);
+  const [relatedResult] = await Promise.allSettled([listRelatedRecipes(slug)]);
+  const related =
+    relatedResult.status === "fulfilled" ? relatedResult.value : [];
+  const relatedUnavailable = relatedResult.status === "rejected";
 
   const meta = [
-    { icon: Clock, label: formatDuration(recipe.total_time_minutes) },
+    {
+      icon: Clock,
+      term: "زمان کل",
+      label: formatDuration(recipe.total_time_minutes),
+    },
     recipe.servings > 0
-      ? { icon: Users, label: `${faNum(recipe.servings)} نفر` }
+      ? {
+          icon: Users,
+          term: "تعداد سرو",
+          label: `${faNum(recipe.servings)} نفر`,
+        }
       : null,
-    { icon: Flame, label: difficultyFa[recipe.difficulty] },
-    recipe.glass_type ? { icon: Wine, label: recipe.glass_type } : null,
-    recipe.calories
-      ? { icon: Zap, label: `${faNum(recipe.calories)} کالری` }
+    {
+      icon: Flame,
+      term: "درجهٔ سختی",
+      label: difficultyFa[recipe.difficulty],
+    },
+    recipe.glass_type
+      ? { icon: Wine, term: "ظرف سرو", label: recipe.glass_type }
       : null,
-  ].filter(Boolean) as { icon: typeof Clock; label: string }[];
+    recipe.calories != null
+      ? {
+          icon: Zap,
+          term: "انرژی هر سرو",
+          label: `${faNum(recipe.calories)} کالری`,
+        }
+      : null,
+  ].filter(Boolean) as { icon: typeof Clock; term: string; label: string }[];
 
   const availableCount = recipe.products.filter((p) => p.is_available).length;
 
@@ -56,11 +80,14 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
     <>
       <JsonLd
         data={[
-          recipe.structured_data ?? {},
+          recipeDetailLd(recipe),
           breadcrumbLd([
             { name: "خانه", path: "/" },
             { name: "دستورها", path: "/recipes" },
-            { name: recipe.title, path: `/recipes/${recipe.slug}` },
+            {
+              name: recipe.title,
+              path: `/recipes/${encodeURIComponent(recipe.slug)}`,
+            },
           ]),
         ]}
       />
@@ -68,7 +95,10 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
       {/* Hero */}
       <section className="cellar-glow border-b border-border/60">
         <div className="container-px mx-auto max-w-6xl py-12 sm:py-16">
-          <nav className="mb-8 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <nav
+            className="mb-8 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+            aria-label="مسیر صفحه"
+          >
             <Link
               href="/"
               className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -83,7 +113,9 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
               دستورها
             </Link>
             <span aria-hidden>/</span>
-            <span className="text-foreground">{recipe.title}</span>
+            <span className="text-foreground" aria-current="page">
+              {recipe.title}
+            </span>
           </nav>
 
           <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
@@ -104,7 +136,11 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
                 <dl className="mt-8 flex flex-wrap gap-x-8 gap-y-4">
                   {meta.map((m) => (
                     <div key={m.label} className="flex items-center gap-2">
-                      <m.icon className="size-5 text-primary" />
+                      <m.icon
+                        className="size-5 text-primary"
+                        aria-hidden="true"
+                      />
+                      <dt className="sr-only">{m.term}</dt>
                       <dd className="text-sm font-medium">{m.label}</dd>
                     </div>
                   ))}
@@ -141,63 +177,71 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
       <section className="container-px mx-auto max-w-6xl py-16 sm:py-20">
         <div className="grid gap-10 lg:grid-cols-[0.9fr_1.4fr] lg:gap-14">
           {/* Ingredients */}
-          <aside
+          <section
             className="lg:sticky lg:top-24 lg:self-start"
-            aria-label="مواد لازم"
+            aria-labelledby="recipe-ingredients-title"
             data-recipe-ingredients
           >
             <div className="border-hairline rounded-3xl bg-card p-6 ring-1 ring-foreground/5 sm:p-7">
               <p className="eyebrow mb-3">مواد لازم</p>
-              <h2 className="font-serif text-2xl">آنچه نیاز دارید</h2>
+              <h2 id="recipe-ingredients-title" className="font-serif text-2xl">
+                آنچه نیاز دارید
+              </h2>
               {recipe.servings > 0 ? (
                 <p className="mt-1 text-sm text-muted-foreground">
                   برای {faNum(recipe.servings)} نفر
                 </p>
               ) : null}
-              <ul className="mt-6 space-y-3.5 text-sm">
-                {recipe.ingredients.map((ing) => (
-                  <li
-                    key={ing.id}
-                    className="flex items-start gap-3 border-b border-border/40 pb-3.5 last:border-0 last:pb-0"
-                  >
-                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
-                    <span className="leading-relaxed">
-                      <span className="font-medium text-foreground">
-                        {ing.ingredient_name}
+              {recipe.ingredients.length > 0 ? (
+                <ul className="mt-6 space-y-3.5 text-sm">
+                  {recipe.ingredients.map((ing) => (
+                    <li
+                      key={ing.id}
+                      className="flex items-start gap-3 border-b border-border/40 pb-3.5 last:border-0 last:pb-0"
+                    >
+                      <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
+                      <span className="leading-relaxed">
+                        <span className="font-medium text-foreground">
+                          {ing.ingredient_name}
+                        </span>
+                        {ing.quantity ? (
+                          <span className="text-muted-foreground">
+                            {" — "}
+                            {formatRecipeQuantity(ing.quantity)}
+                            {ing.unit ? ` ${ing.unit}` : ""}
+                          </span>
+                        ) : null}
+                        {ing.optional ? (
+                          <span className="ms-1.5 inline-block rounded-full bg-secondary px-1.5 py-0.5 align-middle text-[0.625rem] font-medium text-muted-foreground">
+                            اختیاری
+                          </span>
+                        ) : null}
+                        {ing.notes ? (
+                          <span className="block text-xs text-muted-foreground/80">
+                            {ing.notes}
+                          </span>
+                        ) : null}
                       </span>
-                      {ing.quantity ? (
-                        <span className="text-muted-foreground">
-                          {" — "}
-                          {ing.quantity}
-                          {ing.unit ? ` ${ing.unit}` : ""}
-                        </span>
-                      ) : null}
-                      {ing.optional ? (
-                        <span className="ms-1.5 inline-block rounded-full bg-secondary px-1.5 py-0.5 align-middle text-[0.625rem] font-medium text-muted-foreground">
-                          اختیاری
-                        </span>
-                      ) : null}
-                      {ing.notes ? (
-                        <span className="block text-xs text-muted-foreground/80">
-                          {ing.notes}
-                        </span>
-                      ) : null}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-6 rounded-2xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
+                  فهرست مواد لازم برای این دستور ثبت نشده است.
+                </p>
+              )}
             </div>
-          </aside>
+          </section>
 
           {/* Instructions */}
           <div data-recipe-instructions>
             <p className="eyebrow mb-3">طرز تهیه</p>
             <h2 className="font-serif text-3xl">گام به گام</h2>
-            <div className="mt-6 space-y-4 text-lg leading-8 text-foreground/90 [&_a]:text-primary [&_a]:underline [&_h2]:mt-10 [&_h2]:font-serif [&_h2]:text-xl [&_h2]:text-foreground [&_h3]:mt-8 [&_h3]:font-serif [&_h3]:text-lg [&_h3]:text-foreground [&_li]:mt-2 [&_li]:ps-1.5 [&_li]:leading-relaxed [&_li]:marker:font-serif [&_li]:marker:text-primary [&_ol]:list-decimal [&_ol]:space-y-3 [&_ol]:ps-6 [&_strong]:text-foreground [&_ul]:list-disc [&_ul]:space-y-3 [&_ul]:ps-6 [&_ul]:marker:text-primary">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {recipe.content}
-              </ReactMarkdown>
-            </div>
+            <EditorialContent
+              content={recipe.content}
+              emptyMessage="مراحل تهیهٔ این دستور هنوز ثبت نشده است."
+              className="mt-6"
+            />
 
             {recipe.serving_suggestion ? (
               <div className="border-hairline mt-10 rounded-2xl border-s-2 border-s-primary/50 bg-accent/40 p-6">
@@ -219,7 +263,8 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
             <div className="flex flex-wrap items-end justify-between gap-5">
               <div>
                 <p className="eyebrow mb-2">
-                  <ShoppingBag className="size-3.5" /> همین دستور را بسازید
+                  <ShoppingBag className="size-3.5" aria-hidden="true" /> همین
+                  دستور را بسازید
                 </p>
                 <h2 className="font-serif text-3xl sm:text-4xl">
                   محصولات این دستور
@@ -232,17 +277,19 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
               </div>
               <AddAllIngredientsButton products={recipe.products} />
             </div>
-            <div className="mt-10 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
+            <ul className="mt-10 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
               {recipe.products.map((p) => (
-                <ShoppableProductCard key={p.recipe_product_id} product={p} />
+                <li key={p.recipe_product_id} className="contents">
+                  <ShoppableProductCard product={p} />
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         ) : null}
       </section>
 
       {/* Related */}
-      {related.length > 0 ? (
+      {related.length > 0 || relatedUnavailable ? (
         <section className="border-t border-border/60 bg-card/30">
           <div className="container-px mx-auto max-w-6xl py-16 sm:py-20">
             <div className="flex items-end justify-between gap-4">
@@ -260,11 +307,22 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
                 <ArrowLeft className="size-4 transition-transform duration-300 group-hover/all:-translate-x-1" />
               </Link>
             </div>
-            <div className="mt-10 grid gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
-              {related.slice(0, 3).map((r) => (
-                <RecipeCard key={r.id} recipe={r} />
-              ))}
-            </div>
+            {related.length > 0 ? (
+              <ul className="mt-10 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
+                {related.slice(0, 3).map((r) => (
+                  <li key={r.id} className="contents">
+                    <RecipeCard recipe={r} headingLevel={3} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p
+                className="mt-8 rounded-2xl bg-muted/60 px-5 py-4 text-sm text-muted-foreground"
+                role="status"
+              >
+                دستورهای پیشنهادی موقتاً در دسترس نیستند.
+              </p>
+            )}
           </div>
         </section>
       ) : null}

@@ -33,3 +33,13 @@ func TestRecipeAdminListItemIncludesWorkflowStatus(t *testing.T) {
 		t.Fatalf("expected archived status, got %q", item.Status)
 	}
 }
+
+func TestRecipeShoppableProductResponsePreservesAvailability(t *testing.T) {
+	responses := ToShoppableProductResponses([]*models.ShoppableProduct{{
+		AvailableStock: 3,
+		IsAvailable:    true,
+	}})
+	if len(responses) != 1 || responses[0].AvailableStock != 3 || !responses[0].IsAvailable {
+		t.Fatalf("responses = %+v; want available stock 3", responses)
+	}
+}

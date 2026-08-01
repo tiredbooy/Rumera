@@ -63,6 +63,7 @@ const ALLOW = new Set([
   "auth/password/reset",
   "auth/password/validate",
   "auth/otp/request",
+  "categories/tree",
 ]);
 ```
 
@@ -99,13 +100,16 @@ const ALLOW = new Set([
   "gift-cards",
   "subscriptions",
   "recommendations",
+  "me",
 ]);
 ```
 
 `auth` is allowlisted only so the **self-service profile** routes
 (`GET`/`PATCH /auth/me`) can be proxied; the backend still guards every
-`/auth/*` route itself. The proxy reads the session with `auth()` and attaches
-`Authorization: Bearer <session.accessToken>` if present. Consumed via
+`/auth/*` route itself. `me` covers authenticated personalization routes. The
+proxy uses the Auth.js route wrapper, then attaches
+`Authorization: Bearer <session.accessToken>`. Every segment passes through the
+shared traversal-safe target builder before the allowlist check. Consumed via
 `storeRequest()` in `lib/api/store-client.ts`, which returns the backend body
 verbatim and throws a typed `ApiClientError` from the `{ error }` envelope.
 
@@ -126,11 +130,11 @@ Authenticated **and staff-gated**. Two guards keep it from being an open proxy:
    ```
    The `admin` entry covers staff-namespaced endpoints; the others are read-only
    catalogue lookups the admin forms need.
-2. **Role** — `session.user` must exist **and** `isStaff(session.role)` must be
-   true (`support` / `manager` / `admin`; see `lib/rbac/roles.ts`), else `403`.
+2. **Role** — `session.user` must exist and a live `/auth/me` lookup must return
+   `role=admin`; `customer` and `vendor` never receive admin access.
 
-The backend then enforces **per-permission RBAC** on top of this — the proxy is
-deliberately a coarse gate, not the authority.
+The backend repeats the live `admin` role check. Frontend permissions only
+organize navigation inside that boundary; they are not backend authorization.
 
 > **Path doubling is intentional.** The proxy forwards to
 > `${API_BASE}/<segments>`, and `API_BASE` already ends in `/api/v1`. Backend
@@ -159,58 +163,27 @@ validation-aware clients also carry the backend `fields` map.
 
 ---
 
-## 401 refresh-and-retry-once
+## Persisted refresh rotation
 
-Both authenticated proxies (store and admin) implement the **same** silent
-recovery: if the upstream returns `401` (the access token expired mid-request),
-they try **exactly one** refresh + retry, then give up.
+Backend refresh tokens are single-use, so a consumer must not rotate unless it
+can also return the replacement Auth.js cookie. React Server Components can read
+cookies but cannot write them. Rumera therefore uses one rule:
 
-```
-send upstream with session.accessToken
-        │
-   401? ──no──► return response as-is
-        │ yes
-        ▼
-read RAW next-auth JWT from the encrypted cookie  (getToken, server-only)
-        │
-   has refreshToken? ──no──► return the original 401
-        │ yes
-        ▼
-POST {API_BASE}/auth/refresh { refresh_token }
-        │
-   got fresh access_token? ──no──► return the original 401
-        │ yes
-        ▼
-re-send upstream with the fresh Bearer token  ──►  return that response
-```
+- bare `auth()` calls in server rendering return `RefreshRequired` when the
+  access token approaches expiry and never consume the refresh token;
+- middleware redirects protected page requests to
+  `/api/auth/refresh-session?callbackUrl=…`, preserving the exact path;
+- that route and both authenticated BFFs use the Auth.js route wrapper, where
+  rotation can append `Set-Cookie` to the outgoing response;
+- the store and admin proxies never read or exchange the raw refresh token
+  themselves.
 
-Key points:
-
-- The **refresh token never reaches the browser**. The session callback projects
-  only `accessToken` onto the session (see `lib/auth/auth.config.ts`), so the
-  proxy can't get the refresh token from `auth()`. Instead it reads the **raw**
-  encrypted JWT directly with `getToken()` from `next-auth/jwt`:
-
-  ```ts
-  const secureCookie = req.nextUrl.protocol === "https:";
-  const token = await getToken({
-    req,
-    secret: process.env.AUTH_SECRET,
-    secureCookie,
-  });
-  return token?.refreshToken as string | undefined;
-  ```
-
-  `secureCookie` is derived from the request protocol so the right cookie name is
-  read in dev (`authjs.session-token`) vs. prod (`__Secure-…`).
-
-- The retry is **at most once**. If the refresh fails (token expired/revoked,
-  backend down) the proxy returns the **original 401** untouched. It does **not**
-  write a new session cookie — that 401 is the signal that flows to the client.
-
-- This proxy-level refresh is a **safety net** for tokens that expire _during_ a
-  request. The primary refresh path is in the JWT callback (`rotate()`), which
-  refreshes proactively _before_ expiry (see next section).
+If rotation fails, the persisted session receives `RefreshAccessTokenError` and
+the client session guard signs out. This avoids both refresh-token replay races
+and successful requests whose replacement credential was discarded.
+The backend also returns one identical replacement pair to concurrent retries
+within its short replay window, so late `Set-Cookie` responses cannot overwrite a
+successful rotation with an error session.
 
 ---
 
@@ -219,13 +192,15 @@ Key points:
 Auth uses the standard next-auth v5 **split-config** pattern so the middleware
 can run on the **Edge runtime** (no Node-only code):
 
-| File                                  | Runtime            | Contents                                                                                                                   |
-| ------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `lib/auth/auth.config.ts`             | Edge + Node        | `pages`, `session` strategy, the `session()` callback, no providers                                                        |
-| `lib/auth/auth.ts`                    | Node only          | Credentials providers (fetch the backend), the `jwt()` callback + `rotate()`, exports `handlers`/`auth`/`signIn`/`signOut` |
-| `lib/auth/session.ts`                 | Node (server-only) | server guards: `requireUser`, `requireStaff`, `requirePermission`                                                          |
-| `lib/auth/types.ts`                   | —                  | module augmentation for the extra JWT/Session fields                                                                       |
-| `app/api/auth/[...nextauth]/route.ts` | Node               | re-exports `handlers` as `GET`/`POST` for `/api/auth/*`                                                                    |
+| File                                    | Runtime            | Contents                                                                                                                    |
+| --------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `lib/auth/auth.config.ts`               | Edge + Node        | `pages`, `session` strategy, the `session()` callback, no providers                                                         |
+| `lib/auth/auth.ts`                      | Node only          | Request-aware Credentials config, persisted rotation, and backend revocation on Auth.js sign-out                           |
+| `lib/auth/access-token.ts`              | Edge + Node        | Expiry inspection used by protected-route middleware                                                                        |
+| `lib/auth/session.ts`                   | Node (server-only) | server guards: `requireUser`, `requireStaff`, `requirePermission`                                                           |
+| `lib/auth/types.ts`                     | —                  | module augmentation for the extra JWT/Session fields                                                                        |
+| `app/api/auth/[...nextauth]/route.ts`   | Node               | re-exports `handlers` as `GET`/`POST` for `/api/auth/*`                                                                     |
+| `app/api/auth/refresh-session/route.ts` | Node               | response-producing refresh redirect that persists the replacement cookie                                                    |
 
 ### Providers
 
@@ -250,7 +225,8 @@ async jwt({ token, user }) {
   if (token.accessTokenExpires && Date.now() < token.accessTokenExpires - 60_000) {
     return token
   }
-  return rotate(token)   // expired/expiring → refresh now
+  if (!canPersistRotation) return { ...token, error: "RefreshRequired" }
+  return rotate(token)   // route response can persist the replacement cookie
 }
 ```
 
@@ -262,6 +238,11 @@ not throw — it stamps the token with an error marker and returns it:
 return { ...token, error: "RefreshAccessTokenError" };
 ```
 
+The Auth.js `signOut` event receives the encrypted JWT before Auth.js clears its
+cookie. It sends the server-only refresh token to `POST /auth/logout`, allowing
+the backend to revoke the active rotation chain without exposing that token to
+the browser session.
+
 ### Session shape
 
 The `session()` callback in `auth.config.ts` projects the token onto the session.
@@ -272,7 +253,7 @@ interface Session {
   role: Role; // from the token (backend access JWT), defaults "customer"
   permissions: Permission[]; // DERIVED from role via permissionsForRole()
   accessToken?: string; // for the BFF proxies / apiFetch — NOT the refresh token
-  error?: "RefreshAccessTokenError";
+  error?: "RefreshRequired" | "RefreshAccessTokenError";
   user: { id?: string } & DefaultSession["user"];
 }
 ```
@@ -282,20 +263,20 @@ middleware, client) reads the same resolved set. `role` rides on the JWT;
 `permissions` is not stored on the token. Notably the session **never carries
 the refresh token** — only `accessToken`.
 
-> Roles → permissions live in `lib/rbac/roles.ts`. Staff = `support`, `manager`,
-> `admin`. The mapping is a frontend fallback that mirrors the backend tables
-> until the API embeds permissions in the token.
+> Roles → capabilities live in `lib/rbac/roles.ts`. The supported roles are
+> `customer`, `vendor`, and `admin`; only `admin` is staff. These capabilities
+> organize frontend UX and do not mirror effective backend permission rows.
 
 ---
 
 ## RefreshAccessTokenError handling & SessionGuard
 
-There are **two layers** of refresh and they fail differently:
+There are two refresh outcomes:
 
-| Layer                   | When                               | On failure                                       |
-| ----------------------- | ---------------------------------- | ------------------------------------------------ |
-| JWT callback `rotate()` | proactively, before/at expiry      | stamps `token.error = "RefreshAccessTokenError"` |
-| BFF proxy (store/admin) | reactively, on a `401` mid-request | returns the original `401`                       |
+| Context                   | Behavior                                                                 |
+| ------------------------- | ------------------------------------------------------------------------ |
+| Server-component `auth()` | returns `RefreshRequired` without consuming the refresh token            |
+| Auth route/BFF wrapper    | rotates once, persists `Set-Cookie`, or stamps `RefreshAccessTokenError` |
 
 When `rotate()` fails, the error is projected onto `session.error`. The
 client-side **`SessionGuard`** (`features/auth/components/session-guard.tsx`) watches the
@@ -315,11 +296,8 @@ nothing. The `signingOut` ref guards against a double sign-out under React Stric
 Mode.
 
 Crucially, `SessionGuard` signs the user out **only on terminal refresh
-failure** — never on a healthy session, and never on a routine access-token
-expiry (the silent refreshes above handle those transparently). A `401` from a
-single BFF call does **not** trigger sign-out by itself; it surfaces to the
-caller as a typed store or domain-client error. The session ends only when the
-refresh token is genuinely dead.
+failure**. `RefreshRequired` is recoverable and is handled by the protected-route
+redirect, never by signing out.
 
 ---
 
@@ -340,26 +318,26 @@ The same `(group)` rule applies to `(account)` and `(storefront)`.
 ### Defense-in-depth access control
 
 ```
-Edge middleware (coarse)      Server guards (authoritative)     Backend RBAC
-────────────────────────      ─────────────────────────────     ────────────
-middleware.ts                 lib/auth/session.ts                Go API
-• /account, /admin only       • requireUser   → /login           • per-permission
-• no session → /login         • requireStaff  → /forbidden         enforcement on
-• admin & !staff → /forbidden • requirePermission → /forbidden      every endpoint
-• tags private pages noindex  • returns a narrowed session
+Edge middleware (coarse)       Server guards (live)             Backend authority
+────────────────────────       ────────────────────             ─────────────────
+middleware.ts                  lib/auth/session.ts               Go API
+• /account, /admin only        • requireUser → /login           • re-read users row
+• no session → /login          • requireStaff → live /auth/me   • reject inactive/ban
+• expiring → refresh route     • requirePermission → UX gate    • RequireRole("admin")
+• tags private pages noindex
 ```
 
-The middleware runs on the Edge with the Node-free `authConfig` and only bounces
-obvious cases early. The **authoritative** checks happen server-side in the route
-layouts via the `lib/auth/session.ts` guards, and the backend enforces
-per-permission RBAC regardless of what the frontend allows through.
+The middleware runs on the Edge with the Node-free `authConfig` and only handles
+session presence/expiry. The server guard checks live account state, and the
+backend independently enforces the same live `admin` role. Frontend capability
+checks are UX only.
 
 ---
 
 ## Request lifecycle — an authed admin upload
 
 End-to-end for a standalone image upload (`uploadImage()` →
-`/api/admin/admin/uploads`), including the silent-refresh branch:
+`/api/admin/admin/uploads`):
 
 ```
 Browser (admin console)
@@ -369,35 +347,21 @@ Browser (admin console)
 Next.js route handler — app/api/admin/[...path]/route.ts  (Node runtime)
   │  segments = ["admin","uploads"]
   │  ① ALLOW.has("admin")?                     ── no  → 403 FORBIDDEN_PATH
-  │  ② auth() → session; isStaff(session.role)? ── no  → 403 FORBIDDEN
-  │  ③ build Bearer header from session.accessToken
+  │  ② Auth.js wrapper rotates if needed and persists Set-Cookie
+  │  ③ live /auth/me returns role=admin?         ── no  → 403 FORBIDDEN
+  │  ④ build Bearer header from session.accessToken
   │  fetch POST {API_BASE}/admin/uploads        (= /api/v1/admin/uploads)
   ▼
 Go backend
-  │  validate Bearer JWT + per-permission RBAC
-  │  ◄─ 401 (access token expired)?
+  │  validate Bearer JWT + live account + RequireRole("admin")
   ▼
-Next.js handler — refresh-and-retry-once
-  │  getToken() → raw JWT → refreshToken        (refresh token stays server-side)
-  │  POST {API_BASE}/auth/refresh { refresh_token }
-  │     • fail → return the original 401 ─────────────────────┐
-  │     • ok   → re-send POST /admin/uploads with fresh Bearer │
-  ▼                                                            │
-Go backend → 201 { data: { url, key, width, height } }         │
-  ▼                                                            │
-Next.js handler → pass body + Content-Type through (or 204)    │
-  ▼                                                            ▼
-Browser                                            Browser receives 401
-  uploadImage unwraps { data }                     → no auto sign-out here; surfaces
-  → UploadedImage                                    as UploadApiError(401). Sign-out
-                                                     happens only later, if the JWT
-                                                     callback's rotate() also fails and
-                                                     stamps session.error, which
-                                                     SessionGuard then acts on → /login
+Go backend → 201 { data: { url, key, width, height } }
+  ▼
+Next.js handler → pass body + Content-Type and any rotated cookie
+  ▼
+Browser → uploadImage unwraps { data } → UploadedImage
 ```
 
-The dual-layer refresh means a user almost never sees an auth error: the JWT
-callback refreshes proactively before expiry, and the BFF proxy catches the rare
-mid-request expiry. The user is only signed out when the refresh token itself is
-dead — surfaced as `session.error === "RefreshAccessTokenError"` and handled by
+The user is signed out only when route-level rotation cannot recover the session,
+surfaced as `session.error === "RefreshAccessTokenError"` and handled by
 `SessionGuard`.

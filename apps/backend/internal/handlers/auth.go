@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -41,7 +42,7 @@ type RefreshTokenInput struct {
 // new authenticated session and omitted for token rotation.
 type TokenResponse struct {
 	AccessToken  string               `json:"access_token"`
-	RefreshToken string               `json:"refresh_token"`
+	RefreshToken string               `json:"refresh_token,omitempty"`
 	User         *models.UserResponse `json:"user,omitempty"`
 }
 
@@ -57,6 +58,12 @@ func (h *Handler) Register(c *gin.Context) {
 	input.FirstName = blankToNil(input.FirstName)
 	input.LastName = blankToNil(input.LastName)
 	req := mappers.MapToCreateUserReq(input)
+	if !crypto.PasswordFitsBcrypt(req.Password) {
+		response.ValidationError(c, map[string][]string{
+			"password": {"password must not exceed 72 UTF-8 bytes"},
+		})
+		return
+	}
 
 	hash, err := crypto.HashPassword(req.Password)
 	if err != nil {
@@ -73,8 +80,14 @@ func (h *Handler) Register(c *gin.Context) {
 
 	pair, err := h.issueTokens(c.Request.Context(), user.ID, user.UserID.String(), user.Role)
 	if err != nil {
-		response.InternalError(c)
-		return
+		// Account creation already succeeded. Return only the short-lived access
+		// token rather than advertising an unwhitelisted refresh credential; the
+		// client can establish a full session through normal login.
+		if pair.Access == "" {
+			response.InternalError(c)
+			return
+		}
+		pair.Refresh = ""
 	}
 
 	// Welcome loyalty bonus (idempotent per user; best-effort).
@@ -106,7 +119,7 @@ func (h *Handler) Login(c *gin.Context) {
 		response.Error(c, response.ErrInvalidCredentials)
 		return
 	}
-	if !user.IsActive {
+	if !user.IsActive || user.IsBanned {
 		response.Error(c, response.ErrForbidden)
 		return
 	}
@@ -134,9 +147,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 		return
 	}
 
-	// consumeRefresh validates the token and, when Redis is present, enforces
-	// single-use rotation — the old refresh token is invalidated here.
-	claims, ok := h.consumeRefresh(c.Request.Context(), req.RefreshToken)
+	claims, ok := h.validateRefresh(req.RefreshToken)
 	if !ok {
 		response.Error(c, response.ErrInvalidToken)
 		return
@@ -148,19 +159,29 @@ func (h *Handler) Refresh(c *gin.Context) {
 		return
 	}
 
-	user, err := h.User.GetByID(c.Request.Context(), userUUID)
+	user, err := h.User.GetByIDIncludingInactive(c.Request.Context(), userUUID)
 	if err != nil {
 		response.Error(c, response.ErrInvalidToken)
 		return
 	}
-	if !user.IsActive {
+	if user.ID != claims.UID {
+		response.Error(c, response.ErrInvalidToken)
+		return
+	}
+	if !user.IsActive || user.IsBanned {
 		response.Error(c, response.ErrForbidden)
 		return
 	}
 
-	pair, err := h.issueTokens(c.Request.Context(), user.ID, user.UserID.String(), user.Role)
+	pair, ok, err := h.rotateTokens(
+		c.Request.Context(), claims, user.ID, user.UserID.String(), user.Role,
+	)
 	if err != nil {
 		response.InternalError(c)
+		return
+	}
+	if !ok {
+		response.Error(c, response.ErrInvalidToken)
 		return
 	}
 
@@ -196,8 +217,16 @@ func (h *Handler) Me(c *gin.Context) {
 // POST /auth/logout
 func (h *Handler) Logout(c *gin.Context) {
 	var req RefreshTokenInput
-	// Body is optional; bind best-effort.
-	_ = c.ShouldBindJSON(&req)
-	h.revokeRefresh(c.Request.Context(), req.RefreshToken)
+	if !h.bindJSON(c, &req) {
+		return
+	}
+	if err := h.revokeRefresh(c.Request.Context(), req.RefreshToken); err != nil {
+		if errors.Is(err, errInvalidRefreshToken) {
+			response.Error(c, response.ErrInvalidToken)
+			return
+		}
+		response.InternalError(c)
+		return
+	}
 	c.Status(http.StatusNoContent)
 }

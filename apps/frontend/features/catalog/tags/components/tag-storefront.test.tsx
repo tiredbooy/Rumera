@@ -46,6 +46,7 @@ vi.mock("@/features/catalog/products/api/public", () => ({
 }));
 
 vi.mock("@/features/catalog/products/components/product-card", () => ({
+  PRODUCT_CARD_GRID_CLASS: "grid",
   ProductCard: ({ product }: { product: { slug?: string; title: string } }) => (
     <a href={`/products/${product.slug}`}>{product.title}</a>
   ),

@@ -14,7 +14,11 @@ See [Authentication](../authentication.md) for the token model and trust tiers, 
 | PATCH | `/admin/inventory/variants/:variantID/reorder` | 🛡️ admin | Update reorder thresholds |
 | GET | `/admin/inventory/variants/:variantID/movements` | 🛡️ admin | A variant's movement history |
 
-`available_stock` is always derived as `stock_on_hand - committed_stock`. Movement `type` is one of `purchase`, `restock`, `refund`, `adjustment`, `reservation`, `release`, `damage`.
+`stock_on_hand` is physical stock and `available_stock` is always derived as
+`stock_on_hand - committed_stock`. Reserving an order changes only
+`committed_stock`; payment confirmation deducts the same quantity from both
+physical and committed stock. Movement `type` is one of `purchase`, `restock`,
+`refund`, `adjustment`, `reservation`, `release`, `damage`.
 
 ---
 
@@ -29,7 +33,12 @@ Authorization: Bearer <admin access_token>
 
 | Param | Type | Description |
 |-------|------|-------------|
-| `low_stock` | bool | Only records where `stock_on_hand <= reorder_point` |
+| `search` | string | Product-title or SKU search |
+| `low_stock` | bool | Only records where `available_stock <= reorder_point` |
+
+Supported `sortBy` values are `id`, `updated_at`, `stock_on_hand`,
+`available_stock`, `reorder_point`, `product_title`, and `sku`. Results use the
+inventory ID as a deterministic secondary ordering key.
 
 **Response** `200 OK` — paginated `results` of `InventoryResponse`:
 
@@ -39,6 +48,11 @@ Authorization: Bearer <admin access_token>
     {
       "id": 7,
       "product_variant_id": 312,
+      "product_id": 31,
+      "product_title": "Test Bottle",
+      "sku": "SKU-312",
+      "category_title": "Whisky",
+      "unit_price": "1250000.50",
       "stock_on_hand": 40,
       "committed_stock": 6,
       "available_stock": 34,
@@ -94,7 +108,6 @@ Authorization: Bearer <admin access_token>
       "product_variant_id": 312,
       "quantity": 50,
       "type": "restock",
-      "reference_order_id": null,
       "note": "Q2 replenishment",
       "created_at": "2026-06-01T09:00:00Z"
     }
@@ -104,6 +117,9 @@ Authorization: Bearer <admin access_token>
 ```
 
 **Errors:** `400 INVALID_QUERY`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`.
+
+`reference_order_id` and `note` are omitted when absent. Results use
+`created_at` and `id` as deterministic newest-first ordering keys by default.
 
 ---
 
@@ -134,7 +150,7 @@ Records a movement against the variant and updates its stock accordingly.
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
 | `quantity` | int | ✓ | non-zero (`required`) |
-| `type` | string | ✓ | one of `purchase` `restock` `refund` `adjustment` `reservation` `release` `damage` |
+| `type` | string | ✓ | one of `purchase` `restock` `refund` `adjustment` `damage` |
 | `note` | string | | |
 
 ```json
@@ -145,7 +161,14 @@ Records a movement against the variant and updates its stock accordingly.
 }
 ```
 
-**Response** `204 No Content`. **Errors:** `400 INVALID_PARAMS`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `404 NOT_FOUND`, `422 VALIDATION_ERROR`.
+The stock delta and its movement are committed atomically. A delta that would
+make physical stock lower than committed stock is rejected without recording a
+movement. `restock` and `refund` require a positive quantity; `purchase` and
+`damage` require a negative quantity; `adjustment` accepts either direction.
+Reservations and releases are owned by the order lifecycle and are not valid
+direct adjustments.
+
+**Response** `204 No Content`. **Errors:** `400 INVALID_PARAMS`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `404 NOT_FOUND`, `409 OUT_OF_STOCK`, `422 VALIDATION_ERROR`.
 
 ---
 
@@ -156,14 +179,15 @@ PATCH /admin/inventory/variants/:variantID/reorder
 Authorization: Bearer <admin access_token>
 ```
 
-All fields optional — only supplied fields change.
+All fields optional — only supplied fields change. Send `0` to clear either
+threshold; omitted fields and JSON `null` are no-ops.
 
 **Request body** — `UpdateReorderReq`:
 
 | Field | Type | Validation |
 |-------|------|------------|
-| `reorder_point` | int | omitempty, min 0 |
-| `reorder_quantity` | int | omitempty, min 0 |
+| `reorder_point` | int | omitempty, 0 to 2147483647 |
+| `reorder_quantity` | int | omitempty, 0 to 2147483647 |
 
 ```json
 {
@@ -172,7 +196,11 @@ All fields optional — only supplied fields change.
 }
 ```
 
-**Response** `200 OK` — updated `InventoryResponse`. **Errors:** `400 INVALID_PARAMS`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `404 NOT_FOUND`, `422 VALIDATION_ERROR`.
+Updating thresholds does not create a stock movement. `reorder_point` controls
+low-stock classification; `reorder_quantity` is advisory and does not trigger an
+automatic purchase.
+
+**Response** `200 OK` — the atomically updated `InventoryResponse`. **Errors:** `400 INVALID_PARAMS`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `404 NOT_FOUND`, `422 VALIDATION_ERROR`.
 
 ---
 

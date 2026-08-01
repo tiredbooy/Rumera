@@ -60,21 +60,21 @@ export interface CreateJournalPostInput {
 }
 
 export interface UpdateJournalPostInput {
-  title?: string | null;
-  slug?: string | null;
-  content?: string | null;
+  title?: string;
+  slug?: string;
+  content?: string;
   excerpt?: string | null;
   image_url?: string | null;
   image_alt?: string | null;
-  time_to_read?: number | null;
-  status?: JournalStatus | null;
-  is_featured?: boolean | null;
+  time_to_read?: number;
+  status?: JournalStatus;
+  is_featured?: boolean;
   meta_title?: string | null;
   meta_description?: string | null;
   published_at?: string | null;
-  category_ids?: number[] | null;
-  product_ids?: number[] | null;
-  tag_ids?: number[] | null;
+  category_ids?: number[];
+  product_ids?: number[];
+  tag_ids?: number[];
 }
 
 export interface CreateJournalCategoryInput {
@@ -84,8 +84,12 @@ export interface CreateJournalCategoryInput {
   parent_id?: number | null;
 }
 
-// The backend currently uses the same required-name payload for both mutations.
-export type UpdateJournalCategoryInput = CreateJournalCategoryInput;
+export interface UpdateJournalCategoryInput {
+  name?: string;
+  description?: string | null;
+  slug?: string | null;
+  parent_id?: number | null;
+}
 
 export type JournalSortField =
   | "published_at"
@@ -99,6 +103,17 @@ export type JournalSortDirection = "asc" | "desc";
 /** Effective query contract for the published-only public journal list. */
 export interface JournalListQuery extends PaginationQuery {
   search?: string;
+  is_featured?: boolean;
+  category_id?: number;
+  exclude_id?: number;
+  sortBy?: JournalSortField;
+  orderBy?: JournalSortDirection;
+}
+
+/** Admin journal list includes drafts and supports an explicit status filter. */
+export interface AdminJournalListQuery extends PaginationQuery {
+  search?: string;
+  status?: JournalStatus;
   is_featured?: boolean;
   category_id?: number;
   sortBy?: JournalSortField;

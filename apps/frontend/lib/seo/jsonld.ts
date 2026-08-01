@@ -11,6 +11,9 @@ import type {
   ProductDetail,
   ProductListItem,
 } from "@/features/catalog/products/types";
+import type { JournalDetail } from "@/features/journal/types";
+import type { RecipeDetail } from "@/features/recipes/types";
+import { extractContentSteps } from "@/lib/content/sanitize-html";
 
 export function organizationLd() {
   return {
@@ -172,6 +175,127 @@ export function productListLd(
           ]
         : [];
     }),
+  };
+}
+
+export function contentListLd(
+  name: string,
+  items: { name: string; path: string }[],
+  startPosition = 1,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name,
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem",
+      position: startPosition + index,
+      name: item.name,
+      url: absoluteUrl(item.path),
+    })),
+  };
+}
+
+export function journalArticleLd(post: JournalDetail) {
+  const url = absoluteUrl(`/journal/${encodeURIComponent(post.slug)}`);
+  const description =
+    post.meta_description?.trim() || post.excerpt?.trim() || undefined;
+  const categories = post.categories.map((category) => category.name);
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    ...(description ? { description } : {}),
+    ...(post.image_url ? { image: [absoluteUrl(post.image_url)] } : {}),
+    inLanguage: "fa-IR",
+    ...(post.published_at ? { datePublished: post.published_at } : {}),
+    dateModified: post.updated_at,
+    url,
+    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+    ...(categories.length ? { articleSection: categories } : {}),
+    ...(post.time_to_read > 0
+      ? { timeRequired: `PT${post.time_to_read}M` }
+      : {}),
+    publisher: {
+      "@type": "Organization",
+      name: siteConfig.name,
+      url: siteConfig.url,
+    },
+  };
+}
+
+function isoDuration(minutes: number): string | undefined {
+  if (!Number.isFinite(minutes) || minutes <= 0) return undefined;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours && rest) return `PT${hours}H${rest}M`;
+  return hours ? `PT${hours}H` : `PT${rest}M`;
+}
+
+export function recipeDetailLd(recipe: RecipeDetail) {
+  const fallbackPath = `/recipes/${encodeURIComponent(recipe.slug)}`;
+  const url = absoluteUrl(recipe.canonical_url?.trim() || fallbackPath);
+  const description =
+    recipe.meta_description?.trim() ||
+    recipe.excerpt?.trim() ||
+    recipe.description?.trim() ||
+    undefined;
+  const image = recipe.og_image_url ?? recipe.image_url;
+  const instructions = extractContentSteps(recipe.content);
+  const keywords = [
+    ...(recipe.meta_keywords ?? []),
+    ...recipe.tags.map((tag) => tag.title),
+  ].filter(Boolean);
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "Recipe",
+    name: recipe.title,
+    url,
+    inLanguage: "fa-IR",
+    ...(description ? { description } : {}),
+    ...(image ? { image: [absoluteUrl(image)] } : {}),
+    ...(recipe.published_at ? { datePublished: recipe.published_at } : {}),
+    dateModified: recipe.updated_at,
+    ...(recipe.servings > 0 ? { recipeYield: `${recipe.servings} نفر` } : {}),
+    ...(recipe.cocktail_type ? { recipeCategory: recipe.cocktail_type } : {}),
+    ...(keywords.length ? { keywords } : {}),
+    ...(isoDuration(recipe.prep_time_minutes)
+      ? { prepTime: isoDuration(recipe.prep_time_minutes) }
+      : {}),
+    ...(isoDuration(recipe.cook_time_minutes)
+      ? { cookTime: isoDuration(recipe.cook_time_minutes) }
+      : {}),
+    ...(isoDuration(recipe.total_time_minutes)
+      ? { totalTime: isoDuration(recipe.total_time_minutes) }
+      : {}),
+    ...(recipe.calories != null
+      ? {
+          nutrition: {
+            "@type": "NutritionInformation",
+            calories: `${recipe.calories} calories`,
+          },
+        }
+      : {}),
+    ...(recipe.ingredients.length
+      ? {
+          recipeIngredient: recipe.ingredients.map((ingredient) =>
+            [ingredient.quantity, ingredient.unit, ingredient.ingredient_name]
+              .filter(Boolean)
+              .join(" "),
+          ),
+        }
+      : {}),
+    ...(instructions.length
+      ? {
+          recipeInstructions: instructions.map((text, index) => ({
+            "@type": "HowToStep",
+            position: index + 1,
+            text,
+          })),
+        }
+      : {}),
   };
 }
 

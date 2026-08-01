@@ -1,6 +1,7 @@
 import { Controller } from "react-hook-form";
 import type { Control, FieldErrors, UseFormRegister } from "react-hook-form";
 
+import { fieldErrorId } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -26,14 +27,19 @@ export function ProfileSection({
   control,
   register,
   errors,
+  disabled,
 }: {
   user: AdminUser;
   control: Control<CustomerEditFormValues>;
   register: UseFormRegister<CustomerEditFormValues>;
   errors: FieldErrors<CustomerEditFormValues>;
+  disabled: boolean;
 }) {
   return (
-    <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
+    <fieldset
+      disabled={disabled}
+      className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6 disabled:opacity-70"
+    >
       <legend className="px-1 font-serif text-base">مشخصات کاربر</legend>
       <p className="-mt-0.5 text-xs text-muted-foreground">
         اطلاعات هویتی و تماس این حساب.
@@ -106,18 +112,28 @@ export function ProfileSection({
           />
         </Field>
 
-        <Field id="gender" label="جنسیت">
+        <Field id="gender" label="جنسیت" error={errors.gender?.message}>
           <Controller
             control={control}
             name="gender"
             render={({ field }) => (
               <Select
                 value={field.value || "none"}
+                disabled={disabled}
                 onValueChange={(val) =>
                   field.onChange(val === "none" ? "" : val)
                 }
               >
-                <SelectTrigger id="gender" className="w-full">
+                <SelectTrigger
+                  id="gender"
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  className="w-full"
+                  aria-invalid={errors.gender ? true : undefined}
+                  aria-describedby={
+                    errors.gender ? fieldErrorId("gender") : undefined
+                  }
+                >
                   <SelectValue placeholder="انتخاب جنسیت" />
                 </SelectTrigger>
                 <SelectContent>

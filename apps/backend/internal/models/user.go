@@ -6,6 +6,34 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	UserRoleCustomer = "customer"
+	UserRoleVendor   = "vendor"
+	UserRoleAdmin    = "admin"
+)
+
+func IsAssignableUserRole(role string) bool {
+	switch role {
+	case UserRoleCustomer, UserRoleVendor, UserRoleAdmin:
+		return true
+	default:
+		return false
+	}
+}
+
+func AssignableUserRoles() []string {
+	return []string{UserRoleCustomer, UserRoleVendor, UserRoleAdmin}
+}
+
+func IsUserGender(gender string) bool {
+	switch gender {
+	case "male", "female", "other":
+		return true
+	default:
+		return false
+	}
+}
+
 // ─────────────────────────────────────────────────────────────
 // Core DB Model  —  maps 1-to-1 with the users table
 // ─────────────────────────────────────────────────────────────
@@ -41,18 +69,28 @@ type User struct {
 	UpdatedAt time.Time  `db:"updated_at"`
 }
 
+// AuthUser is the minimal live account projection required by authentication
+// middleware after a token has been cryptographically validated.
+type AuthUser struct {
+	ID       int64     `db:"id"`
+	UserID   uuid.UUID `db:"user_id"`
+	Role     string    `db:"role"`
+	IsActive bool      `db:"is_active"`
+	IsBanned bool      `db:"is_banned"`
+}
+
 // ─────────────────────────────────────────────────────────────
 // Requests  —  what the handler binds from the HTTP body
 // ─────────────────────────────────────────────────────────────
 
 // SignUpInput is the public POST /auth/register body. Role is accepted for
-// backward-compatible validation but ignored: every self-registered account is
-// a customer.
+// request compatibility but ignored: every self-registered account is a
+// customer.
 type SignUpInput struct {
 	FirstName    *string    `json:"first_name"`
 	LastName     *string    `json:"last_name"`
 	Email        string     `json:"email"         validate:"required,email"`
-	Password     string     `json:"password"      validate:"required,min=8"`
+	Password     string     `json:"password"      validate:"required,min=8,max=72"`
 	Phone        *string    `json:"phone"`
 	NationalCode *string    `json:"national_code"`
 	BirthDate    *time.Time `json:"birth_date"`
@@ -61,17 +99,47 @@ type SignUpInput struct {
 }
 
 // CreateUserReq is the internal service/repository command produced from a
-// validated SignUpInput (or trusted bootstrap code).
+// validated SignUpInput. UserService always forces its role to customer.
 type CreateUserReq struct {
 	FirstName    *string    `json:"first_name"`
 	LastName     *string    `json:"last_name"`
 	Email        string     `json:"email"         validate:"required,email"`
-	Password     string     `json:"password"      validate:"required,min=8"`
+	Password     string     `json:"password"      validate:"required,min=8,max=72"`
 	Phone        *string    `json:"phone"`
 	NationalCode *string    `json:"national_code"`
 	BirthDate    *time.Time `json:"birth_date"`
 	Gender       *string    `json:"gender"        validate:"omitempty,oneof=male female other"`
 	Role         string     `json:"role"          validate:"omitempty,oneof=customer admin vendor"`
+}
+
+// AdminCreateUserReq is the body for POST /admin/users. Password is accepted
+// only at this boundary and is replaced by a server-generated hash before the
+// repository is called.
+type AdminCreateUserReq struct {
+	FirstName    *string    `json:"first_name"    validate:"omitempty,max=100"`
+	LastName     *string    `json:"last_name"     validate:"omitempty,max=100"`
+	Email        string     `json:"email"         validate:"required,email,max=255"`
+	Password     string     `json:"password"      validate:"required,min=8,max=72"`
+	Phone        *string    `json:"phone"          validate:"omitempty,max=20"`
+	NationalCode *string    `json:"national_code" validate:"omitempty,max=20"`
+	BirthDate    *time.Time `json:"birth_date"`
+	Gender       *string    `json:"gender"        validate:"omitempty,oneof=male female other"`
+	Role         *string    `json:"role"          validate:"omitempty,oneof=customer vendor admin"`
+	IsActive     *bool      `json:"is_active"`
+}
+
+// AdminCreateUserParams is the persistence command produced after defaults and
+// password hashing. It intentionally contains no plaintext password.
+type AdminCreateUserParams struct {
+	FirstName    *string
+	LastName     *string
+	Email        string
+	Phone        *string
+	NationalCode *string
+	BirthDate    *time.Time
+	Gender       *string
+	Role         string
+	IsActive     bool
 }
 
 // UpdateProfileInput is the public PATCH /auth/me body. Email, password, role,
@@ -95,15 +163,17 @@ type UpdateUserReq struct {
 	Gender       *string    `json:"gender"    validate:"omitempty,oneof=male female other"`
 }
 
-// AdminUpdateUserReq is the body for PATCH /admin/users/:userID. It carries the
-// same editable profile fields as UpdateUserReq plus the two privileged,
-// admin-only fields — role and is_active — which must NEVER be bindable on the
-// self-service /auth/me route. Both privileged fields are optional pointers so
-// an admin can patch profile data without touching access control.
+// AdminUpdateUserReq is the body for PATCH /admin/users/:userID. NullablePatch
+// distinguishes an omitted profile field from an explicit JSON null clear.
 type AdminUpdateUserReq struct {
-	UpdateUserReq
-	Role     *string `json:"role"      validate:"omitempty,oneof=customer admin vendor"`
-	IsActive *bool   `json:"is_active"`
+	FirstName    NullablePatch[string]    `json:"first_name"`
+	LastName     NullablePatch[string]    `json:"last_name"`
+	Phone        NullablePatch[string]    `json:"phone"`
+	NationalCode NullablePatch[string]    `json:"national_code"`
+	BirthDate    NullablePatch[time.Time] `json:"birth_date"`
+	Gender       NullablePatch[string]    `json:"gender"`
+	Role         NullablePatch[string]    `json:"role"`
+	IsActive     NullablePatch[bool]      `json:"is_active"`
 }
 
 type OAuthReq struct {
@@ -137,6 +207,8 @@ type AdminUser struct {
 	NationalCode    *string    `json:"national_code,omitempty"`
 	OAuthProvider   *string    `json:"oauth_provider,omitempty"`
 	IsActive        bool       `json:"is_active"`
+	IsBanned        bool       `json:"is_banned"`
+	BannedAt        *time.Time `json:"banned_at,omitempty"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
 	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`
 	UpdatedAt       time.Time  `json:"updated_at"`
@@ -150,7 +222,51 @@ type UserListItem struct {
 	Role        string    `json:"role"`
 	TotalOrders int       `json:"total_orders"`
 	IsActive    bool      `json:"is_active"`
+	IsBanned    bool      `json:"is_banned"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+type UserRoleCounts struct {
+	MemberCount       int64
+	ActiveMemberCount int64
+}
+
+type AdminRoleSummary struct {
+	Role              string `json:"role"`
+	AdminAccess       bool   `json:"admin_access"`
+	Assignable        bool   `json:"assignable"`
+	MemberCount       int64  `json:"member_count"`
+	ActiveMemberCount int64  `json:"active_member_count"`
+}
+
+type AdminRolesResponse struct {
+	AuthorizationMode string             `json:"authorization_mode"`
+	AdminRoles        []string           `json:"admin_roles"`
+	Roles             []AdminRoleSummary `json:"roles"`
+}
+
+type AdminUserAuditAction string
+
+const (
+	AdminUserAuditCreated     AdminUserAuditAction = "user.created"
+	AdminUserAuditUpdated     AdminUserAuditAction = "user.updated"
+	AdminUserAuditDeactivated AdminUserAuditAction = "user.deactivated"
+)
+
+type AdminUserAuditChange struct {
+	Before any `json:"before"`
+	After  any `json:"after"`
+}
+
+type AdminUserAuditEvent struct {
+	EventID       uuid.UUID                       `json:"event_id"`
+	ActorUserID   uuid.UUID                       `json:"actor_user_id"`
+	ActorEmail    string                          `json:"actor_email"`
+	TargetUserID  uuid.UUID                       `json:"target_user_id"`
+	Action        AdminUserAuditAction            `json:"action"`
+	ChangedFields []string                        `json:"changed_fields"`
+	Changes       map[string]AdminUserAuditChange `json:"changes"`
+	CreatedAt     time.Time                       `json:"created_at"`
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -170,4 +286,17 @@ type UserFilter struct {
 
 func (f *UserFilter) Defaults() {
 	f.BaseFilter.Defaults("created_at")
+}
+
+type AdminUserAuditFilter struct {
+	PaginationParams
+}
+
+func (f *AdminUserAuditFilter) Defaults() {
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.Limit < 1 || f.Limit > 100 {
+		f.Limit = 20
+	}
 }

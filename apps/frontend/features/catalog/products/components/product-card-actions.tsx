@@ -36,7 +36,9 @@ export function ProductCardActions({
   const { status } = useSession();
   const router = useRouter();
   const authenticated = status === "authenticated";
-  const wishlist = useWishlist(authenticated && purchasableVariantId !== undefined);
+  const wishlist = useWishlist(
+    authenticated && purchasableVariantId !== undefined,
+  );
   const addWishlist = useAddWishlistItem();
   const removeWishlist = useRemoveWishlistItem();
   const recordInteraction = useRecordInteraction();
@@ -90,33 +92,31 @@ export function ProductCardActions({
           }
           aria-pressed={Boolean(wishlistItem)}
           className={cn(
-            "absolute end-3 top-3 z-20 flex size-11 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-background/85 text-foreground shadow-lg backdrop-blur-md outline-none transition-[opacity,color,background-color,transform] duration-200 hover:text-wine focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/product:opacity-100 [@media(hover:hover)]:group-focus-within/product:opacity-100",
+            "absolute end-3 top-3 z-20 flex size-11 cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background text-foreground shadow-e1 outline-none transition-[color,background-color,transform] duration-200 hover:bg-accent hover:text-wine focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none",
             wishlistItem && "text-wine",
           )}
         >
           {wishPending ? (
             <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
           ) : (
-            <Heart
-              className={cn("size-4", wishlistItem && "fill-current")}
-            />
+            <Heart className={cn("size-4", wishlistItem && "fill-current")} />
           )}
         </button>
       ) : null}
 
-      <div className="absolute inset-x-3 bottom-3 z-20 translate-y-0 opacity-100 transition-[opacity,transform] duration-200 motion-reduce:transition-none [@media(hover:hover)]:translate-y-2 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/product:translate-y-0 [@media(hover:hover)]:group-hover/product:opacity-100 [@media(hover:hover)]:group-focus-within/product:translate-y-0 [@media(hover:hover)]:group-focus-within/product:opacity-100">
+      <div className="absolute inset-x-3 bottom-3 z-20">
         {purchasableVariantId ? (
           <AddToCartButton
             productVariantId={purchasableVariantId}
             label="افزودن سریع"
             ariaLabel={`افزودن سریع ${productTitle} به سبد`}
-            className="h-11 w-full rounded-2xl bg-background/90 px-4 text-foreground shadow-xl backdrop-blur-md hover:bg-primary hover:text-primary-foreground"
+            className="h-11 w-full rounded-2xl bg-primary px-4 text-primary-foreground shadow-e2 hover:bg-primary/90"
           />
         ) : hasActiveVariants && hasAvailableVariants && productHref ? (
           <Button
             asChild
             variant="secondary"
-            className="h-11 w-full rounded-2xl bg-background/90 shadow-xl backdrop-blur-md"
+            className="h-11 w-full rounded-2xl bg-background text-foreground shadow-e2 hover:bg-accent"
           >
             <Link href={productHref}>
               <SlidersHorizontal /> انتخاب گزینه‌ها
@@ -127,7 +127,7 @@ export function ProductCardActions({
             type="button"
             variant="secondary"
             disabled
-            className="h-11 w-full rounded-2xl bg-background/90 shadow-xl backdrop-blur-md"
+            className="h-11 w-full rounded-2xl bg-background text-foreground shadow-e2"
           >
             انتخاب گزینه در دسترس نیست
           </Button>
@@ -136,7 +136,7 @@ export function ProductCardActions({
             type="button"
             variant="secondary"
             disabled
-            className="h-11 w-full rounded-2xl bg-background/90 shadow-xl backdrop-blur-md"
+            className="h-11 w-full rounded-2xl bg-background text-foreground shadow-e2"
           >
             ناموجود
           </Button>

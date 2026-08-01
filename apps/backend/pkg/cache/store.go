@@ -15,6 +15,23 @@ type redisStore struct {
 	client *redis.Client
 }
 
+var rotateScript = redis.NewScript(`
+local current = redis.call("GET", KEYS[1])
+if not current or current ~= ARGV[1] then
+  return 0
+end
+redis.call("DEL", KEYS[1])
+redis.call("PSETEX", KEYS[2], ARGV[2], ARGV[3])
+redis.call("PSETEX", KEYS[3], ARGV[4], ARGV[5])
+return 1
+`)
+
+var revokeRotationScript = redis.NewScript(`
+local replay = redis.call("GET", KEYS[2])
+redis.call("DEL", KEYS[1])
+return replay or ""
+`)
+
 func (s *redisStore) Set(ctx context.Context, key, value string, ttl time.Duration) error {
 	if err := s.client.Set(ctx, key, value, ttl).Err(); err != nil {
 		return fmt.Errorf("cache set %q: %w", key, err)
@@ -31,6 +48,36 @@ func (s *redisStore) Get(ctx context.Context, key string) (string, error) {
 		return "", fmt.Errorf("cache get %q: %w", key, err)
 	}
 	return val, nil
+}
+
+func (s *redisStore) Rotate(ctx context.Context, rotation Rotation) (bool, error) {
+	replacementTTL := max(rotation.ReplacementTTL.Milliseconds(), 1)
+	replayTTL := max(rotation.ReplayTTL.Milliseconds(), 1)
+	result, err := rotateScript.Run(
+		ctx,
+		s.client,
+		[]string{rotation.CurrentKey, rotation.ReplacementKey, rotation.ReplayKey},
+		rotation.ExpectedValue,
+		replacementTTL,
+		rotation.ReplacementValue,
+		replayTTL,
+		rotation.ReplayValue,
+	).Int64()
+	if err != nil {
+		return false, fmt.Errorf("cache rotate %q: %w", rotation.CurrentKey, err)
+	}
+	return result == 1, nil
+}
+
+func (s *redisStore) RevokeRotation(ctx context.Context, currentKey, replayKey string) (string, error) {
+	replay, err := revokeRotationScript.Run(ctx, s.client, []string{currentKey, replayKey}).Text()
+	if err != nil {
+		return "", fmt.Errorf("cache revoke rotation %q: %w", currentKey, err)
+	}
+	if replay == "" {
+		return "", ErrNotFound
+	}
+	return replay, nil
 }
 
 func (s *redisStore) Incr(ctx context.Context, key string, ttl time.Duration) (int64, error) {

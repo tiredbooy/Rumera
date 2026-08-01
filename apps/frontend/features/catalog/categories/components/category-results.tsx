@@ -17,7 +17,10 @@ import {
   getCategorySortLabel,
   type CategoryRouteQuery,
 } from "@/features/catalog/categories/routing";
-import { ProductCard } from "@/features/catalog/products/components/product-card";
+import {
+  ProductCard,
+  PRODUCT_CARD_GRID_CLASS,
+} from "@/features/catalog/products/components/product-card";
 import type { ProductListItem } from "@/features/catalog/products/types";
 import { Placeholder } from "@/features/dashboard/components/placeholder";
 import type { Pagination } from "@/lib/api/types";
@@ -49,7 +52,7 @@ export function CategoryResults({
 
   return (
     <section
-      className="container-px mx-auto max-w-7xl py-10 sm:py-14 lg:py-16"
+      className="container-px mx-auto w-full max-w-7xl py-10 sm:py-14 lg:py-16"
       aria-labelledby={CATEGORY_RESULTS_ID}
     >
       <CategoryToolbar
@@ -68,7 +71,7 @@ export function CategoryResults({
       {products.length ? (
         <ul
           id="category-products-grid"
-          className="mt-7 grid list-none grid-cols-1 gap-6 p-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          className={`${PRODUCT_CARD_GRID_CLASS} mt-7 list-none p-0`}
         >
           {products.map((product) => (
             <li key={product.id} className="h-full min-w-0">

@@ -77,6 +77,7 @@ export interface ShoppableProduct {
   compare_at_price?: number;
   image_url?: string;
   is_available: boolean;
+  available_stock: number;
   quantity?: string;
   unit?: string;
   sort_order: number;
@@ -119,6 +120,7 @@ export type RecipeListQuery = PaginationQuery & {
   tag_id?: number;
   variant_id?: number;
   max_time?: number;
+  exclude_id?: number;
   sortBy?: RecipeSortField;
   orderBy?: RecipeSortDirection;
 };

@@ -1,10 +1,13 @@
 package middlewares
 
 import (
+	"context"
+	"errors"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/response"
 	"github.com/tiredbooy/pkg/token"
 )
@@ -18,9 +21,17 @@ const (
 	ctxKeyRole   = "role"   // string
 )
 
-// Auth validates the bearer access token and injects the caller's identity into
-// the request context. Requests without a valid token are rejected with 401.
-func Auth(jwt token.Manager) gin.HandlerFunc {
+// AuthUserReader is the live account projection required after JWT validation.
+// The token proves possession; users.role and users.is_active remain the source
+// of authorization truth for every protected request.
+type AuthUserReader interface {
+	GetAuthUserByUID(ctx context.Context, uid int64) (*models.AuthUser, error)
+}
+
+// Auth validates the bearer access token, rehydrates the account from the live
+// database, and injects that live identity into the request context. A stale
+// token cannot preserve access after role demotion or account deactivation.
+func Auth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw, ok := bearerToken(c)
 		if !ok {
@@ -34,32 +45,64 @@ func Auth(jwt token.Manager) gin.HandlerFunc {
 			return
 		}
 
-		if uid, err := uuid.Parse(claims.UserID); err == nil {
-			c.Set(ctxKeyUserID, uid)
+		claimUserID, err := uuid.Parse(claims.UserID)
+		if err != nil || claims.UID <= 0 {
+			abort(c, response.ErrInvalidToken)
+			return
 		}
-		c.Set(ctxKeyUID, claims.UID)
-		c.Set(ctxKeyRole, claims.Role)
+		if users == nil {
+			abort(c, response.ErrInternalError)
+			return
+		}
+		live, err := users.GetAuthUserByUID(c.Request.Context(), claims.UID)
+		if err != nil {
+			if errors.Is(err, models.ErrNotFound) {
+				abort(c, response.ErrInvalidToken)
+			} else {
+				abort(c, response.ErrInternalError)
+			}
+			return
+		}
+		if live == nil || !live.IsActive || live.IsBanned || live.ID != claims.UID ||
+			live.UserID != claimUserID || !models.IsAssignableUserRole(live.Role) {
+			abort(c, response.ErrInvalidToken)
+			return
+		}
+
+		c.Set(ctxKeyUserID, live.UserID)
+		c.Set(ctxKeyUID, live.ID)
+		c.Set(ctxKeyRole, live.Role)
 
 		c.Next()
 	}
 }
 
 // OptionalAuth populates identity when a valid token is present but never
-// rejects the request. Useful for endpoints that personalise output for logged
-// in users yet stay public (e.g. product listings).
-func OptionalAuth(jwt token.Manager) gin.HandlerFunc {
+// rejects the request. Valid token claims are still rehydrated before they are
+// trusted; stale or inactive identities simply proceed as anonymous.
+func OptionalAuth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw, ok := bearerToken(c)
 		if !ok {
 			c.Next()
 			return
 		}
-		if claims, err := jwt.ValidateAccessToken(raw); err == nil {
-			if uid, err := uuid.Parse(claims.UserID); err == nil {
-				c.Set(ctxKeyUserID, uid)
-			}
-			c.Set(ctxKeyUID, claims.UID)
-			c.Set(ctxKeyRole, claims.Role)
+		claims, err := jwt.ValidateAccessToken(raw)
+		if err != nil || users == nil || claims.UID <= 0 {
+			c.Next()
+			return
+		}
+		claimUserID, err := uuid.Parse(claims.UserID)
+		if err != nil {
+			c.Next()
+			return
+		}
+		live, err := users.GetAuthUserByUID(c.Request.Context(), claims.UID)
+		if err == nil && live != nil && live.IsActive && !live.IsBanned && live.ID == claims.UID &&
+			live.UserID == claimUserID && models.IsAssignableUserRole(live.Role) {
+			c.Set(ctxKeyUserID, live.UserID)
+			c.Set(ctxKeyUID, live.ID)
+			c.Set(ctxKeyRole, live.Role)
 		}
 		c.Next()
 	}

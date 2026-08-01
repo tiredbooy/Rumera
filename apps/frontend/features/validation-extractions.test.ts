@@ -6,7 +6,11 @@ import {
   brandFormSchema,
 } from "./catalog/brands/validations";
 import { categoryFormSchema } from "./catalog/categories/validations";
-import { customerEditFormSchema } from "./customers/validations";
+import {
+  adminUserCreateFormSchema,
+  customerEditFormSchema,
+  parseAdminUserID,
+} from "./customers/validations";
 import {
   heroDateTimeInputValue,
   heroDateTimeISO,
@@ -97,13 +101,31 @@ describe("extracted validation contracts", () => {
     };
     expect(customerEditFormSchema.safeParse(base).success).toBe(true);
     expect(
-      customerEditFormSchema.safeParse({ ...base, role: "support" }).success,
-    ).toBe(false);
-    expect(
-      customerEditFormSchema.safeParse({ ...base, role: "manager" }).success,
+      customerEditFormSchema.safeParse({ ...base, role: "operator" }).success,
     ).toBe(false);
     expect(
       customerEditFormSchema.safeParse({ ...base, gender: "unknown" }).success,
+    ).toBe(false);
+    expect(
+      customerEditFormSchema.safeParse({ ...base, birth_date: "2026-02-30" })
+        .success,
+    ).toBe(false);
+    expect(parseAdminUserID("8b5948a0-d150-4c78-86cd-d16e63da940d")).toBe(
+      "8b5948a0-d150-4c78-86cd-d16e63da940d",
+    );
+    expect(parseAdminUserID("../roles")).toBeNull();
+
+    const createBase = {
+      ...base,
+      email: "admin@example.com",
+      password: "password123",
+    };
+    expect(adminUserCreateFormSchema.safeParse(createBase).success).toBe(true);
+    expect(
+      adminUserCreateFormSchema.safeParse({
+        ...createBase,
+        password: "آ".repeat(37),
+      }).success,
     ).toBe(false);
   });
 

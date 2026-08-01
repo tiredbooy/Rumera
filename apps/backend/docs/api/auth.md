@@ -9,7 +9,7 @@ See [Authentication](../authentication.md) for the token model and trust tiers, 
 | POST | `/auth/register` | 🌐 public | Create a customer account |
 | POST | `/auth/login` | 🌐 public | Exchange credentials for tokens |
 | POST | `/auth/refresh` | 🌐 public | Mint a new token pair |
-| POST | `/auth/logout` | 🌐 public | Client-side logout (no-op) |
+| POST | `/auth/logout` | 🌐 public | Revoke a refresh token |
 | POST | `/auth/password/forgot` | 🌐 public | Start password reset |
 | GET | `/auth/password/validate` | 🌐 public | Validate a reset token |
 | POST | `/auth/password/reset` | 🌐 public | Set a new password |
@@ -24,14 +24,14 @@ See [Authentication](../authentication.md) for the token model and trust tiers, 
 POST /auth/register
 ```
 
-Creates a customer account and returns a token pair. The `role` field is ignored — new accounts are always `customer`.
+Creates a customer account and returns credentials. The `role` field is ignored — new accounts are always `customer`.
 
 **Request body**
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
 | `email` | string | ✓ | valid email |
-| `password` | string | ✓ | min 8 chars |
+| `password` | string | ✓ | min 8 chars, max 72 UTF-8 bytes |
 | `first_name` | string | | |
 | `last_name` | string | | |
 | `phone` | string | | |
@@ -46,6 +46,12 @@ Creates a customer account and returns a token pair. The `role` field is ignored
   "first_name": "Jane"
 }
 ```
+
+If the account commit succeeds but a configured refresh whitelist becomes
+unavailable during credential issuance, the response still returns the
+short-lived `access_token` and user but omits `refresh_token`. The client should
+use normal login to establish a refreshable session; an unwhitelisted refresh
+token is never advertised.
 
 **Response** `201 Created`
 
@@ -84,7 +90,7 @@ POST /auth/login
 
 **Response** `200 OK` — same `AuthResponse` shape as register (`access_token`, `refresh_token`, `user`).
 
-**Errors:** `401 INVALID_CREDENTIALS` (wrong email *or* password — never disclosed which), `403 FORBIDDEN` (account inactive).
+**Errors:** `401 INVALID_CREDENTIALS` (wrong email *or* password — never disclosed which), `403 FORBIDDEN` (account inactive or banned).
 
 ---
 
@@ -106,9 +112,18 @@ POST /auth/refresh
 { "data": { "access_token": "…", "refresh_token": "…" } }
 ```
 
-The user's current role is re-read, so role changes apply from the next refresh onward.
+The user's current role and active status are re-read before rotation. Protected
+requests also rehydrate this state, so access changes apply on the next request
+without waiting for refresh.
 
-**Errors:** `401 INVALID_TOKEN`, `403 FORBIDDEN` (account inactive).
+When Redis is configured, refresh JTIs are whitelisted and replaced atomically.
+One concurrent request commits the old-to-new handoff; retries during a
+10-second race window receive the identical replacement pair, preventing
+response ordering from corrupting a session cookie. The replay remains valid
+only while its replacement JTI is still whitelisted. Token issuance and
+revocation fail closed if the configured whitelist is unavailable.
+
+**Errors:** `401 INVALID_TOKEN`, `403 FORBIDDEN` (account inactive or banned).
 
 ---
 
@@ -118,7 +133,19 @@ The user's current role is re-read, so role changes apply from the next refresh 
 POST /auth/logout
 ```
 
-Stateless JWTs can't be server-revoked yet, so this is a **no-op** that returns `204 No Content`. The client should discard its tokens. The endpoint exists so revocation can be added later without an API change.
+**Request body**
+
+```json
+{ "refresh_token": "…" }
+```
+
+Returns `204 No Content`. When Redis is configured, logout atomically consumes
+each replay link from the supplied token and removes the currently active
+replacement from the whitelist. A whitelist failure returns `500` rather than
+claiming successful revocation. Access tokens remain short-lived and every
+protected use is still checked against the live account state. A missing,
+malformed, or wrong-purpose token returns `401 INVALID_TOKEN`; repeating logout
+with a valid already-revoked token remains idempotent.
 
 ---
 

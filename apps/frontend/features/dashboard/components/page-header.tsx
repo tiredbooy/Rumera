@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 /**
  * Consistent page heading for the admin console: an optional eyebrow/breadcrumb
@@ -13,32 +13,36 @@ export function PageHeader({
   eyebrow,
   className,
 }: {
-  title: string
-  description?: string
-  actions?: React.ReactNode
+  title: string;
+  description?: string;
+  actions?: React.ReactNode;
   /** Breadcrumb / context row rendered above the title. */
-  eyebrow?: React.ReactNode
-  className?: string
+  eyebrow?: React.ReactNode;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
         "mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-3",
-        className
+        className,
       )}
     >
       <div className="min-w-0">
         {eyebrow ? <div className="mb-1.5">{eyebrow}</div> : null}
-        <h1 className="font-serif text-2xl leading-tight tracking-normal sm:text-[1.75rem]">
+        <h1 className="break-words font-serif text-2xl leading-tight tracking-normal [overflow-wrap:anywhere] sm:text-[1.75rem]">
           {title}
         </h1>
         {description ? (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-1 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            {description}
+          </p>
         ) : null}
       </div>
       {actions ? (
-        <div className="flex shrink-0 items-center gap-2">{actions}</div>
+        <div className="flex w-full min-w-0 max-w-full items-center gap-2 sm:w-auto">
+          {actions}
+        </div>
       ) : null}
     </div>
-  )
+  );
 }

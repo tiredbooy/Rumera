@@ -17,6 +17,12 @@ import CategoriesLoading from "../app/(storefront)/categories/loading";
 import CategoriesNotFound from "../app/(storefront)/categories/not-found";
 import StorefrontError from "../app/(storefront)/error";
 import JournalDetailLoading from "../app/(storefront)/journal/[slug]/loading";
+import JournalError from "../app/(storefront)/journal/error";
+import JournalLoading from "../app/(storefront)/journal/loading";
+import JournalNotFound from "../app/(storefront)/journal/not-found";
+import RecipesError from "../app/(storefront)/recipes/error";
+import RecipesLoading from "../app/(storefront)/recipes/loading";
+import RecipesNotFound from "../app/(storefront)/recipes/not-found";
 import StorefrontLoading from "../app/(storefront)/loading";
 import StorefrontNotFound from "../app/(storefront)/not-found";
 import TagsError from "../app/(storefront)/tags/error";
@@ -59,6 +65,16 @@ const notFoundCases = [
     Component: TagsNotFound,
     hrefs: ["/tags", "/products"],
   },
+  {
+    name: "journal",
+    Component: JournalNotFound,
+    hrefs: ["/journal", "/products"],
+  },
+  {
+    name: "recipes",
+    Component: RecipesNotFound,
+    hrefs: ["/recipes", "/products"],
+  },
   { name: "admin", Component: AdminNotFound, hrefs: ["/admin", "/"] },
 ];
 
@@ -68,6 +84,8 @@ const errorCases = [
   { name: "account", Component: AccountError },
   { name: "checkout", Component: CheckoutError },
   { name: "categories", Component: CategoriesError },
+  { name: "journal", Component: JournalError },
+  { name: "recipes", Component: RecipesError },
   { name: "tags", Component: TagsError },
   { name: "admin", Component: AdminError },
 ];
@@ -76,6 +94,8 @@ const loadingCases = [
   { name: "root", Component: RootLoading },
   { name: "storefront", Component: StorefrontLoading },
   { name: "journal detail", Component: JournalDetailLoading },
+  { name: "journal", Component: JournalLoading },
+  { name: "recipes", Component: RecipesLoading },
   { name: "account", Component: AccountLoading },
   { name: "checkout", Component: CheckoutLoading },
   { name: "categories", Component: CategoriesLoading },

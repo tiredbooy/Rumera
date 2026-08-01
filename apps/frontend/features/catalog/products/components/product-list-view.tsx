@@ -5,7 +5,10 @@ import { JsonLd } from "@/components/json-ld";
 import { Button } from "@/components/ui/button";
 import { listCategories } from "@/features/catalog/categories/api";
 import { listProducts } from "@/features/catalog/products/api/public";
-import { ProductCard } from "@/features/catalog/products/components/product-card";
+import {
+  ProductCard,
+  PRODUCT_CARD_GRID_CLASS,
+} from "@/features/catalog/products/components/product-card";
 import { ProductSort } from "@/features/catalog/products/components/product-sort";
 import type { ProductSortField } from "@/features/catalog/products/queries";
 import { Placeholder } from "@/features/dashboard/components/placeholder";
@@ -24,9 +27,7 @@ type ProductListViewProps = {
   searchParams: Promise<ProductListSearchParams>;
 };
 
-export async function ProductListView({
-  searchParams,
-}: ProductListViewProps) {
+export async function ProductListView({ searchParams }: ProductListViewProps) {
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
   const search = sp.search?.trim() || undefined;
@@ -58,7 +59,7 @@ export async function ProductListView({
         ]}
       />
 
-      <section className="container-px mx-auto max-w-7xl py-14">
+      <section className="container-px mx-auto w-full max-w-7xl py-14">
         <p className="eyebrow mb-3">کاتالوگ کامل</p>
         <h1 className="font-serif text-5xl">فروشگاه بطری‌ها</h1>
         <p className="mt-3 max-w-xl text-muted-foreground">
@@ -92,7 +93,7 @@ export async function ProductListView({
               <ProductSort />
             </div>
 
-            <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className={`${PRODUCT_CARD_GRID_CLASS} mt-8`}>
               {results.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}

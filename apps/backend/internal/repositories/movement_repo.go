@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -52,14 +53,26 @@ func (r *movementRepository) GetAll(ctx context.Context, f models.MovementFilter
 
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
-
+	whereSQL := strings.Join(where, " AND ")
 	q := fmt.Sprintf(`
-		SELECT *, COUNT(*) OVER() AS total_count
-		FROM inventory_movements
-		WHERE %s
-		ORDER BY %s %s
-		LIMIT @limit OFFSET @offset`,
-		strings.Join(where, " AND "), sortBy, order,
+		WITH filtered AS (
+			SELECT id, product_variant_id, quantity, type, reference_order_id, note, created_at
+			FROM inventory_movements
+			WHERE %s
+		), page_rows AS (
+			SELECT *
+			FROM filtered
+			ORDER BY %s %s, id %s
+			LIMIT @limit OFFSET @offset
+		), total AS (
+			SELECT COUNT(*)::bigint AS total_count FROM filtered
+		)
+		SELECT p.id, p.product_variant_id, p.quantity, p.type,
+		       p.reference_order_id, p.note, p.created_at, total.total_count
+		FROM total
+		LEFT JOIN page_rows p ON TRUE
+		ORDER BY p.%s %s NULLS LAST, p.id %s NULLS LAST`,
+		whereSQL, sortBy, order, order, sortBy, order, order,
 	)
 
 	rows, err := r.db.Query(ctx, q, args)
@@ -68,23 +81,39 @@ func (r *movementRepository) GetAll(ctx context.Context, f models.MovementFilter
 	}
 	defer rows.Close()
 
-	var (
-		movements []*models.InventoryMovement
-		total     int64
-	)
+	movements := make([]*models.InventoryMovement, 0)
+	var total int64
 
 	for rows.Next() {
-		var m models.InventoryMovement
+		var (
+			id        *int64
+			variantID *int64
+			quantity  *int
+			typeValue *models.MovementType
+			orderID   *int64
+			note      *string
+			createdAt *time.Time
+			rowTotal  int64
+		)
 		if err := rows.Scan(
-			&m.ID, &m.ProductVariantID,
-			&m.Quantity, &m.Type,
-			&m.ReferenceOrderID, &m.Note,
-			&m.CreatedAt,
-			&total,
+			&id, &variantID, &quantity, &typeValue,
+			&orderID, &note, &createdAt, &rowTotal,
 		); err != nil {
 			return nil, 0, fmt.Errorf("movementRepository.GetAll scan: %w", err)
 		}
-		movements = append(movements, &m)
+		total = rowTotal
+		if id == nil {
+			continue
+		}
+		movements = append(movements, &models.InventoryMovement{
+			ID:               *id,
+			ProductVariantID: *variantID,
+			Quantity:         *quantity,
+			Type:             *typeValue,
+			ReferenceOrderID: orderID,
+			Note:             note,
+			CreatedAt:        *createdAt,
+		})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("movementRepository.GetAll rows: %w", err)
@@ -95,9 +124,10 @@ func (r *movementRepository) GetAll(ctx context.Context, f models.MovementFilter
 
 func (r *movementRepository) GetByVariantID(ctx context.Context, variantID int64) ([]*models.InventoryMovement, error) {
 	const q = `
-		SELECT * FROM inventory_movements
+		SELECT id, product_variant_id, quantity, type, reference_order_id, note, created_at
+		FROM inventory_movements
 		WHERE product_variant_id = $1
-		ORDER BY created_at DESC`
+		ORDER BY created_at DESC, id DESC`
 
 	rows, err := r.db.Query(ctx, q, variantID)
 	if err != nil {

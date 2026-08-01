@@ -58,9 +58,14 @@ Default sort is `created_at` `desc`.
       "code": "HSM-12",
       "slug": "highland-single-malt",
       "brand": "Glenmore",
+      "category": "Single Malt",
+      "tags": [{ "id": 7, "title": "Gift" }],
+      "image_response": null,
       "is_active": true,
       "min_price": 39.9,
-      "max_price": 89.0
+      "max_price": 89.0,
+      "active_variant_count": 2,
+      "available_variant_count": 1
     }
   ],
   "pagination": {

@@ -28,9 +28,10 @@ func NewManager(cfg *config.Config, log *zap.Logger) *JWTManager {
 
 func (m *JWTManager) GenerateAccessToken(uid int64, userID, role string) (string, error) {
 	accessClaims := Claims{
-		UID:    uid,
-		UserID: userID,
-		Role:   role,
+		UID:       uid,
+		UserID:    userID,
+		Role:      role,
+		TokenType: TypeAccess,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.AccessTTL)),
@@ -55,9 +56,10 @@ func (m *JWTManager) GenerateRefreshToken(uid int64, userID string) (string, err
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.RefreshTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
-		UID:    uid,
-		UserID: userID,
-		Role:   "",
+		UID:       uid,
+		UserID:    userID,
+		Role:      "",
+		TokenType: TypeRefresh,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -84,53 +86,63 @@ func (m *JWTManager) Generate(uid int64, userID, role string) (TokenPair, error)
 }
 
 func (m *JWTManager) ValidateAccessToken(token string) (*Claims, error) {
-	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return []byte(m.secret), nil // ← []byte here
-	})
-
+	claims, err := m.parse(token)
 	if err != nil {
-		return &Claims{}, err
+		return nil, err
 	}
-
-	if !parsed.Valid {
-		return &Claims{}, fmt.Errorf("Invalid token: %w", err)
+	switch claims.TokenType {
+	case TypeAccess:
+		return claims, nil
+	case "":
+		// Compatibility for access tokens issued before token_type existed. A
+		// legacy JTI identifies a refresh token and must never enter middleware.
+		if claims.ID == "" {
+			return claims, nil
+		}
 	}
+	return nil, fmt.Errorf("token is not an access token")
+}
 
-	claims, ok := parsed.Claims.(*Claims)
-	if !ok {
-		return nil, fmt.Errorf("invalid token claims")
+func (m *JWTManager) ValidateRefreshToken(tokenStr string) (*Claims, error) {
+	claims, err := m.parse(tokenStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid refresh token: %w", err)
+	}
+	switch claims.TokenType {
+	case TypeRefresh:
+		// Continue below: refresh tokens require a JTI for rotation/revocation.
+	case "":
+		// Compatibility for refresh tokens issued before token_type existed.
+		// Their JTI is the discriminator from legacy access tokens.
+		if claims.ID == "" {
+			return nil, fmt.Errorf("token is not a refresh token")
+		}
+	default:
+		return nil, fmt.Errorf("token is not a refresh token")
+	}
+	if claims.ID == "" {
+		return nil, fmt.Errorf("refresh token missing jti")
 	}
 	return claims, nil
 }
 
-func (m *JWTManager) ValidateRefreshToken(tokenStr string) (*Claims, error) {
+func (m *JWTManager) parse(tokenStr string) (*Claims, error) {
 	parsed, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		if t.Method != jwt.SigningMethodHS256 {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return []byte(m.secret), nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("invalid refresh token: %w", err)
+		return nil, err
 	}
-
 	if !parsed.Valid {
-		return nil, fmt.Errorf("refresh token is not valid")
+		return nil, fmt.Errorf("token is not valid")
 	}
-
 	claims, ok := parsed.Claims.(*Claims)
 	if !ok {
-		return nil, fmt.Errorf("invalid refresh token claims")
+		return nil, fmt.Errorf("invalid token claims")
 	}
-
-	// jti must be present — refresh tokens without an ID can't be rotated
-	if claims.ID == "" {
-		return nil, fmt.Errorf("refresh token missing jti")
-	}
-
 	return claims, nil
 }
 

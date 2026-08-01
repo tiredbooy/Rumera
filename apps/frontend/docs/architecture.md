@@ -138,10 +138,9 @@ A) Server render (public storefront data)
 B) Browser interaction (per-user / authenticated data)
    Browser: "use client" + React Query
      └─► fetch /api/store/<path>      (same origin, session cookie)
-           └─► Next BFF route handler: app/api/store/[...path]/route.ts
-                 ├─ auth() → read bearer token from next-auth session
-                 ├─ forward to ${API_URL}/api/v1/<path>  (Authorization: Bearer …)
-                 └─ on 401 → silent refresh + one retry (§6)
+            └─► Next BFF route handler: app/api/store/[...path]/route.ts
+                  ├─ Auth.js route wrapper → rotate/persist when needed
+                  └─ forward to ${API_URL}/api/v1/<path>  (Authorization: Bearer …)
                        └─► Go backend
 ```
 
@@ -176,12 +175,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 }
 ```
 
-| Route           | File                                                                    | Auth                                   | Allowlist (first segment unless noted)                                                                                                                                            |
-| --------------- | ----------------------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/store/*`  | [`store/[...path]/route.ts`](../app/api/store/[...path]/route.ts)       | next-auth session, token forwarded     | `cart`, `orders`, `addresses`, `coupons`, `shipping`, `wallet`, `wishlist`, `reviews`, `alerts`, `auth`, `loyalty`, `referrals`, `gift-cards`, `subscriptions`, `recommendations` |
-| `/api/admin/*`  | [`admin/[...path]/route.ts`](../app/api/admin/[...path]/route.ts)       | requires **staff** (`isStaff`) + token | `admin`, `products`, `categories`, `brands`, `tags`, `hero-slides`                                                                                                                |
-| `/api/public/*` | [`public/[...path]/route.ts`](../app/api/public/[...path]/route.ts)     | **none** (unauth forms)                | exact paths: `auth/register`, `auth/password/forgot`, `auth/password/reset`, `auth/password/validate`, `auth/otp/request`                                                         |
-| `/api/auth/*`   | [`auth/[...nextauth]/route.ts`](../app/api/auth/[...nextauth]/route.ts) | next-auth internals                    | sign-in / callback / session / CSRF (handled by next-auth)                                                                                                                        |
+| Route           | File                                                                    | Auth                                     | Allowlist (first segment unless noted)                                                                                                                                                  |
+| --------------- | ----------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/store/*`  | [`store/[...path]/route.ts`](../app/api/store/[...path]/route.ts)       | Auth.js-wrapped session, token forwarded | `cart`, `orders`, `addresses`, `coupons`, `shipping`, `wallet`, `wishlist`, `reviews`, `alerts`, `auth`, `loyalty`, `referrals`, `gift-cards`, `subscriptions`, `recommendations`, `me` |
+| `/api/admin/*`  | [`admin/[...path]/route.ts`](../app/api/admin/[...path]/route.ts)       | Auth.js wrapper + live `admin` check     | `admin`, `products`, `categories`, `brands`, `tags`, `hero-slides`                                                                                                                      |
+| `/api/public/*` | [`public/[...path]/route.ts`](../app/api/public/[...path]/route.ts)     | **none** (unauth forms)                  | exact paths: `auth/register`, `auth/password/forgot`, `auth/password/reset`, `auth/password/validate`, `auth/otp/request`, `categories/tree`                                            |
+| `/api/auth/*`   | [`auth/[...nextauth]/route.ts`](../app/api/auth/[...nextauth]/route.ts) | next-auth internals                      | sign-in / callback / session / CSRF (handled by next-auth)                                                                                                                              |
 
 Notes that are easy to get wrong:
 
@@ -193,8 +192,8 @@ Notes that are easy to get wrong:
   intact) so product image uploads pass through; `/api/store` forwards JSON only.
 - All proxies pass the backend status and JSON through **unchanged**, return
   `204` as an empty body, and map a fetch failure to a `502 UPSTREAM_UNAVAILABLE`.
-- Backend RBAC still runs on top — the proxy's staff check and allowlist are a
-  coarse first gate, not the authority.
+- Backend authorization still runs on top — the admin proxy's live check and
+  allowlist are defense in depth, not the authority.
 
 ---
 
@@ -209,7 +208,8 @@ Responsibilities:
 
 1. For any path under `/account` or `/admin`:
    - **Not signed in** → redirect to `/login?callbackUrl=<path>`.
-   - **Signed in but not staff** on `/admin` → redirect to `/forbidden`.
+   - **Expiring token** → rotate through `/api/auth/refresh-session` while
+     preserving the exact callback path.
    - Otherwise tag the response `X-Robots-Tag: noindex, nofollow` (private
      surfaces must never be indexed).
 2. Everything else passes through untouched.
@@ -267,15 +267,15 @@ Auth is next-auth v5 with the standard **split-config** pattern:
   the `session` callback that projects `role`, `permissions`, and `accessToken`
   onto the session). No Node-only code, so middleware can use it.
 - [`auth.ts`](../lib/auth/auth.ts) — Node runtime: the Credentials providers
-  (password login + SMS `otp`), and the `jwt` callback that persists the
-  access/refresh pair and **silently rotates** via `POST /auth/refresh` ~60s before
-  the access token expires.
+  (password login + SMS `otp`) and a request-aware `jwt` callback. It marks
+  server-component reads `RefreshRequired`, then rotates only in an Auth.js route
+  wrapper that can persist the replacement cookie.
 
-If the access token expires _mid-request_, the BFF proxies (`/api/store`,
-`/api/admin`) perform **one** silent refresh + retry using the server-only
-refresh token (read straight from the encrypted JWT cookie via `getToken`, so it
-never reaches the browser). If that refresh fails, the original 401 is returned
-and the client-side `SessionGuard` signs the user out.
+Protected page middleware sends expiring sessions through
+`/api/auth/refresh-session` with the exact callback path. The `/api/store` and
+`/api/admin` handlers are also wrapped by Auth.js, so every rotation happens in a
+response-producing context and its `Set-Cookie` is preserved. Neither proxy
+reads or exchanges a raw refresh token itself.
 
 ---
 

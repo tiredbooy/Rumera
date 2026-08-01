@@ -1,57 +1,109 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowLeft, ArrowRight, BookOpen } from "lucide-react";
 
 import { JsonLd } from "@/components/json-ld";
+import { ResultsHeading } from "@/components/results-heading";
 import { Button } from "@/components/ui/button";
-import { listJournalPage } from "@/features/journal/api/server";
+import {
+  listFeaturedJournalPosts,
+  listJournalPage,
+} from "@/features/journal/api/server";
 import { JournalCard } from "@/features/journal/components/journal-card";
 import { JournalExplorer } from "@/features/journal/components/journal-explorer";
+import {
+  getJournalSortLabel,
+  JOURNAL_PAGE_SIZE,
+  journalPageHref,
+  type JournalListSearchParams,
+  parseJournalRouteQuery,
+} from "@/features/journal/routing";
 import { Reveal } from "@/features/motion/components/reveal";
 import { faNum } from "@/lib/products";
-import { breadcrumbLd } from "@/lib/seo/jsonld";
+import { breadcrumbLd, contentListLd } from "@/lib/seo/jsonld";
 
-const PAGE_SIZE = 24;
+const RESULTS_ID = "journal-results-title";
 
-export type JournalListSearchParams = Promise<{ page?: string }>;
+export type { JournalListSearchParams } from "@/features/journal/routing";
 
-function pageHref(page: number): string {
-  return page > 1 ? `/journal?page=${page}` : "/journal";
-}
-
-type JournalListViewProps = {
+export async function JournalListView({
+  searchParams,
+}: {
   searchParams: JournalListSearchParams;
-};
+}) {
+  const rawSearchParams = await searchParams;
+  const query = parseJournalRouteQuery(rawSearchParams);
+  if (query.needsRedirect) redirect(journalPageHref(query, query.page));
 
-export async function JournalListView({ searchParams }: JournalListViewProps) {
-  const sp = await searchParams;
-  const pageParam = Number(sp.page);
-  const page = Number.isFinite(pageParam) && pageParam > 1 ? pageParam : 1;
-  // The featured lead story only headlines the untouched first page.
-  const isFirstPage = page === 1;
-
-  const { posts, pagination } = await listJournalPage({ page, limit: PAGE_SIZE });
-
-  // Headline the post the editors marked `is_featured`; fall back to the newest.
-  const featured = isFirstPage
-    ? (posts.find((p) => p.is_featured) ?? posts[0])
+  const isUnfiltered = !query.q && query.sort === "new";
+  const editorialFeatured = isUnfiltered
+    ? (await listFeaturedJournalPosts(1).catch(() => []))[0]
     : undefined;
-  const rest = featured ? posts.filter((p) => p.id !== featured.id) : posts;
+  const { posts, pagination } = await listJournalPage({
+    page: query.page,
+    limit: JOURNAL_PAGE_SIZE,
+    search: query.q,
+    sortBy: query.sortBy,
+    orderBy: query.orderBy,
+    ...(editorialFeatured ? { exclude_id: editorialFeatured.id } : {}),
+  });
+
+  const finalPage =
+    pagination.total_items === 0 ? 1 : Math.max(1, pagination.total_pages);
+  if (query.page > finalPage) redirect(journalPageHref(query, finalPage));
+
+  const lead =
+    query.page === 1
+      ? (editorialFeatured ?? (isUnfiltered ? posts[0] : undefined))
+      : undefined;
+  const rest = lead ? posts.filter((post) => post.id !== lead.id) : posts;
+  const hasFilters = Boolean(query.q) || query.sort !== "new";
+  const totalItems =
+    pagination.total_items + (editorialFeatured && isUnfiltered ? 1 : 0);
+  const resultTitle = query.q
+    ? `نتیجهٔ جستجو برای «${query.q}»`
+    : query.sort === "popular"
+      ? "نوشته‌های پربازدید"
+      : "تازه‌ترین نوشته‌ها";
+  const status =
+    totalItems > 0
+      ? `${faNum(totalItems)} نوشته، صفحهٔ ${faNum(query.page)} از ${faNum(finalPage)}`
+      : hasFilters
+        ? "نوشته‌ای مطابق فیلترها نیست"
+        : "هنوز نوشته‌ای منتشر نشده است";
+  const structuredItems = [lead, ...rest]
+    .filter((post) => post !== undefined)
+    .map((post) => ({
+      name: post.title,
+      path: `/journal/${encodeURIComponent(post.slug)}`,
+    }));
+  const structuredStart =
+    query.page === 1
+      ? 1
+      : (query.page - 1) * JOURNAL_PAGE_SIZE +
+        (editorialFeatured ? 2 : 1);
 
   return (
     <>
       <JsonLd
-        data={breadcrumbLd([
-          { name: "خانه", path: "/" },
-          { name: "ژورنال", path: "/journal" },
-        ])}
+        data={[
+          breadcrumbLd([
+            { name: "خانه", path: "/" },
+            { name: "ژورنال", path: "/journal" },
+          ]),
+          contentListLd(
+            resultTitle,
+            structuredItems,
+            structuredStart,
+          ),
+        ]}
       />
 
-      {/* Header */}
       <section className="cellar-glow relative overflow-hidden border-b border-border/60">
         <div className="container-px mx-auto max-w-7xl py-16 sm:py-20 lg:py-24">
           <Reveal>
             <p className="eyebrow mb-4">
-              <BookOpen className="size-3.5" aria-hidden /> ژورنال رومرا
+              <BookOpen className="size-3.5" aria-hidden="true" /> ژورنال رومرا
             </p>
             <h1 className="max-w-3xl text-balance font-serif text-4xl leading-[1.05] sm:text-5xl lg:text-6xl">
               خواندنی‌هایی برای کنجکاوها
@@ -66,83 +118,121 @@ export async function JournalListView({ searchParams }: JournalListViewProps) {
 
       <section
         className="container-px mx-auto max-w-7xl py-12 sm:py-16"
-        aria-label="فهرست نوشته‌های ژورنال"
+        aria-labelledby={RESULTS_ID}
         data-journal-results
       >
-        {posts.length === 0 ? (
-          <div className="border-hairline flex flex-col items-center gap-3 rounded-3xl bg-card/50 px-6 py-24 text-center ring-1 ring-foreground/5">
-            <BookOpen
-              className="size-10 text-muted-foreground/50"
-              aria-hidden
+        {lead ? (
+          <Reveal className="mb-12 sm:mb-16">
+            <JournalCard
+              post={lead}
+              featured
+              featuredLabel={
+                editorialFeatured ? "نوشتهٔ منتخب" : "تازه‌ترین نوشته"
+              }
+              priority
             />
-            <p className="font-serif text-2xl">به‌زودی</p>
-            <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-              هنوز نوشته‌ای منتشر نشده است. به‌زودی سر بزنید.
+          </Reveal>
+        ) : null}
+
+        <JournalExplorer
+          key={`${query.q ?? ""}:${query.sort}`}
+          query={query}
+        />
+        <ResultsHeading
+          id={RESULTS_ID}
+          eyebrow={getJournalSortLabel(query.sort)}
+          title={resultTitle}
+          status={status}
+          focusKey={`${query.page}:${query.q ?? ""}:${query.sort}:${totalItems}`}
+        />
+
+        {rest.length === 0 ? (
+          lead ? (
+            <p className="mt-6 rounded-2xl bg-muted/50 px-5 py-4 text-sm text-muted-foreground">
+              این تنها نوشتهٔ منتشرشده در ژورنال است.
             </p>
-          </div>
-        ) : (
-          <>
-            {/* Featured lead story — wide editorial hero */}
-            {featured ? (
-              <Reveal className="mb-12 sm:mb-16">
-                <JournalCard post={featured} featured priority />
-              </Reveal>
-            ) : null}
-
-            {rest.length > 0 ? (
-              <JournalExplorer posts={rest} />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {faNum(posts.length)} نوشته
+          ) : (
+            <div className="border-hairline mt-6 flex flex-col items-center gap-3 rounded-3xl bg-card/50 px-6 py-20 text-center ring-1 ring-foreground/5">
+              <BookOpen
+                className="size-10 text-muted-foreground/50"
+                aria-hidden="true"
+              />
+              <p className="font-serif text-2xl">
+                {hasFilters ? "نوشته‌ای پیدا نشد" : "به‌زودی"}
               </p>
-            )}
-
-            {/* Pagination — only the rest grid paginates; the explorer searches within the page. */}
-            {pagination.total_pages > 1 ? (
-              <nav
-                className="mt-12 flex items-center justify-center gap-3"
-                aria-label="صفحه‌بندی ژورنال"
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!pagination.has_prev}
-                  asChild={pagination.has_prev}
-                >
-                  {pagination.has_prev ? (
-                    <Link href={pageHref(pagination.page - 1)}>
-                      <ArrowRight className="size-4" aria-hidden /> قبلی
-                    </Link>
-                  ) : (
-                    <span>
-                      <ArrowRight className="size-4" aria-hidden /> قبلی
-                    </span>
-                  )}
+              <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+                {hasFilters
+                  ? "عبارت یا مرتب‌سازی دیگری را امتحان کنید."
+                  : "هنوز نوشته‌ای منتشر نشده است. به‌زودی سر بزنید."}
+              </p>
+              {hasFilters ? (
+                <Button variant="outline" asChild className="mt-2">
+                  <Link href="/journal">نمایش همهٔ نوشته‌ها</Link>
                 </Button>
-                <span className="text-sm text-muted-foreground">
-                  صفحهٔ {faNum(pagination.page)} از{" "}
-                  {faNum(pagination.total_pages)}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!pagination.has_next}
-                  asChild={pagination.has_next}
-                >
-                  {pagination.has_next ? (
-                    <Link href={pageHref(pagination.page + 1)}>
-                      بعدی <ArrowLeft className="size-4" aria-hidden />
-                    </Link>
-                  ) : (
-                    <span>
-                      بعدی <ArrowLeft className="size-4" aria-hidden />
-                    </span>
-                  )}
-                </Button>
-              </nav>
-            ) : null}
-          </>
+              ) : null}
+            </div>
+          )
+        ) : (
+          <ul
+            className="mt-6 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3"
+            data-journal-grid
+          >
+            {rest.map((post, index) => (
+              <li key={post.id} className="contents">
+                <JournalCard post={post} index={index} headingLevel={3} />
+              </li>
+            ))}
+          </ul>
         )}
+
+        {pagination.total_pages > 1 ? (
+          <nav
+            className="mt-12 flex items-center justify-center gap-3"
+            aria-label="صفحه‌بندی ژورنال"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!pagination.has_prev}
+              asChild={pagination.has_prev}
+            >
+              {pagination.has_prev ? (
+                <Link
+                  href={journalPageHref(query, query.page - 1, RESULTS_ID)}
+                  rel="prev"
+                >
+                  <ArrowRight className="size-4" aria-hidden="true" /> قبلی
+                </Link>
+              ) : (
+                <span>
+                  <ArrowRight className="size-4" aria-hidden="true" /> قبلی
+                </span>
+              )}
+            </Button>
+            <span className="text-sm text-muted-foreground" aria-current="page">
+              صفحهٔ {faNum(query.page)} از {faNum(finalPage)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!pagination.has_next}
+              asChild={pagination.has_next}
+            >
+              {pagination.has_next ? (
+                <Link
+                  href={journalPageHref(query, query.page + 1, RESULTS_ID)}
+                  rel="next"
+                >
+                  بعدی <ArrowLeft className="size-4" aria-hidden="true" />
+                </Link>
+              ) : (
+                <span>
+                  بعدی <ArrowLeft className="size-4" aria-hidden="true" />
+                </span>
+              )}
+            </Button>
+          </nav>
+        ) : null}
       </section>
     </>
   );

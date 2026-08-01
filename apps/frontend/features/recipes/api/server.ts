@@ -1,10 +1,10 @@
-import "server-only"
+import "server-only";
 
-import { apiFetch } from "@/lib/api/client"
-import { isApiNotFoundError } from "@/lib/api/error-semantics"
-import { publicRequest } from "@/lib/api/public"
-import { buildQuery } from "@/lib/api/qs"
-import type { Paginated } from "@/lib/api/types"
+import { apiFetch } from "@/lib/api/client";
+import { isApiNotFoundError } from "@/lib/api/error-semantics";
+import { publicRequest } from "@/lib/api/public";
+import { buildQuery } from "@/lib/api/qs";
+import type { Paginated } from "@/lib/api/types";
 
 import type {
   AdminRecipeDetail,
@@ -12,24 +12,32 @@ import type {
   RecipeListItem,
   RecipeListQuery,
   RecipeSitemapItem,
-} from "../types"
+} from "../types";
 
-const PUBLIC_CACHE = {
+const PUBLIC_LIST_CACHE = {
   cache: "force-cache" as const,
   next: { revalidate: 3600 },
-}
+};
+
+const PUBLIC_DETAIL_CACHE = {
+  cache: "force-cache" as const,
+  next: { revalidate: 120 },
+};
 
 export async function listRecipes(
   query: RecipeListQuery = {},
 ): Promise<Paginated<RecipeListItem>> {
   return publicRequest<Paginated<RecipeListItem>>(
     `/recipes${buildQuery({ ...query })}`,
-    PUBLIC_CACHE,
-  )
+    PUBLIC_LIST_CACHE,
+  );
 }
 
 export async function listFeaturedRecipes(): Promise<RecipeListItem[]> {
-  return publicRequest<RecipeListItem[]>("/recipes/featured", PUBLIC_CACHE)
+  return publicRequest<RecipeListItem[]>(
+    "/recipes/featured",
+    PUBLIC_LIST_CACHE,
+  );
 }
 
 export async function getRecipeBySlug(
@@ -38,11 +46,11 @@ export async function getRecipeBySlug(
   try {
     return await publicRequest<RecipeDetail>(
       `/recipes/${encodeURIComponent(slug)}`,
-      PUBLIC_CACHE,
-    )
+      PUBLIC_DETAIL_CACHE,
+    );
   } catch (error) {
-    if (isApiNotFoundError(error)) return null
-    throw error
+    if (isApiNotFoundError(error)) return null;
+    throw error;
   }
 }
 
@@ -51,20 +59,23 @@ export async function listRelatedRecipes(
 ): Promise<RecipeListItem[]> {
   return publicRequest<RecipeListItem[]>(
     `/recipes/${encodeURIComponent(slug)}/related`,
-    PUBLIC_CACHE,
-  )
+    PUBLIC_LIST_CACHE,
+  );
 }
 
 export async function listRecipeSlugs(): Promise<string[]> {
-  const items = await publicRequest<RecipeSitemapItem[]>(
+  return (await listRecipeSitemapItems()).map((item) => item.slug);
+}
+
+export function listRecipeSitemapItems(): Promise<RecipeSitemapItem[]> {
+  return publicRequest<RecipeSitemapItem[]>(
     "/recipes/sitemap",
-    PUBLIC_CACHE,
-  )
-  return items.map((item) => item.slug)
+    PUBLIC_LIST_CACHE,
+  );
 }
 
 export function getAdminRecipe(
   id: number | string,
 ): Promise<AdminRecipeDetail> {
-  return apiFetch<AdminRecipeDetail>(`/admin/recipes/${id}`)
+  return apiFetch<AdminRecipeDetail>(`/admin/recipes/${id}`);
 }

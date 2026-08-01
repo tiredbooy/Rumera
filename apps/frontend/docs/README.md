@@ -61,10 +61,10 @@ Browser
    └─ B) Browser interaction (per-user / authenticated) ────────────┐
          "use client" + React Query                                 │
            └─► fetch /api/store/* (same origin, session cookie)     │
-                 └─► Next BFF route handler                         │
-                       ├─ auth() → bearer from next-auth session    │
+                  └─► Next BFF route handler                         │
+                       ├─ Auth.js wrapper → rotate/persist if needed│
                        ├─ forward to ${API_URL}/api/v1/...          │
-                       └─ on 401 → silent refresh + one retry       ▼
+                       └─ bearer remains server-side                ▼
                                                                Go backend
 ```
 
@@ -72,7 +72,7 @@ Browser
 > feature-owned APIs backed by `publicRequest()` and render RTL HTML. Client
 > islands fetch **per-user, authenticated** data through the same-origin **BFF
 > proxies**, which attach the bearer token server-side (the browser never sees
-> it) and silently refresh it.
+> it) and persist single-use refresh rotation through Auth.js route responses.
 > Edge middleware does a fast bounce for `/account` + `/admin`; **layout-level
 > server guards** are the real authority; **RBAC permissions** gate individual
 > admin features in the UI. See [`architecture.md`](./architecture.md) for the

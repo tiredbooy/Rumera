@@ -6,12 +6,36 @@ import (
 	"time"
 )
 
+// Rotation describes an atomic single-use credential handoff. The current key
+// is consumed only when its value matches, then both the replacement key and a
+// short-lived replay result are written in the same Redis script.
+type Rotation struct {
+	CurrentKey       string
+	ExpectedValue    string
+	ReplacementKey   string
+	ReplacementValue string
+	ReplacementTTL   time.Duration
+	ReplayKey        string
+	ReplayValue      string
+	ReplayTTL        time.Duration
+}
+
 type Store interface {
 	// Set stores a string value with a TTL. Pass 0 for no expiry.
 	Set(ctx context.Context, key, value string, ttl time.Duration) error
 
 	// Get retrieves a value. Returns ErrNotFound if the key doesn't exist.
 	Get(ctx context.Context, key string) (string, error)
+
+	// Rotate atomically consumes a current value and installs its replacement.
+	// It returns false without mutation when the current key is absent or differs.
+	Rotate(ctx context.Context, rotation Rotation) (bool, error)
+
+	// RevokeRotation atomically removes a current credential and reads its replay
+	// record. The replay remains until its TTL expires so an interrupted
+	// revocation can safely retry the chain. It returns ErrNotFound when no replay
+	// record was present; the current credential is still removed in that case.
+	RevokeRotation(ctx context.Context, currentKey, replayKey string) (string, error)
 
 	// Incr atomically increments the integer value of a key and returns the new
 	// value. On the first increment (value goes from absent to 1) the given TTL
@@ -36,6 +60,7 @@ type Store interface {
 
 // ======= HELPERS =======
 func KeyRefreshToken(jti string) string  { return "refresh:" + jti }
+func KeyRefreshReplay(jti string) string { return "refresh:replay:" + jti }
 func KeyCSRF(userID string) string       { return "csrf:" + userID }
 func KeySession(sessionID string) string { return "session:" + sessionID }
 func KeyRateLimit(ip string) string      { return "rl:" + ip }
