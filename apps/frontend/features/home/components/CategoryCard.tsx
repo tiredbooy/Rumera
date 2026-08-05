@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createElement } from "react";
 import { ArrowLeft } from "lucide-react";
 
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { Reveal } from "@/features/motion/components/reveal";
 import { categoryIconFor } from "@/lib/home/category-icons";
 import type { Category } from "@/features/catalog/categories/types";
@@ -26,16 +26,12 @@ export function CategoryCard({ category, delay = 0 }: CategoryCardProps) {
           isLarge ? "min-h-64 sm:min-h-80" : "min-h-44 sm:min-h-48"
         }`}
       >
-        {/* Category image — uses the admin-set image_url, falls back to monogram in SmartImage */}
+        {/* Category image — slot policy + monogram fallback */}
         <div className="absolute inset-0 transition-transform duration-700 ease-out group-hover/cat:scale-105">
-          <SmartImage
+          <StorefrontMedia
+            slot="category-card"
             src={category.image_url ?? undefined}
             alt={category.title}
-            sizes={
-              isLarge
-                ? "(max-width: 1024px) 100vw, 50vw"
-                : "(max-width: 1024px) 50vw, 25vw"
-            }
             monogram={category.title.charAt(0)}
           />
         </div>

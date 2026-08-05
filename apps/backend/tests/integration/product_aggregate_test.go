@@ -181,7 +181,7 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 	redVariant, blueVariant := variants[0], variants[1]
 	seedInventory(t, redVariant.ID, 23, 4)
 	if err := services.NewVariantService(
-		repositories.NewVariantRepository(testPool), nil,
+		repositories.NewVariantRepository(testPool), repositories.NewInventoryRepository(testPool), nil,
 	).Delete(ctx, redVariant.ID); !errors.Is(err, apperr.ErrConflict) {
 		t.Fatalf("standalone stocked variant deletion error = %v; want conflict", err)
 	}
@@ -481,7 +481,7 @@ func TestGranularGraphWritesInvalidateAggregateRevision(t *testing.T) {
 	time.Sleep(2 * time.Millisecond)
 	price := 125.0
 	if _, err := services.NewVariantService(
-		repositories.NewVariantRepository(testPool), nil,
+		repositories.NewVariantRepository(testPool), repositories.NewInventoryRepository(testPool), nil,
 	).Update(ctx, variantID, models.UpdateVariantReq{Price: &price}); err != nil {
 		t.Fatalf("granular variant update: %v", err)
 	}

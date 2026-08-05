@@ -16,14 +16,15 @@ import (
 // GiftCardService issues gift cards (admin) and redeems them into a customer's
 // wallet (customer).
 type GiftCardService struct {
-	repo   repositories.GiftCardRepository
-	wallet *WalletService
+	repo repositories.GiftCardRepository
 }
 
 const maxGiftCardBatchSize = 500
 
-func NewGiftCardService(repo repositories.GiftCardRepository, wallet *WalletService) *GiftCardService {
-	return &GiftCardService{repo: repo, wallet: wallet}
+func NewGiftCardService(repo repositories.GiftCardRepository, _ *WalletService) *GiftCardService {
+	// WalletService is accepted for constructor signature stability with the
+	// DI graph; redeem now credits the wallet inside the repository transaction.
+	return &GiftCardService{repo: repo}
 }
 
 // Issue creates `count` gift cards of `amount` and returns them (with codes).
@@ -65,24 +66,19 @@ func (s *GiftCardService) Issue(ctx context.Context, amount decimal.Decimal, cou
 }
 
 // Redeem credits the card's amount into the customer's wallet (single-use).
+// Card mark + wallet credit run in one DB transaction.
 func (s *GiftCardService) Redeem(ctx context.Context, userID int64, code string) (*models.RedeemGiftCardResult, error) {
 	code = normalizeGiftCode(code)
 	if code == "" {
 		return nil, apperr.ErrInvalidRequest
 	}
 
-	amount, err := s.repo.Redeem(ctx, code, userID)
+	desc := "شارژ کیف پول با کارت هدیه"
+	amount, err := s.repo.RedeemAndCredit(ctx, code, userID, desc)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return nil, apperr.ErrNotFound // unknown or already used
 		}
-		return nil, apperr.ErrInternal
-	}
-
-	desc := "شارژ کیف پول با کارت هدیه"
-	if _, err := s.wallet.Deposit(ctx, userID, amount.InexactFloat64(), nil, &desc); err != nil {
-		// Compensate so the card isn't burned without crediting the wallet.
-		_ = s.repo.Reactivate(ctx, code)
 		return nil, apperr.ErrInternal
 	}
 	return &models.RedeemGiftCardResult{Amount: amount}, nil

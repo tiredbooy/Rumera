@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/tiredbooy/internal/mappers"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/pkg/crypto"
@@ -29,13 +31,30 @@ type OrderService interface {
 	MarkOrderAsPaid(ctx context.Context, orderID int64) error
 }
 
+// shippingAuthorizer prices and validates checkout shipping methods. Implemented
+// by ShippingService so quote preview and order persistence share one policy.
+type shippingAuthorizer interface {
+	AuthorizeCheckoutMethod(
+		ctx context.Context,
+		methodID int64,
+		regionCode string,
+		weightKg, subtotal float64,
+	) (*models.ShippingMethod, float64, error)
+}
+
+// addressLookup loads the buyer's address for region resolution.
+type addressLookup interface {
+	GetByID(ctx context.Context, id int64, userID int64) (*models.Address, error)
+}
+
 type orderService struct {
 	orderRepo       repositories.OrderRepository
 	orderItemRepo   repositories.OrderItemRepository
 	cartRepo        repositories.CartRepository
 	couponRepo      repositories.CouponRepository
 	couponUsageRepo repositories.CouponUsageRepository
-	shippingRepo    repositories.ShippingMethodRepository
+	shipping        shippingAuthorizer
+	addresses       addressLookup
 	inventory       InventoryService
 	payment         *PaymentService
 }
@@ -46,7 +65,8 @@ func NewOrderService(
 	cartRepo repositories.CartRepository,
 	couponRepo repositories.CouponRepository,
 	couponUsageRepo repositories.CouponUsageRepository,
-	shippingRepo repositories.ShippingMethodRepository,
+	shipping shippingAuthorizer,
+	addresses addressLookup,
 	inventory InventoryService,
 	payment *PaymentService,
 ) OrderService {
@@ -56,7 +76,8 @@ func NewOrderService(
 		cartRepo:        cartRepo,
 		couponRepo:      couponRepo,
 		couponUsageRepo: couponUsageRepo,
-		shippingRepo:    shippingRepo,
+		shipping:        shipping,
+		addresses:       addresses,
 		inventory:       inventory,
 		payment:         payment,
 	}
@@ -81,26 +102,50 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req models
 	}
 
 	var subtotal float64
+	var packageWeightKg float64
 	for _, item := range cartItems {
 		subtotal += item.UnitPriceSnapshot * float64(item.Quantity)
+		unitWeight := 0.0
+		if item.WeightKg != nil && *item.WeightKg > 0 {
+			unitWeight = *item.WeightKg
+		}
+		packageWeightKg += unitWeight * float64(item.Quantity)
 	}
 
-	shippingMethod, err := s.shippingRepo.GetByID(ctx, req.ShippingMethodID)
+	// Region comes from the selected address country (ISO-style region codes on
+	// shipping zones). The client cannot override it.
+	address, err := s.addresses.GetByID(ctx, req.AddressID, userID)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("orderService.CreateOrder: fetch address: %w", err)
+	}
+	regionCode := strings.ToUpper(strings.TrimSpace(address.Country))
+	if regionCode == "" {
+		return nil, models.ErrInvalidShippingMethod
+	}
+
+	shippingMethod, shippingCost, err := s.shipping.AuthorizeCheckoutMethod(
+		ctx, req.ShippingMethodID, regionCode, packageWeightKg, subtotal,
+	)
+	if err != nil {
+		if errors.Is(err, models.ErrInvalidShippingMethod) || errors.Is(err, models.ErrNotFound) {
 			return nil, models.ErrInvalidShippingMethod
 		}
-		return nil, fmt.Errorf("orderService.CreateOrder: fetch shipping: %w", err)
+		return nil, fmt.Errorf("orderService.CreateOrder: authorize shipping: %w", err)
 	}
-	shippingCost := shippingMethod.BaseRate // ← correct field
+	_ = shippingMethod
 
 	var (
 		discountAmount float64
 		couponID       *int64
 		appliedCoupon  *models.Coupon
+		freeShipping   bool
 	)
 	if req.CouponCode != nil {
-		coupon, discount, err := s.validateAndComputeDiscount(ctx, *req.CouponCode, userID, subtotal)
+		// Pre-flight without a lock so obvious failures fail fast before a tx.
+		coupon, discount, err := s.validateAndComputeDiscount(ctx, *req.CouponCode, userID, subtotal, cartItems)
 		if err != nil {
 			return nil, err
 		}
@@ -111,16 +156,42 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req models
 		// Free shipping coupon zeroes the shipping cost
 		if coupon.DiscountType == models.DiscountTypeFreeShipping {
 			shippingCost = 0
+			freeShipping = true
 		}
 	}
-
-	taxAmount := (subtotal - discountAmount) * models.TaxRate
 
 	tx, err := s.orderRepo.BeginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("orderService.CreateOrder: begin tx: %w", err)
 	}
 	defer utils.RollbackOnErr(ctx, tx, &err)
+
+	// Authoritative coupon re-validation under FOR UPDATE happens before the
+	// order row is written so amounts match the locked definition.
+	if appliedCoupon != nil {
+		locked, err := s.revalidateCouponUnderLock(ctx, tx, appliedCoupon.ID, userID, subtotal, cartItems)
+		if err != nil {
+			return nil, err
+		}
+		appliedCoupon = locked
+		couponID = &locked.ID
+		discountAmount = computeDiscount(locked, subtotal)
+		if locked.DiscountType == models.DiscountTypeFreeShipping {
+			shippingCost = 0
+			freeShipping = true
+		} else if freeShipping {
+			// Definition may have changed away from free shipping under the lock.
+			_, shippingCost, err = s.shipping.AuthorizeCheckoutMethod(
+				ctx, req.ShippingMethodID, regionCode, packageWeightKg, subtotal,
+			)
+			if err != nil {
+				return nil, models.ErrInvalidShippingMethod
+			}
+			freeShipping = false
+		}
+	}
+
+	taxAmount := (subtotal - discountAmount) * models.TaxRate
 
 	order, err := s.orderRepo.Create(ctx, tx, req, userID, subtotal, discountAmount, shippingCost, taxAmount, couponID)
 	if err != nil {
@@ -132,12 +203,6 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req models
 	}
 
 	if appliedCoupon != nil {
-		// Re-check usage limits under a row lock INSIDE the tx, then record — this
-		// closes the TOCTOU race where two concurrent orders both read "under the
-		// limit" and both redeem a single-use coupon.
-		if err = s.enforceCouponLimitsTx(ctx, tx, appliedCoupon, userID); err != nil {
-			return nil, err
-		}
 		if err = s.couponUsageRepo.Record(ctx, tx, appliedCoupon.ID, userID, order.ID, discountAmount); err != nil {
 			return nil, fmt.Errorf("orderService.CreateOrder: record coupon usage: %w", err)
 		}
@@ -209,8 +274,13 @@ func (s *orderService) validateAndComputeDiscount(
 	code string,
 	userID int64,
 	subtotal float64,
+	cartItems []models.CartItemResponse,
 ) (*models.Coupon, float64, error) {
-	coupon, err := s.couponRepo.GetByCode(ctx, code)
+	normalized := mappers.NormalizeCouponCode(code)
+	if normalized == "" {
+		return nil, 0, models.ErrInvalidCoupon
+	}
+	coupon, err := s.couponRepo.GetByCode(ctx, normalized)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return nil, 0, models.ErrInvalidCoupon
@@ -218,56 +288,97 @@ func (s *orderService) validateAndComputeDiscount(
 		return nil, 0, fmt.Errorf("orderService: fetch coupon: %w", err)
 	}
 
-	now := time.Now()
-	if !coupon.IsActive || coupon.StartsAt.After(now) {
-		return nil, 0, models.ErrCouponNotActive
-	}
-	if coupon.ExpiresAt != nil && coupon.ExpiresAt.Before(now) {
-		return nil, 0, models.ErrCouponExpired
-	}
-
-	// MinOrderAmount is a plain float64, not a pointer
-	if subtotal < coupon.MinOrderAmount {
-		return nil, 0, models.ErrOrderBelowMinimum
+	if err := assertCouponRedeemable(coupon, subtotal, cartItems); err != nil {
+		return nil, 0, err
 	}
 
 	// NOTE: usage-limit (MaxUses / MaxUsesPerUser) checks are intentionally NOT
 	// done here. They run later under a row lock inside the order transaction
-	// (enforceCouponLimitsTx) to avoid a TOCTOU race; checking them here without a
-	// lock would be both redundant and unsafe.
+	// to avoid a TOCTOU race.
 
 	discount := computeDiscount(coupon, subtotal)
 	return coupon, discount, nil
 }
 
-// enforceCouponLimitsTx re-validates a coupon's usage limits while holding a row
-// lock on the coupon, inside the order transaction. Concurrent redemptions of the
-// same coupon serialize on the lock, so each sees the others' recorded usage and
-// the MaxUses / MaxUsesPerUser caps hold exactly.
-func (s *orderService) enforceCouponLimitsTx(ctx context.Context, tx pgx.Tx, coupon *models.Coupon, userID int64) error {
-	if coupon.MaxUses == nil && coupon.MaxUsesPerUser <= 0 {
-		return nil
+// revalidateCouponUnderLock reloads the coupon under FOR UPDATE, re-checks the
+// full redeemability rules (including product/category applicability), and
+// enforces usage caps using the locked definition.
+func (s *orderService) revalidateCouponUnderLock(
+	ctx context.Context,
+	tx pgx.Tx,
+	couponID int64,
+	userID int64,
+	subtotal float64,
+	cartItems []models.CartItemResponse,
+) (*models.Coupon, error) {
+	coupon, err := s.couponRepo.GetByIDForUpdate(ctx, tx, couponID)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, models.ErrInvalidCoupon
+		}
+		return nil, fmt.Errorf("orderService: lock coupon: %w", err)
 	}
-	if err := s.couponRepo.LockByID(ctx, tx, coupon.ID); err != nil {
-		return fmt.Errorf("orderService: lock coupon: %w", err)
+	if err := assertCouponRedeemable(coupon, subtotal, cartItems); err != nil {
+		return nil, err
 	}
 	if coupon.MaxUses != nil {
 		used, err := s.couponRepo.CountUsagesTx(ctx, tx, coupon.ID)
 		if err != nil {
-			return fmt.Errorf("orderService: count coupon usages: %w", err)
+			return nil, fmt.Errorf("orderService: count coupon usages: %w", err)
 		}
 		if used >= *coupon.MaxUses {
-			return models.ErrCouponUsageLimitReached
+			return nil, models.ErrCouponUsageLimitReached
 		}
 	}
 	if coupon.MaxUsesPerUser > 0 {
 		usedByUser, err := s.couponRepo.CountUsagesByUserTx(ctx, tx, coupon.ID, userID)
 		if err != nil {
-			return fmt.Errorf("orderService: count coupon usages by user: %w", err)
+			return nil, fmt.Errorf("orderService: count coupon usages by user: %w", err)
 		}
 		if usedByUser >= coupon.MaxUsesPerUser {
-			return models.ErrCouponUserLimitReached
+			return nil, models.ErrCouponUserLimitReached
 		}
+	}
+	return coupon, nil
+}
+
+func assertCouponRedeemable(
+	coupon *models.Coupon,
+	subtotal float64,
+	cartItems []models.CartItemResponse,
+) error {
+	now := time.Now()
+	if !coupon.IsActive || coupon.StartsAt.After(now) {
+		return models.ErrCouponNotActive
+	}
+	if coupon.ExpiresAt != nil && coupon.ExpiresAt.Before(now) {
+		return models.ErrCouponExpired
+	}
+	if subtotal < coupon.MinOrderAmount {
+		return models.ErrOrderBelowMinimum
+	}
+
+	productIDs := make([]int64, 0, len(cartItems))
+	categoryIDs := make([]int64, 0, len(cartItems))
+	seenCat := make(map[int64]struct{})
+	for _, item := range cartItems {
+		if item.ProductID > 0 {
+			productIDs = append(productIDs, item.ProductID)
+		}
+		if item.CategoryID != nil && *item.CategoryID > 0 {
+			if _, ok := seenCat[*item.CategoryID]; !ok {
+				seenCat[*item.CategoryID] = struct{}{}
+				categoryIDs = append(categoryIDs, *item.CategoryID)
+			}
+		}
+	}
+	req := models.ValidateCouponReq{
+		OrderSubtotal: subtotal,
+		ProductIDs:    productIDs,
+		CategoryIDs:   categoryIDs,
+	}
+	if !mappers.CouponAppliesToBasket(coupon, req) {
+		return models.ErrInvalidCoupon
 	}
 	return nil
 }

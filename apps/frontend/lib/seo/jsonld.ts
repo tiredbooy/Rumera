@@ -14,6 +14,16 @@ import type {
 import type { JournalDetail } from "@/features/journal/types";
 import type { RecipeDetail } from "@/features/recipes/types";
 import { extractContentSteps } from "@/lib/content/sanitize-html";
+import { resolveMediaUrl } from "@/lib/media/resolve-media-url";
+
+/** Absolute media URL for structured data (API origin, not site origin). */
+function absoluteMediaUrl(value: string): string {
+  const resolved = resolveMediaUrl(value);
+  if (!resolved) return absoluteUrl(value);
+  if (/^https?:\/\//i.test(resolved)) return resolved;
+  // Same-origin relative residual (no media base configured).
+  return absoluteUrl(resolved);
+}
 
 export function organizationLd() {
   return {
@@ -22,7 +32,7 @@ export function organizationLd() {
     name: siteConfig.name,
     url: siteConfig.url,
     description: siteConfig.description,
-    logo: absoluteUrl("/icon"),
+    logo: absoluteUrl(siteConfig.logo),
     sameAs: Object.values(siteConfig.socials),
   };
 }
@@ -80,9 +90,7 @@ export function productDetailLd(
     created_at: string;
   }[],
 ) {
-  const variants = (p.variants ?? []).filter(
-    (variant) => variant.is_active && variant.price > 0,
-  );
+  const variants = (p.variants ?? []).filter((variant) => variant.is_active);
   const prices = variants.map((variant) => variant.price);
   const low = prices.length ? Math.min(...prices) : undefined;
   const high = prices.length ? Math.max(...prices) : undefined;
@@ -101,7 +109,9 @@ export function productDetailLd(
     ...(singleSku ? { sku: singleSku } : {}),
     mpn: p.code,
     ...(productUrl ? { url: productUrl } : {}),
-    image: (p.images ?? []).map((img) => img.image_url),
+    image: (p.images ?? [])
+      .map((img) => absoluteMediaUrl(img.image_url))
+      .filter(Boolean),
     ...(p.country_of_origin ? { countryOfOrigin: p.country_of_origin } : {}),
     ...(rating && rating.count > 0
       ? {
@@ -207,7 +217,7 @@ export function journalArticleLd(post: JournalDetail) {
     "@type": "BlogPosting",
     headline: post.title,
     ...(description ? { description } : {}),
-    ...(post.image_url ? { image: [absoluteUrl(post.image_url)] } : {}),
+    ...(post.image_url ? { image: [absoluteMediaUrl(post.image_url)] } : {}),
     inLanguage: "fa-IR",
     ...(post.published_at ? { datePublished: post.published_at } : {}),
     dateModified: post.updated_at,
@@ -255,7 +265,7 @@ export function recipeDetailLd(recipe: RecipeDetail) {
     url,
     inLanguage: "fa-IR",
     ...(description ? { description } : {}),
-    ...(image ? { image: [absoluteUrl(image)] } : {}),
+    ...(image ? { image: [absoluteMediaUrl(image)] } : {}),
     ...(recipe.published_at ? { datePublished: recipe.published_at } : {}),
     dateModified: recipe.updated_at,
     ...(recipe.servings > 0 ? { recipeYield: `${recipe.servings} نفر` } : {}),

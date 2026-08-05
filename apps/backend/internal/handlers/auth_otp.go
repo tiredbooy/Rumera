@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/mappers"
 	"github.com/tiredbooy/pkg/cache"
+	"github.com/tiredbooy/pkg/crypto"
 	"github.com/tiredbooy/pkg/response"
 	"go.uber.org/zap"
 )
@@ -57,12 +58,22 @@ func (h *Handler) RequestOTP(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// Cap codes requested per phone per hour (on top of the per-IP route throttle).
-	if sent, err := h.Cache.Incr(ctx, cache.KeyOTPSend(phone), time.Hour); err == nil && sent > otpMaxSendsPerHour {
+	// Fail closed on counter errors so a Redis blip cannot disable the cap.
+	sent, err := h.Cache.Incr(ctx, cache.KeyOTPSend(phone), time.Hour)
+	if err != nil {
+		response.Error(c, response.ErrServiceUnavailable)
+		return
+	}
+	if sent > otpMaxSendsPerHour {
 		response.TooManyRequests(c)
 		return
 	}
 
-	code := generateOTP()
+	code, err := generateOTP()
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
 	if err := h.Cache.Set(ctx, cache.KeyOTP(phone), code, h.OTPTTL); err != nil {
 		response.InternalError(c)
 		return
@@ -70,14 +81,20 @@ func (h *Handler) RequestOTP(c *gin.Context) {
 	// Fresh code → reset the verify-attempt counter.
 	_ = h.Cache.Delete(ctx, cache.KeyOTPVerify(phone))
 
-	// Send off the request path; a slow gateway must never block the response,
-	// and we don't reveal delivery success to the caller.
-	msg := fmt.Sprintf("کد ورود شما به رومرا: %s", code)
+	// Deliver off the request path (async outbox or inline SMS). Never block
+	// the response or reveal delivery success to the caller.
 	go func() {
 		sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := h.SMS.Send(sctx, phone, msg); err != nil {
-			h.Log.Warn("otp sms send failed", zap.String("phone", phone), zap.Error(err))
+		var err error
+		if h.Notifications != nil {
+			err = h.Notifications.DispatchOTP(sctx, phone, code, "login", c.GetString("request_id"))
+		} else if h.SMS != nil {
+			msg := fmt.Sprintf("کد ورود شما به رومرا: %s", code)
+			err = h.SMS.Send(sctx, phone, msg)
+		}
+		if err != nil {
+			h.Log.Warn("otp sms dispatch failed", zap.String("phone", phone), zap.Error(err))
 		}
 	}()
 
@@ -107,13 +124,19 @@ func (h *Handler) VerifyOTP(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// Throttle verify attempts to defeat code brute-forcing within the TTL window.
-	if tries, err := h.Cache.Incr(ctx, cache.KeyOTPVerify(phone), h.OTPTTL); err == nil && tries > otpMaxVerifyTries {
+	// Fail closed on counter errors so a Redis blip cannot disable the cap.
+	tries, err := h.Cache.Incr(ctx, cache.KeyOTPVerify(phone), h.OTPTTL)
+	if err != nil {
+		response.Error(c, response.ErrServiceUnavailable)
+		return
+	}
+	if tries > otpMaxVerifyTries {
 		response.TooManyRequests(c)
 		return
 	}
 
 	stored, err := h.Cache.Get(ctx, cache.KeyOTP(phone))
-	if err != nil || stored == "" || stored != req.Code {
+	if err != nil || stored == "" || !crypto.ConstantTimeEqual(stored, req.Code) {
 		// Expired, never requested, or wrong — same generic response either way.
 		response.Error(c, response.ErrInvalidCredentials)
 		return
@@ -154,13 +177,13 @@ func (h *Handler) VerifyOTP(c *gin.Context) {
 }
 
 // generateOTP returns a zero-padded 6-digit crypto-random code.
-func generateOTP() string {
+// On RNG failure it returns an error rather than a predictable fallback.
+func generateOTP() (string, error) {
 	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
 	if err != nil {
-		// rand.Int only errors if the reader fails; fall back to a fixed-width 0.
-		return "000000"
+		return "", err
 	}
-	return fmt.Sprintf("%06d", n.Int64())
+	return fmt.Sprintf("%06d", n.Int64()), nil
 }
 
 // normalizeIranPhone canonicalises common Iranian mobile inputs to "09XXXXXXXXX".

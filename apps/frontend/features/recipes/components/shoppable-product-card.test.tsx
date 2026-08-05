@@ -47,5 +47,21 @@ describe("ShoppableProductCard", () => {
       `href="/products/${encodeURIComponent(product.product_slug!)}"`,
     );
     expect(markup).toContain('aria-label="افزودن محصول دستور به سبد خرید"');
+    expect(markup).toContain("۳ عدد موجود");
+  });
+
+  it("offers a catalogue search alternative when the product is unavailable", () => {
+    const markup = renderToStaticMarkup(
+      <ShoppableProductCard
+        product={{
+          ...product,
+          is_available: false,
+          available_stock: 0,
+        }}
+      />,
+    );
+    expect(markup).toContain("ناموجود در حال حاضر");
+    expect(markup).toContain("یافتن جایگزین");
+    expect(markup).toContain(`/search?q=${encodeURIComponent(product.product_title)}`);
   });
 });

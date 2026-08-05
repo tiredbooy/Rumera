@@ -1,0 +1,9 @@
+{
+  "alwaysUpdateLinks": true,
+  "newFileLocation": "folder",
+  "newFileFolderPath": "00 Meta",
+  "attachmentFolderPath": "00 Meta/attachments",
+  "showUnsupportedFiles": true,
+  "strictLineBreaks": false,
+  "readableLineLength": true
+}

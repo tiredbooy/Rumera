@@ -12,6 +12,7 @@ import {
   useRemoveWishlistItem,
 } from "@/features/wishlist/hooks";
 import { useAddCartItem, useBulkAddCartItems } from "@/features/cart/api";
+import { useRecordInteraction } from "@/features/recommendations/hooks";
 import type {
   BulkAddCartResult,
   SkippedCartItemReason,
@@ -19,8 +20,9 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { cn } from "@/lib/utils";
+import { DashboardErrorState } from "@/features/dashboard/components/async-state";
 import { EmptyState } from "../../EmptyState";
 
 const productHref = (item: WishlistItem) =>
@@ -91,6 +93,7 @@ export function WishlistView() {
   const wishlist = useWishlist();
   const removeItem = useRemoveWishlistItem();
   const addCart = useAddCartItem();
+  const recordInteraction = useRecordInteraction();
   const bulkAdd = useBulkAddCartItems();
   const [addingItemId, setAddingItemId] = React.useState<number | null>(null);
   const [removingItemId, setRemovingItemId] = React.useState<number | null>(null);
@@ -146,6 +149,15 @@ export function WishlistView() {
       toast.success("به سبد خرید افزوده شد", {
         description: `${item.product_title} — ${formatPrice(item.price)}`,
       });
+      if (item.product_id > 0) {
+        void recordInteraction
+          .mutateAsync({
+            product_id: item.product_id,
+            interaction_type: "add_to_cart",
+            source: "wishlist",
+          })
+          .catch(() => undefined);
+      }
     } catch {
       setRowStatus(item.id, { kind: "error", message: "افزودن ناموفق بود" });
       setActionStatus(`افزودن ${item.product_title} به سبد خرید ناموفق بود`);
@@ -203,6 +215,20 @@ export function WishlistView() {
       toast[feedback.tone](feedback.title, {
         description: feedback.description,
       });
+
+      // Fire-and-forget recs signals only for variants that were not skipped.
+      for (const item of availableItems) {
+        if (skippedByVariant.has(item.variant_id) || item.product_id <= 0) {
+          continue;
+        }
+        void recordInteraction
+          .mutateAsync({
+            product_id: item.product_id,
+            interaction_type: "add_to_cart",
+            source: "wishlist_bulk",
+          })
+          .catch(() => undefined);
+      }
     } catch {
       setRowStatuses((current) => {
         const next = { ...current };
@@ -233,16 +259,12 @@ export function WishlistView() {
 
   if (wishlist.isError) {
     return (
-      <div className="border-hairline rounded-2xl bg-card p-6 text-sm text-muted-foreground ring-1 ring-foreground/5">
-        خطا در دریافت علاقه‌مندی‌ها.{" "}
-        <button
-          type="button"
-          onClick={() => wishlist.refetch()}
-          className="cursor-pointer font-medium text-primary hover:underline"
-        >
-          تلاش دوباره
-        </button>
-      </div>
+      <DashboardErrorState
+        title="خطا در دریافت علاقه‌مندی‌ها"
+        description="فهرست علاقه‌مندی‌ها بارگذاری نشد. اتصال را بررسی کنید و دوباره تلاش کنید."
+        onRetry={() => void wishlist.refetch()}
+        isRetrying={wishlist.isFetching}
+      />
     );
   }
 
@@ -315,12 +337,11 @@ export function WishlistView() {
                   aria-label={item.product_title}
                 >
                   <div className="absolute inset-0 transition-transform duration-700 ease-out group-hover/product:scale-105">
-                    <SmartImage
+                    <StorefrontMedia
+                      slot="wishlist"
                       src={item.image_url}
                       alt={item.product_title}
-                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                       monogram={item.product_title.charAt(0)}
-                      fallbackClassName="from-accent/40 via-card to-secondary"
                     />
                   </div>
                 </Link>

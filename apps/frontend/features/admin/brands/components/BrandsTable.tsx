@@ -19,6 +19,7 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
+import { DashboardErrorState } from "@/features/dashboard/components/async-state"
 import type { Brand } from "@/features/catalog/brands/types"
 import {
   BrandApiError,
@@ -171,26 +172,16 @@ export function BrandsTable({
   // ── Error ────────────────────────────────────────────────────────────────
   if (isError) {
     return (
-      <div className="border-hairline flex flex-col items-center justify-center gap-3 rounded-2xl bg-card px-6 py-16 text-center ring-1 ring-foreground/[0.04]">
-        <span className="flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive ring-1 ring-destructive/20">
-          <AlertTriangle className="size-6" aria-hidden />
-        </span>
-        <p className="text-sm font-medium">بارگذاری برندها ناموفق بود</p>
-        <p className="max-w-xs text-xs text-muted-foreground">
-          {error instanceof BrandApiError
+      <DashboardErrorState
+        title="بارگذاری برندها ناموفق بود"
+        description={
+          error instanceof BrandApiError
             ? error.message
-            : "ارتباط با سرور برقرار نشد. دوباره تلاش کنید."}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={isFetching}
-        >
-          <RotateCw className={isFetching ? "size-4 animate-spin" : "size-4"} />
-          تلاش مجدد
-        </Button>
-      </div>
+            : "ارتباط با سرور برقرار نشد. دوباره تلاش کنید."
+        }
+        onRetry={() => void refetch()}
+        isRetrying={isFetching}
+      />
     )
   }
 

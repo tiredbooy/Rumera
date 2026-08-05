@@ -24,7 +24,7 @@ CREATE TABLE search_summary (
     conversion_rate     NUMERIC(5,4)    NOT NULL DEFAULT 0,
 
     -- What they clicked (top 5 products clicked from this search)
-    -- [{"product_id": "uuid", "click_count": 12}]
+    -- [{"product_id": "<catalog bigint as string>", "click_count": 12}]
     top_clicked_products    JSONB   NOT NULL DEFAULT '[]',
 
     -- Filters used with this search

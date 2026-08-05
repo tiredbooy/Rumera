@@ -12,12 +12,21 @@ import (
 )
 
 type VariantService struct {
-	variantRepo repositories.VariantRepository
-	media       *MediaLifecycleService
+	variantRepo   repositories.VariantRepository
+	inventoryRepo repositories.InventoryRepository
+	media         *MediaLifecycleService
 }
 
-func NewVariantService(variantRepo repositories.VariantRepository, media *MediaLifecycleService) *VariantService {
-	return &VariantService{variantRepo: variantRepo, media: media}
+func NewVariantService(
+	variantRepo repositories.VariantRepository,
+	inventoryRepo repositories.InventoryRepository,
+	media *MediaLifecycleService,
+) *VariantService {
+	return &VariantService{
+		variantRepo:   variantRepo,
+		inventoryRepo: inventoryRepo,
+		media:         media,
+	}
 }
 
 func (s *VariantService) Create(ctx context.Context, productID int64, req models.CreateVariantReq) (*models.ProductVariant, error) {
@@ -38,6 +47,13 @@ func (s *VariantService) Create(ctx context.Context, productID int64, req models
 			return nil, apperr.ErrInvalidRequest
 		}
 		return nil, apperr.ErrInternal
+	}
+
+	// Every variant must have an inventory row for admin stock tools + checkout.
+	if s.inventoryRepo != nil {
+		if err := s.inventoryRepo.EnsureForVariant(ctx, variant.ID); err != nil {
+			return nil, apperr.ErrInternal
+		}
 	}
 
 	return variant, nil

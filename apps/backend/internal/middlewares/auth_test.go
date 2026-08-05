@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -14,6 +15,8 @@ import (
 	"github.com/tiredbooy/pkg/token"
 	"go.uber.org/zap"
 )
+
+func ptrTime(t time.Time) *time.Time { return &t }
 
 type authUserReaderStub struct {
 	user *models.AuthUser
@@ -87,6 +90,16 @@ func TestAuthRehydratesLiveRoleAndStatus(t *testing.T) {
 			claimRole: models.UserRoleAdmin,
 			reader: authUserReaderStub{user: &models.AuthUser{
 				ID: 7, UserID: uuid.New(), Role: models.UserRoleAdmin, IsActive: true,
+			}},
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:      "sessions invalidated after password reset",
+			claimRole: models.UserRoleAdmin,
+			reader: authUserReaderStub{user: &models.AuthUser{
+				ID: 7, UserID: userID, Role: models.UserRoleAdmin, IsActive: true,
+				// Cutover in the future → token iat (now) is strictly before it.
+				SessionsInvalidatedAt: ptrTime(time.Now().Add(time.Hour)),
 			}},
 			wantStatus: http.StatusUnauthorized,
 		},

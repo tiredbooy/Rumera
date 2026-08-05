@@ -1,5 +1,5 @@
 /**
- * Edge-safe auth config — the slice of next-auth that the middleware can run on
+ * Edge-safe auth config — the slice of next-auth that the edge proxy can run on
  * the Edge runtime. It contains NO Node-only code (no `fetch` to the backend, no
  * Buffer): just the session-shaping callback and page routes. The Credentials
  * provider and token-refresh logic live in `auth.ts`, which runs in Node.
@@ -14,7 +14,7 @@ import "./types";
 
 export const authConfig = {
   // The login page lives at app/(auth)/login — the (auth) route group adds NO
-  // URL segment, so the canonical path is "/login" (this matches middleware.ts,
+  // URL segment, so the canonical path is "/login" (this matches proxy.ts,
   // robots.ts, and every in-app link). Keep these in lock-step.
   pages: { signIn: "/login" },
   session: { strategy: "jwt" },

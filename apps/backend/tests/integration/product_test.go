@@ -224,7 +224,7 @@ func TestProductVariantImageOwnershipAndGalleryScope(t *testing.T) {
 
 	firstProductID := seedProduct(t)
 	secondProductID := seedProduct(t)
-	variantService := services.NewVariantService(repositories.NewVariantRepository(testPool), nil)
+	variantService := services.NewVariantService(repositories.NewVariantRepository(testPool), repositories.NewInventoryRepository(testPool), nil)
 	variant, err := variantService.Create(ctx, firstProductID, models.CreateVariantReq{
 		SKU: stringPointer("IMAGE-SCOPE"), Price: 10,
 	})

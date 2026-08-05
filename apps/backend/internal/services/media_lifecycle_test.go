@@ -48,6 +48,42 @@ func TestMediaLifecycleCleanupRemovesOriginalAndDerivatives(t *testing.T) {
 	}
 }
 
+func TestMediaLifecycleDerivativeCleanupFailureIsRetryable(t *testing.T) {
+	ctx := context.Background()
+	store := lifecycleStorage(t)
+	cacheStore := lifecycleStorage(t)
+	cache := &deletePrefixFailingStorage{
+		Storage:         cacheStore,
+		deletePrefixErr: errors.New("cache unavailable"),
+	}
+	service := NewMediaLifecycleService(store, cache, &mediaLifecycleRepositoryStub{}, zap.NewNop())
+	const key = "products/4-bottle/gallery-image.webp"
+	derivative := mediaDerivativePrefix(key) + "/a.webp"
+	if err := store.Put(ctx, key, strings.NewReader("original")); err != nil {
+		t.Fatalf("seed original: %v", err)
+	}
+	if err := cacheStore.Put(ctx, derivative, strings.NewReader("render")); err != nil {
+		t.Fatalf("seed derivative: %v", err)
+	}
+
+	service.CleanupKeys(ctx, key)
+	if exists, err := store.Exists(ctx, key); err != nil || !exists {
+		t.Fatalf("original after failed derivative cleanup exists = %v, %v; want true, nil", exists, err)
+	}
+	if exists, err := cacheStore.Exists(ctx, derivative); err != nil || !exists {
+		t.Fatalf("derivative after failed cleanup exists = %v, %v; want true, nil", exists, err)
+	}
+
+	cache.deletePrefixErr = nil
+	service.CleanupKeys(ctx, key)
+	if exists, err := store.Exists(ctx, key); err != nil || exists {
+		t.Fatalf("original after retry exists = %v, %v; want false, nil", exists, err)
+	}
+	if exists, err := cacheStore.Exists(ctx, derivative); err != nil || exists {
+		t.Fatalf("derivative after retry exists = %v, %v; want false, nil", exists, err)
+	}
+}
+
 func TestMediaLifecycleNeverDeletesReferencedOrNonStandaloneKeys(t *testing.T) {
 	ctx := context.Background()
 	store := lifecycleStorage(t)
@@ -128,6 +164,38 @@ func TestMediaReconciliationDryRunAndApply(t *testing.T) {
 	}
 }
 
+func TestMediaReconciliationRechecksCandidateBeforeDelete(t *testing.T) {
+	ctx := context.Background()
+	store := lifecycleStorage(t)
+	const key = "uploads/newly-referenced.webp"
+	if err := store.Put(ctx, key, strings.NewReader("candidate")); err != nil {
+		t.Fatalf("seed candidate: %v", err)
+	}
+	repo := &mediaLifecycleRepositoryStub{
+		isReferenced: func(got string) (bool, error) {
+			return got == key, nil
+		},
+	}
+	service := NewMediaLifecycleService(store, lifecycleStorage(t), repo, zap.NewNop())
+
+	report, err := service.Reconcile(ctx, MediaReconcileOptions{
+		Apply: true,
+		Now:   time.Now().UTC().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if report.Summary.Candidates != 1 || report.Summary.SkippedReferenced != 1 || report.Summary.Deleted != 0 {
+		t.Fatalf("reconcile summary = %+v; want one skipped referenced candidate", report.Summary)
+	}
+	if len(report.Objects) != 1 || report.Objects[0].Action != "skipped_referenced" {
+		t.Fatalf("reconcile objects = %+v; want skipped_referenced", report.Objects)
+	}
+	if exists, err := store.Exists(ctx, key); err != nil || !exists {
+		t.Fatalf("newly referenced candidate exists = %v, %v; want true, nil", exists, err)
+	}
+}
+
 func TestMediaReconciliationReusesReviewedCutoff(t *testing.T) {
 	now := time.Date(2026, time.July, 25, 12, 0, 0, 0, time.UTC)
 	cutoff := now.Add(-36 * time.Hour)
@@ -161,12 +229,16 @@ func lifecycleStorage(t *testing.T) *storage.LocalStorage {
 }
 
 type mediaLifecycleRepositoryStub struct {
-	referenced map[string]bool
-	product    []string
-	variant    []string
+	referenced   map[string]bool
+	product      []string
+	variant      []string
+	isReferenced func(string) (bool, error)
 }
 
 func (r *mediaLifecycleRepositoryStub) IsReferenced(_ context.Context, key string) (bool, error) {
+	if r.isReferenced != nil {
+		return r.isReferenced(key)
+	}
 	return r.referenced[key], nil
 }
 
@@ -199,3 +271,15 @@ func (r *mediaLifecycleRepositoryStub) TryReconciliationLock(context.Context) (r
 type mediaReconciliationLockStub struct{}
 
 func (mediaReconciliationLockStub) Release(context.Context) error { return nil }
+
+type deletePrefixFailingStorage struct {
+	storage.Storage
+	deletePrefixErr error
+}
+
+func (s *deletePrefixFailingStorage) DeletePrefix(ctx context.Context, prefix string) error {
+	if s.deletePrefixErr != nil {
+		return s.deletePrefixErr
+	}
+	return s.Storage.DeletePrefix(ctx, prefix)
+}

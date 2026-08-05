@@ -8,26 +8,44 @@ import {
   ProductCard,
   PRODUCT_CARD_GRID_CLASS,
 } from "@/features/catalog/products/components/product-card";
+import type { ProductListItem } from "@/features/catalog/products/types";
+import { SearchResultProductCard } from "@/features/storefront/search/components/search-result-product-card";
 import { faNum } from "@/lib/products";
 
 type SearchViewProps = {
   searchParams: Promise<{ q?: string }>;
 };
 
+async function settleProducts(
+  promise: Promise<{ results: ProductListItem[] }>,
+): Promise<ProductListItem[]> {
+  try {
+    const page = await promise;
+    return page.results ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export async function SearchView({ searchParams }: SearchViewProps) {
   const { q = "" } = await searchParams;
   const query = q.trim();
 
-  const [{ results }, categories] = await Promise.all([
+  const [results, categories, suggestions] = await Promise.all([
     query
-      ? listProducts({ search: query, limit: 24 })
-      : Promise.resolve({ results: [] as never[] }),
-    listCategories(),
+      ? settleProducts(listProducts({ search: query, limit: 24 }))
+      : Promise.resolve([] as ProductListItem[]),
+    listCategories().catch(() => []),
+    // Soft suggestions when idle or zero hits — catalogue first page.
+    settleProducts(listProducts({ page: 1, limit: 4 })),
   ]);
+
+  const showZero = Boolean(query) && results.length === 0;
+  const showHits = Boolean(query) && results.length > 0;
+  const showSuggestions = !showHits && suggestions.length > 0;
 
   return (
     <>
-      {/* Search hero — on-page field so the page is usable on its own. */}
       <section className="cellar-glow border-b border-border/60">
         <div className="container-px mx-auto max-w-3xl py-14 text-center sm:py-16">
           <p className="eyebrow mb-3 justify-center">
@@ -59,7 +77,7 @@ export async function SearchView({ searchParams }: SearchViewProps) {
       </section>
 
       <section className="container-px mx-auto w-full max-w-7xl py-12 sm:py-14">
-        {query && results.length ? (
+        {showHits ? (
           <>
             <p className="text-muted-foreground">
               {`${faNum(results.length)} نتیجه برای «`}
@@ -68,39 +86,52 @@ export async function SearchView({ searchParams }: SearchViewProps) {
             </p>
             <div className={`${PRODUCT_CARD_GRID_CLASS} mt-8`}>
               {results.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <SearchResultProductCard
+                  key={product.id}
+                  product={product}
+                  query={query}
+                />
               ))}
             </div>
           </>
-        ) : query ? (
-          /* No results */
+        ) : null}
+
+        {showZero ? (
           <div className="border-hairline mx-auto flex max-w-lg flex-col items-center rounded-3xl bg-card/40 px-6 py-14 text-center ring-1 ring-foreground/5">
             <span className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-              <SearchX className="size-7" />
+              <SearchX className="size-7" aria-hidden />
             </span>
             <h2 className="font-serif text-2xl">
               نتیجه‌ای برای «{query}» پیدا نشد
             </h2>
-            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-              املای عبارت را بررسی کنید یا با کلمهٔ کلی‌تری دوباره جستجو کنید.
-              می‌توانید از دسته‌بندی‌ها هم شروع کنید.
+            <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+              املا را چک کنید یا کلمه‌ای کوتاه‌تر بزنید. فعلاً جستجو روی{" "}
+              <strong className="font-medium text-foreground">نام محصول</strong>{" "}
+              است — از دسته‌ها یا پیشنهادهای زیر هم می‌توانید شروع کنید.
             </p>
-            <Button asChild className="mt-6">
-              <Link href="/products">
-                مرور همهٔ محصولات <ArrowLeft />
-              </Link>
-            </Button>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <Button asChild>
+                <Link href="/products">
+                  مرور فروشگاه <ArrowLeft className="size-4" aria-hidden />
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/search">پاک کردن جستجو</Link>
+              </Button>
+            </div>
           </div>
-        ) : (
-          /* Idle — no query yet */
-          <p className="text-center text-muted-foreground">
-            عبارتی برای جستجو وارد کنید یا از دسته‌بندی‌ها شروع کنید.
-          </p>
-        )}
+        ) : null}
 
-        {/* Category shortcuts — always offered as a starting point */}
+        {!query && !showHits ? (
+          <div className="mx-auto max-w-lg text-center">
+            <p className="text-muted-foreground">
+              عبارتی وارد کنید یا از دسته‌بندی‌ها و پیشنهادهای زیر شروع کنید.
+            </p>
+          </div>
+        ) : null}
+
         {categories.length ? (
-          <div className="mt-14">
+          <div className={showHits ? "mt-16" : "mt-14"}>
             <p className="eyebrow mb-4 justify-center text-center">
               جستجو بر اساس دسته
             </p>
@@ -114,6 +145,27 @@ export async function SearchView({ searchParams }: SearchViewProps) {
                   {c.title}
                 </Link>
               ))}
+            </div>
+          </div>
+        ) : null}
+
+        {showSuggestions ? (
+          <div className="mt-16">
+            <p className="eyebrow mb-2 justify-center text-center">
+              {showZero ? "شاید این‌ها را بپسندید" : "پیشنهاد شروع"}
+            </p>
+            <h2 className="section-title mb-8 text-center text-2xl sm:text-3xl">
+              {showZero ? "نمونه‌هایی از سردابه" : "تازه‌های فروشگاه"}
+            </h2>
+            <div className={PRODUCT_CARD_GRID_CLASS}>
+              {suggestions.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+            <div className="mt-8 text-center">
+              <Button asChild variant="outline" className="h-11">
+                <Link href="/products">مشاهدهٔ همهٔ محصولات</Link>
+              </Button>
             </div>
           </div>
         ) : null}

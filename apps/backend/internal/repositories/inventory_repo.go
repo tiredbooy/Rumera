@@ -17,6 +17,11 @@ type InventoryRepository interface {
 	GetAll(ctx context.Context, filter models.InventoryFilter) ([]*models.Inventory, int64, error)
 	GetLowStock(ctx context.Context) ([]*models.Inventory, error)
 
+	// EnsureForVariant creates a zero-stock inventory row when missing.
+	// Returns models.ErrNotFound if the product_variant does not exist.
+	EnsureForVariant(ctx context.Context, variantID int64) error
+	EnsureForVariantTx(ctx context.Context, tx pgx.Tx, variantID int64) error
+
 	Adjust(ctx context.Context, tx pgx.Tx, variantID int64, req models.AdjustStockReq, orderID *int64) error
 
 	Reserve(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
@@ -63,6 +68,61 @@ func NewInventoryRepository(db *pgxpool.Pool) InventoryRepository {
 
 func (r *inventoryRepository) BeginTx(ctx context.Context) (pgx.Tx, error) {
 	return r.db.Begin(ctx)
+}
+
+const ensureInventorySQL = `
+	INSERT INTO inventory (
+		product_variant_id,
+		stock_on_hand,
+		committed_stock,
+		reorder_point,
+		reorder_quantity
+	)
+	SELECT $1, 0, 0, 5, 24
+	WHERE EXISTS (SELECT 1 FROM product_variants WHERE id = $1)
+	ON CONFLICT (product_variant_id) DO NOTHING`
+
+func (r *inventoryRepository) EnsureForVariant(ctx context.Context, variantID int64) error {
+	tag, err := r.db.Exec(ctx, ensureInventorySQL, variantID)
+	if err != nil {
+		return fmt.Errorf("inventoryRepository.EnsureForVariant: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		return nil
+	}
+	// Either already existed or variant is missing — distinguish.
+	var exists bool
+	if err := r.db.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM product_variants WHERE id = $1)`,
+		variantID,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("inventoryRepository.EnsureForVariant exists: %w", err)
+	}
+	if !exists {
+		return models.ErrNotFound
+	}
+	return nil
+}
+
+func (r *inventoryRepository) EnsureForVariantTx(ctx context.Context, tx pgx.Tx, variantID int64) error {
+	tag, err := tx.Exec(ctx, ensureInventorySQL, variantID)
+	if err != nil {
+		return fmt.Errorf("inventoryRepository.EnsureForVariantTx: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		return nil
+	}
+	var exists bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM product_variants WHERE id = $1)`,
+		variantID,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("inventoryRepository.EnsureForVariantTx exists: %w", err)
+	}
+	if !exists {
+		return models.ErrNotFound
+	}
+	return nil
 }
 
 func (r *inventoryRepository) GetByVariantID(ctx context.Context, variantID int64) (*models.Inventory, error) {

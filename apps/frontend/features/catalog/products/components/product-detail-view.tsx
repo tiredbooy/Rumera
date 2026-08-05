@@ -73,13 +73,11 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
     (f) => !similar.some((s) => s.product_id === f.product_id),
   );
 
-  // For the recently-viewed memory.
+  // For the recently-viewed memory — stock gates inclusion; zero is a real price.
   const variantPrices = (product.variants ?? [])
     .filter(
       (variant) =>
-        variant.is_active &&
-        variant.price > 0 &&
-        (variant.available_stock ?? 0) > 0,
+        variant.is_active && (variant.available_stock ?? 0) > 0,
     )
     .map((v) => v.price);
   const minPrice = variantPrices.length

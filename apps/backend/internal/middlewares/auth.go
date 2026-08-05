@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -68,6 +69,10 @@ func Auth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
 			abort(c, response.ErrInvalidToken)
 			return
 		}
+		if sessionInvalidated(live, claims) {
+			abort(c, response.ErrInvalidToken)
+			return
+		}
 
 		c.Set(ctxKeyUserID, live.UserID)
 		c.Set(ctxKeyUID, live.ID)
@@ -99,13 +104,38 @@ func OptionalAuth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
 		}
 		live, err := users.GetAuthUserByUID(c.Request.Context(), claims.UID)
 		if err == nil && live != nil && live.IsActive && !live.IsBanned && live.ID == claims.UID &&
-			live.UserID == claimUserID && models.IsAssignableUserRole(live.Role) {
+			live.UserID == claimUserID && models.IsAssignableUserRole(live.Role) &&
+			!sessionInvalidated(live, claims) {
 			c.Set(ctxKeyUserID, live.UserID)
 			c.Set(ctxKeyUID, live.ID)
 			c.Set(ctxKeyRole, live.Role)
 		}
 		c.Next()
 	}
+}
+
+// sessionInvalidated reports whether the token was issued strictly before a
+// hard logout (password reset). Tokens without IssuedAt are treated as invalid
+// when a cutover timestamp exists — fail closed. Equal timestamps are allowed
+// so a login in the same second as the cutover still works.
+func sessionInvalidated(live *models.AuthUser, claims *token.Claims) bool {
+	if live == nil || live.SessionsInvalidatedAt == nil {
+		return false
+	}
+	cutover := live.SessionsInvalidatedAt.UTC()
+	if claims.IssuedAt == nil {
+		return true
+	}
+	return claims.IssuedAt.Time.UTC().Before(cutover)
+}
+
+// SessionStillValid is exported for the refresh path, which reloads the user
+// outside middleware and must apply the same cutover rule.
+func SessionStillValid(invalidatedAt *time.Time, issuedAt time.Time) bool {
+	if invalidatedAt == nil {
+		return true
+	}
+	return !issuedAt.UTC().Before(invalidatedAt.UTC())
 }
 
 // RequireRole guards a route group, allowing only callers whose role matches one

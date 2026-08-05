@@ -11,14 +11,47 @@ import (
 	"github.com/tiredbooy/internal/models"
 )
 
+type stubShippingAuthorizer struct {
+	cost float64
+	err  error
+}
+
+func (s stubShippingAuthorizer) AuthorizeCheckoutMethod(
+	context.Context, int64, string, float64, float64,
+) (*models.ShippingMethod, float64, error) {
+	if s.err != nil {
+		return nil, 0, s.err
+	}
+	return &models.ShippingMethod{ID: 1, ShippingZoneID: 1, IsActive: true, BaseRate: s.cost}, s.cost, nil
+}
+
+type stubAddressLookup struct {
+	country string
+	err     error
+}
+
+func (s stubAddressLookup) GetByID(context.Context, int64, int64) (*models.Address, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	country := s.country
+	if country == "" {
+		country = "IR"
+	}
+	return &models.Address{ID: 1, UserID: 1, Country: country}, nil
+}
+
 // buildOrderService wires an orderService over the supplied mocks, with real
 // inventory and payment services backed by their own mocks (the order saga calls
 // into them). Returned mocks are the ones a test typically configures/inspects.
-func buildOrderService(orderRepo *mocks.OrderRepo, cartRepo *mocks.CartRepo, couponRepo *mocks.CouponRepo, shipRepo *mocks.ShippingMethodRepo, invRepo *mocks.InventoryRepo) OrderService {
+func buildOrderService(orderRepo *mocks.OrderRepo, cartRepo *mocks.CartRepo, couponRepo *mocks.CouponRepo, ship shippingAuthorizer, invRepo *mocks.InventoryRepo) OrderService {
 	inv := NewInventoryService(invRepo, &mocks.MovementRepo{})
 	pay := NewPaymentService(&mocks.PaymentRepo{}, &mocks.OrderRepo{}, inv, nil, nil)
+	if ship == nil {
+		ship = stubShippingAuthorizer{cost: 9}
+	}
 	return NewOrderService(orderRepo, &mocks.OrderItemRepo{}, cartRepo, couponRepo,
-		&mocks.CouponUsageRepo{}, shipRepo, inv, pay)
+		&mocks.CouponUsageRepo{}, ship, stubAddressLookup{}, inv, pay)
 }
 
 func nonEmptyCart() *mocks.CartRepo {
@@ -32,23 +65,19 @@ func nonEmptyCart() *mocks.CartRepo {
 func strptr(s string) *string { return &s }
 
 func TestCreateOrder_EmptyCart(t *testing.T) {
-	svc := buildOrderService(&mocks.OrderRepo{}, &mocks.CartRepo{}, &mocks.CouponRepo{}, &mocks.ShippingMethodRepo{}, &mocks.InventoryRepo{})
+	svc := buildOrderService(&mocks.OrderRepo{}, &mocks.CartRepo{}, &mocks.CouponRepo{}, nil, &mocks.InventoryRepo{})
 
-	_, err := svc.CreateOrder(context.Background(), 1, models.CreateOrderReq{ShippingMethodID: 1})
+	_, err := svc.CreateOrder(context.Background(), 1, models.CreateOrderReq{ShippingMethodID: 1, AddressID: 1})
 	if !errors.Is(err, models.ErrCartEmpty) {
 		t.Fatalf("err = %v; want ErrCartEmpty", err)
 	}
 }
 
 func TestCreateOrder_InvalidShipping(t *testing.T) {
-	shipRepo := &mocks.ShippingMethodRepo{
-		GetByIDFn: func(context.Context, int64) (*models.ShippingMethod, error) {
-			return nil, models.ErrNotFound
-		},
-	}
-	svc := buildOrderService(&mocks.OrderRepo{}, nonEmptyCart(), &mocks.CouponRepo{}, shipRepo, &mocks.InventoryRepo{})
+	ship := stubShippingAuthorizer{err: models.ErrInvalidShippingMethod}
+	svc := buildOrderService(&mocks.OrderRepo{}, nonEmptyCart(), &mocks.CouponRepo{}, ship, &mocks.InventoryRepo{})
 
-	_, err := svc.CreateOrder(context.Background(), 1, models.CreateOrderReq{ShippingMethodID: 99})
+	_, err := svc.CreateOrder(context.Background(), 1, models.CreateOrderReq{ShippingMethodID: 99, AddressID: 1})
 	if !errors.Is(err, models.ErrInvalidShippingMethod) {
 		t.Fatalf("err = %v; want ErrInvalidShippingMethod", err)
 	}
@@ -60,9 +89,9 @@ func TestCreateOrder_InvalidCoupon(t *testing.T) {
 			return nil, models.ErrNotFound
 		},
 	}
-	svc := buildOrderService(&mocks.OrderRepo{}, nonEmptyCart(), couponRepo, &mocks.ShippingMethodRepo{}, &mocks.InventoryRepo{})
+	svc := buildOrderService(&mocks.OrderRepo{}, nonEmptyCart(), couponRepo, nil, &mocks.InventoryRepo{})
 
-	req := models.CreateOrderReq{ShippingMethodID: 1, CouponCode: strptr("BAD")}
+	req := models.CreateOrderReq{ShippingMethodID: 1, AddressID: 1, CouponCode: strptr("BAD")}
 	_, err := svc.CreateOrder(context.Background(), 1, req)
 	if !errors.Is(err, models.ErrInvalidCoupon) {
 		t.Fatalf("err = %v; want ErrInvalidCoupon", err)
@@ -81,9 +110,9 @@ func TestCreateOrder_ExpiredCoupon(t *testing.T) {
 			}, nil
 		},
 	}
-	svc := buildOrderService(&mocks.OrderRepo{}, nonEmptyCart(), couponRepo, &mocks.ShippingMethodRepo{}, &mocks.InventoryRepo{})
+	svc := buildOrderService(&mocks.OrderRepo{}, nonEmptyCart(), couponRepo, nil, &mocks.InventoryRepo{})
 
-	req := models.CreateOrderReq{ShippingMethodID: 1, CouponCode: strptr("OLD")}
+	req := models.CreateOrderReq{ShippingMethodID: 1, AddressID: 1, CouponCode: strptr("OLD")}
 	_, err := svc.CreateOrder(context.Background(), 1, req)
 	if !errors.Is(err, models.ErrCouponExpired) {
 		t.Fatalf("err = %v; want ErrCouponExpired", err)
@@ -105,10 +134,10 @@ func TestCreateOrder_HappyPath(t *testing.T) {
 	invRepo := &mocks.InventoryRepo{
 		ReserveFn: func(context.Context, pgx.Tx, int64, int, int64) error { reserved = true; return nil },
 	}
-	svc := buildOrderService(orderRepo, nonEmptyCart(), &mocks.CouponRepo{}, &mocks.ShippingMethodRepo{}, invRepo)
+	svc := buildOrderService(orderRepo, nonEmptyCart(), &mocks.CouponRepo{}, nil, invRepo)
 
 	order, err := svc.CreateOrder(context.Background(), 1, models.CreateOrderReq{
-		ShippingMethodID: 1, PaymentMethod: models.PaymentMethodCard,
+		ShippingMethodID: 1, AddressID: 1, PaymentMethod: models.PaymentMethodCard,
 	})
 	if err != nil {
 		t.Fatalf("CreateOrder err = %v; want nil", err)
@@ -142,10 +171,10 @@ func TestCreateOrder_InsufficientStockRollsBack(t *testing.T) {
 			return models.ErrInsufficientStock
 		},
 	}
-	svc := buildOrderService(orderRepo, nonEmptyCart(), &mocks.CouponRepo{}, &mocks.ShippingMethodRepo{}, invRepo)
+	svc := buildOrderService(orderRepo, nonEmptyCart(), &mocks.CouponRepo{}, nil, invRepo)
 
 	_, err := svc.CreateOrder(context.Background(), 1, models.CreateOrderReq{
-		ShippingMethodID: 1, PaymentMethod: models.PaymentMethodCard,
+		ShippingMethodID: 1, AddressID: 1, PaymentMethod: models.PaymentMethodCard,
 	})
 	if !errors.Is(err, models.ErrInsufficientStock) {
 		t.Fatalf("err = %v; want ErrInsufficientStock", err)

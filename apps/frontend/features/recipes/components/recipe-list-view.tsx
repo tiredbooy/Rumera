@@ -11,7 +11,7 @@ import {
 
 import { JsonLd } from "@/components/json-ld";
 import { ResultsHeading } from "@/components/results-heading";
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/features/motion/components/reveal";
@@ -134,10 +134,10 @@ export async function RecipeListView({
             >
               <div className="relative aspect-[16/10] overflow-hidden lg:aspect-auto">
                 <div className="absolute inset-0 transition-transform duration-500 ease-cellar group-hover/spot:scale-[1.04]">
-                  <SmartImage
+                  <StorefrontMedia
+                    slot="recipe-hero"
                     src={spotlight.image_url}
                     alt={spotlight.image_alt?.trim() || spotlight.title}
-                    sizes="(max-width: 1024px) 100vw, 50vw"
                     monogram={spotlight.title.charAt(0)}
                     fallbackClassName="from-primary/20 via-card to-secondary"
                     priority

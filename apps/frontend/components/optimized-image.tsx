@@ -1,8 +1,13 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "@/lib/utils"
+import {
+  mediaTransformUrl,
+  resolveMediaUrl,
+  type MediaTransformParams,
+} from "@/lib/media/resolve-media-url";
+import { cn } from "@/lib/utils";
 
 /**
  * OptimizedImage renders an image through the backend's on-the-fly transform
@@ -10,34 +15,31 @@ import { cn } from "@/lib/utils"
  * `srcset` across a few widths and lazy-loads by default, so the browser pulls
  * the smallest adequate AVIF/WebP for the layout slot.
  *
- * Transform origin comes from `NEXT_PUBLIC_MEDIA_BASE_URL` (e.g. the API host in
- * local dev); when unset it falls back to same-origin (`/media/...`), which is
- * how production serves it behind nginx.
+ * Transform origin comes from {@link mediaTransformUrl} / configured media
+ * origin (`NEXT_PUBLIC_MEDIA_BASE_URL` → `NEXT_PUBLIC_API_URL` → same-origin).
  *
  * Falls back to a branded gradient (never a broken image) when there's no key /
  * src or the request errors — matching `SmartImage`'s behaviour.
  */
-const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? "").replace(/\/$/, "")
 
-export type MediaFormat = "avif" | "webp" | "jpeg" | "png"
-export type MediaFit = "cover" | "contain" | "inside"
+export type MediaFormat = NonNullable<MediaTransformParams["f"]>;
+export type MediaFit = NonNullable<MediaTransformParams["fit"]>;
 
+/** @deprecated Prefer mediaTransformUrl from `@/lib/media/resolve-media-url`. */
 export function mediaUrl(
   key: string,
-  params: { f?: MediaFormat; q?: number; w?: number; h?: number; fit?: MediaFit } = {}
+  params: {
+    f?: MediaFormat;
+    q?: number;
+    w?: number;
+    h?: number;
+    fit?: MediaFit;
+  } = {},
 ): string {
-  const search = new URLSearchParams()
-  if (params.f) search.set("f", params.f)
-  if (params.q) search.set("q", String(params.q))
-  if (params.w) search.set("w", String(params.w))
-  if (params.h) search.set("h", String(params.h))
-  if (params.fit) search.set("fit", params.fit)
-  const qs = search.toString()
-  const cleanKey = key.replace(/^\/+/, "")
-  return `${MEDIA_BASE}/media/${cleanKey}${qs ? `?${qs}` : ""}`
+  return mediaTransformUrl(key, params);
 }
 
-const DEFAULT_WIDTHS = [200, 400, 800]
+const DEFAULT_WIDTHS = [200, 400, 800];
 
 export function OptimizedImage({
   imageKey,
@@ -56,33 +58,44 @@ export function OptimizedImage({
   monogram = "ر",
 }: {
   /** Storage key from the media pipeline (`products/{uuid}.{ext}`). */
-  imageKey?: string | null
+  imageKey?: string | null;
   /** Legacy / external URL used when no `imageKey` is available. */
-  src?: string | null
-  alt: string
-  width?: number
-  height?: number
-  format?: MediaFormat
-  quality?: number
-  widths?: number[]
-  fit?: MediaFit
+  src?: string | null;
+  alt: string;
+  width?: number;
+  height?: number;
+  format?: MediaFormat;
+  quality?: number;
+  widths?: number[];
+  fit?: MediaFit;
   /** `sizes` attribute for responsive selection from the `srcset`. */
-  sizes?: string
+  sizes?: string;
   /** Eager-load above-the-fold images; otherwise lazy. */
-  priority?: boolean
-  className?: string
-  fallbackClassName?: string
-  monogram?: string
+  priority?: boolean;
+  className?: string;
+  fallbackClassName?: string;
+  monogram?: string;
 }) {
-  const [failed, setFailed] = React.useState(false)
+  const [failed, setFailed] = React.useState(false);
 
   const resolvedSrc = imageKey
-    ? mediaUrl(imageKey, { f: format, q: quality, w: width, h: height, fit })
-    : (src ?? null)
+    ? mediaTransformUrl(imageKey, {
+        f: format,
+        q: quality,
+        w: width,
+        h: height,
+        fit,
+      })
+    : resolveMediaUrl(src);
 
   const srcSet = imageKey
-    ? widths.map((w) => `${mediaUrl(imageKey, { f: format, q: quality, w, fit })} ${w}w`).join(", ")
-    : undefined
+    ? widths
+        .map(
+          (w) =>
+            `${mediaTransformUrl(imageKey, { f: format, q: quality, w, fit })} ${w}w`,
+        )
+        .join(", ")
+    : undefined;
 
   if (!resolvedSrc || failed) {
     return (
@@ -90,7 +103,7 @@ export function OptimizedImage({
         className={cn(
           "flex h-full w-full flex-col items-center justify-center",
           "bg-gradient-to-br from-accent/60 via-card to-secondary",
-          fallbackClassName
+          fallbackClassName,
         )}
         role="img"
         aria-label={alt}
@@ -102,7 +115,7 @@ export function OptimizedImage({
           {monogram}
         </span>
       </div>
-    )
+    );
   }
 
   return (
@@ -119,5 +132,5 @@ export function OptimizedImage({
       onError={() => setFailed(true)}
       className={cn("object-cover", className)}
     />
-  )
+  );
 }

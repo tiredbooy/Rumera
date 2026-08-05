@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +16,11 @@ const (
 	sessionCookieName = "sid"
 	deviceCookieName  = "did"
 	cookieTTL         = 365 * 24 * time.Hour
+
+	// Context keys handlers may set so the post-request hook can attach
+	// catalog identifiers without re-parsing the response body.
+	AnalyticsProductIDKey = "analytics_product_id"
+	AnalyticsPayloadKey   = "analytics_payload"
 )
 
 func Analytics(queue *analytics.Queue) gin.HandlerFunc {
@@ -23,19 +29,45 @@ func Analytics(queue *analytics.Queue) gin.HandlerFunc {
 
 		method := c.Request.Method
 		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
 		rawURL := c.Request.URL.String()
 		referrer := c.Request.Referer()
 		userAgentStr := c.Request.UserAgent()
 		query := c.Request.URL.Query()
 		sessionID := getOrCreateCookieID(c, sessionCookieName)
 		deviceID := getOrCreateCookieID(c, deviceCookieName)
-		userID, _ := c.Get("userID") // set by your auth middleware
+		userID, _ := c.Get("userID") // set by auth middleware
+
+		// Capture catalog enrichment before leaving the request goroutine.
+		var productID int64
+		if raw, ok := c.Get(AnalyticsProductIDKey); ok {
+			switch v := raw.(type) {
+			case int64:
+				productID = v
+			case int:
+				productID = int64(v)
+			}
+		}
+		if productID <= 0 {
+			if id, err := strconv.ParseInt(c.Param("id"), 10, 64); err == nil && id > 0 {
+				productID = id
+			}
+		}
+		var extraPayload map[string]any
+		if raw, ok := c.Get(AnalyticsPayloadKey); ok {
+			if m, ok := raw.(map[string]any); ok {
+				extraPayload = m
+			}
+		}
 
 		go func() {
 			event := buildEvent(
 				method, path, rawURL, referrer,
 				userAgentStr, query,
 				sessionID, deviceID, userID,
+				productID, extraPayload,
 			)
 			queue.Push(event)
 		}()
@@ -48,10 +80,23 @@ func buildEvent(
 	query map[string][]string,
 	sessionID, deviceID uuid.UUID,
 	rawUserID any,
+	productID int64,
+	extraPayload map[string]any,
 ) *analyticsmodels.EventReq {
 	ua := useragent.Parse(userAgentStr)
 	deviceType := resolveDeviceType(ua)
 	eventType := resolveEventType(method, path)
+
+	payload := map[string]any{}
+	for k, v := range extraPayload {
+		payload[k] = v
+	}
+	if productID > 0 {
+		payload["product_id"] = productID
+	}
+	if q := queryParamFromMap(query, "q"); q != nil && eventType == "search_performed" {
+		payload["query"] = *q
+	}
 
 	event := &analyticsmodels.EventReq{
 		SessionID:   sessionID,
@@ -66,7 +111,7 @@ func buildEvent(
 		UTMCampaign: queryParamFromMap(query, "utm_campaign"),
 		UTMContent:  queryParamFromMap(query, "utm_content"),
 		UTMTerm:     queryParamFromMap(query, "utm_term"),
-		Payload:     map[string]any{},
+		Payload:     payload,
 	}
 
 	if referrer != "" {
@@ -81,22 +126,53 @@ func buildEvent(
 }
 
 func resolveEventType(method, path string) string {
+	// FullPath is the Gin route pattern (e.g. /api/v1/products/:id).
 	switch {
-	case method == "GET" && strings.HasPrefix(path, "/api/products/"):
-		return "product_viewed"
-	case method == "GET" && strings.HasPrefix(path, "/api/recipes/"):
+	case method == "GET" && (strings.HasPrefix(path, "/api/v1/products/") || strings.HasPrefix(path, "/api/products/")):
+		// Exclude list-style collections that are not a single product view.
+		if strings.Contains(path, "/products/slug/") || pathEndsWithProductID(path) {
+			return "product_viewed"
+		}
+		if strings.HasPrefix(path, "/api/v1/products/") || strings.HasPrefix(path, "/api/products/") {
+			// /products/:id and nested product resources share the prefix; only
+			// the bare product detail patterns count as views.
+			if isProductDetailPath(path) {
+				return "product_viewed"
+			}
+		}
+	case method == "GET" && (strings.HasPrefix(path, "/api/v1/recipes/") || strings.HasPrefix(path, "/api/recipes/")):
 		return "recipe_viewed"
-	case method == "GET" && strings.HasPrefix(path, "/api/blogs/"):
+	case method == "GET" && (strings.HasPrefix(path, "/api/v1/blogs/") || strings.HasPrefix(path, "/api/blogs/")):
 		return "blog_viewed"
-	case method == "GET" && strings.HasPrefix(path, "/api/search"):
+	case method == "GET" && (strings.HasPrefix(path, "/api/v1/search") || strings.HasPrefix(path, "/api/search")):
 		return "search_performed"
-	case method == "POST" && strings.HasPrefix(path, "/api/cart"):
+	case method == "POST" && (strings.HasPrefix(path, "/api/v1/cart") || strings.HasPrefix(path, "/api/cart")):
 		return "cart_updated"
-	case method == "POST" && strings.HasPrefix(path, "/api/orders"):
+	case method == "POST" && (path == "/api/v1/orders" || path == "/api/orders" ||
+		strings.HasPrefix(path, "/api/v1/orders") && !strings.Contains(path[len("/api/v1/orders"):], "/") ||
+		strings.HasPrefix(path, "/api/orders") && !strings.Contains(path[len("/api/orders"):], "/")):
 		return "order_created"
-	default:
-		return "page_viewed"
 	}
+	return "page_viewed"
+}
+
+func isProductDetailPath(path string) bool {
+	// Matches /api/v1/products/:id and /api/v1/products/slug/:slug only.
+	if strings.Contains(path, "/products/slug/") {
+		return true
+	}
+	return pathEndsWithProductID(path)
+}
+
+func pathEndsWithProductID(path string) bool {
+	const marker = "/products/"
+	idx := strings.LastIndex(path, marker)
+	if idx < 0 {
+		return false
+	}
+	rest := path[idx+len(marker):]
+	// :id with no further segment (tags, images, variants, reviews, recipes).
+	return rest == ":id" || (!strings.Contains(rest, "/") && rest != "")
 }
 
 func resolveDeviceType(ua useragent.UserAgent) analyticsmodels.DeviceType {

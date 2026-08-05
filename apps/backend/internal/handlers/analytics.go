@@ -89,9 +89,7 @@ func (h *Handler) RevenueToday(c *gin.Context) {
 
 // ── Products ───────────────────────────────────────────────────────────────
 
-// Backend blocker: these routes expose analytics UUIDs, but catalog product
-// routes expose BIGINT IDs. The UUID is deliberately not presented as a catalog
-// identifier until the databases share a canonical product key.
+// Product analytics keys are catalog BIGINT product IDs (same as /admin/products/:id).
 
 // TopProductsByRevenue — GET /admin/analytics/products/top-revenue
 func (h *Handler) TopProductsByRevenue(c *gin.Context) {
@@ -123,7 +121,7 @@ func (h *Handler) TopProductsByViews(c *gin.Context) {
 
 // ProductStatsSummary — GET /admin/analytics/products/:productID/summary
 func (h *Handler) ProductStatsSummary(c *gin.Context) {
-	productID, ok := h.paramUUID(c, "productID")
+	productID, ok := h.paramInt64(c, "productID")
 	if !ok {
 		return
 	}
@@ -141,7 +139,7 @@ func (h *Handler) ProductStatsSummary(c *gin.Context) {
 
 // ProductStatsTimeSeries — GET /admin/analytics/products/:productID/timeseries
 func (h *Handler) ProductStatsTimeSeries(c *gin.Context) {
-	productID, ok := h.paramUUID(c, "productID")
+	productID, ok := h.paramInt64(c, "productID")
 	if !ok {
 		return
 	}

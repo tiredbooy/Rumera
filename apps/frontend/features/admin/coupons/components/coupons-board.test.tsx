@@ -86,7 +86,9 @@ describe("CouponsBoard", () => {
             max_uses_per_user: 1,
             is_active: false,
             starts_at: "2026-01-01T00:00:00Z",
-            total_uses: 0,
+            total_uses: 3,
+            max_uses: 10,
+            is_exhausted: false,
           },
         ],
         pagination: {
@@ -109,8 +111,8 @@ describe("CouponsBoard", () => {
       screen.getByRole("button", { name: "غیرفعال کردن OLD" }),
     ).toBeDisabled();
     expect(
-      screen.queryByRole("columnheader", { name: /مصرف/ }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("columnheader", { name: /مصرف/ }),
+    ).toBeInTheDocument();
   });
 
   it("ignores invalid URL filters before querying the backend", () => {

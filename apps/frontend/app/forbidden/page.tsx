@@ -5,8 +5,9 @@
  */
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ShieldAlert, Wine, ArrowLeft } from "lucide-react"
+import { ShieldAlert, ArrowLeft } from "lucide-react"
 
+import { RumeraBrandMark } from "@/components/brand/rumera-brand-mark"
 import { Button } from "@/components/ui/button"
 import { noindexMetadata } from "@/lib/seo/metadata"
 
@@ -19,14 +20,9 @@ export default function ForbiddenPage() {
       tabIndex={-1}
       className="cellar-glow flex min-h-dvh flex-col items-center justify-center px-5 py-12"
     >
-      <Link href="/" className="mb-8 flex items-center gap-2">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
-          <Wine className="size-5" />
-        </span>
-        <span className="font-serif text-3xl leading-none">
-          <span className="text-foil">رومرا</span>
-        </span>
-      </Link>
+      <div className="mb-8">
+        <RumeraBrandMark variant="full" size="md" href="/" />
+      </div>
 
       <div className="border-hairline w-full max-w-md rounded-3xl bg-card/80 p-8 text-center shadow-xl ring-1 ring-foreground/5 backdrop-blur-sm sm:p-10">
         <span className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">

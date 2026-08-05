@@ -65,18 +65,24 @@ type User struct {
 	LastLoginAt     *time.Time `db:"last_login_at"`
 
 	BannedAt  *time.Time `db:"banned_at"`
-	CreatedAt time.Time  `db:"created_at"`
-	UpdatedAt time.Time  `db:"updated_at"`
+	// SessionsInvalidatedAt is bumped on password reset (and other hard
+	// logout events). Tokens issued at or before this time are rejected.
+	SessionsInvalidatedAt *time.Time `db:"sessions_invalidated_at"`
+	CreatedAt             time.Time  `db:"created_at"`
+	UpdatedAt             time.Time  `db:"updated_at"`
 }
 
 // AuthUser is the minimal live account projection required by authentication
 // middleware after a token has been cryptographically validated.
 type AuthUser struct {
-	ID       int64     `db:"id"`
-	UserID   uuid.UUID `db:"user_id"`
-	Role     string    `db:"role"`
-	IsActive bool      `db:"is_active"`
-	IsBanned bool      `db:"is_banned"`
+	ID                     int64      `db:"id"`
+	UserID                 uuid.UUID  `db:"user_id"`
+	Role                   string     `db:"role"`
+	IsActive               bool       `db:"is_active"`
+	IsBanned               bool       `db:"is_banned"`
+	// SessionsInvalidatedAt, when set, rejects any JWT whose IssuedAt is not
+	// strictly after this timestamp (password reset / forced logout).
+	SessionsInvalidatedAt  *time.Time `db:"sessions_invalidated_at"`
 }
 
 // ─────────────────────────────────────────────────────────────

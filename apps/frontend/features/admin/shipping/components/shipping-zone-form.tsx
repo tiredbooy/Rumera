@@ -27,6 +27,7 @@ import {
   type ShippingZoneFormValues,
 } from "@/features/shipping/validations";
 
+import { RegionCodesEditor } from "./region-codes-editor";
 import { ShippingFormField, ShippingFormSection } from "./shipping-form-field";
 
 const zoneFields = new Set<keyof ShippingZoneFormValues>([
@@ -151,23 +152,35 @@ export function ShippingZoneForm({
 
       <ShippingFormSection
         title="محدودهٔ پوشش"
-        description="کدها را با ویرگول فارسی یا انگلیسی، یا در خط‌های جدا وارد کنید. حروف هنگام ذخیره بزرگ و موارد تکراری حذف می‌شوند."
+        description="استان‌های رایج را با یک کلیک اضافه کنید، یا کد دلخواه را تایپ و Enter بزنید. کدها هنگام ذخیره یکتا و حروف‌بزرگ می‌شوند."
       >
         <ShippingFormField
           id="zone-region-codes"
           label="کدهای منطقه"
           error={errors.region_codes?.message}
-          hint="نمونه: IR-TEH، IR-ALB یا DE"
+          hint="کدهای ذخیره‌شده: مثلاً IR-TEH یا IR. می‌توانید چند کد را با ویرگول هم بچسبانید."
           full
+          bindControl={false}
         >
-          <Textarea
-            id="zone-region-codes"
-            rows={4}
-            dir="ltr"
-            spellCheck={false}
-            disabled={busy}
-            className="font-mono"
-            {...register("region_codes")}
+          <Controller
+            name="region_codes"
+            control={control}
+            render={({ field }) => (
+              <RegionCodesEditor
+                ref={field.ref}
+                id="zone-region-codes"
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                disabled={busy}
+                invalid={Boolean(errors.region_codes)}
+                describedBy={
+                  errors.region_codes
+                    ? "zone-region-codes-error"
+                    : "zone-region-codes-description"
+                }
+              />
+            )}
           />
         </ShippingFormField>
       </ShippingFormSection>

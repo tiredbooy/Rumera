@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/tiredbooy/internal/mappers"
+	"github.com/tiredbooy/internal/middlewares"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/crypto"
 	"github.com/tiredbooy/pkg/response"
@@ -126,8 +127,13 @@ func (h *Handler) Login(c *gin.Context) {
 
 	pair, err := h.issueTokens(c.Request.Context(), user.ID, user.UserID.String(), user.Role)
 	if err != nil {
-		response.InternalError(c)
-		return
+		// Credentials were valid; prefer a short-lived access-only session over
+		// a 500 when the refresh whitelist is unavailable (see Register).
+		if pair.Access == "" {
+			response.InternalError(c)
+			return
+		}
+		pair.Refresh = ""
 	}
 
 	response.OK(c, TokenResponse{
@@ -170,6 +176,13 @@ func (h *Handler) Refresh(c *gin.Context) {
 	}
 	if !user.IsActive || user.IsBanned {
 		response.Error(c, response.ErrForbidden)
+		return
+	}
+	// Password reset (and other hard logouts) bump sessions_invalidated_at;
+	// refuse to mint a new pair from a pre-cutover refresh token.
+	if claims.IssuedAt == nil ||
+		!middlewares.SessionStillValid(user.SessionsInvalidatedAt, claims.IssuedAt.Time) {
+		response.Error(c, response.ErrInvalidToken)
 		return
 	}
 

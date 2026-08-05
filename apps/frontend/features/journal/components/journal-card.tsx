@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Clock, Eye } from "lucide-react";
 
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import type { JournalListItem } from "@/features/journal/types";
 import { formatJournalDate, formatReadingTime } from "@/features/journal/utils";
 import { faNum } from "@/lib/products";
@@ -44,12 +44,12 @@ export function JournalCard({
           className="group/feat border-hairline shadow-e1 hover:shadow-e3 relative grid overflow-hidden rounded-[1.5rem] bg-card ring-1 ring-foreground/5 transition-[box-shadow,border-color] duration-300 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-4 sm:rounded-[2rem] lg:grid-cols-2"
         >
           <div className="relative aspect-[16/10] overflow-hidden lg:h-full lg:aspect-auto">
-            <SmartImage
+            <StorefrontMedia
+              slot="journal-hero"
               src={post.image_url}
               alt={post.image_alt?.trim() || post.title}
               monogram={post.title.charAt(0)}
               fallbackClassName={cn("bg-gradient-to-br", tint(index))}
-              sizes="(max-width: 1024px) 100vw, 50vw"
               priority={priority}
               className="transition-transform duration-500 ease-cellar group-hover/feat:scale-[1.03]"
             />
@@ -102,12 +102,12 @@ export function JournalCard({
         className="group/post press border-hairline shadow-e1 hover:shadow-e3 relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 ease-cellar hover:-translate-y-1 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-4 sm:rounded-3xl"
       >
         <div className="relative aspect-[16/10] overflow-hidden">
-          <SmartImage
+          <StorefrontMedia
+            slot="journal-card"
             src={post.image_url}
             alt={post.image_alt?.trim() || post.title}
             monogram={post.title.charAt(0)}
             fallbackClassName={cn("bg-gradient-to-br", tint(index))}
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             priority={priority}
             className="transition-transform duration-500 ease-cellar group-hover/post:scale-105"
           />

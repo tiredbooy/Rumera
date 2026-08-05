@@ -138,14 +138,17 @@ type CouponResponse struct {
 	StartsAt          time.Time     `json:"starts_at"`
 	ExpiresAt         *time.Time    `json:"expires_at,omitempty"`
 	TotalUses         int           `json:"total_uses"` // joined from coupon_usages count
+	// IsExhausted is true when MaxUses is set and TotalUses has reached it.
+	IsExhausted bool `json:"is_exhausted"`
 }
 
 type CouponValidationResult struct {
-	Coupon         *Coupon `json:"coupon"`
-	DiscountAmount float64 `json:"discount_amount"` // calculated discount
-	FreeShipping   bool    `json:"free_shipping"`
-	IsValid        bool    `json:"is_valid"`
-	InvalidReason  string  `json:"invalid_reason,omitempty"`
+	// Coupon is the wire projection (snake_case), never the raw persistence model.
+	Coupon         *CouponResponse `json:"coupon"`
+	DiscountAmount float64         `json:"discount_amount"` // calculated discount
+	FreeShipping   bool            `json:"free_shipping"`
+	IsValid        bool            `json:"is_valid"`
+	InvalidReason  string          `json:"invalid_reason,omitempty"`
 }
 
 var _ = pgtype.Text{}

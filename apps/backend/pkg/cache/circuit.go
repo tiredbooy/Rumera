@@ -209,6 +209,15 @@ func (b *breaker) Delete(ctx context.Context, keys ...string) error {
 	return err
 }
 
+func (b *breaker) KeysByPrefix(ctx context.Context, prefix string) ([]string, error) {
+	if !b.allow() {
+		return nil, ErrUnavailable
+	}
+	keys, err := b.store.KeysByPrefix(ctx, prefix)
+	b.record(err != nil)
+	return keys, err
+}
+
 func (b *breaker) Exists(ctx context.Context, key string) (bool, error) {
 	if !b.allow() {
 		return false, ErrUnavailable

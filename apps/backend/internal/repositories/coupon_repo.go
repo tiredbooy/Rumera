@@ -32,12 +32,19 @@ type CouponRepository interface {
 	// so concurrent redemptions of the same coupon serialize and the usage-limit
 	// re-check below is race-free.
 	LockByID(ctx context.Context, tx pgx.Tx, id int64) error
+	// GetByIDForUpdate reloads the coupon definition under a row lock so order
+	// creation re-validates the current definition after taking the redemption lock.
+	GetByIDForUpdate(ctx context.Context, tx pgx.Tx, id int64) (*models.Coupon, error)
 	// CountUsagesTx / CountUsagesByUserTx count usages on the supplied tx (used
 	// for the locked re-check inside order creation).
 	CountUsagesTx(ctx context.Context, tx pgx.Tx, couponID int64) (int, error)
 	CountUsagesByUserTx(ctx context.Context, tx pgx.Tx, couponID int64, userID int64) (int, error)
+	// CountUsagesByIDs returns total redemptions keyed by coupon id for admin lists.
+	CountUsagesByIDs(ctx context.Context, ids []int64) (map[int64]int, error)
 
 	ExistsByCode(ctx context.Context, code string) (bool, error)
+	// Deactivate marks a coupon inactive without deleting redemption history.
+	Deactivate(ctx context.Context, id int64) (*models.Coupon, error)
 }
 
 type couponRepository struct {
@@ -296,16 +303,27 @@ func (r *couponRepository) Update(ctx context.Context, id int64, req models.Upda
 }
 
 func (r *couponRepository) Delete(ctx context.Context, id int64) error {
-	const q = `DELETE FROM coupons WHERE id = $1`
+	// Destructive hard-delete is no longer supported; deactivate instead so order
+	// and redemption history remain intact.
+	_, err := r.Deactivate(ctx, id)
+	return err
+}
 
-	res, err := r.db.Exec(ctx, q, id)
+func (r *couponRepository) Deactivate(ctx context.Context, id int64) (*models.Coupon, error) {
+	const q = `
+		UPDATE coupons
+		SET is_active = false, updated_at = NOW()
+		WHERE id = $1
+		RETURNING ` + couponColumns
+
+	coupon, err := scanCoupon(r.db.QueryRow(ctx, q, id))
 	if err != nil {
-		return fmt.Errorf("couponRepository.Delete: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("couponRepository.Deactivate: %w", err)
 	}
-	if res.RowsAffected() == 0 {
-		return models.ErrNotFound
-	}
-	return nil
+	return coupon, nil
 }
 
 func (r *couponRepository) CountUsages(ctx context.Context, couponID int64) (int, error) {
@@ -329,15 +347,48 @@ func (r *couponRepository) CountUsagesByUser(ctx context.Context, couponID int64
 }
 
 func (r *couponRepository) LockByID(ctx context.Context, tx pgx.Tx, id int64) error {
-	var x int
-	err := tx.QueryRow(ctx, `SELECT 1 FROM coupons WHERE id = $1 FOR UPDATE`, id).Scan(&x)
+	_, err := r.GetByIDForUpdate(ctx, tx, id)
+	return err
+}
+
+func (r *couponRepository) GetByIDForUpdate(ctx context.Context, tx pgx.Tx, id int64) (*models.Coupon, error) {
+	q := `SELECT ` + couponColumns + ` FROM coupons WHERE id = $1 FOR UPDATE`
+	coupon, err := scanCoupon(tx.QueryRow(ctx, q, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return models.ErrNotFound
+			return nil, models.ErrNotFound
 		}
-		return fmt.Errorf("couponRepository.LockByID: %w", err)
+		return nil, fmt.Errorf("couponRepository.GetByIDForUpdate: %w", err)
 	}
-	return nil
+	return coupon, nil
+}
+
+func (r *couponRepository) CountUsagesByIDs(ctx context.Context, ids []int64) (map[int64]int, error) {
+	out := make(map[int64]int, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT coupon_id, COUNT(*)::int
+		FROM coupon_usages
+		WHERE coupon_id = ANY($1)
+		GROUP BY coupon_id`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("couponRepository.CountUsagesByIDs: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var count int
+		if err := rows.Scan(&id, &count); err != nil {
+			return nil, fmt.Errorf("couponRepository.CountUsagesByIDs scan: %w", err)
+		}
+		out[id] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("couponRepository.CountUsagesByIDs rows: %w", err)
+	}
+	return out, nil
 }
 
 func (r *couponRepository) CountUsagesTx(ctx context.Context, tx pgx.Tx, couponID int64) (int, error) {

@@ -62,7 +62,10 @@ describe("recipe public API", () => {
     await getRecipeBySlug("mojito");
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       cache: "force-cache",
-      next: { revalidate: 120 },
+      next: {
+        revalidate: 120,
+        tags: expect.arrayContaining(["storefront:recipes"]),
+      },
     });
   });
 });

@@ -9,5 +9,15 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Playwright lives under e2e/ — do not collect those as Vitest files.
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.next/**",
+      "**/e2e/**",
+      "**/playwright-report/**",
+      "**/test-results/**",
+    ],
   },
 });
+

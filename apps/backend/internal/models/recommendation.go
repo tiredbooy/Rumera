@@ -82,7 +82,7 @@ func (p *UserRecommendationProfile) HasSignal() bool {
 
 type InteractionReq struct {
 	ProductID       int64           `json:"product_id"       validate:"required,min=1"`
-	InteractionType InteractionType `json:"interaction_type" validate:"required,oneof=view wishlist review recipe_view search_click"`
+	InteractionType InteractionType `json:"interaction_type" validate:"required,oneof=view add_to_cart purchase wishlist review recipe_view search_click"`
 	Source          *string         `json:"source" validate:"omitempty,max=40"`
 	Metadata        map[string]any  `json:"metadata"`
 }
@@ -92,6 +92,17 @@ type RecommendationQuery struct {
 	Limit      int    `query:"limit"`
 	CategoryID *int64 `query:"category_id"`
 	WindowDays int    `query:"window_days"`
+}
+
+// RecommendationOpsStats is a read-only operator summary for admin dashboards.
+// Counts come from first-party interaction rows and stored user profiles.
+type RecommendationOpsStats struct {
+	WindowDays           int            `json:"window_days"`
+	InteractionTotal     int64          `json:"interaction_total"`
+	UniqueUsers          int64          `json:"unique_users"`
+	ProfilesTotal        int64          `json:"profiles_total"`
+	InteractionsByType   map[string]int64 `json:"interactions_by_type"`
+	GeneratedAt          time.Time      `json:"generated_at"`
 }
 
 func (q *RecommendationQuery) Defaults() {

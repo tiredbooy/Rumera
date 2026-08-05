@@ -71,6 +71,14 @@ var (
 			Help: "Cache circuit breaker state: 0=closed, 1=half-open, 2=open.",
 		},
 	)
+
+	recommendationInteractions = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "recommendation_interactions_total",
+			Help: "Recommendation interaction signals recorded, by interaction_type.",
+		},
+		[]string{"interaction_type"},
+	)
 )
 
 func init() {
@@ -80,6 +88,7 @@ func init() {
 		cacheRequests,
 		dbRetries,
 		cacheCircuitState,
+		recommendationInteractions,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
@@ -120,6 +129,15 @@ func IncCache(result string) {
 // IncDBRetry records one retried database operation (called per retry attempt).
 func IncDBRetry() {
 	dbRetries.Inc()
+}
+
+// IncRecommendationInteraction records one successfully stored recommendation
+// signal. interactionType should match models.InteractionType string values.
+func IncRecommendationInteraction(interactionType string) {
+	if interactionType == "" {
+		interactionType = "unknown"
+	}
+	recommendationInteractions.WithLabelValues(interactionType).Inc()
 }
 
 // Cache circuit-breaker state values for SetCacheCircuitState.

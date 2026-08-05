@@ -9,16 +9,8 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { fieldErrorId } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -38,6 +30,8 @@ import {
   type ShippingMethodFormValues,
 } from "@/features/shipping/validations";
 
+import { RateTypePicker } from "./rate-type-picker";
+import { ShippingCostPreview } from "./shipping-cost-preview";
 import { ShippingFormField, ShippingFormSection } from "./shipping-form-field";
 
 const methodFields = new Set<keyof ShippingMethodFormValues>([
@@ -91,6 +85,8 @@ export function ShippingMethodForm({
     defaultValues: shippingMethodFormDefaults(method),
   });
   const rateType = useWatch({ control, name: "rate_type" });
+  const baseRate = useWatch({ control, name: "base_rate" });
+  const freeAboveAmount = useWatch({ control, name: "free_above_amount" });
   const busy = isSubmitting || createMethod.isPending || updateMethod.isPending;
 
   function applyError(error: unknown) {
@@ -191,21 +187,25 @@ export function ShippingMethodForm({
 
       <ShippingFormSection
         title="نرخ و آستانه"
-        description="هزینهٔ تخمینی بر اساس نوع نرخ محاسبه می‌شود؛ نرخ درصدی از مبلغ سفارش و نرخ وزنی از وزن بسته استفاده می‌کند."
+        description="نوع محاسبه را انتخاب کنید؛ پیش‌نمایش پایین صفحه با یک سبد نمونه کمک می‌کند اشتباهات را زود ببینید."
       >
         <ShippingFormField
           id="method-rate-type"
           label="نوع نرخ"
           error={errors.rate_type?.message}
           bindControl={false}
+          full
         >
           <Controller
             name="rate_type"
             control={control}
             render={({ field }) => (
-              <Select
+              <RateTypePicker
+                id="method-rate-type"
                 value={field.value}
-                onValueChange={(value) => {
+                invalid={Boolean(errors.rate_type)}
+                disabled={busy}
+                onChange={(value) => {
                   field.onChange(value);
                   if (value === "free") {
                     setValue("base_rate", "0", { shouldValidate: true });
@@ -214,29 +214,7 @@ export function ShippingMethodForm({
                     });
                   }
                 }}
-                disabled={busy}
-              >
-                <SelectTrigger
-                  ref={field.ref}
-                  id="method-rate-type"
-                  className="w-full"
-                  onBlur={field.onBlur}
-                  aria-invalid={errors.rate_type ? true : undefined}
-                  aria-describedby={
-                    errors.rate_type
-                      ? fieldErrorId("method-rate-type")
-                      : undefined
-                  }
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="flat_rate">مبلغ ثابت</SelectItem>
-                  <SelectItem value="per_kg">به‌ازای هر کیلوگرم</SelectItem>
-                  <SelectItem value="percentage">درصد از مبلغ سفارش</SelectItem>
-                  <SelectItem value="free">همیشه رایگان</SelectItem>
-                </SelectContent>
-              </Select>
+              />
             )}
           />
         </ShippingFormField>
@@ -244,7 +222,13 @@ export function ShippingMethodForm({
           id="method-base-rate"
           label={rateLabel(rateType)}
           error={errors.base_rate?.message}
-          hint={rateType === "percentage" ? "عددی بین صفر تا ۱۰۰" : undefined}
+          hint={
+            rateType === "percentage"
+              ? "عددی بین صفر تا ۱۰۰"
+              : rateType === "free"
+                ? "برای روش رایگان همیشه صفر است"
+                : "مبلغ به تومان"
+          }
         >
           <Input
             id="method-base-rate"
@@ -261,9 +245,9 @@ export function ShippingMethodForm({
         {rateType !== "free" ? (
           <ShippingFormField
             id="method-free-above"
-            label="ارسال رایگان از مبلغ"
+            label="ارسال رایگان از مبلغ (تومان)"
             error={errors.free_above_amount?.message}
-            hint="خالی یعنی این روش آستانهٔ رایگان ندارد"
+            hint="اختیاری — اگر سبد از این مبلغ بیشتر شود، هزینهٔ این روش صفر می‌شود"
             full
           >
             <Input
@@ -278,6 +262,11 @@ export function ShippingMethodForm({
             />
           </ShippingFormField>
         ) : null}
+        <ShippingCostPreview
+          rateType={rateType}
+          baseRate={baseRate}
+          freeAboveAmount={freeAboveAmount}
+        />
       </ShippingFormSection>
 
       <ShippingFormSection

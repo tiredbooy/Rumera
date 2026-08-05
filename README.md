@@ -81,6 +81,19 @@ DI in `internal/bootstrap`; errors flow through `pkg/apperr`. The frontend uses
 **BFF proxies** (`app/api/{admin,store,public}/[...path]`) so the browser never
 holds API credentials. See the per-app docs below for the full picture.
 
+### Documentation (start here)
+
+| Doc | Audience |
+|-----|----------|
+| [`obsidian/`](./obsidian/) | **Obsidian vault** — linked project map + Graph view (open `obsidian/` as vault) |
+| [`docs/README.md`](./docs/README.md) | **Doc hub** — organized index for the whole monorepo |
+| [`docs/SYSTEM-OVERVIEW.md`](./docs/SYSTEM-OVERVIEW.md) | End-to-end architecture |
+| [`docs/DOCUMENTATION-MAP.md`](./docs/DOCUMENTATION-MAP.md) | Full inventory + residual gaps |
+| [`docs/TESTING.md`](./docs/TESTING.md) | Go / Vitest / Playwright conventions |
+| [`apps/backend/docs/`](./apps/backend/docs/) | API + `architecture/` deep-dives (inventory, payments, …) |
+| [`apps/frontend/docs/`](./apps/frontend/docs/) | `platform/` + `features/` guides |
+| [`docs/DOCKER.md`](./docs/DOCKER.md) | Compose stacks and nginx |
+
 ---
 
 ## Quickstart

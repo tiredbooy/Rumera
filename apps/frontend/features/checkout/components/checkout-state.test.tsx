@@ -115,7 +115,18 @@ const cart: Cart = {
 };
 
 const validCoupon = {
-  coupon: { Code: "SAVE" },
+  coupon: {
+    id: 1,
+    code: "SAVE",
+    discount_type: "free_shipping",
+    discount_value: 0,
+    min_order_amount: 0,
+    max_uses_per_user: 1,
+    is_active: true,
+    starts_at: "2026-01-01T00:00:00Z",
+    total_uses: 0,
+    is_exhausted: false,
+  },
   discount_amount: 100,
   free_shipping: true,
   is_valid: true,

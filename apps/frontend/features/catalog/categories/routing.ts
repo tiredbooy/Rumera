@@ -14,6 +14,18 @@ export const CATEGORY_SORT_OPTIONS = [
     orderBy: "desc",
   },
   {
+    value: "price-asc",
+    label: "ارزان‌ترین",
+    sortBy: "price",
+    orderBy: "asc",
+  },
+  {
+    value: "price-desc",
+    label: "گران‌ترین",
+    sortBy: "price",
+    orderBy: "desc",
+  },
+  {
     value: "alphabetical",
     label: "حروف الفبا",
     sortBy: "title",

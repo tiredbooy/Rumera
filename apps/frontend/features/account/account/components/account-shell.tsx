@@ -3,8 +3,9 @@
 import * as React from "react"
 import Link from "next/link"
 import { signOut } from "next-auth/react"
-import { Wine, Menu, LogOut, Store } from "lucide-react"
+import { Menu, LogOut, Store } from "lucide-react"
 
+import { RumeraBrandMark } from "@/components/brand/rumera-brand-mark"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -45,15 +46,14 @@ export function AccountShell({
     <div className="flex h-full flex-col">
       {/* Brand header */}
       <div className="cellar-glow border-b border-border/60 px-5 py-5">
-        <Link href="/account" className="flex items-center gap-3" onClick={() => setOpen(false)}>
-          <span className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/20">
-            <Wine className="size-5" />
-          </span>
-          <div className="leading-tight">
-            <span className="block font-serif text-xl text-foil">رومرا</span>
-            <span className="block text-[11px] text-muted-foreground">حساب کاربری</span>
-          </div>
-        </Link>
+        <RumeraBrandMark
+          variant="full"
+          size="sm"
+          href="/account"
+          caption="حساب کاربری"
+          aria-label="رومرا — حساب کاربری"
+          className="w-full"
+        />
       </div>
 
       {/* Identity card */}

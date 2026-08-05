@@ -287,17 +287,43 @@ func uniquePositiveIDs(ids []int64) ([]int64, bool) {
 	return out, true
 }
 
+// Delete soft-deactivates a coupon. Redemption history is preserved; hard
+// deletion is intentionally not offered.
 func (s *CouponService) Delete(ctx context.Context, id int64) error {
 	if id <= 0 {
 		return apperr.ErrInvalidRequest
 	}
-	if err := s.couponRepo.Delete(ctx, id); err != nil {
+	if _, err := s.couponRepo.Deactivate(ctx, id); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return apperr.ErrNotFound
 		}
 		return apperr.ErrInternal
 	}
 	return nil
+}
+
+// Deactivate is the explicit admin soft-delete path and returns the updated row.
+func (s *CouponService) Deactivate(ctx context.Context, id int64) (*models.Coupon, error) {
+	if id <= 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+	coupon, err := s.couponRepo.Deactivate(ctx, id)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+	return coupon, nil
+}
+
+// UsageCounts returns redemption totals for a set of coupon ids.
+func (s *CouponService) UsageCounts(ctx context.Context, ids []int64) (map[int64]int, error) {
+	counts, err := s.couponRepo.CountUsagesByIDs(ctx, ids)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	return counts, nil
 }
 
 // TotalUses returns how many times a coupon has been redeemed — used to enrich
@@ -315,10 +341,11 @@ func (s *CouponService) TotalUses(ctx context.Context, couponID int64) (int, err
 // creation. An unknown code yields an "invalid" result, not an error, so the
 // checkout UI can render a friendly message.
 func (s *CouponService) Validate(ctx context.Context, req models.ValidateCouponReq) (*models.CouponValidationResult, error) {
-	code := strings.ToUpper(strings.TrimSpace(req.Code))
+	code := mappers.NormalizeCouponCode(req.Code)
 	if code == "" {
 		return nil, apperr.ErrInvalidRequest
 	}
+	req.Code = code
 
 	coupon, err := s.couponRepo.GetByCode(ctx, code)
 	if err != nil {

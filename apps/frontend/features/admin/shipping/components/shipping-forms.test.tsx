@@ -90,9 +90,11 @@ describe("shipping forms", () => {
     fireEvent.change(screen.getByLabelText("نام منطقه"), {
       target: { value: "  Tehran  " },
     });
-    fireEvent.change(screen.getByLabelText("کدهای منطقه"), {
+    const regions = screen.getByLabelText("کدهای منطقه");
+    fireEvent.change(regions, {
       target: { value: " ir-teh، IR-TEH, de " },
     });
+    fireEvent.click(screen.getByRole("button", { name: "افزودن" }));
     fireEvent.click(screen.getByRole("button", { name: "ساخت منطقه" }));
 
     await waitFor(() => expect(mocks.createZone).toHaveBeenCalledTimes(1));

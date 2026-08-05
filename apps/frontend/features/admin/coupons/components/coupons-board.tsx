@@ -53,6 +53,7 @@ import type {
   CouponListQuery,
   DiscountType,
 } from "@/features/coupons/types";
+import { DashboardErrorState } from "@/features/dashboard/components/async-state";
 import { PageHeader } from "@/features/dashboard/components/page-header";
 import { faNum, formatPrice } from "@/lib/products";
 import { faDate } from "@/lib/utils/date";
@@ -91,6 +92,7 @@ function couponStatus(coupon: Coupon): {
   variant: "default" | "secondary" | "outline";
 } {
   if (!coupon.is_active) return { label: "غیرفعال", variant: "secondary" };
+  if (coupon.is_exhausted) return { label: "تمام‌شده", variant: "secondary" };
   const now = Date.now();
   if (new Date(coupon.starts_at).getTime() > now) {
     return { label: "زمان‌بندی‌شده", variant: "outline" };
@@ -296,15 +298,12 @@ export function CouponsBoard() {
       {coupons.isLoading ? <LoadingTable /> : null}
 
       {coupons.isError ? (
-        <div
-          role="alert"
-          className="border-hairline flex flex-col items-center gap-4 rounded-2xl bg-card px-6 py-16 text-center ring-1 ring-foreground/[0.04]"
-        >
-          <p className="font-medium">بارگذاری کدهای تخفیف ناموفق بود</p>
-          <Button variant="outline" size="sm" onClick={() => coupons.refetch()}>
-            <RotateCw className="size-4" /> تلاش مجدد
-          </Button>
-        </div>
+        <DashboardErrorState
+          title="بارگذاری کدهای تخفیف ناموفق بود"
+          description="فهرست کدها از سرور دریافت نشد. پس از اطمینان از اتصال دوباره تلاش کنید."
+          onRetry={() => void coupons.refetch()}
+          isRetrying={coupons.isFetching}
+        />
       ) : null}
 
       {coupons.data && coupons.data.results.length === 0 ? (
@@ -330,6 +329,7 @@ export function CouponsBoard() {
               <TableRow className="bg-muted/30 hover:bg-muted/30">
                 <TableHead className="text-start">کد</TableHead>
                 <TableHead className="text-start">تخفیف</TableHead>
+                <TableHead className="text-start">مصرف</TableHead>
                 <TableHead className="text-start">حداقل سفارش</TableHead>
                 <TableHead className="text-start">اعتبار</TableHead>
                 <TableHead className="text-start">وضعیت</TableHead>
@@ -353,6 +353,11 @@ export function CouponsBoard() {
                       </Link>
                     </TableCell>
                     <TableCell>{discountLabel(coupon)}</TableCell>
+                    <TableCell className="tabular-nums text-muted-foreground">
+                      {coupon.max_uses != null
+                        ? `${faNum(coupon.total_uses)} / ${faNum(coupon.max_uses)}`
+                        : faNum(coupon.total_uses)}
+                    </TableCell>
                     <TableCell>
                       {formatPrice(coupon.min_order_amount)}
                     </TableCell>

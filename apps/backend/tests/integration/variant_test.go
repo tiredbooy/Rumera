@@ -50,7 +50,7 @@ func TestVariantSKUAndCombinationValidation(t *testing.T) {
 	}
 
 	productID := seedProduct(t)
-	service := services.NewVariantService(repositories.NewVariantRepository(testPool), nil)
+	service := services.NewVariantService(repositories.NewVariantRepository(testPool), repositories.NewInventoryRepository(testPool), nil)
 	first, err := service.Create(ctx, productID, models.CreateVariantReq{
 		SKU: stringPointer("  Bottle-L-Red  "), Price: 10,
 		OptionValueIDs: []int64{large.ID, red.ID},

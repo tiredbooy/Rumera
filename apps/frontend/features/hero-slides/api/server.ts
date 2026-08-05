@@ -1,6 +1,7 @@
 import "server-only";
 
 import { publicRequest } from "@/lib/api/public";
+import { HERO_CACHE_TAG, HOME_CACHE_TAG } from "@/lib/cache-tags";
 
 import type { PublicHeroSlide } from "../types";
 
@@ -44,7 +45,11 @@ const FALLBACK_HERO_SLIDES: PublicHeroSlide[] = [
 export async function listActiveHeroSlides(): Promise<PublicHeroSlide[]> {
   try {
     const slides = await publicRequest<PublicHeroSlide[]>("/hero-slides", {
-      cache: "no-store",
+      cache: "force-cache",
+      next: {
+        revalidate: 300,
+        tags: [HERO_CACHE_TAG, HOME_CACHE_TAG],
+      },
     });
     return Array.isArray(slides) ? slides : FALLBACK_HERO_SLIDES;
   } catch {

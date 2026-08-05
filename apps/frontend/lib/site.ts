@@ -5,11 +5,15 @@
  * structured data (JSON-LD), the sitemap, robots and the web manifest — reads
  * from here so the brand stays consistent and is changed in exactly one place.
  *
+ * Visual logo assets are owned by `lib/brand.ts` + `RumeraBrandMark`.
+ *
  * `url` is environment-driven so the same build is correct in dev, staging and
  * prod. Set `NEXT_PUBLIC_SITE_URL` in the environment (see .env.example).
  */
+import { brandCopy, brandPaths } from "@/lib/brand";
+
 export const siteConfig = {
-  name: "رومرا",
+  name: brandCopy.wordmarkFa,
   /** Used in <title> templates and OG tags. */
   title: "رومرا — ویسکی، شراب و شامپاینِ نایاب",
   description:
@@ -20,7 +24,10 @@ export const siteConfig = {
   ),
   locale: "fa_IR",
   /** Brand mark used as the default social share image (generated route). */
-  ogImage: "/opengraph-image",
+  ogImage: brandPaths.openGraph,
+  /** Canonical logo paths for JSON-LD / metadata icons. */
+  logo: brandPaths.iconPng,
+  logoSvg: brandPaths.iconSvg,
   keywords: [
     "ویسکی",
     "شراب",

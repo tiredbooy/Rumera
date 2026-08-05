@@ -31,7 +31,11 @@ export default async function AdminInventoryPage() {
     <>
       <PageHeader
         title="موجودی"
-        description="پایش موجودی انبار و هشدار کسری."
+        description={
+          canWrite
+            ? "از آیکون تنظیم روی هر ردیف، موجودی را با چند کلیک تغییر دهید. ردیف‌های جدید با ساخت واریانت خودکار ساخته می‌شوند."
+            : "پایش موجودی انبار، رزرو، و هشدار کسری."
+        }
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

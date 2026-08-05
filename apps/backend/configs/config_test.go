@@ -68,6 +68,8 @@ func validProdConfig() Config {
 	c.CORSAllowedOrigins = []string{"https://rumera.example"}
 	c.CryptoWebhookKey = "whk_live_secret_value"
 	c.SMSProvider = "kavenegar"
+	c.MetricsEnabled = true
+	c.MetricsBearerToken = "metrics-scrape-secret"
 	return c
 }
 
@@ -87,6 +89,7 @@ func TestConfig_Validate_ProductionGuards(t *testing.T) {
 		{"wildcard CORS", func(c *Config) { c.CORSAllowedOrigins = []string{"https://ok.example", "*"} }},
 		{"empty webhook key", func(c *Config) { c.CryptoWebhookKey = "" }},
 		{"log SMS provider", func(c *Config) { c.SMSProvider = "log" }},
+		{"metrics enabled without token", func(c *Config) { c.MetricsBearerToken = "" }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

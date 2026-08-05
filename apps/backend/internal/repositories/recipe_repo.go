@@ -601,10 +601,11 @@ func (r *recipeRepository) GetShoppableProducts(ctx context.Context, recipeID in
 				COALESCE(i.stock_on_hand, 0) - COALESCE(i.committed_stock, 0),
 				0
 			) AS available_stock,
+			-- Availability is stock + active flags only. A real zero price is still
+			-- purchasable (see storefront catalogue truthfulness); do not require price > 0.
 			(
 				pv.is_active
 				AND p.is_active
-				AND pv.price > 0
 				AND GREATEST(
 					COALESCE(i.stock_on_hand, 0) - COALESCE(i.committed_stock, 0),
 					0

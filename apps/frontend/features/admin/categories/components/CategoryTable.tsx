@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 
 import { faNum } from "@/lib/products";
+import { DashboardErrorState } from "@/features/dashboard/components/async-state";
 import {
   CategoryApiError,
   getCategoryTree,
@@ -132,20 +133,12 @@ export function CategoriesTable({ canWrite }: { canWrite: boolean }) {
   // ── Error ────────────────────────────────────────────────────────────────
   if (isError) {
     return (
-      <div className="border-hairline flex flex-col items-center justify-center gap-4 rounded-2xl bg-card px-6 py-16 text-center ring-1 ring-foreground/[0.04]">
-        <span className="flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive ring-1 ring-destructive/20">
-          <AlertCircle className="size-6" />
-        </span>
-        <div className="space-y-1">
-          <p className="font-medium">بارگذاری دسته‌بندی‌ها ناموفق بود</p>
-          <p className="text-sm text-muted-foreground">
-            ارتباط با سرور برقرار نشد. دوباره تلاش کنید.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
-          <RotateCw className="size-4" /> تلاش مجدد
-        </Button>
-      </div>
+      <DashboardErrorState
+        title="بارگذاری دسته‌بندی‌ها ناموفق بود"
+        description="ارتباط با سرور برقرار نشد. دوباره تلاش کنید."
+        onRetry={() => void refetch()}
+        isRetrying={isFetching}
+      />
     );
   }
 

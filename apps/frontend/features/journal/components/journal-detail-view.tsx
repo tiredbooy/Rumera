@@ -4,7 +4,7 @@ import { ArrowLeft, Clock, Eye, ShoppingBag } from "lucide-react";
 
 import { JsonLd } from "@/components/json-ld";
 import { EditorialContent } from "@/components/editorial-content";
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { Badge } from "@/components/ui/badge";
 import { getProductById } from "@/features/catalog/products/api/public";
 import type { ProductDetail } from "@/features/catalog/products/types";
@@ -140,12 +140,12 @@ export async function JournalDetailView({ params }: JournalDetailViewProps) {
 
         <figure className="container-px mx-auto max-w-4xl pt-12">
           <div className="border-hairline relative aspect-[16/9] overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
-            <SmartImage
+            <StorefrontMedia
+              slot="journal-hero"
               src={post.image_url}
               alt={post.image_alt?.trim() || post.title}
               monogram={post.title.charAt(0)}
               fallbackClassName="from-primary/20 via-card to-secondary"
-              sizes="(max-width: 1024px) 100vw, 56rem"
               priority
             />
           </div>

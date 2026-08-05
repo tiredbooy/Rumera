@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { SessionProvider } from "next-auth/react"
 import { NuqsAdapter } from "nuqs/adapters/next/app"
 
+import { PwaProvider } from "@/components/pwa/pwa-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { DirectionProvider } from "@/components/ui/direction"
 import { SessionGuard } from "@/features/auth/components/session-guard"
@@ -35,7 +36,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               enableSystem
               disableTransitionOnChange
             >
-              {children}
+              <PwaProvider>{children}</PwaProvider>
             </ThemeProvider>
           </DirectionProvider>
         </NuqsAdapter>

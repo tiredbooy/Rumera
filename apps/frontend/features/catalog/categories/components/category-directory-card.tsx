@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { CategoryThumbnail } from "@/features/catalog/categories/components/category-thumbnail";
 import type { CategoryTree } from "@/features/catalog/categories/types";
 import {
@@ -104,10 +104,10 @@ function CategoryImage({ category }: { category: CategoryTree }) {
   return (
     <div className="relative aspect-[16/10] overflow-hidden">
       <div className="absolute inset-0 transition-transform duration-[900ms] ease-out group-hover/category-root:scale-[1.05] motion-reduce:transition-none">
-        <SmartImage
+        <StorefrontMedia
+          slot="category-card"
           src={category.image_url}
           alt={`تصویر دسته‌بندی ${category.title}`}
-          sizes="(max-width: 639px) calc(100vw - 2rem), (max-width: 1023px) 50vw, 33vw"
           monogram={monogram}
           fallbackClassName="from-primary/20 via-card to-secondary"
         />

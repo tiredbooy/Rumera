@@ -12,20 +12,25 @@ import {
 
 import { JsonLd } from "@/components/json-ld";
 import { EditorialContent } from "@/components/editorial-content";
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/features/motion/components/reveal";
 import {
   getRecipeBySlug,
   listRelatedRecipes,
 } from "@/features/recipes/api/server";
+import {
+  linkIngredientsToCommerce,
+  shopSectionId,
+} from "@/features/recipes/commerce";
 import { AddAllIngredientsButton } from "@/features/recipes/components/add-all-button";
 import { RecipeCard } from "@/features/recipes/components/recipe-card";
+import { RecipeIngredientList } from "@/features/recipes/components/recipe-ingredient-list";
+import { RecipeViewTracker } from "@/features/recipes/components/recipe-view-tracker";
 import { ShoppableProductCard } from "@/features/recipes/components/shoppable-product-card";
 import {
   difficultyFa,
   formatDuration,
-  formatRecipeQuantity,
 } from "@/features/recipes/utils";
 import { faNum } from "@/lib/products";
 import { breadcrumbLd, recipeDetailLd } from "@/lib/seo/jsonld";
@@ -75,9 +80,20 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
   ].filter(Boolean) as { icon: typeof Clock; term: string; label: string }[];
 
   const availableCount = recipe.products.filter((p) => p.is_available).length;
+  const commerceIngredients = linkIngredientsToCommerce(
+    recipe.ingredients,
+    recipe.products,
+  );
+  const shopId = shopSectionId();
+
+  const shoppableProductIds = recipe.products.map((p) => p.product_id);
 
   return (
     <>
+      <RecipeViewTracker
+        recipeId={recipe.id}
+        productIds={shoppableProductIds}
+      />
       <JsonLd
         data={[
           recipeDetailLd(recipe),
@@ -161,10 +177,11 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
             <Reveal delay={0.1}>
               {/* Recipe hero image — recommended 1600×1200 (4:3). */}
               <div className="border-hairline relative aspect-[4/3] overflow-hidden rounded-[2rem] ring-1 ring-foreground/10">
-                <SmartImage
+                <StorefrontMedia
+                  slot="recipe-hero"
                   src={recipe.image_url}
                   alt={recipe.image_alt?.trim() || recipe.title}
-                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  monogram={recipe.title.charAt(0)}
                   priority
                 />
               </div>
@@ -187,49 +204,19 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
               <h2 id="recipe-ingredients-title" className="font-serif text-2xl">
                 آنچه نیاز دارید
               </h2>
-              {recipe.servings > 0 ? (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  برای {faNum(recipe.servings)} نفر
-                </p>
+              <RecipeIngredientList
+                ingredients={commerceIngredients}
+                servings={recipe.servings}
+              />
+              {recipe.products.length > 0 ? (
+                <a
+                  href={`#${shopId}`}
+                  className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/10 px-4 text-sm font-medium text-primary outline-none transition-colors hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-primary/40 lg:hidden"
+                >
+                  <ShoppingBag className="size-4" aria-hidden />
+                  مشاهدهٔ محصولات قابل خرید
+                </a>
               ) : null}
-              {recipe.ingredients.length > 0 ? (
-                <ul className="mt-6 space-y-3.5 text-sm">
-                  {recipe.ingredients.map((ing) => (
-                    <li
-                      key={ing.id}
-                      className="flex items-start gap-3 border-b border-border/40 pb-3.5 last:border-0 last:pb-0"
-                    >
-                      <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
-                      <span className="leading-relaxed">
-                        <span className="font-medium text-foreground">
-                          {ing.ingredient_name}
-                        </span>
-                        {ing.quantity ? (
-                          <span className="text-muted-foreground">
-                            {" — "}
-                            {formatRecipeQuantity(ing.quantity)}
-                            {ing.unit ? ` ${ing.unit}` : ""}
-                          </span>
-                        ) : null}
-                        {ing.optional ? (
-                          <span className="ms-1.5 inline-block rounded-full bg-secondary px-1.5 py-0.5 align-middle text-[0.625rem] font-medium text-muted-foreground">
-                            اختیاری
-                          </span>
-                        ) : null}
-                        {ing.notes ? (
-                          <span className="block text-xs text-muted-foreground/80">
-                            {ing.notes}
-                          </span>
-                        ) : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-6 rounded-2xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
-                  فهرست مواد لازم برای این دستور ثبت نشده است.
-                </p>
-              )}
             </div>
           </section>
 
@@ -257,11 +244,12 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
         {/* Shop this recipe */}
         {recipe.products.length > 0 ? (
           <div
-            className="mt-20 border-t border-border/60 pt-14"
+            id={shopId}
+            className="mt-20 scroll-mt-24 border-t border-border/60 pt-14"
             data-recipe-shop
           >
-            <div className="flex flex-wrap items-end justify-between gap-5">
-              <div>
+            <div className="flex flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+              <div className="min-w-0">
                 <p className="eyebrow mb-2">
                   <ShoppingBag className="size-3.5" aria-hidden="true" /> همین
                   دستور را بسازید
@@ -271,15 +259,17 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
                 </h2>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {availableCount > 0
-                    ? `${faNum(availableCount)} محصول موجود برای تهیهٔ این دستور`
-                    : "هم‌اکنون محصولی برای این دستور موجود نیست"}
+                    ? `${faNum(availableCount)} از ${faNum(recipe.products.length)} محصول موجود — هر مادهٔ لینک‌شده را می‌توانید جداگانه یا یکجا به سبد بیفزایید`
+                    : "هم‌اکنون هیچ‌کدام از محصولات این دستور موجود نیست؛ از «یافتن جایگزین» استفاده کنید"}
                 </p>
               </div>
-              <AddAllIngredientsButton products={recipe.products} />
+              <div className="w-full sm:w-auto">
+                <AddAllIngredientsButton products={recipe.products} />
+              </div>
             </div>
-            <ul className="mt-10 grid list-none gap-6 p-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
+            <ul className="mt-10 grid list-none gap-5 p-0 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 lg:gap-8">
               {recipe.products.map((p) => (
-                <li key={p.recipe_product_id} className="contents">
+                <li key={p.recipe_product_id} className="min-w-0">
                   <ShoppableProductCard product={p} />
                 </li>
               ))}

@@ -37,15 +37,42 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 		return
 	}
 
+	// Enrich the analytics order_created event with per-line catalog product IDs
+	// so revenue/product aggregates can join against the products table.
+	if len(items) > 0 {
+		lineItems := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			if item.ProductID <= 0 {
+				continue
+			}
+			amount := item.UnitPrice * float64(item.Quantity)
+			lineItems = append(lineItems, map[string]any{
+				"product_id": item.ProductID,
+				"quantity":   item.Quantity,
+				"amount":     amount,
+			})
+		}
+		if len(lineItems) > 0 {
+			c.Set(middlewares.AnalyticsPayloadKey, map[string]any{
+				"order_id": order.ID,
+				"items":    lineItems,
+				// First line product_id keeps legacy single-key consumers working.
+				"product_id": lineItems[0]["product_id"],
+				"quantity":   lineItems[0]["quantity"],
+				"amount":     lineItems[0]["amount"],
+			})
+		}
+	}
+
 	h.sendOrderConfirmation(c, order)
 	response.Created(c, mappers.ToOrderResponse(order, items))
 }
 
 // sendOrderConfirmation emails the buyer a receipt, off the request path. It
 // resolves the address from the authenticated UUID and never blocks or fails
-// the response.
+// the response. Uses the notification dispatcher when configured (async outbox).
 func (h *Handler) sendOrderConfirmation(c *gin.Context, order *models.Order) {
-	if h.Notify == nil {
+	if h.Notifications == nil && h.Notify == nil {
 		return
 	}
 	uid, ok := middlewares.UserUUID(c)
@@ -63,10 +90,15 @@ func (h *Handler) sendOrderConfirmation(c *gin.Context, order *models.Order) {
 			`<p>Total: <strong>%.2f</strong></p>`,
 		order.ID, order.TotalAmount,
 	)
+	subject := "Your order confirmation"
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		_ = h.Notify.Send(ctx, email, "Your order confirmation", body)
+		if h.Notifications != nil {
+			_ = h.Notifications.DispatchOrderConfirmed(ctx, email, subject, body, order.ID, "")
+			return
+		}
+		_ = h.Notify.Send(ctx, email, subject, body)
 	}()
 }
 

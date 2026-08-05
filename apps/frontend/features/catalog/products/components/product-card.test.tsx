@@ -20,8 +20,8 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/components/optimized-image", () => ({
-  OptimizedImage: ({ alt, className }: { alt: string; className?: string }) => (
+vi.mock("@/components/storefront-media", () => ({
+  StorefrontMedia: ({ alt, className }: { alt: string; className?: string }) => (
     <div role="img" aria-label={alt} className={className} />
   ),
 }));
@@ -32,7 +32,11 @@ vi.mock("./product-card-actions", () => ({
   ),
 }));
 
-import { ProductCard, PRODUCT_CARD_GRID_CLASS } from "./product-card";
+import {
+  ProductCard,
+  PRODUCT_CARD_GRID_CLASS,
+  PRODUCT_CARD_MEDIA_FRAME_CLASS,
+} from "./product-card";
 
 const product: ProductListItem = {
   id: 42,
@@ -60,7 +64,10 @@ describe("ProductCard", () => {
 
     expect(markup).toContain("<article");
     expect(markup).toContain('data-slot="card"');
-    expect(markup).toContain("aspect-square");
+    expect(markup).toContain("aspect-[4/3]");
+    expect(markup).not.toContain("aspect-[4/5]");
+    expect(PRODUCT_CARD_MEDIA_FRAME_CLASS).toContain("aspect-[4/3]");
+    expect(PRODUCT_CARD_MEDIA_FRAME_CLASS).toContain("shrink-0");
     expect(markup).toContain("whitespace-nowrap");
     expect(markup).toContain(formatPrice(product.min_price));
     expect(markup).toContain("رزرو");
@@ -74,6 +81,7 @@ describe("ProductCard", () => {
     expect(markup).not.toContain("محدود");
     expect(markup).toContain("+۱");
     expect(markup).toContain('href="/products/reserve-bottle"');
+    expect(markup).toContain("backdrop-blur");
   });
 
   it("renders truthful unavailable and missing-public-page states", () => {
@@ -112,14 +120,33 @@ describe("ProductCard", () => {
     );
 
     expect(markup).toContain("ناموجود");
-    expect(markup).toContain("قیمت ثبت نشده");
-    expect(markup).not.toContain("در حال تأمین");
+    // Real zero price for an active variant is shown, not treated as missing.
+    expect(markup).toContain(formatPrice(0));
+    expect(markup).not.toContain("قیمت ثبت نشده");
+  });
+
+  it("withholds price and commerce links when the product has no active variants", () => {
+    const markup = renderToStaticMarkup(
+      <ProductCard
+        product={{
+          ...product,
+          min_price: 0,
+          max_price: 0,
+          active_variant_count: 0,
+          available_variant_count: 0,
+          purchasable_variant_id: undefined,
+        }}
+      />,
+    );
+
+    expect(markup).toContain("در حال تأمین");
+    expect(markup).not.toContain('data-product-price');
   });
 
   it("uses a mobile-safe auto-fill grid with a usable card minimum", () => {
     expect(PRODUCT_CARD_GRID_CLASS).toContain("grid-cols-1");
     expect(PRODUCT_CARD_GRID_CLASS).toContain("auto-fill");
-    expect(PRODUCT_CARD_GRID_CLASS).toContain("minmax(21rem,1fr)");
+    expect(PRODUCT_CARD_GRID_CLASS).toContain("minmax(17.5rem,1fr)");
     expect(PRODUCT_CARD_GRID_CLASS).not.toContain("grid-cols-4");
   });
 });

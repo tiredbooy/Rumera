@@ -32,6 +32,10 @@ func setupMiddlewares(r *gin.Engine, cfg *config.Config, log *zap.Logger) {
 	if cfg.MetricsEnabled {
 		r.Use(middleware.Metrics())
 	}
+	// Cap request bodies before handlers allocate. Multipart gets a higher limit
+	// so media uploads remain possible under MEDIA_MAX_UPLOAD_MB.
+	multipartLimit := int64(cfg.MediaMaxUploadMB+2) * 1024 * 1024
+	r.Use(middleware.MaxBodySize(middleware.DefaultJSONBodyLimit, multipartLimit))
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(middleware.RateLimit(rate.Limit(100), 200))
 	r.Use(gzip.Gzip(gzip.DefaultCompression))

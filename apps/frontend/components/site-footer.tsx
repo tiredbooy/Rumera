@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  Wine,
   Send,
   AtSign,
   Camera,
@@ -12,6 +11,7 @@ import {
   Mail,
 } from "lucide-react";
 
+import { RumeraBrandMark } from "@/components/brand/rumera-brand-mark";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -22,8 +22,14 @@ const columns: { title: string; links: { label: string; href: string }[] }[] = [
       { label: "همهٔ محصولات", href: "/products" },
       { label: "دسته‌بندی‌ها", href: "/categories" },
       { label: "برچسب‌ها", href: "/tags" },
-      { label: "پیشنهادهای ویژه", href: "/products?sort=discount" },
-      { label: "تازه‌ رسیده‌ها", href: "/products?sort=new" },
+      {
+        label: "ارزان‌ترین‌ها",
+        href: "/products?sortBy=price&orderBy=asc",
+      },
+      {
+        label: "تازه‌ رسیده‌ها",
+        href: "/products?sortBy=created_at&orderBy=desc",
+      },
     ],
   },
   {
@@ -68,14 +74,7 @@ export function SiteFooter() {
         <div className="grid gap-12 lg:grid-cols-[1.4fr_2fr]">
           {/* Brand + newsletter */}
           <div>
-            <Link href="/" className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                <Wine className="size-4.5" />
-              </span>
-              <span className="font-serif text-3xl leading-none">
-                <span className="text-foil">رومرا</span>
-              </span>
-            </Link>
+            <RumeraBrandMark variant="full" size="md" href="/" />
             <p className="mt-4 max-w-sm text-sm text-muted-foreground">
               فروشگاهی منتخب برای هر سلیقه — از نوشیدنی‌های اصل تا لوازم خانه و
               آشپزخانه، با ضمانت اصالت و ارسالی مطمئن به سراسر کشور.

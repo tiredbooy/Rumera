@@ -1,14 +1,16 @@
 import Link from "next/link";
 
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { Button } from "@/components/ui/button";
 import { AddToCartButton } from "@/features/cart/components/add-to-cart-button";
 import type { ProductDetail } from "@/features/catalog/products/types";
 import { formatPrice } from "@/lib/products";
 
 export function ArticleProductCard({ product }: { product: ProductDetail }) {
+  // Active variants are eligible regardless of a zero price; stock alone
+  // gates quick commerce so free/zero-priced SKUs stay truthful.
   const activeVariants = (product.variants ?? []).filter(
-    (variant) => variant.is_active && variant.price > 0,
+    (variant) => variant.is_active,
   );
   const availableVariants = activeVariants
     .filter((variant) => (variant.available_stock ?? 0) > 0)
@@ -29,11 +31,14 @@ export function ArticleProductCard({ product }: { product: ProductDetail }) {
   return (
     <article className="border-hairline flex flex-col gap-4 rounded-3xl bg-card p-5 ring-1 ring-foreground/5">
       <div className="relative block aspect-square overflow-hidden rounded-2xl">
-        <SmartImage
+        <StorefrontMedia
+          slot="journal-product"
+          storageKey={image?.storage_key}
           src={image?.image_url}
           alt={image?.alt_text ?? product.title}
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           monogram={product.title.charAt(0)}
+          intrinsicWidth={image?.width}
+          intrinsicHeight={image?.height}
         />
       </div>
       <div className="flex flex-1 flex-col">
@@ -65,6 +70,7 @@ export function ArticleProductCard({ product }: { product: ProductDetail }) {
           {purchasableVariant ? (
             <AddToCartButton
               productVariantId={purchasableVariant.id}
+              productId={product.id}
               className="w-full"
             />
           ) : pdp ? (

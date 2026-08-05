@@ -48,6 +48,8 @@ export interface ProductListItem {
   category?: string; // category title, joined
   tags?: ProductTag[]; // embedded by the list query; omitted when untagged
   is_active: boolean;
+  /** Unit weight in kilograms when set (shipping / package quotes). */
+  weight?: number;
   min_price: number; // cheapest variant
   max_price: number; // most expensive variant
   active_variant_count: number;

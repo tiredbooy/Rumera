@@ -71,11 +71,11 @@ async function openAdjustment() {
   fireEvent.click(
     screen.getByRole("button", { name: "تنظیم موجودی محصول آزمایشی" }),
   );
-  return screen.findByLabelText("تغییر موجودی");
+  return screen.findByLabelText("تغییر موجودی (±)");
 }
 
 describe("StockAdjustmentPopover", () => {
-  it("submits a Persian signed delta without claiming a final stock value", async () => {
+  it("submits a positive restock delta with Persian input", async () => {
     render(<StockAdjustmentPopover inventory={inventory} compact />);
     const input = await openAdjustment();
     fireEvent.change(input, { target: { value: "۲" } });
@@ -86,14 +86,51 @@ describe("StockAdjustmentPopover", () => {
         variantID: 14,
         input: {
           quantity: 2,
-          type: "adjustment",
-          note: "تنظیم موجودی از پنل مدیریت",
+          type: "restock",
+          note: "تأمین / افزایش موجودی از پنل مدیریت",
         },
       }),
     );
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "تغییر +۲ واحدی موجودی «محصول آزمایشی» ثبت شد",
+    );
+  });
+
+  it("submits a negative adjustment when stock is reduced", async () => {
+    render(<StockAdjustmentPopover inventory={inventory} compact />);
+    const input = await openAdjustment();
+    fireEvent.change(input, { target: { value: "−۳" } });
+    fireEvent.click(screen.getByRole("button", { name: "ذخیرهٔ موجودی" }));
+
+    await waitFor(() =>
+      expect(mocks.adjust).toHaveBeenCalledWith({
+        variantID: 14,
+        input: {
+          quantity: -3,
+          type: "adjustment",
+          note: "کاهش موجودی از پنل مدیریت",
+        },
+      }),
+    );
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies quick restock chips", async () => {
+    render(<StockAdjustmentPopover inventory={inventory} compact />);
+    await openAdjustment();
+    fireEvent.click(screen.getByRole("button", { name: "+۱۰" }));
+    fireEvent.click(screen.getByRole("button", { name: "ذخیرهٔ موجودی" }));
+
+    await waitFor(() =>
+      expect(mocks.adjust).toHaveBeenCalledWith({
+        variantID: 14,
+        input: {
+          quantity: 10,
+          type: "restock",
+          note: "تأمین / افزایش موجودی از پنل مدیریت",
+        },
+      }),
     );
   });
 
@@ -117,17 +154,30 @@ describe("StockAdjustmentPopover", () => {
     expect(mocks.adjust).not.toHaveBeenCalled();
   });
 
+  it("blocks cutting physical stock below reserved quantity", async () => {
+    render(<StockAdjustmentPopover inventory={inventory} compact />);
+    const input = await openAdjustment();
+    // on_hand 10, committed 2 → delta -9 leaves on_hand 1 < committed
+    fireEvent.change(input, { target: { value: "−۹" } });
+    fireEvent.click(screen.getByRole("button", { name: "ذخیرهٔ موجودی" }));
+
+    expect(
+      await screen.findByText(/نمی‌توان کمتر از رزرو/),
+    ).toBeInTheDocument();
+    expect(mocks.adjust).not.toHaveBeenCalled();
+  });
+
   it("explains a concurrent underflow instead of reporting success", async () => {
     mocks.adjust.mockRejectedValue(
       new InventoryMutationError("OUT_OF_STOCK", "out of stock"),
     );
     render(<StockAdjustmentPopover inventory={inventory} compact />);
     const input = await openAdjustment();
-    fireEvent.change(input, { target: { value: "−۲۰" } });
+    fireEvent.change(input, { target: { value: "−۵" } });
     fireEvent.click(screen.getByRole("button", { name: "ذخیرهٔ موجودی" }));
 
     expect(
-      await screen.findByText(/موجودی در این فاصله تغییر کرده/),
+      await screen.findByText(/این مقدار مجاز نیست/),
     ).toBeInTheDocument();
     expect(mocks.refresh).not.toHaveBeenCalled();
     expect(mocks.toastSuccess).not.toHaveBeenCalled();

@@ -11,13 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { fieldErrorId } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableIdSelect } from "@/features/admin/shared/searchable-id-select";
 import type { Category } from "@/features/catalog/categories/types";
 import type { Brand } from "@/features/catalog/brands/types";
 import { FormField, FormSection } from "./FormLayout";
@@ -88,29 +82,22 @@ export function GeneralInfoSection({
           control={control}
           name="category_id"
           render={({ field }) => (
-            <Select
-              value={field.value || "none"}
-              onValueChange={(val) => field.onChange(val === "none" ? "" : val)}
-            >
-              <SelectTrigger
-                id="category_id"
-                className="w-full"
-                aria-invalid={Boolean(errors.category_id)}
-                aria-describedby={
-                  errors.category_id ? fieldErrorId("category_id") : undefined
-                }
-              >
-                <SelectValue placeholder="انتخاب دسته" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">بدون دسته</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c?.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableIdSelect
+              id="category_id"
+              value={field.value || ""}
+              onChange={field.onChange}
+              options={categories.map((c) => ({
+                id: c.id,
+                title: c.title,
+              }))}
+              placeholder="انتخاب دسته"
+              noneLabel="بدون دسته"
+              searchPlaceholder="جستجوی دسته‌بندی…"
+              invalid={Boolean(errors.category_id)}
+              describedBy={
+                errors.category_id ? fieldErrorId("category_id") : undefined
+              }
+            />
           )}
         />
       </FormField>
@@ -124,29 +111,22 @@ export function GeneralInfoSection({
           control={control}
           name="brand_id"
           render={({ field }) => (
-            <Select
-              value={field.value || "none"}
-              onValueChange={(val) => field.onChange(val === "none" ? "" : val)}
-            >
-              <SelectTrigger
-                id="brand_id"
-                className="w-full"
-                aria-invalid={Boolean(errors.brand_id)}
-                aria-describedby={
-                  errors.brand_id ? fieldErrorId("brand_id") : undefined
-                }
-              >
-                <SelectValue placeholder="انتخاب برند" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">بدون برند</SelectItem>
-                {brands.map((b) => (
-                  <SelectItem key={b.id} value={String(b.id)}>
-                    {b.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableIdSelect
+              id="brand_id"
+              value={field.value || ""}
+              onChange={field.onChange}
+              options={brands.map((b) => ({
+                id: b.id,
+                title: b.title,
+              }))}
+              placeholder="انتخاب برند"
+              noneLabel="بدون برند"
+              searchPlaceholder="جستجوی برند…"
+              invalid={Boolean(errors.brand_id)}
+              describedBy={
+                errors.brand_id ? fieldErrorId("brand_id") : undefined
+              }
+            />
           )}
         />
       </FormField>

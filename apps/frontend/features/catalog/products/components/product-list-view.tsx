@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowLeft, ArrowRight, PackageOpen } from "lucide-react";
 
 import { JsonLd } from "@/components/json-ld";
 import { Button } from "@/components/ui/button";
+import { listBrands } from "@/features/catalog/brands/api";
 import { listCategories } from "@/features/catalog/categories/api";
 import { listProducts } from "@/features/catalog/products/api/public";
 import {
@@ -10,42 +12,65 @@ import {
   PRODUCT_CARD_GRID_CLASS,
 } from "@/features/catalog/products/components/product-card";
 import { ProductSort } from "@/features/catalog/products/components/product-sort";
-import type { ProductSortField } from "@/features/catalog/products/queries";
+import {
+  parseProductListRouteQuery,
+  productListBrandHref,
+  productListHref,
+  PRODUCT_LIST_PAGE_SIZE,
+  type ProductListSearchParamsRecord,
+} from "@/features/catalog/products/list-routing";
 import { Placeholder } from "@/features/dashboard/components/placeholder";
-import { buildQuery } from "@/lib/api/qs";
+import { cn } from "@/lib/utils";
 import { faNum } from "@/lib/products";
 import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld";
 
-export type ProductListSearchParams = {
-  page?: string;
-  search?: string;
-  sortBy?: ProductSortField;
-  orderBy?: "asc" | "desc";
-};
-
 type ProductListViewProps = {
-  searchParams: Promise<ProductListSearchParams>;
+  searchParams: Promise<ProductListSearchParamsRecord>;
 };
 
 export async function ProductListView({ searchParams }: ProductListViewProps) {
-  const sp = await searchParams;
-  const page = Math.max(1, Number(sp.page) || 1);
-  const search = sp.search?.trim() || undefined;
+  const raw = await searchParams;
+  const query = parseProductListRouteQuery(raw);
 
-  const [data, categories] = await Promise.all([
+  if (query.needsRedirect) {
+    redirect(productListHref(query, query.page));
+  }
+
+  const [data, categories, brandsPage] = await Promise.all([
     listProducts({
-      page,
-      limit: 12,
-      search,
-      sortBy: sp.sortBy,
-      orderBy: sp.orderBy,
+      page: query.page,
+      limit: PRODUCT_LIST_PAGE_SIZE,
+      search: query.search,
+      brand_id: query.brandId,
+      sortBy: query.sortBy,
+      orderBy: query.orderBy,
     }),
     listCategories(),
+    listBrands({ limit: 24, sortBy: "title", orderBy: "asc" }).catch(() => ({
+      results: [] as Awaited<ReturnType<typeof listBrands>>["results"],
+      pagination: {
+        page: 1,
+        limit: 24,
+        total_items: 0,
+        total_pages: 0,
+        has_next: false,
+        has_prev: false,
+      },
+    })),
   ]);
   const { results, pagination } = data;
+  const brands = brandsPage.results ?? [];
+  const activeBrand = brands.find((b) => b.id === query.brandId);
 
-  const pageHref = (p: number) =>
-    `/products${buildQuery({ page: p, search, sortBy: sp.sortBy, orderBy: sp.orderBy })}`;
+  const pageHref = (page: number) => productListHref(query, page);
+  const allProductsHref = productListHref(
+    {
+      search: query.search,
+      sortBy: query.sortBy,
+      orderBy: query.orderBy,
+    },
+    1,
+  );
 
   return (
     <>
@@ -55,37 +80,108 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
             { name: "خانه", path: "/" },
             { name: "فروشگاه", path: "/products" },
           ]),
-          productListLd("همهٔ بطری‌ها", results),
+          productListLd(
+            activeBrand ? `برند ${activeBrand.title}` : "همهٔ بطری‌ها",
+            results,
+          ),
         ]}
       />
 
       <section className="container-px mx-auto w-full max-w-7xl py-14">
         <p className="eyebrow mb-3">کاتالوگ کامل</p>
-        <h1 className="font-serif text-5xl">فروشگاه بطری‌ها</h1>
+        <h1 className="font-serif text-5xl">
+          {activeBrand ? activeBrand.title : "فروشگاه بطری‌ها"}
+        </h1>
         <p className="mt-3 max-w-xl text-muted-foreground">
-          {`${faNum(pagination.total_items)} برچسب منتخب — بر اساس دسته مرور کنید یا همه را ببینید.`}
+          {activeBrand
+            ? `${faNum(pagination.total_items)} محصول از این برند — برای دیدن همهٔ فروشگاه فیلتر را بردارید.`
+            : `${faNum(pagination.total_items)} محصول — بر اساس دسته یا برند مرور کنید.`}
         </p>
 
+        <div className="mt-6 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant={query.brandId ? "outline" : "default"}
+            className="h-10 rounded-full"
+            asChild
+          >
+            <Link href={allProductsHref}>همهٔ محصولات</Link>
+          </Button>
+          {query.brandId ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-10 rounded-full"
+              asChild
+            >
+              <Link href={allProductsHref}>پاک‌کردن فیلتر برند</Link>
+            </Button>
+          ) : null}
+        </div>
+
         {categories.length ? (
-          <div className="mt-8 flex flex-wrap gap-2">
+          <div className="mt-8 flex flex-wrap gap-2" aria-label="دسته‌بندی‌ها">
             <span className="shadow-e1 rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground">
-              همه
+              همهٔ دسته‌ها
             </span>
-            {categories.map((c) => (
-              <Link
-                key={c.id}
-                href={c.slug ? `/categories/${c.slug}` : "/categories"}
-                className="rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-              >
-                {c.title}
-              </Link>
-            ))}
+            {categories.map((category) => {
+              const href = category.slug?.trim()
+                ? `/categories/${encodeURIComponent(category.slug.trim())}`
+                : null;
+              if (!href) {
+                return (
+                  <span
+                    key={category.id}
+                    className="rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground"
+                  >
+                    {category.title}
+                  </span>
+                );
+              }
+              return (
+                <Link
+                  key={category.id}
+                  href={href}
+                  className="rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                >
+                  {category.title}
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {brands.length ? (
+          <div
+            id="brands"
+            className="mt-5 flex flex-wrap gap-2 scroll-mt-28"
+            aria-label="برندها"
+          >
+            {brands.map((brand) => {
+              const active = query.brandId === brand.id;
+              return (
+                <Link
+                  key={brand.id}
+                  href={
+                    active ? allProductsHref : productListBrandHref(brand.id)
+                  }
+                  className={cn(
+                    "rounded-full border px-4 py-1.5 text-sm transition-colors",
+                    active
+                      ? "border-primary/40 bg-primary/10 font-medium text-foreground"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                  )}
+                  aria-current={active ? "true" : undefined}
+                >
+                  {brand.title}
+                </Link>
+              );
+            })}
           </div>
         ) : null}
 
         {results.length ? (
           <>
-            {/* Toolbar — result count + sort */}
             <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-6">
               <p className="text-sm text-muted-foreground">
                 {`نمایش ${faNum(results.length)} از ${faNum(pagination.total_items)} محصول`}
@@ -108,7 +204,7 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
                   asChild={pagination.has_prev}
                 >
                   {pagination.has_prev ? (
-                    <Link href={pageHref(page - 1)}>
+                    <Link href={pageHref(query.page - 1)}>
                       <ArrowRight className="size-4" /> قبلی
                     </Link>
                   ) : (
@@ -128,7 +224,7 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
                   asChild={pagination.has_next}
                 >
                   {pagination.has_next ? (
-                    <Link href={pageHref(page + 1)}>
+                    <Link href={pageHref(query.page + 1)}>
                       بعدی <ArrowLeft className="size-4" />
                     </Link>
                   ) : (

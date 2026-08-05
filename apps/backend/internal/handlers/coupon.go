@@ -55,14 +55,24 @@ func (h *Handler) ListCoupons(c *gin.Context) {
 	}
 	filter.Defaults()
 
-	coupons, total, err := h.Coupon.GetAll(c.Request.Context(), filter)
+	ctx := c.Request.Context()
+	coupons, total, err := h.Coupon.GetAll(ctx, filter)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	ids := make([]int64, 0, len(coupons))
+	for _, cp := range coupons {
+		ids = append(ids, cp.ID)
+	}
+	uses, err := h.Coupon.UsageCounts(ctx, ids)
 	if err != nil {
 		response.HandleError(c, err)
 		return
 	}
 	out := make([]models.CouponResponse, len(coupons))
 	for i, cp := range coupons {
-		out[i] = mappers.ToCouponResponse(cp, 0)
+		out[i] = mappers.ToCouponResponse(cp, uses[cp.ID])
 	}
 	response.Paginated(c, out, paginate(filter.Page, filter.Limit, total))
 }
@@ -106,15 +116,24 @@ func (h *Handler) UpdateCoupon(c *gin.Context) {
 	response.OK(c, mappers.ToCouponResponse(coupon, 0))
 }
 
-// DeleteCoupon — DELETE /admin/coupons/:id
+// DeleteCoupon soft-deactivates a coupon (history-preserving). Prefer PATCH
+// {is_active:false}; DELETE remains as the same deactivation contract.
+//
+// DELETE /admin/coupons/:id
 func (h *Handler) DeleteCoupon(c *gin.Context) {
 	id, ok := h.paramInt64(c, "id")
 	if !ok {
 		return
 	}
-	if err := h.Coupon.Delete(c.Request.Context(), id); err != nil {
+	coupon, err := h.Coupon.Deactivate(c.Request.Context(), id)
+	if err != nil {
 		response.HandleError(c, err)
 		return
 	}
-	response.NoContent(c)
+	uses, err := h.Coupon.TotalUses(c.Request.Context(), id)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	response.OK(c, mappers.ToCouponResponse(coupon, uses))
 }

@@ -11,20 +11,31 @@ import { listAllTags } from "@/features/catalog/tags/api/public";
 /**
  * Programmatic sitemap served at /sitemap.xml. Covers every public, indexable
  * route — static pages, the live catalogue, category landings, recipes and the
- * journal — so search engines and AI crawlers can discover all of it. These are
- * primary reads, so failures propagate rather than publishing an incomplete
- * sitemap.
+ * journal — so search engines and AI crawlers can discover all of it.
+ *
+ * Dynamic catalogue surfaces soft-fail to empty lists so `next build` still
+ * succeeds when the API is offline; static marketing routes always ship.
+ * Production deploys with a live API still emit the full inventory.
  */
+async function settleSitemap<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await promise;
+  } catch (error) {
+    console.error("sitemap: surface fetch failed", error);
+    return fallback;
+  }
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
   const [productSlugs, categories, tags, recipeItems, journalPosts] =
     await Promise.all([
-      allProductSlugs(),
-      listCategories(),
-      listAllTags(),
-      listRecipeSitemapItems(),
-      listAllJournalPosts(),
+      settleSitemap(allProductSlugs(), []),
+      settleSitemap(listCategories(), []),
+      settleSitemap(listAllTags(), []),
+      settleSitemap(listRecipeSitemapItems(), []),
+      settleSitemap(listAllJournalPosts(), []),
     ]);
 
   const staticRoutes: MetadataRoute.Sitemap = [

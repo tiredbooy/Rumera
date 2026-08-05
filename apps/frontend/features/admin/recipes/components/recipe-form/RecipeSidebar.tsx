@@ -1,6 +1,6 @@
 "use client";
 
-import { ImageIcon, Loader2 } from "lucide-react";
+import { ImageIcon, Loader2, Trash2 } from "lucide-react";
 import { Controller, type Control, type FieldErrors } from "react-hook-form";
 import type { Ref } from "react";
 
@@ -21,6 +21,7 @@ import type {
   ImageUploaderHandle,
   UploadedImage,
 } from "@/features/image-uploader/types";
+import { MultiTagPicker } from "@/features/admin/shared/multi-tag-picker";
 import type { Tag } from "@/features/catalog/tags/types";
 import type { RecipeStatus } from "@/features/recipes/types";
 import type { RecipeFormValues } from "@/features/recipes/validations";
@@ -175,43 +176,18 @@ function TagsCard({
   control: Control<RecipeFormValues>;
   tags: Tag[];
 }) {
-  if (tags.length === 0) return null;
-
   return (
     <div className="border-hairline flex flex-col gap-2.5 rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
-      <Label>برچسب‌ها</Label>
       <Controller
         control={control}
         name="tag_ids"
         render={({ field }) => (
-          <div className="flex flex-wrap gap-2">
-            {tags.map((t) => {
-              const active = field.value.includes(t.id);
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() =>
-                    field.onChange(
-                      active
-                        ? field.value.filter((id) => id !== t.id)
-                        : [...field.value, t.id],
-                    )
-                  }
-                  className={cn(
-                    "min-h-9 cursor-pointer rounded-full border px-3 text-sm transition-colors",
-                    "focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none",
-                    active
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {t.title}
-                </button>
-              );
-            })}
-          </div>
+          <MultiTagPicker
+            options={tags.map((t) => ({ id: t.id, title: t.title }))}
+            value={field.value}
+            onChange={field.onChange}
+            emptyLabel="برچسبی برای انتخاب در دسترس نیست."
+          />
         )}
       />
     </div>
@@ -223,15 +199,22 @@ function FormActions({
   submitLabel,
   isSubmitting,
   onCancel,
+  onDelete,
+  isDeleting,
+  canDelete,
 }: {
   status: RecipeStatus;
   submitLabel: string;
   isSubmitting: boolean;
   onCancel: () => void;
+  onDelete?: () => void;
+  isDeleting?: boolean;
+  canDelete?: boolean;
 }) {
+  const busy = isSubmitting || Boolean(isDeleting);
   return (
     <div className="flex flex-col gap-2">
-      <Button type="submit" size="lg" disabled={isSubmitting}>
+      <Button type="submit" size="lg" disabled={busy}>
         {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
         {submitLabel}
       </Button>
@@ -239,11 +222,28 @@ function FormActions({
         type="button"
         variant="outline"
         size="lg"
-        disabled={isSubmitting}
+        disabled={busy}
         onClick={onCancel}
       >
         انصراف
       </Button>
+      {canDelete && onDelete ? (
+        <Button
+          type="button"
+          variant="destructive"
+          size="lg"
+          disabled={busy}
+          onClick={onDelete}
+          className="cursor-pointer"
+        >
+          {isDeleting ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <Trash2 className="size-4" aria-hidden />
+          )}
+          {isDeleting ? "در حال حذف…" : "حذف دستور"}
+        </Button>
+      ) : null}
       <p className="px-1 text-center text-xs text-muted-foreground">
         {status === "published"
           ? "این دستور پس از ذخیره منتشر می‌شود."
@@ -270,6 +270,9 @@ export function RecipeSidebar({
   onPreviewChange,
   disabled,
   onCancel,
+  onDelete,
+  isDeleting,
+  canDelete,
 }: {
   control: Control<RecipeFormValues>;
   errors: FieldErrors<RecipeFormValues>;
@@ -285,6 +288,9 @@ export function RecipeSidebar({
   onPreviewChange: (url: string) => void;
   disabled?: boolean;
   onCancel: () => void;
+  onDelete?: () => void;
+  isDeleting?: boolean;
+  canDelete?: boolean;
 }) {
   return (
     <aside className="flex flex-col gap-6">
@@ -307,6 +313,9 @@ export function RecipeSidebar({
           submitLabel={submitLabel}
           isSubmitting={isSubmitting}
           onCancel={onCancel}
+          onDelete={onDelete}
+          isDeleting={isDeleting}
+          canDelete={canDelete}
         />
       </div>
     </aside>

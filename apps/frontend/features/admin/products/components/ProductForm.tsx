@@ -586,7 +586,11 @@ export function ProductForm({
               categories={categories}
               brands={brands}
             />
-            <SpecificationsSection register={register} errors={errors} />
+            <SpecificationsSection
+              register={register}
+              control={control}
+              errors={errors}
+            />
             <TagsSection
               control={control}
               errors={errors}

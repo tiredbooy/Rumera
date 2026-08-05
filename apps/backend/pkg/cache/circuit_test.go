@@ -55,6 +55,9 @@ func (f *fakeStore) Incr(_ context.Context, _ string, _ time.Duration) (int64, e
 	return 1, f.hit()
 }
 func (f *fakeStore) Delete(_ context.Context, _ ...string) error      { return f.hit() }
+func (f *fakeStore) KeysByPrefix(_ context.Context, _ string) ([]string, error) {
+	return nil, f.hit()
+}
 func (f *fakeStore) Exists(_ context.Context, _ string) (bool, error) { return true, f.hit() }
 func (f *fakeStore) TTL(_ context.Context, _ string) (time.Duration, error) {
 	return time.Second, f.hit()

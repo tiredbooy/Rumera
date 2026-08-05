@@ -1,10 +1,10 @@
 export type DecimalString = string;
 
 /**
- * Analytics stores product IDs as UUIDs while the catalog uses BIGINT IDs.
- * Keep this value opaque until the backend provides a canonical mapping.
+ * Catalog product primary key. Product analytics share this identifier with
+ * `/admin/products/:id` and the products table (BIGINT on the wire as a number).
  */
-export type AnalyticsProductId = string;
+export type AnalyticsProductId = number;
 
 export interface TopCategoryEntry {
   category_id: string;
@@ -13,7 +13,7 @@ export interface TopCategoryEntry {
 }
 
 export interface TopProductRevenueEntry {
-  product_id: AnalyticsProductId;
+  product_id: string;
   revenue: DecimalString;
   units: number;
 }

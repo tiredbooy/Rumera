@@ -155,6 +155,7 @@ describe("coupon form validation", () => {
       starts_at: "2026-07-18T10:15:45.987Z",
       expires_at: "2026-07-19T11:16:46.123Z",
       total_uses: 4,
+      is_exhausted: false,
     };
     const values = { ...couponFormDefaults(coupon), description: "new" };
 

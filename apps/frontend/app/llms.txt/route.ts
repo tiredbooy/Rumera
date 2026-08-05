@@ -12,8 +12,19 @@ import { listJournalPosts } from "@/features/journal/api/server"
 export const dynamic = "force-static"
 export const revalidate = 86400
 
+async function settleList<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await promise
+  } catch (error) {
+    console.error("llms.txt: surface fetch failed", error)
+    return fallback
+  }
+}
+
 export async function GET() {
-  const categories = await listCategories()
+  // Soft-fail dynamic sections so `next build` / offline API does not abort
+  // static generation; static brand sections always remain.
+  const categories = await settleList(listCategories(), [])
   const categoryLinks = categories
     .flatMap((category) =>
       category.slug
@@ -24,12 +35,22 @@ export async function GET() {
     )
     .join("\n")
 
-  const { results: recipes } = await listRecipes({ limit: 50 })
+  const { results: recipes } = await settleList(listRecipes({ limit: 50 }), {
+    results: [],
+    pagination: {
+      page: 1,
+      limit: 50,
+      total_items: 0,
+      total_pages: 0,
+      has_next: false,
+      has_prev: false,
+    },
+  })
   const recipeLinks = recipes
     .map((r) => `- [${r.title}](${absoluteUrl(`/recipes/${r.slug}`)})${r.excerpt ? `: ${r.excerpt}` : ""}`)
     .join("\n")
 
-  const journalPosts = await listJournalPosts(50)
+  const journalPosts = await settleList(listJournalPosts(50), [])
   const journalLinks = journalPosts
     .map((p) => `- [${p.title}](${absoluteUrl(`/journal/${p.slug}`)})${p.excerpt ? `: ${p.excerpt}` : ""}`)
     .join("\n")

@@ -74,16 +74,22 @@ If the buffer is full, events are **dropped, never blocked** — request latency
 
 ```
 apps/backend/
-├── cmd/server/            Entry point (main.go)
+├── cmd/
+│   ├── server/            HTTP API entrypoint
+│   ├── seed/              Idempotent Persian demo data
+│   ├── notification-worker/  Outbox ↔ Kafka ↔ SMS/email
+│   └── media-reconcile/   Orphan blob dry-run / apply
 ├── configs/               Environment configuration
+├── deploy/kafka/          Local Redpanda compose
 ├── internal/
 │   ├── analytics/         Async event ingestion queue
 │   ├── bootstrap/         App lifecycle + DI container + router
-│   ├── corn/              Cron jobs (stats rollups)        [sic: "cron"]
+│   ├── corn/              Cron jobs (stats, search, alerts, …)  [sic: "cron"]
 │   ├── handlers/          HTTP handlers (this layer)
 │   ├── mappers/           Domain model → response DTO mapping
 │   ├── middlewares/       Auth, analytics capture
 │   ├── models/            Domain models, request/response DTOs, filters
+│   ├── notifications/     Outbox, dispatcher, kafka/postgres adapters
 │   ├── repositories/      SQL data access
 │   ├── routes/            Route tree
 │   └── services/          Business logic
@@ -95,11 +101,26 @@ apps/backend/
     ├── cache/             Redis store
     ├── crypto/            Password hashing, secure tokens
     ├── database/          Connection pools, migrations
+    ├── imaging/           Transform pipeline
     ├── middleware/        Generic HTTP middleware (logger, ratelimit, …)
+    ├── notify/ sms/       Provider interfaces
     ├── response/          Response envelope + error codes
+    ├── storage/           Blob store
     ├── token/             JWT manager
     └── validator/         Struct validation
 ```
+
+Further reading:
+
+- [Architecture index](./architecture/README.md)
+- [Domain map](./architecture/domain-map.md)
+- [Data stores](./architecture/data-stores.md)
+- [Inventory](./architecture/inventory.md)
+- [Media pipeline](./architecture/media-pipeline.md)
+- [Processes & jobs](./architecture/processes-and-jobs.md)
+- [Notifications / Kafka](./architecture/notifications-kafka.md)
+- [Payments & webhooks](./architecture/payments-and-webhooks.md)
+- [Search](./architecture/search.md)
 
 ## Design principles
 

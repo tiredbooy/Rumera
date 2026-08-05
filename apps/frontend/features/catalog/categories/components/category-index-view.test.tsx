@@ -35,19 +35,38 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("next/image", () => ({
-  default: ({
-    src,
-    alt,
-    onError,
-  }: Pick<ImgHTMLAttributes<HTMLImageElement>, "alt" | "onError"> & {
-    src: string;
-  }) => (
-    // The native error event verifies SmartImage's failed-request fallback.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt ?? ""} data-src={src} onError={onError} />
-  ),
-}));
+vi.mock("@/components/storefront-media", () => {
+  const React = require("react") as typeof import("react");
+  return {
+    StorefrontMedia: ({
+      src,
+      alt,
+      monogram = "ر",
+    }: {
+      src?: string | null;
+      alt: string;
+      monogram?: string;
+    }) => {
+      const [failed, setFailed] = React.useState(false);
+      if (!src || failed) {
+        return (
+          <div role="img" aria-label={alt}>
+            {monogram}
+          </div>
+        );
+      }
+      // eslint-disable-next-line @next/next/no-img-element
+      return (
+        <img
+          alt={alt}
+          data-src={src}
+          src={src}
+          onError={() => setFailed(true)}
+        />
+      );
+    },
+  };
+});
 
 vi.mock("@/features/catalog/categories/api", () => ({
   getCategoryTree: mocks.getCategoryTree,
@@ -192,7 +211,7 @@ describe("category index storefront", () => {
     expect(document.body).not.toHaveTextContent("+۲ زیرشاخه");
   });
 
-  it("passes real images through SmartImage and retains absent and failed fallbacks", () => {
+  it("passes real images through StorefrontMedia and retains absent and failed fallbacks", () => {
     const category: CategoryTree = {
       ...root,
       title: "تصویر اصلی",

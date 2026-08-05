@@ -2,6 +2,10 @@
 
 Per-variant stock levels, reorder thresholds, and the movement ledger. The entire surface is admin-only.
 
+**Architecture (reserve / release / deduct, available vs committed):**
+[architecture/inventory.md](../architecture/inventory.md).  
+**Admin UI:** [frontend features/inventory](../../frontend/docs/features/inventory.md).
+
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.
 
 | Method | Path | Tier | Description |

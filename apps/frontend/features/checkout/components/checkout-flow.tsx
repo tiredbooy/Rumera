@@ -34,8 +34,6 @@ import { CheckoutReviewStep } from "./checkout-review-step";
 import { CheckoutShippingStep } from "./checkout-shipping-step";
 import { CheckoutSummary } from "./checkout-summary";
 
-const SHIP_REGION = "IR";
-
 type CouponAttempt = {
   code: string;
   subtotal: number;
@@ -43,11 +41,24 @@ type CouponAttempt = {
   error?: string;
 };
 
+/** Package weight for quotes — sum of unit weights when known, else 0 (backend
+ *  re-computes authoritatively from catalog weights at order creation). */
+function packageWeightKg(
+  items: Array<{ quantity: number; weight_kg?: number | null }> | undefined,
+): number {
+  if (!items?.length) return 0;
+  return items.reduce((sum, item) => {
+    const unit = typeof item.weight_kg === "number" && item.weight_kg > 0
+      ? item.weight_kg
+      : 0;
+    return sum + unit * item.quantity;
+  }, 0);
+}
+
 export function CheckoutFlow() {
   const router = useRouter();
   const cartQuery = useCart();
   const addressesQuery = useAddresses();
-  const shipping = useShippingMethods(SHIP_REGION, 0);
   const validateCoupon = useValidateCoupon();
   const placeOrder = usePlaceOrder();
   const cart = cartQuery.data;
@@ -87,6 +98,28 @@ export function CheckoutFlow() {
     addresses?.find((address) => address.is_default) ?? addresses?.[0]
   )?.id;
   const addressId = selectedAddressId ?? defaultAddressId;
+  const selectedAddress = addresses?.find((a) => a.id === addressId);
+  // Region is authoritative from the selected address country — never a
+  // checkout constant. Quotes stay disabled until an address is chosen.
+  const shipRegion = (selectedAddress?.country ?? "").trim().toUpperCase();
+  const shipWeight = packageWeightKg(
+    cart?.items as Array<{ quantity: number; weight_kg?: number | null }> | undefined,
+  );
+  const shipping = useShippingMethods(
+    shipRegion,
+    shipWeight,
+    subtotal,
+    shipRegion.length > 0,
+  );
+
+  // Drop a previously selected method when the region/weight quote set changes.
+  React.useEffect(() => {
+    if (!shippingId || !shipping.data) return;
+    if (!shipping.data.some((m) => m.id === shippingId)) {
+      setShippingId(undefined);
+    }
+  }, [shipping.data, shippingId]);
+
   const selectedShipping = shipping.data?.find((m) => m.id === shippingId);
   const normalizedCouponCode = couponCode.trim();
   const activeCouponAttempt =
@@ -111,7 +144,6 @@ export function CheckoutFlow() {
   const total = Math.max(0, subtotal - discount + shippingCost);
   const canPlace = !!addressId && !!selectedShipping && !!cart?.items.length;
 
-  const selectedAddress = addresses?.find((a) => a.id === addressId);
   const currentKey: CheckoutStepKey = CHECKOUT_STEPS[step].key;
   // Whether the user may advance past the current step.
   const stepValid =
@@ -169,7 +201,7 @@ export function CheckoutFlow() {
         address_id: addressId!,
         shipping_method_id: shippingId!,
         payment_method: payment,
-        coupon_code: coupon?.is_valid ? coupon.coupon.Code : undefined,
+        coupon_code: coupon?.is_valid ? coupon.coupon.code : undefined,
         ...(isGift
           ? {
               is_gift: true,
@@ -185,6 +217,26 @@ export function CheckoutFlow() {
       {
         onSuccess: (order) => {
           toast.success("سفارش ثبت شد");
+          // Fire-and-forget purchase signals for recommendation profiles.
+          const productIds = [
+            ...new Set(
+              (cart?.items ?? [])
+                .map((item) => item.product_id)
+                .filter((id): id is number => typeof id === "number" && id > 0),
+            ),
+          ];
+          for (const productId of productIds) {
+            void import("@/features/recommendations/client")
+              .then(({ recordInteractionClient }) =>
+                recordInteractionClient({
+                  product_id: productId,
+                  interaction_type: "purchase",
+                  source: "checkout",
+                  metadata: { order_id: order.id },
+                }),
+              )
+              .catch(() => undefined);
+          }
           router.push(`/checkout/confirmation/${order.id}`);
         },
         onError: (e) => {

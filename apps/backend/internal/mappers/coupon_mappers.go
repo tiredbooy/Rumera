@@ -3,12 +3,14 @@ package mappers
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/tiredbooy/internal/models"
 )
 
 func ToCouponResponse(c *models.Coupon, totalUses int) models.CouponResponse {
+	exhausted := c.MaxUses != nil && totalUses >= *c.MaxUses
 	return models.CouponResponse{
 		ID:                c.ID,
 		Code:              c.Code,
@@ -24,7 +26,13 @@ func ToCouponResponse(c *models.Coupon, totalUses int) models.CouponResponse {
 		StartsAt:          c.StartsAt,
 		ExpiresAt:         c.ExpiresAt,
 		TotalUses:         totalUses,
+		IsExhausted:       exhausted,
 	}
+}
+
+// NormalizeCouponCode matches preview validation and order redemption.
+func NormalizeCouponCode(code string) string {
+	return strings.ToUpper(strings.TrimSpace(code))
 }
 
 func CalculateDiscount(c *models.Coupon, orderSubtotal float64) (discountAmount float64, freeShipping bool) {
@@ -78,14 +86,15 @@ func ValidateCoupon(
 	if userUses >= c.MaxUsesPerUser {
 		return invalid("you have already used this coupon the maximum number of times")
 	}
-	if !isApplicable(c, req) {
+	if !CouponAppliesToBasket(c, req) {
 		return invalid("coupon does not apply to items in your cart")
 	}
 
 	discount, freeShipping := CalculateDiscount(c, req.OrderSubtotal)
+	resp := ToCouponResponse(c, totalUses)
 
 	return models.CouponValidationResult{
-		Coupon:         c,
+		Coupon:         &resp,
 		DiscountAmount: discount,
 		FreeShipping:   freeShipping,
 		IsValid:        true,
@@ -96,7 +105,10 @@ func invalid(reason string) models.CouponValidationResult {
 	return models.CouponValidationResult{IsValid: false, InvalidReason: reason}
 }
 
-func isApplicable(c *models.Coupon, req models.ValidateCouponReq) bool {
+// CouponAppliesToBasket reports whether the coupon's product/category
+// restrictions admit at least one cart product or category. Unrestricted
+// coupons (nil ApplicableTo) always apply.
+func CouponAppliesToBasket(c *models.Coupon, req models.ValidateCouponReq) bool {
 	if c.ApplicableTo == nil {
 		return true
 	}

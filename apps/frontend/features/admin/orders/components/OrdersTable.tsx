@@ -15,6 +15,7 @@ import {
   type Column,
   type Filter,
 } from "@/features/admin/analytics/components/DataTable";
+import { DashboardErrorState } from "@/features/dashboard/components/async-state";
 
 const PAGE_SIZE = 50;
 
@@ -105,24 +106,13 @@ export function OrdersTable() {
 
   if (isError) {
     return (
-      <div
-        className="border-hairline flex min-h-64 flex-col items-center justify-center gap-3 rounded-2xl bg-card text-center"
-        role="alert"
-        aria-busy={isFetching}
-      >
-        <p className="text-sm text-destructive">خطا در دریافت سفارش‌ها.</p>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isFetching}
-          onClick={() => void refetch()}
-        >
-          {isFetching ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-          ) : null}
-          {isFetching ? "در حال تلاش…" : "تلاش دوباره"}
-        </Button>
-      </div>
+      <DashboardErrorState
+        title="خطا در دریافت سفارش‌ها"
+        description="فهرست سفارش‌ها در دسترس نیست. دوباره تلاش کنید یا بعداً سر بزنید."
+        onRetry={() => void refetch()}
+        isRetrying={isFetching}
+        className="min-h-64"
+      />
     );
   }
 

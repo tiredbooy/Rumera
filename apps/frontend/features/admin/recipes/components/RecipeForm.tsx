@@ -13,9 +13,20 @@ import type {
 } from "@/features/image-uploader/types";
 import {
   createRecipe,
+  deleteRecipe,
   RecipeApiError,
   updateRecipe,
 } from "@/features/recipes/api/client";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type {
   AdminRecipeDetail,
   CreateRecipeInput,
@@ -101,6 +112,9 @@ export function RecipeForm({
   const [coverPreview, setCoverPreview] = React.useState(
     recipe?.image_url ?? "",
   );
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
+  const [isDeleting, startDelete] = React.useTransition();
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
 
   const {
     register,
@@ -180,6 +194,27 @@ export function RecipeForm({
     }
   }
 
+  function confirmDelete() {
+    if (!recipe || isDeleting) return;
+    setDeleteError(null);
+    startDelete(async () => {
+      try {
+        await deleteRecipe(recipe.id);
+        setConfirmDeleteOpen(false);
+        toast.success(`«${recipe.title}» حذف شد`);
+        router.push("/admin/recipes");
+        router.refresh();
+      } catch (e) {
+        const message =
+          e instanceof RecipeApiError
+            ? e.message
+            : "حذف دستور ناموفق بود. دوباره تلاش کنید.";
+        setDeleteError(message);
+        toast.error(message);
+      }
+    });
+  }
+
   async function onSubmit(v: RecipeFormValues) {
     let savedOwnerId: number | null = null;
     try {
@@ -235,56 +270,105 @@ export function RecipeForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit(onSubmit)}
-      className="grid gap-6 lg:grid-cols-[1fr_320px]"
-      noValidate
-    >
-      <div className="flex flex-col gap-6">
-        <GeneralInfoSection register={register} errors={errors} />
-        <ContentSection control={control} errors={errors} />
-        <SpecificationsSection
-          control={control}
-          register={register}
-          errors={errors}
-        />
-        <IngredientsSection
-          control={control}
-          register={register}
-          errors={errors}
-        />
-        <ShoppableProductsSection
-          control={control}
-          register={register}
-          errors={errors}
-          setValue={setValue}
-        />
-        <SeoSection
-          control={control}
-          register={register}
-          errors={errors}
-          ownerId={recipe?.id}
-          mediaRef={ogMediaRef}
-          disabled={isSubmitting}
-        />
-      </div>
+    <>
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="grid gap-6 lg:grid-cols-[1fr_320px]"
+        noValidate
+      >
+        <div className="flex flex-col gap-6">
+          <GeneralInfoSection register={register} errors={errors} />
+          <ContentSection control={control} errors={errors} />
+          <SpecificationsSection
+            control={control}
+            register={register}
+            errors={errors}
+          />
+          <IngredientsSection
+            control={control}
+            register={register}
+            errors={errors}
+          />
+          <ShoppableProductsSection
+            control={control}
+            register={register}
+            errors={errors}
+            setValue={setValue}
+          />
+          <SeoSection
+            control={control}
+            register={register}
+            errors={errors}
+            ownerId={recipe?.id}
+            mediaRef={ogMediaRef}
+            disabled={isSubmitting || isDeleting}
+          />
+        </div>
 
-      <RecipeSidebar
-        control={control}
-        errors={errors}
-        tags={tags}
-        title={title}
-        imageUrl={coverPreview}
-        imageAlt={imageAlt}
-        status={status}
-        submitLabel={submitLabel}
-        isSubmitting={isSubmitting}
-        ownerId={recipe?.id}
-        mediaRef={coverMediaRef}
-        onPreviewChange={setCoverPreview}
-        disabled={isSubmitting}
-        onCancel={() => router.push("/admin/recipes")}
-      />
-    </form>
+        <RecipeSidebar
+          control={control}
+          errors={errors}
+          tags={tags}
+          title={title}
+          imageUrl={coverPreview}
+          imageAlt={imageAlt}
+          status={status}
+          submitLabel={submitLabel}
+          isSubmitting={isSubmitting}
+          ownerId={recipe?.id}
+          mediaRef={coverMediaRef}
+          onPreviewChange={setCoverPreview}
+          disabled={isSubmitting || isDeleting}
+          onCancel={() => router.push("/admin/recipes")}
+          canDelete={mode === "edit" && Boolean(recipe)}
+          isDeleting={isDeleting}
+          onDelete={() => {
+            setDeleteError(null);
+            setConfirmDeleteOpen(true);
+          }}
+        />
+      </form>
+
+      <AlertDialog
+        open={confirmDeleteOpen}
+        onOpenChange={(open) => {
+          if (!isDeleting) {
+            setConfirmDeleteOpen(open);
+            if (!open) setDeleteError(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف دستور</AlertDialogTitle>
+            <AlertDialogDescription>
+              آیا از حذف «{recipe?.title}» مطمئن هستید؟ این عمل قابل بازگشت نیست
+              و دستور از فروشگاه و پنل مدیریت حذف می‌شود.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {deleteError}
+            </p>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel size="lg" disabled={isDeleting}>
+              انصراف
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              size="lg"
+              disabled={isDeleting}
+              onClick={(event) => {
+                event.preventDefault();
+                confirmDelete();
+              }}
+            >
+              {isDeleting ? "در حال حذف…" : "تأیید حذف"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

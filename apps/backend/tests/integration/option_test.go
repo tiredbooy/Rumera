@@ -175,7 +175,8 @@ func TestProductOptionCatalogAndVariantCombinationInvariants(t *testing.T) {
 
 	productID := seedProduct(t)
 	variantRepo := repositories.NewVariantRepository(testPool)
-	variantService := services.NewVariantService(variantRepo, nil)
+	inventoryRepo := repositories.NewInventoryRepository(testPool)
+	variantService := services.NewVariantService(variantRepo, inventoryRepo, nil)
 	first, err := variantService.Create(ctx, productID, models.CreateVariantReq{
 		SKU: stringPointer("OPT-1"), Price: 10,
 		OptionValueIDs: []int64{volume750.ID, red.ID},

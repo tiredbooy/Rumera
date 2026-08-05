@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, ChevronLeft, FolderTree } from "lucide-react";
 
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { CategoryThumbnail } from "@/features/catalog/categories/components/category-thumbnail";
 import type { CategoryRouteQuery } from "@/features/catalog/categories/routing";
 import type {
@@ -108,13 +108,12 @@ export function CategoryHero({
           </div>
 
           <div className="shadow-e2 relative aspect-[16/10] min-w-0 overflow-hidden rounded-3xl border border-border/70 bg-card ring-1 ring-foreground/5 lg:aspect-[4/3]">
-            <SmartImage
+            <StorefrontMedia
+              slot="category-hero"
               src={category.image_url}
               alt={`تصویر دسته‌بندی ${category.title}`}
-              sizes="(max-width: 1023px) calc(100vw - 2rem), 42vw"
               priority
               monogram={monogram}
-              label={category.title}
               fallbackClassName="from-primary/25 via-card to-secondary"
             />
             <div

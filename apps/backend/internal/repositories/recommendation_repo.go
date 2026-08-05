@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,6 +32,9 @@ type RecommendationRepository interface {
 	// recently active first, capped at limit. It drives the nightly profile
 	// refresh so personalization stays warm without recomputing every user.
 	ActiveUserIDs(ctx context.Context, sinceDays, limit int) ([]int64, error)
+
+	// OpsStats returns aggregate interaction/profile counts for admin observability.
+	OpsStats(ctx context.Context, windowDays int) (*models.RecommendationOpsStats, error)
 }
 
 type recommendationRepository struct{ db *pgxpool.Pool }
@@ -557,4 +561,59 @@ func (r *recommendationRepository) scanAffinity(ctx context.Context, query strin
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// OpsStats aggregates first-party interaction and profile counts for admin ops.
+func (r *recommendationRepository) OpsStats(ctx context.Context, windowDays int) (*models.RecommendationOpsStats, error) {
+	if windowDays <= 0 {
+		windowDays = 30
+	}
+	if windowDays > 365 {
+		windowDays = 365
+	}
+
+	stats := &models.RecommendationOpsStats{
+		WindowDays:         windowDays,
+		InteractionsByType: map[string]int64{},
+		GeneratedAt:        time.Now().UTC(),
+	}
+
+	if err := r.db.QueryRow(ctx,
+		`SELECT COUNT(*), COUNT(DISTINCT user_id)
+		 FROM user_product_interactions
+		 WHERE created_at >= NOW() - make_interval(days => $1)`,
+		windowDays,
+	).Scan(&stats.InteractionTotal, &stats.UniqueUsers); err != nil {
+		return nil, fmt.Errorf("ops stats interactions: %w", err)
+	}
+
+	if err := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM user_recommendation_profiles`,
+	).Scan(&stats.ProfilesTotal); err != nil {
+		return nil, fmt.Errorf("ops stats profiles: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT interaction_type, COUNT(*)
+		 FROM user_product_interactions
+		 WHERE created_at >= NOW() - make_interval(days => $1)
+		 GROUP BY interaction_type`,
+		windowDays,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("ops stats by type: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var kind string
+		var count int64
+		if err := rows.Scan(&kind, &count); err != nil {
+			return nil, fmt.Errorf("ops stats by type scan: %w", err)
+		}
+		stats.InteractionsByType[kind] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return stats, nil
 }

@@ -3,11 +3,13 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
+	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/utils"
 )
 
@@ -18,6 +20,8 @@ type InventoryService interface {
 	GetLowStock(ctx context.Context) ([]*models.Inventory, error)
 	GetMovements(ctx context.Context, filter models.MovementFilter) ([]*models.InventoryMovement, int64, error)
 	GetMovementsByVariant(ctx context.Context, variantID int64) ([]*models.InventoryMovement, error)
+	// EnsureForVariant creates a zero-stock row when a variant has none yet.
+	EnsureForVariant(ctx context.Context, variantID int64) error
 	AdjustStock(ctx context.Context, variantID int64, req models.AdjustStockReq, orderID *int64) error
 	UpdateReorder(ctx context.Context, variantID int64, req models.UpdateReorderReq) (*models.Inventory, error)
 
@@ -51,9 +55,32 @@ func NewInventoryService(
 
 // ── Admin reads ───────────────────────────────────────────────────────────────
 
+func (s *inventoryService) EnsureForVariant(ctx context.Context, variantID int64) error {
+	if variantID <= 0 {
+		return apperr.ErrInvalidRequest
+	}
+	if err := s.inventoryRepo.EnsureForVariant(ctx, variantID); err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
+		return fmt.Errorf("inventoryService.EnsureForVariant: %w", err)
+	}
+	return nil
+}
+
 func (s *inventoryService) GetByVariantID(ctx context.Context, variantID int64) (*models.Inventory, error) {
+	// Auto-create a zero-stock row so admin detail never 404s for new variants.
+	if err := s.inventoryRepo.EnsureForVariant(ctx, variantID); err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, fmt.Errorf("inventoryService.GetByVariantID ensure: %w", err)
+	}
 	inv, err := s.inventoryRepo.GetByVariantID(ctx, variantID)
 	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
 		return nil, fmt.Errorf("inventoryService.GetByVariantID: %w", err)
 	}
 	return inv, nil
@@ -84,8 +111,8 @@ func (s *inventoryService) GetMovements(ctx context.Context, filter models.Movem
 }
 
 func (s *inventoryService) GetMovementsByVariant(ctx context.Context, variantID int64) ([]*models.InventoryMovement, error) {
-	if _, err := s.inventoryRepo.GetByVariantID(ctx, variantID); err != nil {
-		return nil, fmt.Errorf("inventoryService.GetMovementsByVariant inventory: %w", err)
+	if _, err := s.GetByVariantID(ctx, variantID); err != nil {
+		return nil, err
 	}
 	movements, err := s.movementRepo.GetByVariantID(ctx, variantID)
 	if err != nil {
@@ -106,7 +133,18 @@ func (s *inventoryService) AdjustStock(ctx context.Context, variantID int64, req
 	}
 	defer utils.RollbackOnErr(ctx, tx, &err)
 
+	// Ensure row exists so first adjust on a new variant does not miss.
+	if err = s.inventoryRepo.EnsureForVariantTx(ctx, tx, variantID); err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
+		return fmt.Errorf("inventoryService.AdjustStock ensure: %w", err)
+	}
+
 	if err = s.inventoryRepo.Adjust(ctx, tx, variantID, req, orderID); err != nil {
+		if isBusinessError(err) {
+			return err
+		}
 		return fmt.Errorf("inventoryService.AdjustStock: %w", err)
 	}
 
@@ -130,8 +168,17 @@ func validInventoryAdjustment(req models.AdjustStockReq) bool {
 }
 
 func (s *inventoryService) UpdateReorder(ctx context.Context, variantID int64, req models.UpdateReorderReq) (*models.Inventory, error) {
+	if err := s.inventoryRepo.EnsureForVariant(ctx, variantID); err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, fmt.Errorf("inventoryService.UpdateReorder ensure: %w", err)
+	}
 	inv, err := s.inventoryRepo.UpdateReorder(ctx, variantID, req)
 	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
 		return nil, fmt.Errorf("inventoryService.UpdateReorder: %w", err)
 	}
 	return inv, nil

@@ -67,3 +67,34 @@ func TestBuildProductFilterSQLKeepsDirectCategoryContract(t *testing.T) {
 		t.Fatalf("descendant flag without category changed query = %+v", unused)
 	}
 }
+
+func TestProductListSortExprAllowlist(t *testing.T) {
+	cases := map[string]string{
+		"title":      "p.title",
+		"updated_at": "p.updated_at",
+		"created_at": "p.created_at",
+		"price":      "MIN(pv.price)",
+		"discount":   "p.created_at", // unsupported → default
+		"p.id;--":    "p.created_at", // never interpolate raw input
+		"":           "p.created_at",
+	}
+	for input, wantFragment := range cases {
+		got := productListSortExpr(input)
+		if !strings.Contains(got, wantFragment) {
+			t.Fatalf("sort %q → %q; want fragment %q", input, got, wantFragment)
+		}
+		// Guard against interpolating client-controlled identifiers into SQL.
+		if input != "title" && input != "updated_at" && input != "created_at" && input != "price" && input != "" {
+			if strings.Contains(got, input) {
+				t.Fatalf("untrusted sort value leaked into SQL: input=%q expr=%q", input, got)
+			}
+		}
+	}
+
+	if productListSortDirection("asc") != "ASC" || productListSortDirection("ASC") != "ASC" {
+		t.Fatal("ASC direction not recognized")
+	}
+	if productListSortDirection("desc") != "DESC" || productListSortDirection("") != "DESC" {
+		t.Fatal("default direction should be DESC")
+	}
+}

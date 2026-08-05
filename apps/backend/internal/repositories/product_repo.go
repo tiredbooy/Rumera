@@ -308,25 +308,41 @@ func escapeLikePattern(value string) string {
 	).Replace(value)
 }
 
+// productListSortExpr maps allowlisted ProductFilter.SortBy values to a stable
+// SQL ORDER BY expression. Unknown values fall back to created_at (never
+// interpolated raw client input beyond the allowlist).
+//
+// "price" sorts by the cheapest *active* variant so storefront "ارزان‌ترین" /
+// "گران‌ترین" match the min_price band shown on cards. Products without an
+// active variant sort last via NULLS LAST on the outer query.
+func productListSortExpr(sortBy string) string {
+	switch sortBy {
+	case "title":
+		return "p.title"
+	case "updated_at":
+		return "p.updated_at"
+	case "price":
+		return `(SELECT MIN(pv.price) FROM product_variants pv WHERE pv.product_id = p.id AND pv.is_active)`
+	default:
+		return "p.created_at"
+	}
+}
+
+func productListSortDirection(orderBy string) string {
+	if strings.EqualFold(orderBy, "ASC") {
+		return "ASC"
+	}
+	return "DESC"
+}
+
 func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) ([]*models.ProductListItem, int64, error) {
 	// No hardcoded is_active filter — callers decide (the public list forces
 	// active, the admin list shows all) via f.IsActive.
 	filterSQL := buildProductFilterSQL(f)
 	args := filterSQL.args
 
-	allowed := map[string]bool{
-		"created_at": true,
-		"title":      true,
-		"updated_at": true,
-	}
-	sortBy := "p.created_at"
-	if allowed[f.SortBy] {
-		sortBy = "p." + f.SortBy
-	}
-	order := "DESC"
-	if strings.ToUpper(f.OrderBy) == "ASC" {
-		order = "ASC"
-	}
+	sortExpr := productListSortExpr(f.SortBy)
+	order := productListSortDirection(f.OrderBy)
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
 
@@ -344,14 +360,14 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		SELECT p.id
 		FROM products p
 		INNER JOIN filtered_products filtered ON filtered.id = p.id
-		ORDER BY %s %s, p.id %s
+		ORDER BY %s %s NULLS LAST, p.id %s
 		LIMIT @limit OFFSET @offset
 	),
 	product_total AS (
 		SELECT COUNT(*) AS total_count FROM filtered_products
 	)
     SELECT
-        p.id, p.title, p.code, p.slug, p.is_active,
+        p.id, p.title, p.code, p.slug, p.is_active, p.weight,
         b.title AS brand,
         c.title AS category,
 		COALESCE(pr.min_price, 0) AS min_price,
@@ -413,10 +429,10 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 	ORDER BY %s %s NULLS LAST, p.id %s NULLS LAST`,
 		filterSQL.categoryScope,
 		filterSQL.whereSQL,
-		sortBy,
+		sortExpr,
 		order,
 		order,
-		sortBy,
+		sortExpr,
 		order,
 		order,
 	)
@@ -437,6 +453,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 			code           *string
 			slug           *string
 			isActive       *bool
+			weight         *float64
 			brand          *string
 			category       *string
 			minPrice       float64
@@ -457,7 +474,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		)
 
 		if err := rows.Scan(
-			&productID, &title, &code, &slug, &isActive,
+			&productID, &title, &code, &slug, &isActive, &weight,
 			&brand, &category, &minPrice, &maxPrice,
 			&activeCount, &availableCount, &purchasableID,
 			&tagIDs, &tagTitles,
@@ -490,6 +507,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 			Category:              category,
 			Tags:                  tags,
 			IsActive:              *isActive,
+			Weight:                weight,
 			MinPrice:              minPrice,
 			MaxPrice:              maxPrice,
 			ActiveVariantCount:    activeCount,

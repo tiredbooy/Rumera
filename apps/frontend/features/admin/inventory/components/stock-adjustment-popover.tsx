@@ -23,8 +23,9 @@ import {
   InventoryMutationError,
   useAdjustVariantStock,
 } from "@/features/inventory/hooks";
-import type { InventoryItem } from "@/features/inventory/types";
+import type { InventoryItem, MovementType } from "@/features/inventory/types";
 import { faNum } from "@/lib/products";
+import { cn } from "@/lib/utils";
 
 import {
   MAX_INVENTORY_INTEGER,
@@ -32,20 +33,30 @@ import {
   parseStockAdjustment,
 } from "../validations";
 
+const DEFAULT_QUICK_RESTOCK = [5, 10, 24, 50] as const;
+
+function quickRestockUnits(reorderQuantity: number): number[] {
+  const units = new Set<number>(DEFAULT_QUICK_RESTOCK);
+  if (reorderQuantity > 0) {
+    units.add(reorderQuantity);
+  }
+  return Array.from(units).sort((a, b) => a - b);
+}
+
 function adjustmentErrorMessage(error: unknown): string {
   if (!(error instanceof InventoryMutationError)) {
     return "ذخیرهٔ موجودی انجام نشد. دوباره تلاش کنید.";
   }
-  if (error.code === "OUT_OF_STOCK") {
-    return "موجودی در این فاصله تغییر کرده یا مقدار هدف مجاز نیست. صفحه را تازه کنید و دوباره تلاش کنید.";
+  if (error.code === "OUT_OF_STOCK" || error.code === "INSUFFICIENT_STOCK") {
+    return "این مقدار مجاز نیست (مثلاً کمتر از رزرو). صفحه را تازه کنید و دوباره تلاش کنید.";
   }
   if (error.code === "NOT_FOUND") {
-    return "رکورد موجودی این واریانت پیدا نشد.";
+    return "واریانت پیدا نشد.";
   }
-  if (error.code === "VALIDATION_ERROR") {
+  if (error.code === "VALIDATION_ERROR" || error.code === "INVALID_REQUEST") {
     return "مقدار موجودی معتبر نیست.";
   }
-  return "ذخیرهٔ موجودی انجام نشد. دوباره تلاش کنید.";
+  return error.message || "ذخیرهٔ موجودی انجام نشد. دوباره تلاش کنید.";
 }
 
 export function StockAdjustmentPopover({
@@ -63,6 +74,21 @@ export function StockAdjustmentPopover({
   const [open, setOpen] = React.useState(false);
   const inputID = `stock-adjustment-${inventory.product_variant_id}`;
   const titleID = `stock-adjustment-title-${inventory.product_variant_id}`;
+
+  const restockChips = React.useMemo(
+    () => quickRestockUnits(inventory.reorder_quantity),
+    [inventory.reorder_quantity],
+  );
+
+  const parsedDelta = parseStockAdjustment(quantity);
+  const previewOnHand =
+    parsedDelta === null
+      ? null
+      : inventory.stock_on_hand + parsedDelta;
+  const previewAvailable =
+    previewOnHand === null
+      ? null
+      : previewOnHand - inventory.committed_stock;
 
   function setOpenState(nextOpen: boolean) {
     if (adjustment.isPending) return;
@@ -86,6 +112,11 @@ export function StockAdjustmentPopover({
     setError(null);
   }
 
+  function applyQuickRestock(units: number) {
+    setQuantity(String(units));
+    setError(null);
+  }
+
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -97,13 +128,30 @@ export function StockAdjustmentPopover({
       return;
     }
 
+    if (
+      inventory.stock_on_hand + parsedQuantity <
+      inventory.committed_stock
+    ) {
+      setError(
+        `نمی‌توان کمتر از رزرو (${faNum(inventory.committed_stock)}) موجودی فیزیکی گذاشت.`,
+      );
+      inputRef.current?.focus();
+      return;
+    }
+
+    const movementType: MovementType =
+      parsedQuantity > 0 ? "restock" : "adjustment";
+
     try {
       await adjustment.mutateAsync({
         variantID: inventory.product_variant_id,
         input: {
           quantity: parsedQuantity,
-          type: "adjustment",
-          note: "تنظیم موجودی از پنل مدیریت",
+          type: movementType,
+          note:
+            parsedQuantity > 0
+              ? "تأمین / افزایش موجودی از پنل مدیریت"
+              : "کاهش موجودی از پنل مدیریت",
         },
       });
       const signedQuantity = `${parsedQuantity > 0 ? "+" : "−"}${faNum(Math.abs(parsedQuantity))}`;
@@ -136,7 +184,7 @@ export function StockAdjustmentPopover({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-72 max-w-[calc(100vw-2rem)]"
+        className="w-80 max-w-[calc(100vw-2rem)]"
         aria-labelledby={titleID}
       >
         <form onSubmit={save} aria-busy={adjustment.isPending || undefined}>
@@ -144,13 +192,58 @@ export function StockAdjustmentPopover({
           <p className="mt-0.5 text-xs text-muted-foreground" dir="ltr">
             {inventory.sku ?? `#${inventory.product_variant_id}`}
           </p>
-          <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            موجودی فعلی {faNum(inventory.stock_on_hand)} و موجودی رزروشده{" "}
-            {faNum(inventory.committed_stock)} واحد است.
-          </p>
+
+          <dl className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-muted/40 p-2.5 text-center text-xs">
+            <div>
+              <dt className="text-muted-foreground">فیزیکی</dt>
+              <dd className="mt-0.5 font-semibold tabular-nums">
+                {faNum(inventory.stock_on_hand)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">رزرو</dt>
+              <dd className="mt-0.5 tabular-nums text-muted-foreground">
+                {faNum(inventory.committed_stock)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">قابل فروش</dt>
+              <dd className="mt-0.5 font-semibold tabular-nums text-primary">
+                {faNum(inventory.available_stock)}
+              </dd>
+            </div>
+          </dl>
+
+          <div className="mt-3">
+            <p className="mb-1.5 text-xs text-muted-foreground">
+              تأمین سریع
+              {inventory.reorder_quantity > 0
+                ? ` · پیشنهاد ${faNum(inventory.reorder_quantity)}`
+                : null}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {restockChips.map((units) => (
+                <Button
+                  key={units}
+                  type="button"
+                  size="sm"
+                  variant={
+                    units === inventory.reorder_quantity
+                      ? "default"
+                      : "secondary"
+                  }
+                  className="h-9 px-2.5 tabular-nums"
+                  disabled={adjustment.isPending}
+                  onClick={() => applyQuickRestock(units)}
+                >
+                  +{faNum(units)}
+                </Button>
+              ))}
+            </div>
+          </div>
 
           <div className="mt-4 space-y-1.5">
-            <Label htmlFor={inputID}>تغییر موجودی</Label>
+            <Label htmlFor={inputID}>تغییر موجودی (±)</Label>
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -200,9 +293,31 @@ export function StockAdjustmentPopover({
             ) : (
               <p
                 id={fieldDescriptionId(inputID)}
-                className="text-xs leading-5 text-muted-foreground"
+                className={cn(
+                  "text-xs leading-5 text-muted-foreground",
+                  previewOnHand !== null && "text-foreground",
+                )}
               >
-                عدد مثبت موجودی را افزایش و عدد منفی آن را کاهش می‌دهد.
+                {previewOnHand === null || previewAvailable === null ? (
+                  <>
+                    عدد مثبت تأمین می‌کند؛ منفی کم می‌کند. رزرو (
+                    {faNum(inventory.committed_stock)}) قابل فروش را محدود
+                    می‌کند.
+                  </>
+                ) : (
+                  <>
+                    بعد از ذخیره: فیزیکی {faNum(previewOnHand)} · قابل فروش{" "}
+                    <span
+                      className={
+                        previewAvailable < 0
+                          ? "text-destructive"
+                          : "font-medium text-primary"
+                      }
+                    >
+                      {faNum(previewAvailable)}
+                    </span>
+                  </>
+                )}
               </p>
             )}
           </div>

@@ -3,7 +3,7 @@
  * `redirect()`s on failure (which throws, so control never returns) and returns
  * a narrowed, non-null session on success.
  *
- * Defense-in-depth: middleware does the coarse edge check and these repeat the
+ * Defense-in-depth: the edge proxy does the coarse check and these repeat the
  * admin-role check on the server. `requirePermission` also keeps frontend
  * capability-gated pages consistent inside that admin-only boundary.
  */

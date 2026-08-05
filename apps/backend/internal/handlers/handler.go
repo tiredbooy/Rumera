@@ -6,6 +6,7 @@ package handlers
 import (
 	"time"
 
+	"github.com/tiredbooy/internal/notifications"
 	"github.com/tiredbooy/internal/services"
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/notify"
@@ -31,6 +32,9 @@ type Deps struct {
 	Notify notify.Mailer
 	// SMS delivers text messages (OTP login). Sent off the request path.
 	SMS sms.Sender
+	// Notifications is the unified inline/async dispatcher (OTP, email).
+	// When nil, handlers fall back to Notify/SMS directly.
+	Notifications *notifications.Dispatcher
 	// OTPTTL bounds how long a requested SMS login code stays valid.
 	OTPTTL time.Duration
 	// RefreshTTL mirrors the JWT refresh lifetime so the auth layer can scope the

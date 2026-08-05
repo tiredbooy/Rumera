@@ -37,7 +37,7 @@ describe("OrdersTable failure state", () => {
       "خطا در دریافت سفارش‌ها",
     );
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "تلاش دوباره" }));
+    fireEvent.click(screen.getByRole("button", { name: "تلاش مجدد" }));
 
     expect(mocks.refetch).toHaveBeenCalledTimes(1);
   });

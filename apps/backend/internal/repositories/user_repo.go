@@ -44,7 +44,7 @@ const userColumns = `
 	id, user_id, first_name, last_name, email, password_hash,
 	phone, national_code, birth_date, gender, oauth_provider, oauth_id,
 	role, is_active, email_verified_at, last_login_at, is_banned, banned_at,
-	created_at, updated_at`
+	sessions_invalidated_at, created_at, updated_at`
 
 func NewUserRepository(db *pgxpool.Pool) UserRepository {
 	return &userRepository{db: db}
@@ -224,10 +224,13 @@ func (r *userRepository) GetByIDIncludingInactive(ctx context.Context, userID uu
 }
 
 func (r *userRepository) GetAuthUserByUID(ctx context.Context, uid int64) (*models.AuthUser, error) {
-	const q = `SELECT id, user_id, role, is_active, is_banned FROM users WHERE id = $1`
+	const q = `
+		SELECT id, user_id, role, is_active, is_banned, sessions_invalidated_at
+		FROM users WHERE id = $1`
 	var user models.AuthUser
 	if err := r.db.QueryRow(ctx, q, uid).Scan(
 		&user.ID, &user.UserID, &user.Role, &user.IsActive, &user.IsBanned,
+		&user.SessionsInvalidatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrNotFound
@@ -857,6 +860,7 @@ func scanUser(row userScanner) (*models.User, error) {
 		&user.Role, &user.IsActive,
 		&user.EmailVerifiedAt, &user.LastLoginAt,
 		&user.IsBanned, &user.BannedAt,
+		&user.SessionsInvalidatedAt,
 		&user.CreatedAt, &user.UpdatedAt,
 	); err != nil {
 		return nil, err

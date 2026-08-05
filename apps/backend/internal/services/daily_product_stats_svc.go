@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	analyticsmodels "github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
 )
@@ -25,7 +24,6 @@ func (s *DailyProductStatsService) FlushStats(ctx context.Context, reqs []*analy
 	return nil
 }
 
-
 func (s *DailyProductStatsService) UpsertOne(ctx context.Context, req *analyticsmodels.DailyProductStatsUpsertReq) error {
 	if err := s.repo.Upsert(ctx, req); err != nil {
 		return fmt.Errorf("upserting daily product stats: %w", err)
@@ -33,7 +31,7 @@ func (s *DailyProductStatsService) UpsertOne(ctx context.Context, req *analytics
 	return nil
 }
 
-func (s *DailyProductStatsService) GetByProductAndDate(ctx context.Context, productID uuid.UUID, date time.Time) (*analyticsmodels.DailyProductStats, error) {
+func (s *DailyProductStatsService) GetByProductAndDate(ctx context.Context, productID int64, date time.Time) (*analyticsmodels.DailyProductStats, error) {
 	stats, err := s.repo.GetByProductAndDate(ctx, productID, date)
 	if err != nil {
 		return nil, fmt.Errorf("getting daily product stats: %w", err)
@@ -41,7 +39,7 @@ func (s *DailyProductStatsService) GetByProductAndDate(ctx context.Context, prod
 	return stats, nil
 }
 
-func (s *DailyProductStatsService) GetTimeSeries(ctx context.Context, productID uuid.UUID, from, to time.Time) ([]*analyticsmodels.DailyProductStats, error) {
+func (s *DailyProductStatsService) GetTimeSeries(ctx context.Context, productID int64, from, to time.Time) ([]*analyticsmodels.DailyProductStats, error) {
 	stats, err := s.repo.GetRangeByProduct(ctx, analyticsmodels.ProductStatsFilter{
 		ProductID: &productID,
 		DateFrom:  from,
@@ -53,7 +51,7 @@ func (s *DailyProductStatsService) GetTimeSeries(ctx context.Context, productID 
 	return stats, nil
 }
 
-func (s *DailyProductStatsService) GetSummary(ctx context.Context, productID uuid.UUID, from, to time.Time) (*analyticsmodels.ProductStatsSummary, error) {
+func (s *DailyProductStatsService) GetSummary(ctx context.Context, productID int64, from, to time.Time) (*analyticsmodels.ProductStatsSummary, error) {
 	summary, err := s.repo.SummaryByProduct(ctx, analyticsmodels.ProductStatsFilter{
 		ProductID: &productID,
 		DateFrom:  from,

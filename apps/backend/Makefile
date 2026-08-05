@@ -66,9 +66,23 @@ migrate-all-down: migrate-down analytics-down
 run:
 	go run ./cmd/server/main.go
 
+.PHONY: notification-worker
+notification-worker:
+	# MODE=all|relay|consume|log  KAFKA_BROKERS=localhost:19092
+	NOTIFICATION_WORKER_MODE=$${NOTIFICATION_WORKER_MODE:-$${MODE:-all}} go run ./cmd/notification-worker
+
+.PHONY: kafka-up
+kafka-up:
+	docker compose -f deploy/kafka/docker-compose.kafka.yml up -d
+
+.PHONY: kafka-down
+kafka-down:
+	docker compose -f deploy/kafka/docker-compose.kafka.yml down
+
 .PHONY: build
 build:
 	go build -o bin/server ./cmd/server/main.go
+	go build -o bin/notification-worker ./cmd/notification-worker
 
 .PHONY: test
 test:

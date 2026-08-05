@@ -3,7 +3,6 @@ package models
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
@@ -11,10 +10,10 @@ import (
 
 type DailyProductStats struct {
 	Date time.Time `json:"date"`
-	// Backend blocker: the analytics database uses UUID product IDs, while the
-	// catalog products table uses BIGINT IDs. Do not join or translate this value
-	// until a canonical cross-database product identifier is introduced.
-	ProductID uuid.UUID `json:"product_id"`
+	// Catalog product primary key (BIGINT). Analytics events and aggregates use
+	// the same identifier as the products table so admin surfaces can link
+	// rankings and per-product stats to real catalogue records.
+	ProductID int64 `json:"product_id"`
 
 	// views
 	ViewsTotal      int `json:"views_total"`
@@ -66,7 +65,7 @@ type DailyProductStats struct {
 
 type DailyProductStatsUpsertReq struct {
 	Date      time.Time `json:"date"`
-	ProductID uuid.UUID `json:"product_id"`
+	ProductID int64     `json:"product_id"`
 
 	ViewsTotal      int `json:"views_total"`
 	ViewsUnique     int `json:"views_unique"`
@@ -104,7 +103,7 @@ type DailyProductStatsUpsertReq struct {
 // ── Query filters ─────────────────────────────────────────────────────────────
 
 type ProductStatsFilter struct {
-	ProductID *uuid.UUID
+	ProductID *int64
 	DateFrom  time.Time
 	DateTo    time.Time
 }
@@ -112,7 +111,7 @@ type ProductStatsFilter struct {
 // ── Responses ─────────────────────────────────────────────────────────────────
 
 type ProductStatsSummary struct {
-	ProductID          uuid.UUID        `json:"product_id"`
+	ProductID          int64            `json:"product_id"`
 	TotalViews         int              `json:"total_views"`
 	TotalRevenue       decimal.Decimal  `json:"total_revenue"`
 	TotalUnitsSold     int              `json:"total_units_sold"`
@@ -123,7 +122,7 @@ type ProductStatsSummary struct {
 }
 
 type TopProductEntry struct {
-	ProductID    uuid.UUID       `json:"product_id"`
+	ProductID    int64           `json:"product_id"`
 	TotalRevenue decimal.Decimal `json:"total_revenue"`
 	TotalViews   int             `json:"total_views"`
 	UnitsSold    int             `json:"units_sold"`

@@ -2,12 +2,13 @@ import "server-only";
 
 import type { ApiFetchOptions } from "@/lib/api/client";
 import { publicRequest } from "@/lib/api/public";
+import { RECOMMENDATION_CACHE_TAG } from "@/lib/cache-tags";
 import { buildQueryString } from "@/lib/utils/api-helpers";
 import type { RecommendationItem, RecommendationQuery } from "./types";
 
 const PUBLIC_CACHE_OPTIONS: ApiFetchOptions = {
   cache: "force-cache",
-  next: { revalidate: 1800 },
+  next: { revalidate: 1800, tags: [RECOMMENDATION_CACHE_TAG] },
 };
 
 async function listRecommendations(path: string): Promise<RecommendationItem[]> {

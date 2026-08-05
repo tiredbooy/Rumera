@@ -9,9 +9,9 @@ import {
   Menu,
   PackageOpen,
   User,
-  Wine,
 } from "lucide-react";
 
+import { RumeraBrandMark } from "@/components/brand/rumera-brand-mark";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -78,9 +78,8 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
         className="flex max-h-dvh flex-col overflow-x-hidden overflow-y-auto overscroll-contain p-0 [padding-bottom:env(safe-area-inset-bottom)] [padding-left:env(safe-area-inset-left)] [padding-right:env(safe-area-inset-right)] [padding-top:env(safe-area-inset-top)] data-[side=right]:h-dvh data-[side=right]:w-full data-[side=right]:max-w-[360px] data-[side=right]:sm:max-w-[360px]"
       >
         <SheetHeader className="border-b border-border/50 p-4 pr-16 pb-3">
-          <SheetTitle className="flex items-center gap-2 font-serif text-2xl">
-            <Wine className="size-5 text-primary" /> رومرا
-          </SheetTitle>
+          <SheetTitle className="sr-only">رومرا</SheetTitle>
+          <RumeraBrandMark variant="full" size="sm" href="/" />
         </SheetHeader>
 
         <div className="px-4 pt-4">
@@ -89,10 +88,6 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
 
         {!activeCategory ? (
           <nav aria-label="پیوندهای اصلی" className="mt-2 flex flex-col px-4 pb-2">
-            <DrawerLink href="/products" onNavigate={closeDrawer}>
-              <span>همهٔ محصولات</span>
-              <ArrowLeft className="size-4 text-primary" />
-            </DrawerLink>
             {primaryNavigationItems.map((item) => (
               <DrawerLink
                 key={item.href}
@@ -103,6 +98,9 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
                   <item.icon className="size-4 text-muted-foreground" />
                   {item.label}
                 </span>
+                {item.href.startsWith("/products") ? (
+                  <ArrowLeft className="size-4 text-primary" />
+                ) : null}
               </DrawerLink>
             ))}
             <DrawerLink href="/account" onNavigate={closeDrawer}>

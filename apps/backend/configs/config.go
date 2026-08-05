@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -90,6 +91,16 @@ type Config struct {
 	// outbound emails (e.g. alert "view product" links).
 	PublicSiteURL string `envconfig:"PUBLIC_SITE_URL" default:"http://localhost:3000"`
 
+	// ── Notifications / Kafka ─────────────────────────────────────────────────
+	// NotificationsMode: "inline" (default) sends SMS/email from the API process;
+	// "async" writes notification_outbox and relies on notification-worker + Kafka.
+	NotificationsMode string `envconfig:"NOTIFICATIONS_MODE" default:"inline"`
+	// KafkaBrokers is a comma-separated list (e.g. localhost:19092). Required for
+	// async outbox relay and consumer worker.
+	KafkaBrokers []string `envconfig:"KAFKA_BROKERS"`
+	// NotificationWorkerGroup is the Kafka consumer group id.
+	NotificationWorkerGroup string `envconfig:"NOTIFICATION_WORKER_GROUP" default:"rumera-notification-worker"`
+
 	// ── Loyalty (Cellar Club) ─────────────────────────────────────────────────
 	// LoyaltyEarnDivisor: Toman of order total per 1 point earned.
 	// LoyaltyRedeemValue: Toman of wallet credit per 1 point redeemed.
@@ -128,9 +139,12 @@ type Config struct {
 
 	// ── Observability ─────────────────────────────────────────────────────────
 	// MetricsEnabled toggles the Prometheus /metrics endpoint and the per-request
-	// metrics middleware. Default on: the endpoint is cheap and intended to be
-	// scraped over an internal network only (do not expose it publicly).
+	// metrics middleware. Default on.
 	MetricsEnabled bool `envconfig:"METRICS_ENABLED" default:"true"`
+	// MetricsBearerToken, when set, requires Authorization: Bearer <token> on
+	// GET /metrics. In production MetricsEnabled=true requires a non-empty token
+	// so the scrape surface is never open by accident.
+	MetricsBearerToken string `envconfig:"METRICS_BEARER_TOKEN"`
 
 	// ── Tracing (OpenTelemetry) ───────────────────────────────────────────────
 	// OTELEnabled gates all tracing wiring: the tracer provider, the otelgin HTTP
@@ -281,6 +295,9 @@ func (c *Config) Validate() error {
 		}
 		if c.SMSProvider == "log" {
 			return fmt.Errorf("SMS_PROVIDER must be a real gateway in production, not \"log\" (which writes OTP codes to the logs)")
+		}
+		if c.MetricsEnabled && strings.TrimSpace(c.MetricsBearerToken) == "" {
+			return fmt.Errorf("METRICS_BEARER_TOKEN is required in production when METRICS_ENABLED=true (or set METRICS_ENABLED=false)")
 		}
 	}
 	return nil

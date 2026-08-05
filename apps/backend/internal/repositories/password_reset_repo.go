@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,15 +17,17 @@ import (
 // ─────────────────────────────────────────────────────────────
 
 type PasswordResetRepository interface {
-	// Create stores a new reset token, invalidating any previous
+	// Create stores a new reset token hash, invalidating any previous
 	// unused tokens for the same user in the same query.
 	Create(ctx context.Context, req models.CreatePasswordResetReq) (*models.PasswordReset, error)
 
-	// GetByToken fetches a token record — service validates expiry and used_at.
-	GetByToken(ctx context.Context, token string) (*models.PasswordReset, error)
+	// GetByTokenHash fetches a token record — service validates expiry and used_at.
+	GetByTokenHash(ctx context.Context, tokenHash string) (*models.PasswordReset, error)
 
-	// MarkUsed stamps used_at so the token can never be replayed.
-	MarkUsed(ctx context.Context, id int64) error
+	// ConsumeAndResetPassword atomically marks the token used, sets the new
+	// password hash, and bumps sessions_invalidated_at so existing JWTs die.
+	// Returns the internal user id on success.
+	ConsumeAndResetPassword(ctx context.Context, tokenHash, newPasswordHash string) (userID int64, err error)
 
 	// DeleteExpired is called by a background cleanup job — keeps the table small.
 	DeleteExpired(ctx context.Context) error
@@ -44,8 +47,6 @@ func NewPasswordResetRepository(db *pgxpool.Pool) PasswordResetRepository {
 
 // ─────────────────────────────────────────────────────────────
 // Create
-// Invalidates previous unused tokens for this user in the same
-// transaction — no user should ever have two active reset tokens.
 // ─────────────────────────────────────────────────────────────
 
 func (r *passwordResetRepository) Create(ctx context.Context, req models.CreatePasswordResetReq) (*models.PasswordReset, error) {
@@ -53,9 +54,8 @@ func (r *passwordResetRepository) Create(ctx context.Context, req models.CreateP
 	if err != nil {
 		return nil, fmt.Errorf("passwordResetRepository.Create begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Invalidate any existing unused tokens for this user
 	const invalidate = `
 		UPDATE password_resets
 		SET used_at = NOW()
@@ -70,13 +70,13 @@ func (r *passwordResetRepository) Create(ctx context.Context, req models.CreateP
 	}
 
 	const insert = `
-		INSERT INTO password_resets (user_id, token, expires_at)
-		VALUES (@user_id, @token, @expires_at)
+		INSERT INTO password_resets (user_id, token_hash, expires_at)
+		VALUES (@user_id, @token_hash, @expires_at)
 		RETURNING *`
 
 	args := pgx.NamedArgs{
 		"user_id":    req.UserID,
-		"token":      req.Token,
+		"token_hash": req.TokenHash,
 		"expires_at": req.ExpiresAt,
 	}
 
@@ -98,19 +98,17 @@ func (r *passwordResetRepository) Create(ctx context.Context, req models.CreateP
 }
 
 // ─────────────────────────────────────────────────────────────
-// GetByToken
-// Fetches the raw record — the service is responsible for
-// checking expiry and used_at, not the repo.
+// GetByTokenHash
 // ─────────────────────────────────────────────────────────────
 
-func (r *passwordResetRepository) GetByToken(ctx context.Context, token string) (*models.PasswordReset, error) {
+func (r *passwordResetRepository) GetByTokenHash(ctx context.Context, tokenHash string) (*models.PasswordReset, error) {
 	const q = `
 		SELECT * FROM password_resets
-		WHERE token = $1`
+		WHERE token_hash = $1`
 
-	rows, err := r.db.Query(ctx, q, token)
+	rows, err := r.db.Query(ctx, q, tokenHash)
 	if err != nil {
-		return nil, fmt.Errorf("passwordResetRepository.GetByToken: %w", err)
+		return nil, fmt.Errorf("passwordResetRepository.GetByTokenHash: %w", err)
 	}
 
 	reset, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.PasswordReset])
@@ -118,41 +116,66 @@ func (r *passwordResetRepository) GetByToken(ctx context.Context, token string) 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrNotFound
 		}
-		return nil, fmt.Errorf("passwordResetRepository.GetByToken scan: %w", err)
+		return nil, fmt.Errorf("passwordResetRepository.GetByTokenHash scan: %w", err)
 	}
 	return &reset, nil
 }
 
 // ─────────────────────────────────────────────────────────────
-// MarkUsed
-// Stamps used_at — makes the token single-use.
-// Only marks it if it hasn't been used already and isn't expired,
-// so a race between two simultaneous requests is safe.
+// ConsumeAndResetPassword
+// Single transaction: consume token → set password → kill sessions.
 // ─────────────────────────────────────────────────────────────
 
-func (r *passwordResetRepository) MarkUsed(ctx context.Context, id int64) error {
-	const q = `
+func (r *passwordResetRepository) ConsumeAndResetPassword(
+	ctx context.Context,
+	tokenHash, newPasswordHash string,
+) (int64, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("passwordResetRepository.ConsumeAndResetPassword begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	const consume = `
 		UPDATE password_resets
 		SET used_at = NOW()
-		WHERE id = $1
+		WHERE token_hash = $1
 		  AND used_at IS NULL
-		  AND expires_at > NOW()`
+		  AND expires_at > NOW()
+		RETURNING user_id`
 
-	res, err := r.db.Exec(ctx, q, id)
+	var userID int64
+	if err := tx.QueryRow(ctx, consume, tokenHash).Scan(&userID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, models.ErrNotFound
+		}
+		return 0, fmt.Errorf("passwordResetRepository.ConsumeAndResetPassword consume: %w", err)
+	}
+
+	const setPassword = `
+		UPDATE users
+		SET password_hash = $1,
+		    sessions_invalidated_at = $2,
+		    updated_at = $2
+		WHERE id = $3`
+
+	now := time.Now().UTC()
+	tag, err := tx.Exec(ctx, setPassword, newPasswordHash, now, userID)
 	if err != nil {
-		return fmt.Errorf("passwordResetRepository.MarkUsed: %w", err)
+		return 0, fmt.Errorf("passwordResetRepository.ConsumeAndResetPassword update user: %w", err)
 	}
-	if res.RowsAffected() == 0 {
-		// either already used or expired — both mean invalid from the service's view
-		return models.ErrNotFound
+	if tag.RowsAffected() == 0 {
+		return 0, models.ErrNotFound
 	}
-	return nil
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("passwordResetRepository.ConsumeAndResetPassword commit: %w", err)
+	}
+	return userID, nil
 }
 
 // ─────────────────────────────────────────────────────────────
 // DeleteExpired
-// Run this on a schedule (e.g. every night via a cron job or
-// a ticker in your background worker). Keeps the table lean.
 // ─────────────────────────────────────────────────────────────
 
 func (r *passwordResetRepository) DeleteExpired(ctx context.Context) error {

@@ -286,5 +286,7 @@ migration connection.
 - Task 057c owns replacement/deletion cleanup, rendered-variant cleanup, orphan
   reconciliation, cache invalidation, and local storage operations guidance.
 - Task 061d owns frontend/backend origin resolution. Persisted values stay
-  origin-free; clients resolve `/media/...` against the configured media/API
-  origin when the two applications run on different origins.
+  origin-free (`/media/{key}`); the storefront resolves them via
+  `lib/media/resolve-media-url.ts` against `NEXT_PUBLIC_MEDIA_BASE_URL` →
+  `NEXT_PUBLIC_API_URL` → same-origin. Local development may use `http://`
+  API origins; production configured origins must be `https://`.

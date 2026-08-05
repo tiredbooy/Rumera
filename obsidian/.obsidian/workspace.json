@@ -1,0 +1,58 @@
+{
+  "main": {
+    "id": "rumera-main",
+    "type": "split",
+    "children": [
+      {
+        "id": "rumera-leaf",
+        "type": "leaf",
+        "state": {
+          "type": "markdown",
+          "state": {
+            "file": "Brain/Project Brain.md",
+            "mode": "source"
+          }
+        }
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "rumera-left",
+    "type": "split",
+    "children": [
+      {
+        "id": "rumera-files",
+        "type": "leaf",
+        "state": { "type": "file-explorer", "state": {} }
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "rumera-right",
+    "type": "split",
+    "children": [
+      {
+        "id": "rumera-backlinks",
+        "type": "leaf",
+        "state": { "type": "backlink", "state": { "file": "Brain/Project Brain.md" } }
+      },
+      {
+        "id": "rumera-out",
+        "type": "leaf",
+        "state": { "type": "outgoing-link", "state": { "file": "Brain/Project Brain.md" } }
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": false
+  },
+  "active": "rumera-leaf",
+  "lastOpenFiles": [
+    "00 Meta/00 Home.md",
+    "01 Maps/Map of Content.md",
+    "01 Maps/System Atlas.md"
+  ]
+}

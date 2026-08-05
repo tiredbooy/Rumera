@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 
-import {
-  ProductListView,
-  type ProductListSearchParams,
-} from "@/features/catalog/products/components/product-list-view";
+import { ProductListView } from "@/features/catalog/products/components/product-list-view";
+import type { ProductListSearchParamsRecord } from "@/features/catalog/products/list-routing";
 import { buildMetadata } from "@/lib/seo/metadata";
 
 export const metadata: Metadata = buildMetadata({
@@ -16,7 +14,7 @@ export const metadata: Metadata = buildMetadata({
 export default function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<ProductListSearchParams>;
+  searchParams: Promise<ProductListSearchParamsRecord>;
 }) {
   return <ProductListView searchParams={searchParams} />;
 }

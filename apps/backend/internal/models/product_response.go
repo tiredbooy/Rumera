@@ -17,6 +17,9 @@ type ProductListItem struct {
 	Category              *string        `json:"category,omitempty"`
 	Tags                  []TagResponse  `json:"tags,omitempty"`
 	IsActive              bool           `json:"is_active"`
+	// Weight is unit package weight in kilograms (same column as product detail).
+	// Omitted when unset so admin UIs can flag shippable SKUs missing weight.
+	Weight                *float64       `json:"weight,omitempty"`
 	MinPrice              float64        `json:"min_price"` // cheapest active variant
 	MaxPrice              float64        `json:"max_price"` // most expensive active variant
 	ActiveVariantCount    int            `json:"active_variant_count"`

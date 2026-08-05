@@ -1,7 +1,29 @@
 import type { PaginationQuery } from "@/lib/api/types";
 
-export type ProductSortField = "created_at" | "title" | "updated_at";
+/** Fields the product list API accepts for `sortBy` (backend allowlist). */
+export type ProductSortField =
+  | "created_at"
+  | "title"
+  | "updated_at"
+  | "price";
 export type ProductSortDirection = "asc" | "desc";
+
+export const PRODUCT_SORT_FIELDS = [
+  "created_at",
+  "title",
+  "updated_at",
+  "price",
+] as const satisfies readonly ProductSortField[];
+
+export function isProductSortField(value: string): value is ProductSortField {
+  return (PRODUCT_SORT_FIELDS as readonly string[]).includes(value);
+}
+
+export function isProductSortDirection(
+  value: string,
+): value is ProductSortDirection {
+  return value === "asc" || value === "desc";
+}
 
 /** Query contract shared by public and admin product listings. */
 export interface ProductListQuery extends PaginationQuery {

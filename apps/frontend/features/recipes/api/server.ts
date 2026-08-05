@@ -14,14 +14,16 @@ import type {
   RecipeSitemapItem,
 } from "../types";
 
+import { HOME_CACHE_TAG, RECIPE_CACHE_TAG } from "@/lib/cache-tags";
+
 const PUBLIC_LIST_CACHE = {
   cache: "force-cache" as const,
-  next: { revalidate: 3600 },
+  next: { revalidate: 3600, tags: [RECIPE_CACHE_TAG, HOME_CACHE_TAG] },
 };
 
 const PUBLIC_DETAIL_CACHE = {
   cache: "force-cache" as const,
-  next: { revalidate: 120 },
+  next: { revalidate: 120, tags: [RECIPE_CACHE_TAG] },
 };
 
 export async function listRecipes(

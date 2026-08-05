@@ -11,6 +11,9 @@ import type { NextConfig } from "next";
  *    headers everywhere else.
  */
 const nextConfig: NextConfig = {
+  // Allow Playwright / curl against 127.0.0.1 while SITE_URL is localhost.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
+
   // Self-contained server bundle for Docker (see Dockerfile).
   output: "standalone",
 
@@ -64,6 +67,18 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+      // Service worker must revalidate quickly so updates reach clients.
+      {
+        source: "/sw.js",
+        headers: [
+          ...securityHeaders,
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
       },
     ];
   },

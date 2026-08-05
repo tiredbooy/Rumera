@@ -3,6 +3,9 @@
  *
  * Admin items carry a frontend capability identifier. Only admins receive
  * capabilities; account items are permission-free.
+ *
+ * Groups are job-based so operators scan by work type (catalogue, commerce,
+ * content, insights, system) rather than a mixed flat list.
  */
 import {
   LayoutDashboard,
@@ -10,6 +13,7 @@ import {
   FolderTree,
   Tag,
   Tags,
+  Layers,
   Boxes,
   ClipboardList,
   Users,
@@ -18,6 +22,7 @@ import {
   Newspaper,
   GalleryHorizontalEnd,
   BarChart3,
+  Activity,
   ShieldCheck,
   Settings,
   Home,
@@ -61,7 +66,7 @@ export const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
-    title: "فروشگاه",
+    title: "کاتالوگ",
     items: [
       {
         label: "محصولات",
@@ -88,6 +93,17 @@ export const ADMIN_NAV: NavGroup[] = [
         permission: PERMISSIONS.TAGS_MANAGE,
       },
       {
+        label: "ویژگی‌های تنوع",
+        href: "/admin/options",
+        icon: Layers,
+        permission: PERMISSIONS.PRODUCTS_WRITE,
+      },
+    ],
+  },
+  {
+    title: "موجودی و سفارش",
+    items: [
+      {
         label: "موجودی",
         href: "/admin/inventory",
         icon: Boxes,
@@ -99,6 +115,11 @@ export const ADMIN_NAV: NavGroup[] = [
         icon: ClipboardList,
         permission: PERMISSIONS.ORDERS_READ,
       },
+    ],
+  },
+  {
+    title: "مشتریان",
+    items: [
       {
         label: "کاربران",
         href: "/admin/customers",
@@ -108,7 +129,7 @@ export const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
-    title: "عملیات فروش",
+    title: "فروش و لجستیک",
     items: [
       {
         label: "پرداخت‌ها",
@@ -140,10 +161,10 @@ export const ADMIN_NAV: NavGroup[] = [
     title: "محتوا",
     items: [
       {
-        label: "دیدگاه‌ها",
-        href: "/admin/reviews",
-        icon: Star,
-        permission: PERMISSIONS.REVIEWS_READ,
+        label: "ژورنال",
+        href: "/admin/journal",
+        icon: Newspaper,
+        permission: PERMISSIONS.JOURNAL_READ,
       },
       {
         label: "دستورها",
@@ -152,21 +173,21 @@ export const ADMIN_NAV: NavGroup[] = [
         permission: PERMISSIONS.RECIPES_READ,
       },
       {
-        label: "ژورنال",
-        href: "/admin/journal",
-        icon: Newspaper,
-        permission: PERMISSIONS.JOURNAL_READ,
-      },
-      {
         label: "بنر هیرو",
         href: "/admin/hero-slides",
         icon: GalleryHorizontalEnd,
         permission: PERMISSIONS.HERO_MANAGE,
       },
+      {
+        label: "دیدگاه‌ها",
+        href: "/admin/reviews",
+        icon: Star,
+        permission: PERMISSIONS.REVIEWS_READ,
+      },
     ],
   },
   {
-    title: "سیستم",
+    title: "بینش و پایش",
     items: [
       {
         label: "تحلیل‌ها",
@@ -174,6 +195,23 @@ export const ADMIN_NAV: NavGroup[] = [
         icon: BarChart3,
         permission: PERMISSIONS.ANALYTICS_READ,
       },
+      {
+        label: "توصیه‌گر",
+        href: "/admin/recommendations",
+        icon: Sparkles,
+        permission: PERMISSIONS.ANALYTICS_READ,
+      },
+      {
+        label: "مانیتورینگ API",
+        href: "/admin/monitoring",
+        icon: Activity,
+        permission: PERMISSIONS.ANALYTICS_READ,
+      },
+    ],
+  },
+  {
+    title: "سیستم",
+    items: [
       {
         label: "نقش‌ها و دسترسی‌ها",
         href: "/admin/roles",
@@ -192,17 +230,28 @@ export const ADMIN_NAV: NavGroup[] = [
 
 export const ACCOUNT_NAV: NavGroup[] = [
   {
+    title: "نمای کلی",
     items: [
       { label: "نمای کلی", href: "/account", icon: Home, exact: true },
       { label: "سفارش‌های من", href: "/account/orders", icon: ShoppingBag },
-      { label: "آدرس‌ها", href: "/account/addresses", icon: MapPin },
       { label: "علاقه‌مندی‌ها", href: "/account/wishlist", icon: Heart },
+    ],
+  },
+  {
+    title: "حساب و آدرس",
+    items: [
+      { label: "آدرس‌ها", href: "/account/addresses", icon: MapPin },
+      { label: "کیف پول", href: "/account/wallet", icon: Wallet },
+      { label: "تنظیمات حساب", href: "/account/settings", icon: Settings },
+    ],
+  },
+  {
+    title: "تجربه و وفاداری",
+    items: [
       { label: "سلیقهٔ من", href: "/account/taste", icon: Sparkles },
       { label: "باشگاه مشتریان", href: "/account/rewards", icon: Award },
       { label: "اشتراک‌ها", href: "/account/subscriptions", icon: Repeat },
-      { label: "کیف پول", href: "/account/wallet", icon: Wallet },
       { label: "دیدگاه‌های من", href: "/account/reviews", icon: MessageSquare },
-      { label: "تنظیمات حساب", href: "/account/settings", icon: Settings },
     ],
   },
 ];

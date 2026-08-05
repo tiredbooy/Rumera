@@ -171,9 +171,10 @@ export function deleteAdminShippingMethod(id: number): Promise<void> {
 export function useShippingMethods(
   region: string,
   weight: number,
+  subtotal = 0,
   enabled = true,
 ) {
-  const query = { region, weight };
+  const query = { region, weight, subtotal };
   return useQuery({
     queryKey: shippingKeys.available(query),
     queryFn: () => getAvailableShippingMethods(query),

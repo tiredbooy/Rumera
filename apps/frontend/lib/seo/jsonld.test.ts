@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { ProductDetail } from "@/features/catalog/products/types";
 import type { JournalDetail } from "@/features/journal/types";
@@ -9,6 +9,24 @@ import {
   productDetailLd,
   recipeDetailLd,
 } from "./jsonld";
+
+const previousApi = process.env.NEXT_PUBLIC_API_URL;
+const previousMedia = process.env.NEXT_PUBLIC_MEDIA_BASE_URL;
+
+afterEach(() => {
+  if (previousApi === undefined) delete process.env.NEXT_PUBLIC_API_URL;
+  else process.env.NEXT_PUBLIC_API_URL = previousApi;
+  if (previousMedia === undefined) delete process.env.NEXT_PUBLIC_MEDIA_BASE_URL;
+  else process.env.NEXT_PUBLIC_MEDIA_BASE_URL = previousMedia;
+});
+
+/** Local split-origin media base used by structured-data image tests. */
+function useLocalApiMediaOrigin() {
+  process.env.NEXT_PUBLIC_API_URL = "http://localhost:8080";
+  // Prefer empty media base so resolveMediaUrl falls back to API origin.
+  // Avoid assigning NODE_ENV (read-only in modern @types/node); vitest is not "production".
+  process.env.NEXT_PUBLIC_MEDIA_BASE_URL = "";
+}
 
 describe("productDetailLd", () => {
   it("keeps stored Toman prices unchanged and publishes IRT availability per active variant", () => {
@@ -60,9 +78,10 @@ describe("productDetailLd", () => {
 
     expect(aggregate).toMatchObject({
       priceCurrency: "IRT",
-      lowPrice: 250_000,
+      // Zero is a real free/zero offer once the variant is active — do not drop it.
+      lowPrice: 0,
       highPrice: 300_000,
-      offerCount: 2,
+      offerCount: 3,
     });
     expect(aggregate.offers).toEqual([
       expect.objectContaining({
@@ -77,11 +96,16 @@ describe("productDetailLd", () => {
         sku: "sold-out-sku",
         availability: "https://schema.org/OutOfStock",
       }),
+      expect.objectContaining({
+        price: 0,
+        priceCurrency: "IRT",
+        sku: "zero-price-sku",
+        availability: "https://schema.org/InStock",
+      }),
     ]);
     expect(data).not.toHaveProperty("sku");
     expect(JSON.stringify(data)).not.toContain("IRR");
     expect(JSON.stringify(data)).not.toContain("inactive-sku");
-    expect(JSON.stringify(data)).not.toContain("zero-price-sku");
   });
 
   it("omits product and offer URLs when no public slug exists", () => {
@@ -105,6 +129,7 @@ describe("productDetailLd", () => {
 
 describe("editorial structured data", () => {
   it("builds absolute, backend-truthful BlogPosting data", () => {
+    useLocalApiMediaOrigin();
     const post: JournalDetail = {
       id: 2,
       author_id: 8,
@@ -141,7 +166,7 @@ describe("editorial structured data", () => {
     expect(journalArticleLd(post)).toMatchObject({
       "@type": "BlogPosting",
       description: "توضیح سئو",
-      image: ["http://localhost:3000/media/journal/2/cover.webp"],
+      image: ["http://localhost:8080/media/journal/2/cover.webp"],
       datePublished: post.published_at,
       dateModified: post.updated_at,
       articleSection: ["راهنما"],
@@ -151,6 +176,7 @@ describe("editorial structured data", () => {
   });
 
   it("builds Recipe data from sanitized instructions and precise API fields", () => {
+    useLocalApiMediaOrigin();
     const recipe: RecipeDetail = {
       id: 3,
       title: "موخیتو",
@@ -202,7 +228,7 @@ describe("editorial structured data", () => {
     expect(data).toMatchObject({
       "@type": "Recipe",
       url: "http://localhost:3000/recipes/mojito",
-      image: ["http://localhost:3000/media/recipes/3/cover.webp"],
+      image: ["http://localhost:8080/media/recipes/3/cover.webp"],
       datePublished: recipe.published_at,
       dateModified: recipe.updated_at,
       recipeYield: "2 نفر",

@@ -4,13 +4,19 @@ import type { ApiFetchOptions } from "@/lib/api/client";
 import { isApiNotFoundError } from "@/lib/api/error-semantics";
 import { publicRequest } from "@/lib/api/public";
 import type { Paginated } from "@/lib/api/types";
-import { CATEGORY_DIRECTORY_CACHE_TAG } from "@/lib/cache-tags";
+import {
+  CATEGORY_DIRECTORY_CACHE_TAG,
+  HOME_CACHE_TAG,
+} from "@/lib/cache-tags";
 import { buildQueryString } from "@/lib/utils/api-helpers";
 import type { Category, CategoryListQuery, CategoryTree } from "./types";
 
 const PUBLIC_DIRECTORY_CACHE_OPTIONS: ApiFetchOptions = {
   cache: "force-cache",
-  next: { revalidate: 3600, tags: [CATEGORY_DIRECTORY_CACHE_TAG] },
+  next: {
+    revalidate: 3600,
+    tags: [CATEGORY_DIRECTORY_CACHE_TAG, HOME_CACHE_TAG],
+  },
 };
 const PUBLIC_DETAIL_CACHE_OPTIONS: ApiFetchOptions = { cache: "no-store" };
 

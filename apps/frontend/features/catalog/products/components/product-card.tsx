@@ -1,27 +1,74 @@
 import Link from "next/link";
 import { ArrowLeft, Boxes } from "lucide-react";
 
-import { OptimizedImage } from "@/components/optimized-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  catalogueAvailability,
+  cataloguePriceDisplay,
+  isQuickPurchasable,
+  productPublicHref,
+} from "@/features/catalog/products/catalogue-presentation";
 import type { ProductListItem } from "@/features/catalog/products/types";
 import { faNum, formatPrice } from "@/lib/products";
+import { cn } from "@/lib/utils";
 
 import { ProductCardActions } from "./product-card-actions";
 
+/**
+ * Dense-but-readable auto-fill grid. `minmax(17.5rem,1fr)` keeps two columns on
+ * mid phones and avoids the previous 21rem floor that forced single-column too
+ * early on common viewports.
+ */
 export const PRODUCT_CARD_GRID_CLASS =
-  "grid grid-cols-1 gap-7 sm:grid-cols-[repeat(auto-fill,minmax(21rem,1fr))]";
+  "grid grid-cols-1 gap-5 sm:grid-cols-[repeat(auto-fill,minmax(17.5rem,1fr))] sm:gap-6 lg:gap-7";
+
+/**
+ * Stable media frame for every product card surface (grid, rail, search).
+ * Fixed 4:3 aspect — shorter than the old 4:5 portrait so cards stay compact
+ * and aligned; cover-fit keeps imagery filled without stretching.
+ */
+export const PRODUCT_CARD_MEDIA_FRAME_CLASS =
+  "relative m-2 mb-0 aspect-[4/3] shrink-0 overflow-hidden rounded-[min(var(--radius-3xl),1.25rem)] bg-secondary ring-1 ring-foreground/5";
+
+const AVAILABILITY_CHIP: Record<
+  ReturnType<typeof catalogueAvailability>["kind"],
+  { tone: string; chip: string }
+> = {
+  ready: {
+    tone: "bg-emerald-500",
+    chip: "border-emerald-500/20 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
+  },
+  out_of_stock: {
+    tone: "bg-destructive",
+    chip: "border-destructive/20 bg-destructive/10 text-destructive",
+  },
+  unconfigured: {
+    tone: "bg-muted-foreground",
+    chip: "border-border/70 bg-muted/80 text-muted-foreground",
+  },
+};
 
 /** Luxe storefront card backed only by the real product-list projection. */
-export function ProductCard({ product }: { product: ProductListItem }) {
-  const href = product.slug
-    ? `/products/${encodeURIComponent(product.slug)}`
-    : null;
+export function ProductCard({
+  product,
+  priority = false,
+  className,
+}: {
+  product: ProductListItem;
+  /** Prefer for above-the-fold homepage rows. */
+  priority?: boolean;
+  className?: string;
+}) {
+  const href = productPublicHref(product);
   const hasActiveVariants = product.active_variant_count > 0;
   const hasAvailableVariants = product.available_variant_count > 0;
-  const hasPrice = product.min_price > 0;
-  const ranged = hasPrice && product.max_price > product.min_price;
+  const purchasableVariantId = isQuickPurchasable(product)
+    ? product.purchasable_variant_id
+    : undefined;
+  const price = cataloguePriceDisplay(product);
   const image = product.image_response;
   const imageAlt = image?.alt_text?.trim() || product.title;
   const monogram = product.title.trim().charAt(0) || "ر";
@@ -30,36 +77,39 @@ export function ProductCard({ product }: { product: ProductListItem }) {
     (product.tags?.length ?? 0) - visibleTags.length,
     0,
   );
-  const availability = hasAvailableVariants
-    ? { label: "آمادهٔ سفارش", tone: "bg-emerald-500" }
-    : hasActiveVariants
-      ? { label: "ناموجود", tone: "bg-destructive" }
-      : { label: "در حال تأمین", tone: "bg-muted-foreground" };
+  const availability = catalogueAvailability(product);
+  const chip = AVAILABILITY_CHIP[availability.kind];
 
   const imageContent = (
-    <OptimizedImage
-      imageKey={image?.storage_key}
+    <StorefrontMedia
+      slot="product-card"
+      storageKey={image?.storage_key}
       src={image?.image_url}
       alt={imageAlt}
-      width={800}
-      format="webp"
-      quality={82}
-      widths={[320, 480, 640, 800]}
-      fit="cover"
-      sizes="(max-width: 639px) calc(100vw - 2.5rem), (max-width: 727px) calc(100vw - 4rem), (max-width: 1023px) calc((100vw - 5.5rem) / 2), (max-width: 1279px) calc((100vw - 7.5rem) / 2), 24rem"
       monogram={monogram}
-      className="h-full w-full transition-transform duration-500 ease-cellar group-hover/product:scale-[1.035] motion-reduce:transition-none"
-      fallbackClassName="from-accent/45 via-card to-secondary"
+      intrinsicWidth={image?.width}
+      intrinsicHeight={image?.height}
+      priority={priority}
+      className="transition-transform duration-700 ease-cellar group-hover/product:scale-[1.04] motion-reduce:transition-none"
     />
   );
 
   return (
     <Card
       asChild
-      className="group/product border-hairline shadow-e2 relative h-full min-w-0 gap-0 bg-card py-0 [container-type:inline-size] transition-[transform,box-shadow,border-color] duration-300 ease-cellar hover:-translate-y-1 hover:border-primary/25 hover:shadow-e3 focus-within:ring-2 focus-within:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none!"
+      className={cn(
+        "group/product border-hairline shadow-e2 relative h-full min-w-0 gap-0 overflow-hidden bg-card py-0",
+        "[container-type:inline-size]",
+        "transition-[transform,box-shadow,border-color] duration-300 ease-cellar",
+        "hover:-translate-y-1 hover:border-primary/30 hover:shadow-e3",
+        "focus-within:ring-2 focus-within:ring-primary/40",
+        "motion-reduce:transform-none motion-reduce:transition-none!",
+        className,
+      )}
     >
-      <article>
-        <div className="relative m-2 mb-0 aspect-square overflow-hidden rounded-[min(var(--radius-3xl),20px)] bg-secondary ring-1 ring-foreground/5">
+      <article className="flex h-full min-w-0 flex-col">
+        {/* Media — fixed 4:3 frame; actions float over glass chrome */}
+        <div className={PRODUCT_CARD_MEDIA_FRAME_CLASS}>
           {href ? (
             <Link
               href={href}
@@ -72,10 +122,22 @@ export function ProductCard({ product }: { product: ProductListItem }) {
             <div className="absolute inset-0">{imageContent}</div>
           )}
 
+          {/* Soft bottom scrim so overlay CTAs stay legible on light photos */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-[15] h-20 bg-gradient-to-t from-background/80 via-background/25 to-transparent opacity-90 transition-opacity duration-300 group-hover/product:opacity-100"
+          />
+
+          {/* Sheen catch-light (matches recommendation rail language) */}
+          <span
+            aria-hidden
+            className="sheen pointer-events-none absolute inset-0 z-[12] -translate-x-full opacity-0 transition-all duration-700 ease-out group-hover/product:translate-x-full group-hover/product:opacity-100 motion-reduce:hidden"
+          />
+
           {product.category ? (
             <Badge
               variant="secondary"
-              className="pointer-events-none absolute start-3 top-3 z-20 min-h-8 max-w-[60%] truncate border border-border/70 bg-background px-3 text-[11px] font-semibold text-foreground shadow-e1"
+              className="pointer-events-none absolute start-3 top-3 z-20 min-h-8 max-w-[55%] truncate border border-border/50 bg-background/85 px-3 text-[11px] font-semibold text-foreground shadow-e1 backdrop-blur-md"
             >
               {product.category}
             </Badge>
@@ -85,31 +147,36 @@ export function ProductCard({ product }: { product: ProductListItem }) {
             productId={product.id}
             productTitle={product.title}
             productHref={href}
-            purchasableVariantId={product.purchasable_variant_id}
+            purchasableVariantId={purchasableVariantId}
             hasActiveVariants={hasActiveVariants}
             hasAvailableVariants={hasAvailableVariants}
           />
         </div>
 
-        <div className="flex flex-1 flex-col p-5 sm:p-6">
-          <div className="flex min-h-6 min-w-0 items-center justify-between gap-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-0 p-4 sm:p-5">
+          <div className="flex min-h-6 min-w-0 items-center justify-between gap-2">
             {product.brand ? (
-              <p className="min-w-0 truncate text-xs font-semibold text-primary">
+              <p className="min-w-0 truncate text-[11px] font-semibold tracking-wide text-primary sm:text-xs">
                 {product.brand}
               </p>
             ) : (
-              <span aria-hidden />
+              <span aria-hidden className="min-w-0" />
             )}
-            <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium sm:text-[11px]",
+                chip.chip,
+              )}
+            >
               <span
-                className={`size-1.5 rounded-full ${availability.tone}`}
+                className={cn("size-1.5 rounded-full", chip.tone)}
                 aria-hidden
               />
               {availability.label}
             </span>
           </div>
 
-          <h3 className="mt-3 line-clamp-2 min-h-16 font-serif text-[1.4rem] leading-8 text-foreground transition-colors duration-200 group-hover/product:text-primary motion-reduce:transition-none">
+          <h3 className="mt-2.5 line-clamp-2 min-h-[2.75rem] font-serif text-[clamp(1.05rem,5.5cqi,1.35rem)] leading-snug text-foreground transition-colors duration-200 group-hover/product:text-primary motion-reduce:transition-none">
             {href ? (
               <Link
                 href={href}
@@ -126,7 +193,7 @@ export function ProductCard({ product }: { product: ProductListItem }) {
             <div
               role="list"
               aria-label="برچسب‌های محصول"
-              className="mt-3 flex min-h-7 min-w-0 items-center gap-1.5 overflow-hidden"
+              className="mt-2.5 flex min-h-7 min-w-0 items-center gap-1.5 overflow-hidden"
             >
               {visibleTags.map((tag) => (
                 <Badge
@@ -134,7 +201,7 @@ export function ProductCard({ product }: { product: ProductListItem }) {
                   role="listitem"
                   variant="secondary"
                   title={tag.title}
-                  className="min-h-7 max-w-36 min-w-0 shrink truncate border border-primary/10 bg-accent/70 px-2.5 text-[11px] text-foreground"
+                  className="min-h-7 max-w-32 min-w-0 shrink truncate border border-primary/10 bg-accent/60 px-2 text-[10px] text-foreground sm:max-w-36 sm:px-2.5 sm:text-[11px]"
                 >
                   {tag.title}
                 </Badge>
@@ -144,35 +211,37 @@ export function ProductCard({ product }: { product: ProductListItem }) {
                   role="listitem"
                   variant="outline"
                   aria-label={`${faNum(hiddenTagCount)} برچسب دیگر`}
-                  className="min-h-7 shrink-0 px-2.5 text-[11px] text-muted-foreground"
+                  className="min-h-7 shrink-0 px-2 text-[10px] text-muted-foreground sm:px-2.5 sm:text-[11px]"
                 >
                   +{faNum(hiddenTagCount)}
                 </Badge>
               ) : null}
             </div>
           ) : (
-            <div className="mt-3 min-h-7" aria-hidden />
+            <div className="mt-2.5 min-h-7" aria-hidden />
           )}
 
-          <div className="mt-auto pt-6">
-            <div className="flex min-h-16 items-end justify-between gap-4 border-t border-border/60 pt-4">
+          <div className="mt-auto pt-4">
+            <div className="flex min-h-14 items-end justify-between gap-3 border-t border-border/50 pt-3.5">
               <div className="min-w-0">
-                {hasPrice ? (
+                {price.kind === "single" || price.kind === "range" ? (
                   <>
-                    <p className="text-[11px] text-muted-foreground">
-                      {ranged ? "شروع قیمت از" : "قیمت"}
+                    <p className="text-[10px] font-medium tracking-wide text-muted-foreground sm:text-[11px]">
+                      {price.ranged ? "شروع قیمت از" : "قیمت"}
                     </p>
                     <p
                       data-product-price
-                      className="mt-1 whitespace-nowrap font-serif text-[clamp(1.1rem,6cqi,1.65rem)] leading-tight text-foreground"
+                      className="mt-0.5 whitespace-nowrap font-serif text-[clamp(1.05rem,5.5cqi,1.55rem)] leading-tight text-foreground"
                     >
-                      {formatPrice(product.min_price)}
+                      {formatPrice(price.amount)}
                     </p>
                   </>
                 ) : (
                   <span className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                    <Boxes className="size-4" aria-hidden />
-                    {hasActiveVariants ? "قیمت ثبت نشده" : "در حال تأمین"}
+                    <Boxes className="size-4 shrink-0" aria-hidden />
+                    {price.kind === "unconfigured"
+                      ? "در حال تأمین"
+                      : "قیمت در دسترس نیست"}
                   </span>
                 )}
               </div>
@@ -185,7 +254,7 @@ export function ProductCard({ product }: { product: ProductListItem }) {
                 >
                   <Link href={href}>
                     جزئیات
-                    <ArrowLeft className="size-4 transition-transform duration-200 group-hover/button:-translate-x-1 motion-reduce:transition-none" />
+                    <ArrowLeft className="size-4 transition-transform duration-200 group-hover/product:-translate-x-0.5 motion-reduce:transition-none" />
                   </Link>
                 </Button>
               ) : (

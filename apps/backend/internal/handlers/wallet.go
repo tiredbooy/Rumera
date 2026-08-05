@@ -27,23 +27,16 @@ func (h *Handler) GetWallet(c *gin.Context) {
 // authenticated user credit their own spendable balance for free. Wallet credit
 // now flows only through verified payments, refunds, gift-card/loyalty
 // redemption and admin actions (which call WalletService.Deposit directly).
+//
+// WithdrawFromWallet was removed for the same class of risk: a public burn/cash-
+// out endpoint let customers destroy balance without a payout rail, KYC, or
+// admin review. Wallet debits now happen only via order purchase (WalletService
+// .Purchase) or future admin/ops tooling.
 
-// WithdrawFromWallet — POST /wallet/withdraw
+// WithdrawFromWallet is intentionally not registered. Kept as a 410 handler so
+// any stale client that still POSTs /wallet/withdraw gets a clear signal.
 func (h *Handler) WithdrawFromWallet(c *gin.Context) {
-	userID, ok := h.uid(c)
-	if !ok {
-		return
-	}
-	var req models.WithdrawReq
-	if !h.bindJSON(c, &req) {
-		return
-	}
-	tx, err := h.Wallet.Withdraw(c.Request.Context(), userID, req.Amount, nil, req.Description)
-	if err != nil {
-		response.HandleError(c, err)
-		return
-	}
-	response.Created(c, mappers.ToWalletTransactionResponse(tx))
+	response.Error(c, response.ErrGone)
 }
 
 // WalletTransactions — GET /wallet/transactions

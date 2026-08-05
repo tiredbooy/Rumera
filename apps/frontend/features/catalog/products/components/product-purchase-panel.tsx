@@ -259,6 +259,7 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
           <div className="flex flex-wrap items-center gap-3">
             <AddToCartButton
               productVariantId={selected.id}
+              productId={product.id}
               quantity={safeQty}
               disabled={!isAvailable}
               label={isAvailable ? "افزودن به سبد" : "ناموجود"}
@@ -313,6 +314,7 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
                 />
                 <AddToCartButton
                   productVariantId={selected?.id}
+                  productId={product.id}
                   quantity={safeQty}
                   disabled={!selected || !isAvailable}
                   label={isAvailable ? "افزودن به سبد" : "ناموجود"}

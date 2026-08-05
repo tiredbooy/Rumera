@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/response"
@@ -128,4 +130,26 @@ func nonNilRecs(items []*models.RecommendationItem) []*models.RecommendationItem
 		return []*models.RecommendationItem{}
 	}
 	return items
+}
+
+// RecommendationOpsStats — GET /admin/recommendations/stats?window_days=30
+func (h *Handler) RecommendationOpsStats(c *gin.Context) {
+	window := 30
+	if raw := c.Query("window_days"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n <= 0 || n > 365 {
+			response.Error(c, response.ErrInvalidQuery)
+			return
+		}
+		window = n
+	}
+	stats, err := h.Recommendation.OpsStats(c.Request.Context(), window)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	if stats.InteractionsByType == nil {
+		stats.InteractionsByType = map[string]int64{}
+	}
+	response.OK(c, stats)
 }

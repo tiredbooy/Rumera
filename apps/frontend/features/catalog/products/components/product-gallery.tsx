@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import { StorefrontMedia } from "@/components/storefront-media";
 import { cn } from "@/lib/utils";
 import { faNum } from "@/lib/products";
 import type { ProductImage } from "@/features/catalog/products/types";
@@ -85,15 +85,21 @@ export function ProductGallery({
         }}
       >
         {current ? (
-          <Image
+          <div
             key={current.id}
-            src={current.image_url}
-            alt={current.alt_text?.trim() || title}
-            fill
-            sizes="(max-width: 1024px) 100vw, 50vw"
-            className="animate-in fade-in-0 zoom-in-95 object-contain p-10 duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            priority
-          />
+            className="animate-in fade-in-0 zoom-in-95 absolute inset-0 p-10 duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          >
+            <StorefrontMedia
+              slot="product-gallery"
+              storageKey={current.storage_key}
+              src={current.image_url}
+              alt={current.alt_text?.trim() || title}
+              intrinsicWidth={current.width}
+              intrinsicHeight={current.height}
+              priority
+              className="object-contain"
+            />
+          </div>
         ) : (
           fallback
         )}
@@ -153,13 +159,15 @@ export function ProductGallery({
                   : "ring-foreground/5 hover:ring-primary/40",
               )}
             >
-              <Image
-                src={img.image_url}
-                alt=""
-                fill
-                sizes="20vw"
-                className="object-contain p-2.5"
-              />
+              <div className="absolute inset-0 p-2.5">
+                <StorefrontMedia
+                  slot="product-thumb"
+                  storageKey={img.storage_key}
+                  src={img.image_url}
+                  alt=""
+                  className="object-contain"
+                />
+              </div>
             </button>
           ))}
         </div>

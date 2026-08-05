@@ -1,1 +1,0 @@
-for image there is a problem for example we upload image and its this url "http://localhost:3000/media/product/12fw.jpg" and its not showing but if i do the localhost with go port "8080" its works and showing it i want you to fix this problem

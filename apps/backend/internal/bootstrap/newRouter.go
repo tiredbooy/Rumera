@@ -2,7 +2,9 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -33,9 +35,10 @@ func newRouter(cfg *config.Config, logger *zap.Logger, c *container) *gin.Engine
 
 	setupMiddlewares(r, cfg, logger)
 
-	// Prometheus scrape target. Internal-only — keep it off the public ingress.
+	// Prometheus scrape target. Protected by bearer token when configured
+	// (required in production — see Config.Validate).
 	if cfg.MetricsEnabled {
-		r.GET("/metrics", gin.WrapH(metrics.Handler()))
+		r.GET("/metrics", metricsAuth(cfg.MetricsBearerToken), gin.WrapH(metrics.Handler()))
 	}
 
 	// Readiness probe: verifies the process can actually serve traffic by pinging
@@ -55,6 +58,31 @@ func newRouter(cfg *config.Config, logger *zap.Logger, c *container) *gin.Engine
 	routes.Setup(r, c.handler, c.jwt, c.cache, idempotency)
 
 	return r
+}
+
+// metricsAuth requires Authorization: Bearer <token> when token is non-empty.
+// An empty token leaves the endpoint open (development only; production
+// Validate refuses this combination).
+func metricsAuth(token string) gin.HandlerFunc {
+	expected := strings.TrimSpace(token)
+	return func(c *gin.Context) {
+		if expected == "" {
+			c.Next()
+			return
+		}
+		h := c.GetHeader("Authorization")
+		const prefix = "Bearer "
+		if len(h) <= len(prefix) || !strings.EqualFold(h[:len(prefix)], prefix) {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		provided := strings.TrimSpace(h[len(prefix):])
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		c.Next()
+	}
 }
 
 // registerReadiness wires GET /health/ready. It returns 200 only when every

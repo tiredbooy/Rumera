@@ -7,18 +7,29 @@ import {
   setPrimaryProductImage,
   updateProductImage,
 } from "@/features/admin/products/api/server";
+import { revalidateAfterAdminMutation } from "@/lib/apply-admin-revalidation";
+
+/** Image mutations use server actions (not the BFF); invalidate storefront too. */
+function revalidateProductMedia(productId: number) {
+  revalidateAfterAdminMutation(
+    ["admin", "products", String(productId), "images"],
+    "POST",
+    200,
+  );
+  revalidatePath(`/admin/products/${productId}`);
+}
 
 export async function reorderProductImages(
   productId: number,
   imageIds: number[],
 ) {
   await reorderImagesOnServer(productId, imageIds);
-  revalidatePath(`/admin/products/${productId}`);
+  revalidateProductMedia(productId);
 }
 
 export async function setPrimaryImage(productId: number, imageId: number) {
   await setPrimaryProductImage(productId, imageId);
-  revalidatePath(`/admin/products/${productId}`);
+  revalidateProductMedia(productId);
 }
 
 export async function updateImageAlt(
@@ -29,11 +40,11 @@ export async function updateImageAlt(
   const image = await updateProductImage(productId, imageId, {
     alt_text: altText,
   });
-  revalidatePath(`/admin/products/${productId}`);
+  revalidateProductMedia(productId);
   return image;
 }
 
 export async function deleteProductImage(productId: number, imageId: number) {
   await deleteImageOnServer(productId, imageId);
-  revalidatePath(`/admin/products/${productId}`);
+  revalidateProductMedia(productId);
 }

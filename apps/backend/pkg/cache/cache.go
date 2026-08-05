@@ -45,6 +45,11 @@ type Store interface {
 	// Delete removes one or more keys. Does not error if keys don't exist.
 	Delete(ctx context.Context, keys ...string) error
 
+	// KeysByPrefix returns every key matching prefix* (Redis SCAN). Used for
+	// bulk session revocation; implementations may return empty on unsupported
+	// stores.
+	KeysByPrefix(ctx context.Context, prefix string) ([]string, error)
+
 	// Exists reports whether a key is present.
 	Exists(ctx context.Context, key string) (bool, error)
 
@@ -61,6 +66,27 @@ type Store interface {
 // ======= HELPERS =======
 func KeyRefreshToken(jti string) string  { return "refresh:" + jti }
 func KeyRefreshReplay(jti string) string { return "refresh:replay:" + jti }
+
+// KeyRefreshUserIndex tracks a refresh jti under a per-user prefix so password
+// reset can revoke every active refresh without scanning the whole keyspace.
+// Format: refresh:user:{userUUID}:{jti}
+func KeyRefreshUserIndex(userUUID, jti string) string {
+	return "refresh:user:" + userUUID + ":" + jti
+}
+
+// KeyRefreshUserIndexPrefix is the SCAN prefix for all refresh indexes of a user.
+func KeyRefreshUserIndexPrefix(userUUID string) string {
+	return "refresh:user:" + userUUID + ":"
+}
+
+// RefreshJTIFromUserIndex extracts the jti from a KeyRefreshUserIndex key.
+func RefreshJTIFromUserIndex(key, userUUID string) string {
+	prefix := KeyRefreshUserIndexPrefix(userUUID)
+	if len(key) <= len(prefix) || key[:len(prefix)] != prefix {
+		return ""
+	}
+	return key[len(prefix):]
+}
 func KeyCSRF(userID string) string       { return "csrf:" + userID }
 func KeySession(sessionID string) string { return "session:" + sessionID }
 func KeyRateLimit(ip string) string      { return "rl:" + ip }

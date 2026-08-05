@@ -185,7 +185,16 @@ func (m *CouponRepo) Update(context.Context, int64, models.UpdateCouponReq) (*mo
 	return nil, nil
 }
 func (m *CouponRepo) Delete(context.Context, int64) error                { return nil }
+func (m *CouponRepo) Deactivate(context.Context, int64) (*models.Coupon, error) {
+	return nil, nil
+}
 func (m *CouponRepo) ExistsByCode(context.Context, string) (bool, error) { return false, nil }
+func (m *CouponRepo) GetByIDForUpdate(ctx context.Context, tx pgx.Tx, id int64) (*models.Coupon, error) {
+	return m.GetByID(ctx, id)
+}
+func (m *CouponRepo) CountUsagesByIDs(context.Context, []int64) (map[int64]int, error) {
+	return map[int64]int{}, nil
+}
 func (m *CouponRepo) LockByID(ctx context.Context, tx pgx.Tx, id int64) error {
 	if m.LockByIDFn != nil {
 		return m.LockByIDFn(ctx, tx, id)
@@ -253,13 +262,15 @@ func (m *ShippingMethodRepo) Delete(context.Context, int64) error { return nil }
 // ── InventoryRepository ──────────────────────────────────────────────────────
 
 type InventoryRepo struct {
-	Tx              pgx.Tx
-	GetByVariantFn  func(ctx context.Context, variantID int64) (*models.Inventory, error)
-	AdjustFn        func(ctx context.Context, tx pgx.Tx, variantID int64, req models.AdjustStockReq, orderID *int64) error
-	ReserveFn       func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
-	ReleaseFn       func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
-	DeductFn        func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
-	UpdateReorderFn func(ctx context.Context, variantID int64, req models.UpdateReorderReq) (*models.Inventory, error)
+	Tx                   pgx.Tx
+	GetByVariantFn       func(ctx context.Context, variantID int64) (*models.Inventory, error)
+	EnsureForVariantFn   func(ctx context.Context, variantID int64) error
+	EnsureForVariantTxFn func(ctx context.Context, tx pgx.Tx, variantID int64) error
+	AdjustFn             func(ctx context.Context, tx pgx.Tx, variantID int64, req models.AdjustStockReq, orderID *int64) error
+	ReserveFn            func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
+	ReleaseFn            func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
+	DeductFn             func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
+	UpdateReorderFn      func(ctx context.Context, variantID int64, req models.UpdateReorderReq) (*models.Inventory, error)
 }
 
 func (m *InventoryRepo) BeginTx(context.Context) (pgx.Tx, error) { return txOr(m.Tx), nil }
@@ -298,6 +309,21 @@ func (m *InventoryRepo) GetAll(context.Context, models.InventoryFilter) ([]*mode
 	return nil, 0, nil
 }
 func (m *InventoryRepo) GetLowStock(context.Context) ([]*models.Inventory, error) { return nil, nil }
+func (m *InventoryRepo) EnsureForVariant(ctx context.Context, variantID int64) error {
+	if m.EnsureForVariantFn != nil {
+		return m.EnsureForVariantFn(ctx, variantID)
+	}
+	return nil
+}
+func (m *InventoryRepo) EnsureForVariantTx(ctx context.Context, tx pgx.Tx, variantID int64) error {
+	if m.EnsureForVariantTxFn != nil {
+		return m.EnsureForVariantTxFn(ctx, tx, variantID)
+	}
+	if m.EnsureForVariantFn != nil {
+		return m.EnsureForVariantFn(ctx, variantID)
+	}
+	return nil
+}
 func (m *InventoryRepo) UpdateReorder(ctx context.Context, variantID int64, req models.UpdateReorderReq) (*models.Inventory, error) {
 	if m.UpdateReorderFn != nil {
 		return m.UpdateReorderFn(ctx, variantID, req)

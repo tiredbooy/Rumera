@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Layers, PackagePlus, Plus } from "lucide-react";
 import { useWatch } from "react-hook-form";
 import type {
@@ -68,6 +69,31 @@ export function VariantsSection({
             {error}
           </p>
         ) : null}
+
+        {optionTypes.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-4 py-4 text-sm leading-6">
+            <p className="font-medium">هنوز ویژگی مشترکی تعریف نشده</p>
+            <p className="mt-1 text-muted-foreground">
+              یک‌بار «حجم»، «رنگ» و … را در بخش ویژگی‌ها بسازید؛ بعد همین‌جا برای
+              هر محصول دوباره استفاده می‌کنید — نیازی به ساخت مجدد نیست.
+            </p>
+            <Button asChild variant="secondary" size="sm" className="mt-3 h-10">
+              <Link href="/admin/options">مدیریت ویژگی‌های تنوع</Link>
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            ویژگی‌های مشترک از{" "}
+            <Link
+              href="/admin/options"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              ویژگی‌های تنوع
+            </Link>{" "}
+            بارگذاری شده‌اند — برای هر SKU مقدار را انتخاب کنید.
+          </p>
+        )}
+
         <BulkVariantGenerator
           optionTypes={optionTypes}
           existingCombinations={variants.map(
@@ -83,6 +109,25 @@ export function VariantsSection({
             <p className="text-sm text-muted-foreground">
               هنوز تنوعی اضافه نشده است.
             </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-1 h-10"
+              disabled={disabled}
+              onClick={() =>
+                append({
+                  sku: "",
+                  price: "",
+                  compare_at_price: "",
+                  is_active: true,
+                  option_value_ids: [],
+                })
+              }
+            >
+              <Plus className="size-4" />
+              افزودن اولین تنوع
+            </Button>
           </div>
         ) : null}
 

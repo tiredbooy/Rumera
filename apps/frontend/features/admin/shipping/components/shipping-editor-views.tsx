@@ -14,6 +14,7 @@ import {
 
 import { ShippingMethodForm } from "./shipping-method-form";
 import { ShippingMethodsPanel } from "./shipping-methods-panel";
+import { ShippingQuoteSimulator } from "./shipping-quote-simulator";
 import { ShippingZoneForm } from "./shipping-zone-form";
 
 function BackButton({ href }: { href: string }) {
@@ -98,6 +99,8 @@ export function ShippingZoneEditView({ id }: { id: number }) {
     );
   }
 
+  const defaultRegion = zone.data.region_codes[0] ?? "";
+
   return (
     <>
       <PageHeader
@@ -106,6 +109,7 @@ export function ShippingZoneEditView({ id }: { id: number }) {
         actions={<BackButton href="/admin/shipping" />}
       />
       <ShippingZoneForm mode="edit" zone={zone.data} />
+      <ShippingQuoteSimulator defaultRegion={defaultRegion} />
       <ShippingMethodsPanel zoneID={zone.data.id} />
     </>
   );

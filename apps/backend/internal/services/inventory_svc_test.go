@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/tiredbooy/internal/mocks"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/pkg/apperr"
 )
 
 func orderItems() []models.OrderItemResponse {
@@ -182,7 +183,11 @@ func TestInventoryService_AdjustStock_RejectsSemanticallyInvalidMovement(t *test
 
 func TestInventoryService_GetMovementsByVariant_RequiresInventory(t *testing.T) {
 	movementCalls := 0
+	// Missing variant: EnsureForVariant (or subsequent Get) surfaces as apperr.ErrNotFound.
 	repo := &mocks.InventoryRepo{
+		EnsureForVariantFn: func(context.Context, int64) error {
+			return models.ErrNotFound
+		},
 		GetByVariantFn: func(context.Context, int64) (*models.Inventory, error) {
 			return nil, models.ErrNotFound
 		},
@@ -196,8 +201,8 @@ func TestInventoryService_GetMovementsByVariant_RequiresInventory(t *testing.T) 
 	svc := NewInventoryService(repo, movements)
 
 	_, err := svc.GetMovementsByVariant(context.Background(), 99)
-	if !errors.Is(err, models.ErrNotFound) {
-		t.Fatalf("GetMovementsByVariant error = %v, want ErrNotFound", err)
+	if !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("GetMovementsByVariant error = %v, want apperr.ErrNotFound", err)
 	}
 	if movementCalls != 0 {
 		t.Fatalf("movement calls = %d, want 0", movementCalls)

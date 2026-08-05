@@ -176,6 +176,30 @@ export function InventoryTable({
     },
   ];
 
+  if (rows.length === 0) {
+    return (
+      <div className="border-hairline flex flex-col items-center rounded-2xl bg-card/50 px-6 py-14 text-center ring-1 ring-foreground/[0.04]">
+        <p className="font-serif text-lg">هنوز ردیف موجودی ندارید</p>
+        <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+          با ساخت محصول و واریانت، ردیف موجودی خودکار ساخته می‌شود. اگر دیتابیس
+          خالی است، از ریشهٔ پروژه{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs" dir="ltr">
+            make seed
+          </code>{" "}
+          را اجرا کنید یا در پنل محصولات، کالا اضافه کنید.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <Button asChild className="h-11">
+            <Link href="/admin/products">رفتن به محصولات</Link>
+          </Button>
+          <Button asChild variant="outline" className="h-11">
+            <Link href="/admin/products/new">افزودن محصول</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DataTable
       rows={rows}
@@ -188,7 +212,7 @@ export function InventoryTable({
       searchPlaceholder="جستجوی محصول یا کد کالا…"
       filters={filters}
       pageSize={10}
-      emptyMessage="رکورد موجودی مطابق این جستجو پیدا نشد."
+      emptyMessage="رکورد موجودی مطابق این جستجو پیدا نشد. فیلتر را پاک کنید."
     />
   );
 }

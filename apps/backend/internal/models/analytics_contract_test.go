@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
@@ -24,8 +23,8 @@ func TestAnalyticsDecimalsMarshalAsStrings(t *testing.T) {
 	assertJSONStringField(t, summary, "avg_conversion_rate", "0.125")
 }
 
-func TestProductAnalyticsContractUsesUUIDAndNullableDecimal(t *testing.T) {
-	productID := uuid.MustParse("936da01f-9abd-4d9d-80c7-02af85c822a8")
+func TestProductAnalyticsContractUsesCatalogIDAndNullableDecimal(t *testing.T) {
+	const productID int64 = 42
 	stats := DailyProductStats{ProductID: productID}
 
 	raw, err := json.Marshal(stats)
@@ -37,8 +36,9 @@ func TestProductAnalyticsContractUsesUUIDAndNullableDecimal(t *testing.T) {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("unmarshal product stats: %v", err)
 	}
-	if got["product_id"] != productID.String() {
-		t.Fatalf("product_id = %v, want %q", got["product_id"], productID)
+	// JSON numbers decode as float64 in map[string]any.
+	if got["product_id"] != float64(productID) {
+		t.Fatalf("product_id = %v, want %d", got["product_id"], productID)
 	}
 	if got["avg_rating"] != nil {
 		t.Fatalf("avg_rating = %v, want null", got["avg_rating"])

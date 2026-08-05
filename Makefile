@@ -126,6 +126,21 @@ db-shell: ## Open a psql prompt on the dev main database
 seed: $(DEV_ENV) ## Seed realistic Persian storefront test data (idempotent — safe to re-run)
 	$(DEV) exec backend go run ./cmd/seed
 
+.PHONY: kafka-up
+kafka-up: ## Start local Redpanda (Kafka API :19092, console :8085)
+	docker compose -f apps/backend/deploy/kafka/docker-compose.kafka.yml up -d
+
+.PHONY: kafka-down
+kafka-down: ## Stop local Redpanda
+	docker compose -f apps/backend/deploy/kafka/docker-compose.kafka.yml down
+
+.PHONY: notification-worker
+notification-worker: ## Run notification worker (MODE=all|relay|consume|log, needs KAFKA_BROKERS for non-log)
+	@cd apps/backend && \
+		NOTIFICATION_WORKER_MODE=$${NOTIFICATION_WORKER_MODE:-$${MODE:-all}} \
+		KAFKA_BROKERS=$${KAFKA_BROKERS:-localhost:19092} \
+		go run ./cmd/notification-worker
+
 .PHONY: dev-media-reconcile
 dev-media-reconcile: $(DEV_ENV) ## Audit local media orphans; pass ARGS="--apply --min-age=24h" to delete
 	$(DEV) exec backend go run ./cmd/media-reconcile $(ARGS)

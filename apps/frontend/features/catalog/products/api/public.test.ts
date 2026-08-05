@@ -43,7 +43,18 @@ describe("public product API", () => {
     expect(String(url)).toContain(
       `/api/v1/products/slug/${encodeURIComponent("ویژه / A?")}`,
     );
-    expect(options).toEqual(expect.objectContaining({ cache: "no-store" }));
+    expect(options).toEqual(
+      expect.objectContaining({
+        cache: "force-cache",
+        next: expect.objectContaining({
+          revalidate: 30,
+          tags: expect.arrayContaining([
+            "storefront:products",
+            "storefront:product:ویژه / A?",
+          ]),
+        }),
+      }),
+    );
   });
 
   it("maps only a typed 404 to a missing product", async () => {

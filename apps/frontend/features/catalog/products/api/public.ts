@@ -4,12 +4,32 @@ import type { ApiFetchOptions } from "@/lib/api/client";
 import { isApiNotFoundError } from "@/lib/api/error-semantics";
 import { publicRequest } from "@/lib/api/public";
 import type { Paginated } from "@/lib/api/types";
+import {
+  HOME_CACHE_TAG,
+  PRODUCT_CATALOGUE_CACHE_TAG,
+  productDetailCacheTag,
+} from "@/lib/cache-tags";
 import { buildQueryString } from "@/lib/utils/api-helpers";
 import type { PublicProductListQuery } from "../queries";
 import type { ProductListItem, ProductDetail } from "../types";
 
-const PRODUCT_LIST_OPTIONS: ApiFetchOptions = { cache: "no-store" };
-const PRODUCT_DETAIL_OPTIONS: ApiFetchOptions = { cache: "no-store" };
+/**
+ * Catalogue list is tag-cached so admin product/media writes can expire home +
+ * listing surfaces immediately. Availability is still refreshed on a short TTL.
+ */
+const PRODUCT_LIST_OPTIONS: ApiFetchOptions = {
+  cache: "force-cache",
+  next: {
+    revalidate: 60,
+    tags: [PRODUCT_CATALOGUE_CACHE_TAG, HOME_CACHE_TAG],
+  },
+};
+
+/** Detail keeps a short TTL + per-product tag; inventory stays relatively fresh. */
+const PRODUCT_DETAIL_OPTIONS: ApiFetchOptions = {
+  cache: "force-cache",
+  next: { revalidate: 30 },
+};
 
 // ─────────────────────────────────────────────
 // Product list (public – active only)
@@ -34,10 +54,16 @@ export async function getProductById(
   id: number,
 ): Promise<ProductDetail | null> {
   try {
-    return await publicRequest<ProductDetail>(
-      `/products/${id}`,
-      PRODUCT_DETAIL_OPTIONS,
-    );
+    return await publicRequest<ProductDetail>(`/products/${id}`, {
+      ...PRODUCT_DETAIL_OPTIONS,
+      next: {
+        revalidate: 30,
+        tags: [
+          productDetailCacheTag(id),
+          PRODUCT_CATALOGUE_CACHE_TAG,
+        ],
+      },
+    });
   } catch (error) {
     if (isApiNotFoundError(error)) return null;
     throw error;
@@ -51,7 +77,16 @@ export async function getProductBySlug(
   try {
     return await publicRequest<ProductDetail>(
       `/products/slug/${encodeURIComponent(slug)}`,
-      PRODUCT_DETAIL_OPTIONS,
+      {
+        ...PRODUCT_DETAIL_OPTIONS,
+        next: {
+          revalidate: 30,
+          tags: [
+            productDetailCacheTag(slug),
+            PRODUCT_CATALOGUE_CACHE_TAG,
+          ],
+        },
+      },
     );
   } catch (error) {
     if (isApiNotFoundError(error)) return null;

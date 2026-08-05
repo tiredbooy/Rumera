@@ -38,6 +38,13 @@ vi.mock("@/features/cart/api", () => ({
   }),
 }));
 
+vi.mock("@/features/recommendations/hooks", () => ({
+  useRecordInteraction: () => ({
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+  }),
+}));
+
 vi.mock("sonner", () => ({
   toast: {
     error: mocks.toastError,

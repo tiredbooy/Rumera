@@ -1,4 +1,4 @@
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { cn } from "@/lib/utils";
 
 import type { CategoryTree } from "../types";
@@ -23,10 +23,10 @@ export function CategoryThumbnail({
         size === "sm" ? "size-8" : "size-10",
       )}
     >
-      <SmartImage
+      <StorefrontMedia
+        slot="category-thumb"
         src={category.image_url}
         alt={`تصویر دسته‌بندی ${category.title}`}
-        sizes={size === "sm" ? "32px" : "40px"}
         monogram={initial}
         className="transition-transform duration-300 group-hover/category:scale-105"
         fallbackClassName={cn(

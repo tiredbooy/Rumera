@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 	models "github.com/tiredbooy/internal/models"
@@ -58,21 +58,19 @@ func (j *ProductStatsCronJob) Run(ctx context.Context) {
 	slog.Info("product stats job: done", "products", len(reqs), "date", yesterday.Format("2006-01-02"))
 }
 
-// fetchActiveProductIDs returns distinct product IDs that had events yesterday.
-// We read product_id out of the event payload — your product_viewed events
-// should include {"product_id": "<uuid>"} in their payload field.
-func (j *ProductStatsCronJob) fetchActiveProductIDs(ctx context.Context, date time.Time) ([]uuid.UUID, error) {
+// fetchActiveProductIDs returns distinct catalog product IDs that had events
+// yesterday. product_viewed payloads carry {"product_id": <bigint>}.
+func (j *ProductStatsCronJob) fetchActiveProductIDs(ctx context.Context, date time.Time) ([]int64, error) {
 	query := `
-		SELECT DISTINCT (payload->>'product_id')::uuid
+		SELECT DISTINCT (payload->>'product_id')::bigint
 		FROM events
 		WHERE event_type = 'product_viewed'
 		  AND created_at >= $1
 		  AND created_at < $2
-		  AND payload->>'product_id' IS NOT NULL`
+		  AND payload ? 'product_id'
+		  AND (payload->>'product_id') ~ '^[0-9]+$'`
 
-	// Idempotent read: safe to retry on a transient (serialization/connection)
-	// failure. ids is reset each attempt so a retry can't duplicate rows.
-	var ids []uuid.UUID
+	var ids []int64
 	err := database.WithRetry(ctx, func(ctx context.Context) error {
 		ids = nil
 		rows, err := j.db.Query(ctx, query, date, date.AddDate(0, 0, 1))
@@ -82,11 +80,13 @@ func (j *ProductStatsCronJob) fetchActiveProductIDs(ctx context.Context, date ti
 		defer rows.Close()
 
 		for rows.Next() {
-			var id uuid.UUID
+			var id int64
 			if err := rows.Scan(&id); err != nil {
 				return fmt.Errorf("scanning product id: %w", err)
 			}
-			ids = append(ids, id)
+			if id > 0 {
+				ids = append(ids, id)
+			}
 		}
 		return rows.Err()
 	})
@@ -96,25 +96,18 @@ func (j *ProductStatsCronJob) fetchActiveProductIDs(ctx context.Context, date ti
 	return ids, nil
 }
 
-func (j *ProductStatsCronJob) aggregateForProduct(ctx context.Context, productID uuid.UUID, date time.Time) (*models.DailyProductStatsUpsertReq, error) {
+func (j *ProductStatsCronJob) aggregateForProduct(ctx context.Context, productID int64, date time.Time) (*models.DailyProductStatsUpsertReq, error) {
 	from := date
 	to := date.AddDate(0, 0, 1)
+	productKey := strconv.FormatInt(productID, 10)
 
 	req := &models.DailyProductStatsUpsertReq{
 		Date:      date,
 		ProductID: productID,
 	}
 
-	// One scan per product per day: all five breakdowns (views, funnel, device,
-	// source, revenue) are computed from the same day-and-product slice of events
-	// via conditional aggregates, replacing five sequential round-trips. Each
-	// FILTER reproduces its former query's WHERE exactly — the views, source and
-	// revenue aggregates re-apply the `event_type` scoping their standalone
-	// queries had, while funnel and device intentionally span all event types.
 	var revenueTotal decimal.Decimal
 	var unitsSold int
-	// Idempotent read: the scan overwrites the same fields, so retrying a
-	// transient failure is safe.
 	err := database.WithRetry(ctx, func(ctx context.Context) error {
 		return j.db.QueryRow(ctx, `
 		WITH base AS (
@@ -124,30 +117,25 @@ func (j *ProductStatsCronJob) aggregateForProduct(ctx context.Context, productID
 			  AND created_at >= $2 AND created_at < $3
 		)
 		SELECT
-			-- views (product_viewed only)
 			COUNT(*)                  FILTER (WHERE event_type = 'product_viewed')                          AS views_total,
 			COUNT(DISTINCT session_id) FILTER (WHERE event_type = 'product_viewed')                         AS views_unique,
 			COUNT(*)                  FILTER (WHERE event_type = 'product_viewed' AND user_id IS NOT NULL)  AS views_registered,
 			COUNT(*)                  FILTER (WHERE event_type = 'product_viewed' AND user_id IS NULL)      AS views_guest,
-			-- funnel (all event types)
 			COUNT(*) FILTER (WHERE event_type = 'cart_updated')   AS add_to_cart,
 			COUNT(*) FILTER (WHERE event_type = 'order_created')  AS purchases,
-			-- device breakdown (all event types)
 			COUNT(*) FILTER (WHERE device_type = 'mobile')  AS device_mobile,
 			COUNT(*) FILTER (WHERE device_type = 'desktop') AS device_desktop,
 			COUNT(*) FILTER (WHERE device_type = 'tablet')  AS device_tablet,
-			-- source breakdown (product_viewed only)
 			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer LIKE '%search%')         AS source_search,
 			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer LIKE '%category%')       AS source_category,
 			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer LIKE '%recommendation%') AS source_recommendation,
 			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer LIKE '%blog%')           AS source_blog,
 			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer LIKE '%recipe%')         AS source_recipe,
 			COUNT(*) FILTER (WHERE event_type = 'product_viewed' AND page_referrer IS NULL)                 AS source_direct,
-			-- revenue (order_created only)
 			COALESCE(SUM((payload->>'amount')::numeric) FILTER (WHERE event_type = 'order_created'), 0)     AS revenue_total,
 			COALESCE(SUM((payload->>'quantity')::int)   FILTER (WHERE event_type = 'order_created'), 0)     AS units_sold
 		FROM base`,
-			productID.String(), from, to,
+			productKey, from, to,
 		).Scan(
 			&req.ViewsTotal,
 			&req.ViewsUnique,

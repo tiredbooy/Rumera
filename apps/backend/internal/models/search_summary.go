@@ -9,6 +9,7 @@ import (
 // ── JSONB embedded types ──────────────────────────────────────────────────────
 
 type TopClickedProduct struct {
+	// Catalog product id as a decimal string (e.g. "42"), not an analytics UUID.
 	ProductID  string `json:"product_id"`
 	ClickCount int    `json:"click_count"`
 }

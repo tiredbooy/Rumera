@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react"
 import { History } from "lucide-react"
 
 import { formatPrice } from "@/lib/products"
-import { SmartImage } from "@/components/smart-image"
+import { StorefrontMedia } from "@/components/storefront-media"
 import {
   recordRecentlyViewed,
   useRecentlyViewed,
@@ -56,31 +56,36 @@ export function RecentlyViewedRail({
         <History className="size-3.5" /> {title}
       </p>
       <div className="fade-x -mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
-        {items.map((p) => (
-          <Link
-            key={p.slug}
-            href={`/products/${p.slug}`}
-            className="group/rv hover-lift border-hairline w-40 shrink-0 overflow-hidden rounded-2xl bg-card sm:w-44"
-          >
-            <div className="relative aspect-4/5 overflow-hidden">
-              <SmartImage
-                src={p.image}
-                alt={p.title}
-                sizes="176px"
-                monogram={p.title.charAt(0)}
-                fallbackClassName="from-accent/40 via-card to-secondary"
-              />
-            </div>
-            <div className="p-3">
-              <p className="line-clamp-1 font-serif text-sm leading-tight transition-colors group-hover/rv:text-primary">
-                {p.title}
-              </p>
-              {p.price != null ? (
-                <p className="mt-1 font-serif text-sm text-foreground">{formatPrice(p.price)}</p>
-              ) : null}
-            </div>
-          </Link>
-        ))}
+        {items.map((p) => {
+          const slug = p.slug?.trim();
+          if (!slug) return null;
+          return (
+            <Link
+              key={slug}
+              href={`/products/${encodeURIComponent(slug)}`}
+              className="group/rv hover-lift border-hairline w-40 shrink-0 overflow-hidden rounded-2xl bg-card sm:w-44"
+            >
+              <div className="relative aspect-4/5 overflow-hidden">
+                <StorefrontMedia
+                  slot="recommendation"
+                  src={p.image}
+                  alt={p.title}
+                  monogram={p.title.charAt(0)}
+                />
+              </div>
+              <div className="p-3">
+                <p className="line-clamp-1 font-serif text-sm leading-tight transition-colors group-hover/rv:text-primary">
+                  {p.title}
+                </p>
+                {p.price != null ? (
+                  <p className="mt-1 font-serif text-sm text-foreground">
+                    {formatPrice(p.price)}
+                  </p>
+                ) : null}
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </section>
   )

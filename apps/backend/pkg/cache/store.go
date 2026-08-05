@@ -102,6 +102,26 @@ func (s *redisStore) Delete(ctx context.Context, keys ...string) error {
 	return nil
 }
 
+func (s *redisStore) KeysByPrefix(ctx context.Context, prefix string) ([]string, error) {
+	var (
+		cursor uint64
+		out    []string
+	)
+	pattern := prefix + "*"
+	for {
+		keys, next, err := s.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("cache keys by prefix %q: %w", prefix, err)
+		}
+		out = append(out, keys...)
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return out, nil
+}
+
 func (s *redisStore) Exists(ctx context.Context, key string) (bool, error) {
 	n, err := s.client.Exists(ctx, key).Result()
 	if err != nil {

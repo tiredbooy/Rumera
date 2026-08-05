@@ -9,10 +9,7 @@ export type RecommendationInteractionType =
 
 export interface RecommendationInteractionInput {
   product_id: number;
-  interaction_type: Exclude<
-    RecommendationInteractionType,
-    "add_to_cart" | "purchase"
-  >;
+  interaction_type: RecommendationInteractionType;
   source?: string | null;
   metadata?: Record<string, unknown> | null;
 }

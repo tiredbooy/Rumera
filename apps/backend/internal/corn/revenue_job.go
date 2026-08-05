@@ -219,16 +219,30 @@ func (j *RevenueCronJob) aggregateTopCategories(ctx context.Context, from, to ti
 }
 
 func (j *RevenueCronJob) aggregateTopProducts(ctx context.Context, from, to time.Time) ([]models.TopProductRevenueEntry, error) {
+	// Prefer per-line items when present; fall back to a single product_id on
+	// the root payload for older events. Product keys are catalog BIGINT
+	// values serialized as strings.
 	rows, err := j.db.Query(ctx, `
 		SELECT
-			payload->>'product_id'                              AS product_id,
-			SUM((payload->>'amount')::numeric)                  AS revenue,
-			SUM((payload->>'quantity')::int)                    AS units
-		FROM events
-		WHERE event_type = 'order_created'
-		  AND payload->>'product_id' IS NOT NULL
-		  AND created_at >= $1 AND created_at < $2
-		GROUP BY payload->>'product_id'
+			item->>'product_id'                              AS product_id,
+			SUM(COALESCE((item->>'amount')::numeric, 0))     AS revenue,
+			SUM(COALESCE((item->>'quantity')::int, 0))       AS units
+		FROM events e
+		CROSS JOIN LATERAL jsonb_array_elements(
+			CASE
+				WHEN jsonb_typeof(e.payload->'items') = 'array'
+					AND jsonb_array_length(e.payload->'items') > 0
+				THEN e.payload->'items'
+				WHEN e.payload ? 'product_id'
+				THEN jsonb_build_array(e.payload)
+				ELSE '[]'::jsonb
+			END
+		) AS item
+		WHERE e.event_type = 'order_created'
+		  AND e.created_at >= $1 AND e.created_at < $2
+		  AND item->>'product_id' IS NOT NULL
+		  AND (item->>'product_id') ~ '^[0-9]+$'
+		GROUP BY item->>'product_id'
 		ORDER BY revenue DESC
 		LIMIT 10`,
 		from, to,

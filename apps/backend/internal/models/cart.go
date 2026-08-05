@@ -52,6 +52,12 @@ type CartItemResponse struct {
 	ID                int64                 `json:"id"`
 	ProductID         int64                 `json:"product_id"`
 	ProductTitle      string                `json:"product_title"`
+	// CategoryID is the product's current category (nullable when uncategorised).
+	// Used for coupon applicability during order creation; omitted from sparse
+	// client payloads when nil.
+	CategoryID        *int64                `json:"category_id,omitempty"`
+	// WeightKg is the product's unit weight when known (catalog weight column).
+	WeightKg          *float64              `json:"weight_kg,omitempty"`
 	VariantID         int64                 `json:"variant_id"`
 	SKU               *string               `json:"sku,omitempty"`
 	UnitPriceSnapshot float64               `json:"unit_price_snapshot"`

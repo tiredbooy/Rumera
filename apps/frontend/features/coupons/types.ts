@@ -23,6 +23,8 @@ export interface Coupon {
   starts_at: string;
   expires_at?: string;
   total_uses: number;
+  /** True when max_uses is set and total_uses has reached it. */
+  is_exhausted: boolean;
 }
 
 export interface CreateCouponInput {
@@ -61,31 +63,9 @@ export interface ValidateCouponInput {
   category_ids?: number[] | null;
 }
 
-/**
- * Backend defect: validation embeds the untagged persistence model, so this
- * nested object is PascalCase and differs from canonical `Coupon`.
- */
-export interface LegacyCouponValidationCoupon {
-  ID: number;
-  Code: string;
-  Description: string | null;
-  DiscountType: DiscountType;
-  DiscountValue: number;
-  MaxDiscountAmount: number | null;
-  MinOrderAmount: number;
-  MaxUses: number | null;
-  MaxUsesPerUser: number;
-  ApplicableTo: CouponApplicability | null;
-  IsActive: boolean;
-  StartsAt: string;
-  ExpiresAt: string | null;
-  CreatedAt: string;
-  UpdatedAt: string;
-}
-
 export type CouponValidation =
   | {
-      coupon: LegacyCouponValidationCoupon;
+      coupon: Coupon;
       discount_amount: number;
       free_shipping: boolean;
       is_valid: true;

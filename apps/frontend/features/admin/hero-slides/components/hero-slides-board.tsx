@@ -19,6 +19,7 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { faNum } from "@/lib/products";
+import { DashboardErrorState } from "@/features/dashboard/components/async-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SmartImage } from "@/components/smart-image";
@@ -164,21 +165,12 @@ export function HeroSlidesBoard({ canWrite }: { canWrite: boolean }) {
   // ── Error ───────────────────────────────────────────────────────────────────
   if (isError) {
     return (
-      <div
-        role="alert"
-        className="border-hairline flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-12 text-center"
-      >
-        <span className="flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
-          <AlertCircle className="size-6" />
-        </span>
-        <p className="font-serif text-base">بارگذاری اسلایدها ناموفق بود</p>
-        <p className="text-sm text-muted-foreground">
-          ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید.
-        </p>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
-          <RotateCw className="size-4" /> تلاش دوباره
-        </Button>
-      </div>
+      <DashboardErrorState
+        title="بارگذاری اسلایدها ناموفق بود"
+        description="ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید."
+        onRetry={() => void refetch()}
+        isRetrying={isFetching}
+      />
     );
   }
 

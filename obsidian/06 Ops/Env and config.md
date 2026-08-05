@@ -1,0 +1,93 @@
+---
+tags: [ops]
+---
+
+<!-- brain-hub -->
+**Brain:** [[Project Brain]] · [[Connect 06 Ops]]
+
+
+# Env and config
+
+Living encyclopedia of important variables. Source of truth in code: `apps/backend/configs/config.go` + frontend `.env*` examples. Always re-check after config changes.
+
+## Backend — app & HTTP
+
+| Variable | Role |
+|----------|------|
+| `ENV` | development / production behavior |
+| `SERVER_PORT` | API listen port (default 8080) |
+| `CORS_ALLOWED_ORIGINS` | Browser origins (prod: explicit) |
+| `TRUSTED_PROXIES` | CIDRs for X-Forwarded-For trust |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Bootstrap admin on first boot |
+
+## Backend — data stores
+
+| Variable | Role |
+|----------|------|
+| `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME` `DB_SSL_MODE` | Main Postgres |
+| `ANALYTICS_DB_*` | Analytics / Timescale |
+| `REDIS_ADDR` `REDIS_PASSWORD` `REDIS_DB` | Cache |
+| `CACHE_BREAKER_THRESHOLD` `CACHE_BREAKER_COOLDOWN` | Redis circuit breaker |
+| `DB_RETRY_MAX_ATTEMPTS` `DB_RETRY_BASE_BACKOFF` | Transient SQL retries |
+| `MEILI_HOST` `MEILI_API_KEY` | Meilisearch (prepared; search still ILIKE) |
+
+## Backend — auth & security
+
+| Variable | Role |
+|----------|------|
+| `JWT_SECRET` | Required |
+| `JWT_ACCESS_TTL` | Access minutes (default 15) |
+| `JWT_REFRESH_TTL` | Refresh minutes (default 7d) |
+| `CRYPTO_WEBHOOK_KEY` | Payment webhook HMAC; **required in production** |
+
+## Backend — media
+
+| Variable | Role |
+|----------|------|
+| `MEDIA_MAX_UPLOAD_MB` | Upload size cap |
+| `MEDIA_DEFAULT_QUALITY` | Default transform quality |
+| `MEDIA_MAX_DIMENSION` | Max request w/h |
+| `MEDIA_MAX_SOURCE_DIMENSION` / `MEDIA_MAX_SOURCE_PIXELS` | Bomb guards |
+
+## Backend — notifications & messaging
+
+| Variable | Role |
+|----------|------|
+| `NOTIFICATIONS_MODE` | `inline` \| `async` |
+| `KAFKA_BROKERS` | Async bus |
+| `NOTIFICATION_WORKER_MODE` | `all` \| `relay` \| `consume` \| `log` |
+| `SMTP_*` | Email |
+| `SMS_*` / OTP envs | SMS provider, OTP TTL |
+
+## Backend — commerce knobs
+
+| Variable | Role |
+|----------|------|
+| `LOYALTY_EARN_DIVISOR` | Points earn scaling |
+| `LOYALTY_REDEEM_VALUE` | Redeem economics |
+| `LOYALTY_SIGNUP_BONUS` | Signup points |
+| Referral reward | Wired via loyalty/referral bootstrap (see code) |
+
+## Frontend
+
+| Variable | Role |
+|----------|------|
+| `NEXT_PUBLIC_SITE_URL` | Canonical site / metadata |
+| `NEXT_PUBLIC_API_URL` | Public API origin for RSC |
+| `API_URL` | Server-side API (may differ in Docker) |
+| `NEXT_PUBLIC_MEDIA_BASE_URL` | Media origin override |
+| `AUTH_SECRET` `AUTH_URL` | Auth.js |
+| `PROMETHEUS_URL` | Admin monitoring |
+| `NEXT_PUBLIC_GRAFANA_URL` | Grafana link |
+| `NEXT_PUBLIC_PWA` | Force PWA flags in dev |
+
+## Templates
+
+- Monorepo: `.env.example`, `.env.dev.example`, `.env.prod.example`
+- Frontend may have local `.env*`
+
+## Related
+
+[[Docker and Local Dev]] · [[Gateway and nginx]] · [[Playbook Debug Webhook]] · [[Notifications]] · [[Media and Cache FE]] · [[Migrations]]
+
+#ops

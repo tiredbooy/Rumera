@@ -455,3 +455,21 @@
 @utility container-px {
   @apply px-5 sm:px-8 lg:px-12;
 }
+
+/* ── PWA standalone (Add to Home Screen / installed app) ─────────────────── */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  /* Respect iOS notch / home indicator without double-padding the browser chrome. */
+  body {
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+  }
+}
+
+/* Utility used by fixed bottom bars (install prompt, sticky CTAs). */
+@utility safe-pb {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+@utility safe-pt {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+}
+

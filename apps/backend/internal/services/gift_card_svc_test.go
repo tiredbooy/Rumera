@@ -35,11 +35,9 @@ func (r *giftCardBatchRepo) CreateBatch(_ context.Context, codes []string, amoun
 	return cards, nil
 }
 
-func (r *giftCardBatchRepo) Redeem(context.Context, string, int64) (decimal.Decimal, error) {
+func (r *giftCardBatchRepo) RedeemAndCredit(context.Context, string, int64, string) (decimal.Decimal, error) {
 	return decimal.Zero, nil
 }
-
-func (r *giftCardBatchRepo) Reactivate(context.Context, string) error { return nil }
 
 func TestGiftCardIssueCreatesTheCompleteBatchInOneRepositoryCall(t *testing.T) {
 	repo := &giftCardBatchRepo{}

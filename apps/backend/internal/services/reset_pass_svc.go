@@ -8,19 +8,37 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/pkg/apperr"
+	"github.com/tiredbooy/pkg/crypto"
 	"github.com/tiredbooy/pkg/notify"
 )
 
 const resetTokenTTL = 1 * time.Hour
 
+// PasswordResetNotifier delivers the reset email (inline mailer or async outbox).
+type PasswordResetNotifier interface {
+	DispatchPasswordReset(ctx context.Context, to, subject, htmlBody, correlationID, idempotencyKey string) error
+}
+
+// SessionKiller is called after a successful password reset so refresh-token
+// whitelists (and any other session material) can be purged. Implementations
+// must be safe when the cache is unavailable.
+type SessionKiller interface {
+	// InvalidateUserSessions drops server-side session material for userUID
+	// (public UUID string). Best-effort: errors are logged by the caller.
+	InvalidateUserSessions(ctx context.Context, userUID string) error
+}
+
 type PasswordResetService struct {
 	resetRepo repositories.PasswordResetRepository
 	userRepo  repositories.UserRepository
 	mailer    notify.Mailer
+	// notifier, when set, is preferred over mailer (async Kafka path).
+	notifier PasswordResetNotifier
+	// sessions, when set, revokes refresh tokens after a successful reset.
+	sessions SessionKiller
 }
 
 func NewPasswordResetService(
@@ -35,7 +53,20 @@ func NewPasswordResetService(
 	}
 }
 
-// RequestReset looks up the user by email and creates a signed reset token.
+// WithNotifier enables async (or unified) notification delivery.
+func (s *PasswordResetService) WithNotifier(n PasswordResetNotifier) *PasswordResetService {
+	s.notifier = n
+	return s
+}
+
+// WithSessionKiller registers the callback used to revoke refresh tokens after
+// a successful password reset (access tokens die via sessions_invalidated_at).
+func (s *PasswordResetService) WithSessionKiller(k SessionKiller) *PasswordResetService {
+	s.sessions = k
+	return s
+}
+
+// RequestReset looks up the user by email and creates a hashed reset token.
 // It always returns nil — even if the email doesn't exist — so callers
 // can't use this endpoint to enumerate registered addresses.
 func (s *PasswordResetService) RequestReset(ctx context.Context, email string) error {
@@ -49,14 +80,15 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 		return nil
 	}
 
-	token, err := generateSecureToken()
+	rawToken, err := generateSecureToken()
 	if err != nil {
 		return apperr.ErrInternal
 	}
+	tokenHash := crypto.HashToken(rawToken)
 
 	req := models.CreatePasswordResetReq{
 		UserID:    user.ID,
-		Token:     token,
+		TokenHash: tokenHash,
 		ExpiresAt: time.Now().Add(resetTokenTTL),
 	}
 
@@ -64,16 +96,22 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) e
 		return apperr.ErrInternal
 	}
 
-	// Deliver the token out-of-band, off the request path. A mail failure must
-	// not change the response (still 202), so we don't propagate the error.
-	if s.mailer != nil {
-		email, subject, body := user.Email, "Reset your password", resetEmailBody(token)
-		go func() {
-			sendCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-			_ = s.mailer.Send(sendCtx, email, subject, body)
-		}()
-	}
+	// Deliver the raw token out-of-band. A mail failure must not change the
+	// response (still 202), so we don't propagate the error.
+	to, subject, body := user.Email, "Reset your password", resetEmailBody(rawToken)
+	// Idempotency key uses the hash so the plaintext never lands in outbox keys.
+	idem := fmt.Sprintf("password_reset:%d:%s", user.ID, tokenHash[:16])
+	go func() {
+		sendCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if s.notifier != nil {
+			_ = s.notifier.DispatchPasswordReset(sendCtx, to, subject, body, "", idem)
+			return
+		}
+		if s.mailer != nil {
+			_ = s.mailer.Send(sendCtx, to, subject, body)
+		}
+	}()
 
 	return nil
 }
@@ -95,7 +133,7 @@ func (s *PasswordResetService) ValidateToken(ctx context.Context, token string) 
 		return nil, apperr.ErrInvalidRequest
 	}
 
-	reset, err := s.resetRepo.GetByToken(ctx, token)
+	reset, err := s.resetRepo.GetByTokenHash(ctx, crypto.HashToken(token))
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return nil, apperr.ErrInvalidToken
@@ -110,14 +148,16 @@ func (s *PasswordResetService) ValidateToken(ctx context.Context, token string) 
 	return reset, nil
 }
 
-// ResetPassword validates the token, updates the user's password hash,
-// then marks the token as used — all three steps must succeed.
+// ResetPassword consumes a valid token, sets the new password hash, and
+// invalidates every existing session for that user — all in one DB transaction
+// plus a best-effort refresh-token wipe.
 func (s *PasswordResetService) ResetPassword(ctx context.Context, token string, newPasswordHash string) error {
 	if token == "" || newPasswordHash == "" {
 		return apperr.ErrInvalidRequest
 	}
 
-	reset, err := s.resetRepo.GetByToken(ctx, token)
+	tokenHash := crypto.HashToken(token)
+	userID, err := s.resetRepo.ConsumeAndResetPassword(ctx, tokenHash, newPasswordHash)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return apperr.ErrInvalidToken
@@ -125,37 +165,12 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token string, 
 		return apperr.ErrInternal
 	}
 
-	if err := assertTokenValid(reset); err != nil {
-		return err
-	}
-
-	// Fetch the user so we have their UUID for the update call
-	user, err := s.userRepo.GetByID(ctx, uuid.UUID(reset.UserID))
-	if err != nil {
-		if errors.Is(err, models.ErrNotFound) {
-			return apperr.ErrUserNotFound
+	// Best-effort: drop refresh whitelist entries if a session killer is wired.
+	// Access tokens are already dead via sessions_invalidated_at on the user row.
+	if s.sessions != nil {
+		if user, uerr := s.userRepo.GetAuthUserByUID(ctx, userID); uerr == nil && user != nil {
+			_ = s.sessions.InvalidateUserSessions(ctx, user.UserID.String())
 		}
-		return apperr.ErrInternal
-	}
-
-	updateReq := models.UpdateUserReq{
-		PasswordHash: &newPasswordHash,
-	}
-
-	if _, err := s.userRepo.Update(ctx, user.UserID, updateReq); err != nil {
-		return apperr.ErrInternal
-	}
-
-	// Consume the token — prevents replay attacks.
-	// If this fails after the password update the user can just log in;
-	// the token will expire naturally via DeleteExpired.
-	if err := s.resetRepo.MarkUsed(ctx, reset.ID); err != nil {
-		if errors.Is(err, models.ErrNotFound) {
-			// Token was already used or expired between our check and now —
-			// the password was already updated so this is still a success.
-			return nil
-		}
-		return apperr.ErrInternal
 	}
 
 	return nil
@@ -171,8 +186,6 @@ func (s *PasswordResetService) DeleteExpired(ctx context.Context) error {
 
 // ── private helpers ───────────────────────────────────────────────────────────
 
-// assertTokenValid checks expiry and used_at — the repo intentionally
-// returns the raw record so the service owns these business rules.
 func assertTokenValid(reset *models.PasswordReset) error {
 	if reset.UsedAt != nil {
 		return apperr.ErrInvalidToken

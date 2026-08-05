@@ -40,23 +40,62 @@ type refreshReplay struct {
 // refresh tokens (no rotation/revocation), so local development without Redis
 // still works.
 
-// issueTokens generates a fresh access/refresh pair and, when a cache is
-// present, registers the refresh token's jti in the whitelist.
+// issueTokens generates a fresh access/refresh pair and registers the refresh
+// token's jti in the Redis whitelist. Without a working whitelist we still
+// return a short-lived access token (callers may strip Refresh on error) but
+// never a long-lived refresh credential that cannot be revoked.
 func (h *Handler) issueTokens(ctx context.Context, uid int64, userUUID, role string) (token.TokenPair, error) {
 	pair, err := h.JWT.Generate(uid, userUUID, role)
 	if err != nil {
 		return token.TokenPair{}, err
 	}
-	if h.Cache != nil {
-		claims, err := h.JWT.ValidateRefreshToken(pair.Refresh)
-		if err != nil {
-			return token.TokenPair{}, fmt.Errorf("validate issued refresh token: %w", err)
-		}
-		if err := h.Cache.Set(ctx, cache.KeyRefreshToken(claims.ID), userUUID, h.RefreshTTL); err != nil {
-			return pair, fmt.Errorf("whitelist refresh token: %w", err)
-		}
+	if h.Cache == nil {
+		// Refuse to hand out an unrevocable refresh token.
+		pair.Refresh = ""
+		return pair, fmt.Errorf("refresh whitelist unavailable")
 	}
+	claims, err := h.JWT.ValidateRefreshToken(pair.Refresh)
+	if err != nil {
+		pair.Refresh = ""
+		return pair, fmt.Errorf("validate issued refresh token: %w", err)
+	}
+	if err := h.Cache.Set(ctx, cache.KeyRefreshToken(claims.ID), userUUID, h.RefreshTTL); err != nil {
+		pair.Refresh = ""
+		return pair, fmt.Errorf("whitelist refresh token: %w", err)
+	}
+	// Secondary index so password-reset can wipe every refresh for this user.
+	_ = h.Cache.Set(ctx, cache.KeyRefreshUserIndex(userUUID, claims.ID), "1", h.RefreshTTL)
 	return pair, nil
+}
+
+// InvalidateUserSessions removes every refresh-token whitelist entry tracked
+// for the given public user UUID. Implements services.SessionKiller.
+func (h *Handler) InvalidateUserSessions(ctx context.Context, userUUID string) error {
+	if h.Cache == nil || userUUID == "" {
+		return nil
+	}
+	// Index keys use a known prefix; ScanByPrefix is best-effort. Access tokens
+	// are already dead via sessions_invalidated_at even if this no-ops.
+	keys, err := h.Cache.KeysByPrefix(ctx, cache.KeyRefreshUserIndexPrefix(userUUID))
+	if err != nil {
+		return err
+	}
+	toDelete := make([]string, 0, len(keys)*2)
+	for _, k := range keys {
+		jti := cache.RefreshJTIFromUserIndex(k, userUUID)
+		if jti == "" {
+			continue
+		}
+		toDelete = append(toDelete,
+			cache.KeyRefreshToken(jti),
+			cache.KeyRefreshReplay(jti),
+			k,
+		)
+	}
+	if len(toDelete) == 0 {
+		return nil
+	}
+	return h.Cache.Delete(ctx, toDelete...)
 }
 
 func (h *Handler) validateRefresh(refreshToken string) (*token.Claims, bool) {
@@ -78,8 +117,7 @@ func (h *Handler) rotateTokens(
 	userUUID, role string,
 ) (token.TokenPair, bool, error) {
 	if h.Cache == nil {
-		pair, err := h.JWT.Generate(uid, userUUID, role)
-		return pair, err == nil, err
+		return token.TokenPair{}, false, fmt.Errorf("refresh whitelist unavailable")
 	}
 
 	if pair, ok, err := h.getRefreshReplay(ctx, current); err != nil || ok {
@@ -115,6 +153,9 @@ func (h *Handler) rotateTokens(
 		return token.TokenPair{}, false, fmt.Errorf("rotate refresh token: %w", err)
 	}
 	if rotated {
+		// Track the new jti; drop the old index entry (best-effort).
+		_ = h.Cache.Set(ctx, cache.KeyRefreshUserIndex(userUUID, replacement.ID), "1", h.RefreshTTL)
+		_ = h.Cache.Delete(ctx, cache.KeyRefreshUserIndex(userUUID, current.ID))
 		return pair, true, nil
 	}
 

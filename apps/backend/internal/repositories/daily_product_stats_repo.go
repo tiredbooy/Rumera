@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
@@ -19,7 +18,7 @@ type DailyProductStatsRepository interface {
 	UpsertBatch(ctx context.Context, reqs []*models.DailyProductStatsUpsertReq) error
 
 	// GetByProductAndDate — single row lookup
-	GetByProductAndDate(ctx context.Context, productID uuid.UUID, date time.Time) (*models.DailyProductStats, error)
+	GetByProductAndDate(ctx context.Context, productID int64, date time.Time) (*models.DailyProductStats, error)
 
 	// GetRangeByProduct — time series for charts
 	GetRangeByProduct(ctx context.Context, filter models.ProductStatsFilter) ([]*models.DailyProductStats, error)
@@ -165,7 +164,7 @@ func scanStats(row pgx.Row, s *models.DailyProductStats) error {
 	)
 }
 
-func (r *dailyProductStatsRepository) GetByProductAndDate(ctx context.Context, productID uuid.UUID, date time.Time) (*models.DailyProductStats, error) {
+func (r *dailyProductStatsRepository) GetByProductAndDate(ctx context.Context, productID int64, date time.Time) (*models.DailyProductStats, error) {
 	query := scanStatsQuery + ` FROM daily_product_stats WHERE product_id = $1 AND date = $2`
 
 	s := &models.DailyProductStats{}
@@ -181,7 +180,7 @@ func (r *dailyProductStatsRepository) GetByProductAndDate(ctx context.Context, p
 func (r *dailyProductStatsRepository) GetRangeByProduct(ctx context.Context, filter models.ProductStatsFilter) ([]*models.DailyProductStats, error) {
 	query := scanStatsQuery + `
 		FROM daily_product_stats
-		WHERE ($1::uuid IS NULL OR product_id = $1)
+		WHERE ($1::bigint IS NULL OR product_id = $1)
 		  AND date >= $2
 		  AND date <= $3
 		ORDER BY date ASC`
@@ -231,7 +230,7 @@ func (r *dailyProductStatsRepository) SummaryByProduct(ctx context.Context, filt
 			     ELSE 0 END                             AS avg_cart_to_purchase_rate,
 			AVG(avg_rating)                             AS avg_rating
 		FROM daily_product_stats
-		WHERE ($1::uuid IS NULL OR product_id = $1)
+		WHERE ($1::bigint IS NULL OR product_id = $1)
 		  AND date >= $2
 		  AND date <= $3
 		GROUP BY product_id`

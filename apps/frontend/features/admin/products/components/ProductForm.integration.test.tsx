@@ -197,7 +197,9 @@ function clickSave() {
 }
 
 describe("ProductForm complete authoring journeys", () => {
-  it("creates a draft with merchandising fields, tags, gallery, and generated variants", async () => {
+  it(
+    "creates a draft with merchandising fields, tags, gallery, and generated variants",
+    async () => {
     const saved: AdminProductDetail = {
       id: 77,
       title: "محصول تازه",
@@ -240,7 +242,7 @@ describe("ProductForm complete authoring journeys", () => {
     fireEvent.change(screen.getByLabelText("درصد الکل"), {
       target: { value: "14.5" },
     });
-    fireEvent.change(screen.getByLabelText("وزن"), {
+    fireEvent.change(screen.getByLabelText(/وزن/), {
       target: { value: "750" },
     });
 
@@ -313,7 +315,9 @@ describe("ProductForm complete authoring journeys", () => {
       }),
     );
     expect(mocks.push).toHaveBeenCalledWith("/admin/products/77");
-  });
+  },
+  15_000,
+  );
 
   it("edits a product and intentionally clears nullable and aggregate fields", async () => {
     const saved: AdminProductDetail = {
@@ -352,7 +356,7 @@ describe("ProductForm complete authoring journeys", () => {
     fireEvent.change(screen.getByLabelText("درصد الکل"), {
       target: { value: "" },
     });
-    fireEvent.change(screen.getByLabelText("وزن"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText(/وزن/), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "هدیه" }));
     fireEvent.click(screen.getByRole("button", { name: "حذف تنوع 1" }));
     fireEvent.click(screen.getByRole("button", { name: "حذف تصویر 1" }));

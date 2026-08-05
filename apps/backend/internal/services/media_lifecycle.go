@@ -145,14 +145,13 @@ func (s *MediaLifecycleService) deleteIfUnreferenced(ctx context.Context, key st
 		return false, nil
 	}
 
-	var cleanupErr error
-	if err := s.store.Delete(ctx, key); err != nil {
-		cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete original: %w", err))
-	}
 	if err := s.cache.DeletePrefix(ctx, mediaDerivativePrefix(key)); err != nil {
-		cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete derivatives: %w", err))
+		return false, fmt.Errorf("delete derivatives: %w", err)
 	}
-	return cleanupErr == nil, cleanupErr
+	if err := s.store.Delete(ctx, key); err != nil {
+		return false, fmt.Errorf("delete original: %w", err)
+	}
+	return true, nil
 }
 
 func mediaStorageKeyFromURL(value *string) (string, bool) {

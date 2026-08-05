@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/mappers"
+	"github.com/tiredbooy/internal/middlewares"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/response"
@@ -103,6 +104,8 @@ func (h *Handler) GetProduct(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
+	// Catalog BIGINT for analytics product_viewed payloads.
+	c.Set(middlewares.AnalyticsProductIDKey, id)
 	response.CachedJSON(c, data, productCacheTTL)
 }
 
@@ -125,6 +128,7 @@ func (h *Handler) GetProductBySlug(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
+	c.Set(middlewares.AnalyticsProductIDKey, product.ID)
 	response.CachedJSON(c, data, productCacheTTL)
 }
 

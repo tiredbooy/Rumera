@@ -18,7 +18,6 @@
  * image uploads pass through with their boundary intact.
  */
 import { NextResponse } from "next/server";
-import { revalidatePath, revalidateTag } from "next/cache";
 import type { NextAuthRequest } from "next-auth";
 
 import { auth } from "@/lib/auth/auth";
@@ -26,7 +25,7 @@ import { getLiveAccount } from "@/lib/auth/live-account";
 import { isStaff } from "@/lib/rbac/roles";
 import { API_BASE } from "@/lib/api/client";
 import { buildAdminProxyTarget } from "@/lib/api/admin-proxy-path";
-import { getAdminRevalidationPlan } from "@/lib/admin-revalidation";
+import { revalidateAfterAdminMutation } from "@/lib/apply-admin-revalidation";
 
 const ALLOW = new Set([
   "admin",
@@ -130,13 +129,11 @@ async function handle(req: NextAuthRequest, segments: string[]) {
 
   if (res.ok) {
     try {
-      const plan = getAdminRevalidationPlan(
+      revalidateAfterAdminMutation(
         target.decodedSegments,
         method,
         res.status,
       );
-      for (const tag of plan.tags) revalidateTag(tag, { expire: 0 });
-      for (const entry of plan.paths) revalidatePath(entry.path, entry.type);
     } catch (error) {
       // The mutation already succeeded upstream; stale-cache cleanup must not
       // turn that success into a misleading client error.

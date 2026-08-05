@@ -1,11 +1,13 @@
 import { Suspense } from "react";
 import { PageHeader } from "@/features/dashboard/components/page-header";
+import { windowFor, isValidRange, type RangeId } from "@/features/analytics/range";
 import { RangeToggle } from "./RangeToggle";
 import { AnalyticsKpis } from "./AnalyticsKpis";
 import { AnalyticsRevenueCharts } from "./AnalyticsRevenueCharts";
 import { AnalyticsTopProducts } from "./AnalyticsTopProducts";
+import { AnalyticsSearchTerms } from "./AnalyticsSearchTerms";
+import { AnalyticsEventBreakdown } from "./AnalyticsEventBreakdown";
 import { KpiSkeleton, ChartsSkeleton } from "./skeleton";
-import { isValidRange, type RangeId } from "@/features/analytics/range";
 
 export default async function AnalyticsPage({
   searchParams,
@@ -14,6 +16,7 @@ export default async function AnalyticsPage({
 }) {
   const { range: rangeParam } = await searchParams;
   const range: RangeId = isValidRange(rangeParam) ? rangeParam : "30d";
+  const { from, to } = windowFor(range);
 
   return (
     <>
@@ -35,8 +38,26 @@ export default async function AnalyticsPage({
           <AnalyticsRevenueCharts range={range} />
         </Suspense>
 
-        <Suspense fallback={<ChartsSkeleton count={1} />}>
-          <AnalyticsTopProducts />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Suspense
+            key={`top-products-${range}`}
+            fallback={<ChartsSkeleton count={1} />}
+          >
+            <AnalyticsTopProducts from={from} to={to} />
+          </Suspense>
+          <Suspense
+            key={`events-${range}`}
+            fallback={<ChartsSkeleton count={1} />}
+          >
+            <AnalyticsEventBreakdown from={from} to={to} />
+          </Suspense>
+        </div>
+
+        <Suspense
+          key={`search-${range}`}
+          fallback={<ChartsSkeleton count={1} />}
+        >
+          <AnalyticsSearchTerms from={from} to={to} />
         </Suspense>
       </div>
     </>

@@ -7,7 +7,7 @@ import { listActiveHeroSlides } from "./server";
 describe("public hero slide API", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("keeps an intentional empty response empty and bypasses stale caches", async () => {
+  it("keeps an intentional empty response empty and tags hero/home for revalidation", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: [] }), {
         status: 200,
@@ -19,7 +19,13 @@ describe("public hero slide API", () => {
     await expect(listActiveHeroSlides()).resolves.toEqual([]);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/v1/hero-slides"),
-      expect.objectContaining({ cache: "no-store" }),
+      expect.objectContaining({
+        cache: "force-cache",
+        next: expect.objectContaining({
+          revalidate: 300,
+          tags: expect.arrayContaining(["storefront:hero", "storefront:home"]),
+        }),
+      }),
     );
   });
 

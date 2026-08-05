@@ -9,6 +9,7 @@ import (
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/pkg/apperr"
+	"github.com/tiredbooy/pkg/metrics"
 )
 
 // Recommendation reason codes returned to the client so the UI can label each
@@ -38,6 +39,9 @@ type RecommendationService interface {
 	// failure is logged-and-skipped, never aborting the batch. Returns the count
 	// successfully refreshed.
 	RefreshActiveProfiles(ctx context.Context, windowDays, maxUsers int) (int, error)
+
+	// OpsStats returns aggregate interaction/profile counts for admin observability.
+	OpsStats(ctx context.Context, windowDays int) (*models.RecommendationOpsStats, error)
 }
 
 type recommendationService struct {
@@ -61,6 +65,7 @@ func (s *recommendationService) RecordInteraction(ctx context.Context, userID in
 	if err := s.repo.RecordInteraction(ctx, userID, req, weight); err != nil {
 		return fmt.Errorf("recommendationService.RecordInteraction: %w", err)
 	}
+	metrics.IncRecommendationInteraction(string(req.InteractionType))
 	return nil
 }
 
@@ -197,6 +202,14 @@ func (s *recommendationService) RefreshActiveProfiles(ctx context.Context, windo
 func (s *recommendationService) logRefreshSkip(userID int64, err error) {
 	slog.Warn("recommendation profile refresh: skipping user",
 		"user_id", userID, "err", err)
+}
+
+func (s *recommendationService) OpsStats(ctx context.Context, windowDays int) (*models.RecommendationOpsStats, error) {
+	stats, err := s.repo.OpsStats(ctx, windowDays)
+	if err != nil {
+		return nil, fmt.Errorf("recommendationService.OpsStats: %w", err)
+	}
+	return stats, nil
 }
 
 // backfill tops up a personalized list with trending products, skipping anything

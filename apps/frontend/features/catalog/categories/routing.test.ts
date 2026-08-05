@@ -51,8 +51,18 @@ describe("category detail routing", () => {
         orderBy: "desc",
       },
     );
+    expect(parseCategoryRouteQuery({ sort: "price-asc" })).toMatchObject({
+      sort: "price-asc",
+      sortBy: "price",
+      orderBy: "asc",
+      needsRedirect: false,
+    });
+    expect(parseCategoryRouteQuery({ sort: "price-desc" })).toMatchObject({
+      sortBy: "price",
+      orderBy: "desc",
+    });
 
-    for (const sort of ["price", "", ["alphabetical", "newest"]]) {
+    for (const sort of ["price", "discount", "", ["alphabetical", "newest"]]) {
       expect(parseCategoryRouteQuery({ sort })).toMatchObject({
         sort: "newest",
         sortBy: "created_at",

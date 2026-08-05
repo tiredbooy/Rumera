@@ -194,9 +194,10 @@ func registerCustomerRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.
 
 	// Wallet
 	c.GET("/wallet", h.GetWallet)
-	// NOTE: no public /wallet/deposit — wallet credit must originate only from a
-	// verified payment, refund, gift-card/loyalty redemption or an admin action.
-	// A self-service deposit let any signed-in user mint spendable balance.
+	// NOTE: no public /wallet/deposit or /wallet/withdraw — credit originates
+	// only from verified payments, refunds, gift-card/loyalty redemption or
+	// admin actions; debits only from order purchase. Stale withdraw clients
+	// hit the 410 handler below if they still call the old path.
 	c.POST("/wallet/withdraw", h.WithdrawFromWallet)
 	c.GET("/wallet/transactions", h.WalletTransactions)
 
@@ -368,6 +369,9 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	// Site settings (full document read; partial update)
 	a.GET("/settings", h.GetSiteSettingsAdmin)
 	a.PUT("/settings", h.UpdateSiteSettings)
+
+	// Recommendation observability (read-only aggregates)
+	a.GET("/recommendations/stats", h.RecommendationOpsStats)
 
 	// Analytics
 	an := a.Group("/analytics")

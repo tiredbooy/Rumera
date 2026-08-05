@@ -45,7 +45,9 @@ GET /products
 | `min_price` | number | Minimum variant price |
 | `max_price` | number | Maximum variant price |
 
-Default sort is `created_at` `desc`.
+Default sort is `created_at` `desc`. Supported `sortBy` values: `created_at`,
+`title`, `updated_at`, and `price` (minimum active-variant price). Unsupported
+values fall back to `created_at`.
 
 **Response** `200 OK` — paginated list of lightweight `ProductListItem`:
 

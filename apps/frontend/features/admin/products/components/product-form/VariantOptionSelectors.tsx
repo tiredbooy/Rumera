@@ -40,7 +40,13 @@ export function VariantOptionSelectors({
     return (
       <div>
         <p className="text-xs text-muted-foreground">
-          هنوز نوع ویژگی یا مقداری برای انتخاب تعریف نشده است.
+          هنوز نوع ویژگی یا مقداری برای انتخاب تعریف نشده است.{" "}
+          <a
+            href="/admin/options"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            تعریف ویژگی مشترک
+          </a>
         </p>
         {error ? (
           <p

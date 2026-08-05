@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { MultiTagPicker } from "@/features/admin/shared/multi-tag-picker";
 import type { Tag } from "@/features/catalog/tags/types";
 import { ImageInput } from "@/features/image-uploader/ImageInput";
 import type {
@@ -438,21 +439,19 @@ export function JournalForm({
             />
           </div>
           <div className="sm:col-span-2">
-            <p className="mb-2 text-sm font-medium">برچسب‌ها</p>
             <Controller
               control={control}
               name="tag_ids"
               render={({ field }) => (
-                <ChoiceList
-                  label="برچسب"
-                  empty="برچسبی برای انتخاب در دسترس نیست."
+                <MultiTagPicker
                   options={tags.map((tag) => ({
                     id: tag.id,
-                    label: tag.title,
+                    title: tag.title,
                   }))}
                   value={field.value}
                   onChange={field.onChange}
                   disabled={isSubmitting}
+                  emptyLabel="برچسبی برای انتخاب در دسترس نیست."
                 />
               )}
             />

@@ -18,6 +18,7 @@ var (
 	ErrUnauthorized       = AppCode{"UNAUTHORIZED", http.StatusUnauthorized, "authentication required"}
 	ErrForbidden          = AppCode{"FORBIDDEN", http.StatusForbidden, "access denied"}
 	ErrNotFound           = AppCode{"NOT_FOUND", http.StatusNotFound, "resource not found"}
+	ErrGone               = AppCode{"GONE", http.StatusGone, "this endpoint has been removed"}
 	ErrConflict           = AppCode{"CONFLICT", http.StatusConflict, "resource already exists"}
 	ErrTooManyRequests    = AppCode{"TOO_MANY_REQUESTS", http.StatusTooManyRequests, "too many requests"}
 	ErrServiceUnavailable = AppCode{"SERVICE_UNAVAILABLE", http.StatusServiceUnavailable, "service unavailable"}

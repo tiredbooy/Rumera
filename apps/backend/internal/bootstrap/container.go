@@ -9,6 +9,8 @@ import (
 	"github.com/tiredbooy/internal/analytics"
 	"github.com/tiredbooy/internal/corn"
 	"github.com/tiredbooy/internal/handlers"
+	"github.com/tiredbooy/internal/notifications"
+	notifpg "github.com/tiredbooy/internal/notifications/postgres"
 	"github.com/tiredbooy/internal/repositories"
 	"github.com/tiredbooy/internal/services"
 	"github.com/tiredbooy/pkg/cache"
@@ -164,12 +166,36 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	// confirm transaction, and the order service reserves stock during checkout.
 	inventoryService := services.NewInventoryService(inventoryRepo, movementRepo)
 	paymentService := services.NewPaymentService(paymentRepo, orderRepo, inventoryService, loyaltyService, referralService)
+	shippingService := services.NewShippingService(shippingZoneRepo, shippingMethodRepo)
+	addressService := services.NewAddressService(addressRepo)
 	orderService := services.NewOrderService(
 		orderRepo, orderItemRepo, cartRepo,
-		couponRepo, couponUsageRepo, shippingMethodRepo,
-		inventoryService, paymentService,
+		couponRepo, couponUsageRepo, shippingService,
+		addressService, inventoryService, paymentService,
 	)
 
+	// Notifications: inline (default) or async outbox when NOTIFICATIONS_MODE=async.
+	notifMode := strings.ToLower(strings.TrimSpace(cfg.NotificationsMode))
+	if notifMode == "" {
+		notifMode = "inline"
+	}
+	var notifDispatcher *notifications.Dispatcher
+	if notifMode == "async" {
+		store := notifpg.NewStore(db)
+		notifDispatcher = &notifications.Dispatcher{
+			Mode:   "async",
+			Outbox: store,
+			SMS:    smsSender,
+			Mail:   mailer,
+		}
+		log.Info("notifications mode: async (outbox → Kafka worker)")
+	} else {
+		notifDispatcher = &notifications.Dispatcher{
+			Mode: "inline",
+			SMS:  smsSender,
+			Mail: mailer,
+		}
+	}
 	deps := handlers.Deps{
 		Validator:     validator.New(),
 		JWT:           jwt,
@@ -177,18 +203,18 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		Cache:         cacheStore,
 		Notify:        mailer,
 		SMS:           smsSender,
+		Notifications: notifDispatcher,
 		OTPTTL:        cfg.OTPTTL,
 		RefreshTTL:    time.Duration(cfg.JWTRefreshTokenTTL) * time.Minute,
 		WebhookSecret: cfg.CryptoWebhookKey,
 
-		User:          services.NewUserService(userRepo),
-		PasswordReset: services.NewPasswordResetService(passwordResetRepo, userRepo, mailer),
-		Address:       services.NewAddressService(addressRepo),
+		User:    services.NewUserService(userRepo),
+		Address: addressService,
 		TasteProfile:  services.NewTasteProfileService(tasteRepo),
 
 		Product:  services.NewProductService(productRepo, mediaLifecycleService, mediaService),
 		Media:    mediaService,
-		Variant:  services.NewVariantService(variantRepo, mediaLifecycleService),
+		Variant:  services.NewVariantService(variantRepo, inventoryRepo, mediaLifecycleService),
 		Option:   services.NewOptionService(optionRepo),
 		Category: services.NewCategoryService(categoryRepo, mediaLifecycleService),
 		Brand:    services.NewBrandService(brandRepo),
@@ -205,7 +231,7 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		Subscription: services.NewSubscriptionService(subscriptionRepo),
 		Alert:        services.NewAlertService(alertRepo, variantRepo, inventoryRepo),
 		Review:       services.NewReviewService(reviewRepo, reviewImageRepo),
-		Shipping:     services.NewShippingService(shippingZoneRepo, shippingMethodRepo),
+		Shipping:     shippingService,
 		Payment:      paymentService,
 		Inventory:    inventoryService,
 
@@ -225,8 +251,16 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		SearchSummary: searchSummaryService,
 	}
 
+	handler := handlers.New(deps)
+	// Wire password-reset after the handler exists so session kill can call
+	// InvalidateUserSessions (refresh whitelist wipe) on the same instance.
+	passwordReset := services.NewPasswordResetService(passwordResetRepo, userRepo, mailer).
+		WithNotifier(notifDispatcher).
+		WithSessionKiller(handler)
+	handler.PasswordReset = passwordReset
+
 	return &container{
-		handler: handlers.New(deps),
+		handler: handler,
 		jwt:     jwt,
 		queue:   analytics.NewQueue(eventService),
 		cache:   cacheStore,

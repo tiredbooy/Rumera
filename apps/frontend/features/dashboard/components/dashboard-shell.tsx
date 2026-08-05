@@ -3,8 +3,9 @@
 import * as React from "react"
 import Link from "next/link"
 import { signOut } from "next-auth/react"
-import { Wine, Menu, LogOut, Store, Search, ExternalLink } from "lucide-react"
+import { Menu, LogOut, Store, Search, ExternalLink } from "lucide-react"
 
+import { RumeraBrandMark } from "@/components/brand/rumera-brand-mark"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -46,16 +47,14 @@ export function DashboardShell({
 
   const sidebar = (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2.5 px-5 py-[1.125rem]">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/15">
-          <Wine className="size-4.5" />
-        </span>
-        <div className="leading-tight">
-          <span className="block font-serif text-lg">
-            <span className="text-foil">رومرا</span>
-          </span>
-          <span className="block text-[0.6875rem] text-muted-foreground">{title}</span>
-        </div>
+      <div className="flex items-center px-5 py-[1.125rem]">
+        <RumeraBrandMark
+          variant="full"
+          size="sm"
+          href={variant === "admin" ? "/admin" : "/account"}
+          caption={title}
+          aria-label={`${title} رومرا`}
+        />
       </div>
 
       <div className="mx-3 h-px bg-border/60" />

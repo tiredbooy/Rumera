@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Clock, Star, Users } from "lucide-react";
 
-import { SmartImage } from "@/components/smart-image";
+import { StorefrontMedia } from "@/components/storefront-media";
 import { Badge } from "@/components/ui/badge";
 import type {
   RecipeDifficulty,
@@ -35,10 +35,10 @@ export function RecipeCard({
       >
         <div className="relative aspect-[4/3] overflow-hidden">
           <div className="absolute inset-0 transition-transform duration-500 ease-cellar group-hover/recipe:scale-[1.04]">
-            <SmartImage
+            <StorefrontMedia
+              slot="recipe-card"
               src={recipe.image_url}
               alt={recipe.image_alt?.trim() || recipe.title}
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
               monogram={recipe.title.charAt(0)}
             />
           </div>

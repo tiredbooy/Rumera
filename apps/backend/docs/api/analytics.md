@@ -41,7 +41,9 @@ A `limit` that is missing, non-numeric, `≤ 0`, or `> 100` falls back to the en
 
 All responses are wrapped in the `data` envelope described in [Conventions](../conventions.md).
 
-> **Note on `:productID`** — it is a **UUID**. A malformed UUID fails with `400 INVALID_PARAMS`.
+> **Note on `:productID`** — it is the catalog **BIGINT** product primary key
+> (same identifier as `/admin/products/:id`). A non-numeric or non-positive value
+> fails with `400 INVALID_PARAMS`.
 
 Every endpoint can return `401 UNAUTHORIZED` (missing/invalid token) and `403 INSUFFICIENT_PERMISSIONS` (non-admin caller). Those are not repeated per-endpoint below.
 

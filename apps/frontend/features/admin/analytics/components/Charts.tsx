@@ -253,7 +253,7 @@ export function HorizontalBars({
   color = BLUE,
   valueFormatter = (v: number) => faNum(v),
 }: {
-  data: { label: string; value: number }[]
+  data: { label: string; value: number; href?: string }[]
   className?: string
   color?: string
   valueFormatter?: (v: number) => string
@@ -262,8 +262,19 @@ export function HorizontalBars({
   return (
     <ul className={cn("flex flex-col gap-3", className)}>
       {data.map((d) => (
-        <li key={d.label} className="flex items-center gap-3">
-          <span className="w-28 shrink-0 truncate text-sm text-muted-foreground">{d.label}</span>
+        <li key={d.href ?? d.label} className="flex items-center gap-3">
+          {d.href ? (
+            <a
+              href={d.href}
+              className="w-28 shrink-0 truncate text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              {d.label}
+            </a>
+          ) : (
+            <span className="w-28 shrink-0 truncate text-sm text-muted-foreground">
+              {d.label}
+            </span>
+          )}
           <span className="relative h-6 flex-1 overflow-hidden rounded-md bg-muted">
             <span
               className="absolute inset-y-0 start-0 rounded-md transition-all"

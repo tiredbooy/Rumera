@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Heart, Loader2, SlidersHorizontal } from "lucide-react";
+import { Heart, Loader2, SlidersHorizontal, ShoppingBag } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
@@ -25,6 +25,12 @@ interface ProductCardActionsProps {
   hasAvailableVariants: boolean;
 }
 
+/**
+ * Overlay commerce controls for ProductCard.
+ *
+ * Mobile: always visible over the bottom media scrim (no hover dependency).
+ * Desktop: CTA lifts slightly on card hover; wishlist stays glass-chrome.
+ */
 export function ProductCardActions({
   productId,
   productTitle,
@@ -92,8 +98,13 @@ export function ProductCardActions({
           }
           aria-pressed={Boolean(wishlistItem)}
           className={cn(
-            "absolute end-3 top-3 z-20 flex size-11 cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background text-foreground shadow-e1 outline-none transition-[color,background-color,transform] duration-200 hover:bg-accent hover:text-wine focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none",
-            wishlistItem && "text-wine",
+            "absolute end-3 top-3 z-20 flex size-11 cursor-pointer items-center justify-center rounded-full",
+            "border border-border/50 bg-background/85 text-foreground shadow-e1 backdrop-blur-md",
+            "outline-none transition-[color,background-color,transform,box-shadow] duration-200",
+            "hover:scale-105 hover:bg-background hover:text-wine hover:shadow-e2",
+            "focus-visible:ring-2 focus-visible:ring-primary",
+            "disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none motion-reduce:hover:scale-100",
+            wishlistItem && "border-wine/30 text-wine",
           )}
         >
           {wishPending ? (
@@ -104,22 +115,30 @@ export function ProductCardActions({
         </button>
       ) : null}
 
-      <div className="absolute inset-x-3 bottom-3 z-20">
+      <div
+        className={cn(
+          "absolute inset-x-3 bottom-3 z-20 translate-y-0 opacity-100 transition-[transform,opacity] duration-300 ease-cellar",
+          "sm:translate-y-1 sm:opacity-95 sm:group-hover/product:translate-y-0 sm:group-hover/product:opacity-100",
+          "motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none",
+        )}
+      >
         {purchasableVariantId ? (
           <AddToCartButton
             productVariantId={purchasableVariantId}
+            productId={productId}
             label="افزودن سریع"
             ariaLabel={`افزودن سریع ${productTitle} به سبد`}
-            className="h-11 w-full rounded-2xl bg-primary px-4 text-primary-foreground shadow-e2 hover:bg-primary/90"
+            className="h-11 w-full rounded-2xl bg-primary/95 px-4 text-primary-foreground shadow-e2 backdrop-blur-sm hover:bg-primary"
           />
         ) : hasActiveVariants && hasAvailableVariants && productHref ? (
           <Button
             asChild
             variant="secondary"
-            className="h-11 w-full rounded-2xl bg-background text-foreground shadow-e2 hover:bg-accent"
+            className="h-11 w-full rounded-2xl border border-border/50 bg-background/90 text-foreground shadow-e2 backdrop-blur-md hover:bg-background"
           >
             <Link href={productHref}>
-              <SlidersHorizontal /> انتخاب گزینه‌ها
+              <SlidersHorizontal className="size-4" aria-hidden />
+              انتخاب گزینه‌ها
             </Link>
           </Button>
         ) : hasActiveVariants && hasAvailableVariants ? (
@@ -127,18 +146,28 @@ export function ProductCardActions({
             type="button"
             variant="secondary"
             disabled
-            className="h-11 w-full rounded-2xl bg-background text-foreground shadow-e2"
+            className="h-11 w-full rounded-2xl bg-background/90 text-foreground shadow-e2 backdrop-blur-md"
           >
             انتخاب گزینه در دسترس نیست
+          </Button>
+        ) : hasActiveVariants ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled
+            className="h-11 w-full rounded-2xl bg-background/90 text-foreground shadow-e2 backdrop-blur-md"
+          >
+            <ShoppingBag className="size-4 opacity-70" aria-hidden />
+            ناموجود
           </Button>
         ) : (
           <Button
             type="button"
             variant="secondary"
             disabled
-            className="h-11 w-full rounded-2xl bg-background text-foreground shadow-e2"
+            className="h-11 w-full rounded-2xl bg-background/90 text-foreground shadow-e2 backdrop-blur-md"
           >
-            ناموجود
+            در حال تأمین
           </Button>
         )}
       </div>
