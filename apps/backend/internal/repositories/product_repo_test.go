@@ -1,11 +1,23 @@
 package repositories
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/tiredbooy/internal/models"
 )
+
+func TestIsForeignKeyViolationRecognizesWrappedPostgresError(t *testing.T) {
+	err := fmt.Errorf("delete product: %w", &pgconn.PgError{Code: "23503"})
+	if !isForeignKeyViolation(err) {
+		t.Fatal("wrapped foreign-key violation was not recognized")
+	}
+	if isForeignKeyViolation(&pgconn.PgError{Code: "23505"}) {
+		t.Fatal("unique violation was incorrectly recognized as a foreign-key violation")
+	}
+}
 
 func TestBuildProductFilterSQLScopesCategoryDescendantsInDatabase(t *testing.T) {
 	categoryID := int64(7)

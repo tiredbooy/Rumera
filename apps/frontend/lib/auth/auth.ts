@@ -188,6 +188,15 @@ export function nodeAuthConfig(canPersistRotation: boolean): NextAuthConfig {
   };
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth((request) =>
-  nodeAuthConfig(request !== undefined),
-);
+// Keep the two execution contexts explicit instead of using Auth.js lazy
+// initialization. In next-auth 5.0.0-beta.32 the lazy `auth(handler)` overload
+// returns a Promise of a function; Next.js route exports must be functions and
+// crash at runtime when they receive that Promise. Server Components must not
+// rotate single-use refresh tokens because they cannot persist Set-Cookie,
+// whereas Route Handlers can and should.
+const serverAuth = NextAuth(nodeAuthConfig(false));
+const handlerAuth = NextAuth(nodeAuthConfig(true));
+
+export const { auth } = serverAuth;
+export const { handlers, signIn, signOut } = handlerAuth;
+export const routeAuth = handlerAuth.auth;

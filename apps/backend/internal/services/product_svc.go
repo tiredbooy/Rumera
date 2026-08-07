@@ -181,6 +181,9 @@ func (s *ProductService) Delete(ctx context.Context, id int64) error {
 		if errors.Is(err, models.ErrNotFound) {
 			return apperr.ErrProductNotFound
 		}
+		if errors.Is(err, models.ErrProductHasHistory) {
+			return apperr.ErrProductHasHistory
+		}
 		return apperr.ErrInternal
 	}
 	s.lifecycle.CleanupKeys(ctx, keys...)

@@ -27,6 +27,7 @@ func (c *counts) skipped1(kind string) { c.skipped[kind]++ }
 
 func sp(s string) *string     { return &s }
 func ip(i int) *int           { return &i }
+func i16p(i int16) *int16     { return &i }
 func i64p(i int64) *int64     { return &i }
 func f64p(f float64) *float64 { return &f }
 func bp(b bool) *bool         { return &b }

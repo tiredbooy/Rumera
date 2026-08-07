@@ -68,6 +68,7 @@ var (
 	// Product
 	ErrProductNotFound    = New("PRODUCT_NOT_FOUND", "product not found")
 	ErrProductUnavailable = New("PRODUCT_UNAVAILABLE", "product is not available")
+	ErrProductHasHistory  = New("PRODUCT_HAS_HISTORY", "product has inventory or order history and cannot be permanently deleted")
 	ErrOutOfStock         = New("OUT_OF_STOCK", "item is out of stock")
 
 	// Cart

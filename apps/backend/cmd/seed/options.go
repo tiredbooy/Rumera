@@ -13,8 +13,9 @@ import (
 
 // seedOptionCatalog creates reusable option types (volume, …) once so product
 // variants can pick shared values without redefining them per product.
-func (s *seeder) seedOptionCatalog(ctx context.Context) error {
+func (s *seeder) seedOptionCatalog(ctx context.Context) (map[string]int64, error) {
 	optionSvc := services.NewOptionService(repositories.NewOptionRepository(s.pool))
+	result := make(map[string]int64)
 
 	type valueSpec struct {
 		value string
@@ -53,7 +54,7 @@ func (s *seeder) seedOptionCatalog(ctx context.Context) error {
 	for _, spec := range specs {
 		existing, err := s.findOptionTypeID(ctx, spec.title)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		var typeID int64
 		if existing > 0 {
@@ -65,31 +66,34 @@ func (s *seeder) seedOptionCatalog(ctx context.Context) error {
 				DisplayName: spec.displayName,
 			})
 			if err != nil {
-				return fmt.Errorf("create option type %q: %w", spec.title, err)
+				return nil, fmt.Errorf("create option type %q: %w", spec.title, err)
 			}
 			typeID = created.ID
 			s.c.created1("option_type")
 		}
 
 		for _, val := range spec.values {
-			has, err := s.hasOptionValue(ctx, typeID, val.value)
+			valueID, has, err := s.findOptionValueID(ctx, typeID, val.value)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if has {
 				s.c.skipped1("option_value")
-				continue
+			} else {
+				created, err := optionSvc.CreateValue(ctx, typeID, models.CreateOptionValueReq{
+					Value:     val.value,
+					SortOrder: val.order,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("create option value %q/%q: %w", spec.title, val.value, err)
+				}
+				valueID = created.ID
+				s.c.created1("option_value")
 			}
-			if _, err := optionSvc.CreateValue(ctx, typeID, models.CreateOptionValueReq{
-				Value:     val.value,
-				SortOrder: val.order,
-			}); err != nil {
-				return fmt.Errorf("create option value %q/%q: %w", spec.title, val.value, err)
-			}
-			s.c.created1("option_value")
+			result[spec.title+":"+val.value] = valueID
 		}
 	}
-	return nil
+	return result, nil
 }
 
 func (s *seeder) findOptionTypeID(ctx context.Context, title string) (int64, error) {
@@ -106,13 +110,17 @@ func (s *seeder) findOptionTypeID(ctx context.Context, title string) (int64, err
 	return id, nil
 }
 
-func (s *seeder) hasOptionValue(ctx context.Context, typeID int64, value string) (bool, error) {
-	var exists bool
+func (s *seeder) findOptionValueID(ctx context.Context, typeID int64, value string) (int64, bool, error) {
+	var id int64
 	err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(
-			SELECT 1 FROM option_values
-			WHERE option_type_id = $1 AND value = $2
-		)`, typeID, value,
-	).Scan(&exists)
-	return exists, err
+		`SELECT id FROM option_values WHERE option_type_id = $1 AND value = $2 LIMIT 1`,
+		typeID, value,
+	).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return id, true, nil
 }

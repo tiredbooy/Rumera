@@ -205,6 +205,9 @@ services:
       # service (data fetchers read API_URL, next-auth reads BACKEND_INTERNAL_URL).
       API_URL: http://backend:8080
       BACKEND_INTERNAL_URL: http://backend:8080
+      # The separately deployed observability stack joins rumera_network.
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus:9090}
+      NEXT_PUBLIC_GRAFANA_URL: ${NEXT_PUBLIC_GRAFANA_URL:-http://localhost:3001}
     ports:
       - "${FRONTEND_BIND:-0.0.0.0}:${FRONTEND_PORT:-3000}:3000"
     networks: [rumera_network]
@@ -232,7 +235,7 @@ services:
       # - ./infra/nginx/certs:/etc/nginx/certs:ro   # mount your TLS certs here
     networks: [rumera_network]
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5

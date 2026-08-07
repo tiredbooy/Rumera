@@ -192,6 +192,10 @@ services:
       # BACKEND_INTERNAL_URL.
       API_URL: http://backend:8080
       BACKEND_INTERNAL_URL: http://backend:8080
+      # Server-rendered admin monitoring board → Prometheus over Docker DNS.
+      PROMETHEUS_URL: http://prometheus:9090
+      # Browser-facing deep-dive link from /admin/monitoring.
+      NEXT_PUBLIC_GRAFANA_URL: ${NEXT_PUBLIC_GRAFANA_URL:-http://localhost:3001}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     networks: [rumera_network]
@@ -231,8 +235,58 @@ services:
           path: ./infra/nginx/nginx.dev.conf
           target: /etc/nginx/conf.d/default.conf
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
       interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API monitoring (Prometheus + pre-provisioned Grafana) ─────────────────
+  # These run with the normal dev stack so `make dev` is enough to get a usable
+  # dashboard. Grafana stays separate from the storefront on host port 3001.
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: rumera_prometheus
+    restart: unless-stopped
+    depends_on:
+      backend: { condition: service_healthy }
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./apps/backend/deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./apps/backend/deploy/observability/prometheus-rules.yml:/etc/prometheus/rules/prometheus-rules.yml:ro
+      - prometheus_data:/prometheus
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: rumera_grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus: { condition: service_healthy }
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - ./apps/backend/deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./apps/backend/deploy/observability/grafana-dashboard.json:/var/lib/grafana/dashboards/rumera-backend.json:ro
+      - grafana_data:/var/lib/grafana
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 15s
       timeout: 5s
       retries: 5
 
@@ -244,6 +298,8 @@ volumes:
   go_mod_cache:
   go_build_cache:
   media_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   rumera_network:
