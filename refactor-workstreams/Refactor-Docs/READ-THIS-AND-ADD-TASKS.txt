@@ -1,0 +1,37 @@
+READ this requirements and recommendation down blow and add them to "tasks.md" with numbers
+
+
+1. the product cards specially in home page recommendation for you need to have a little bit more width
+
+2. the home page product section for "منتخب فروشگاه" need to fix the swiper container first make the swipe more enjoyable and remove the quick add to cart button without hover or anything by default its ruining the image its should be maybe on hover and fix the container size because currently its looking weird
+
+3. Brands Page Need to have better style its look weird
+
+4. Add To Cart button don't actually add product to cart its giving errors
+
+5. we should not show our product stock unless its blow 3 you are showing it both in card and bot hin product detail page
+
+6. in Recipe Details page you should to improve ui for what you need and you make the ux for user to see clearly and enjoy and have a very smooth and esay exprience to buy what he needs for the recipe
+
+7. Changing anything for shop setting like changing number or address should work correctly
+
+8. for product details (
+        1. First its need a bit redesign for example the images need gallery and currently the image card is disaster and its horrible i want you to improve it and for mobile too its disaster make it application like for mobile and for the desktop and all screens make it better and remove that nasty background with glow you added for image container
+
+        2. the price part first we need variant selector too for some products we might add prduct X and its might had few diffrent varaints that each have diffrent price and they are selectable or its might be combination of 2 or 3 variant for example combination of size and maybe a package or idk things like every modern e-commerce sites have it
+        we need a complete redesign in here
+
+        3. non buyers can't submit feedback for this one i don't know i want you to decide should we make it non buyers can comment too but we seperate them by a badge in the comment or no its be the same ?
+)
+
+ 9. i want you to redesign my product form in admin panel its need to be so much better,
+
+ 10. for roles and RBAC you have to make it work dynamicly i should decide what roles i want to make and what they can access for customer its the same but for admins i might give lower access to a admin than another admin make it more dynamic
+
+ 11. users management could improve for me i should be able to edit and see anything i want when and for example i should be able to even add a amount to user wallet and things like this
+
+ 12. the discount page need so much improvement for creating discount the form its need be too connected to other pieces and not just a text input for example when i want to set for a specefic product or category or products its should be as a select not as a text input looking for id and the date inputs need to get jalali date input shadcn have a package for this
+
+ 13. make the inventory management better and better
+
+ 14. Create me a K6 Script and make it generic so i can test my app when ever i want to see how its react with diffrent loads
