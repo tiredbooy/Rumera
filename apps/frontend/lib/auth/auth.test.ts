@@ -3,15 +3,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   revokeAuthTokens: vi.fn(),
+  serverAuth: vi.fn((handler) => handler),
+  routeAuth: vi.fn((handler) => handler),
+  nextAuthCall: 0,
 }));
 
 vi.mock("next-auth", () => ({
-  default: vi.fn(() => ({
-    handlers: {},
-    auth: vi.fn(),
-    signIn: vi.fn(),
-    signOut: vi.fn(),
-  })),
+  default: vi.fn(() => {
+    const auth = mocks.nextAuthCall++ === 0 ? mocks.serverAuth : mocks.routeAuth;
+    return {
+      handlers: {},
+      auth,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+    };
+  }),
 }));
 vi.mock("next-auth/providers/credentials", () => ({
   default: vi.fn((config) => config),
@@ -24,7 +30,7 @@ vi.mock("@/features/auth/api/server", () => ({
   revokeAuthTokens: mocks.revokeAuthTokens,
 }));
 
-import { nodeAuthConfig } from "./auth";
+import { nodeAuthConfig, routeAuth } from "./auth";
 
 describe("Auth.js sign-out event", () => {
   beforeEach(() => {
@@ -50,5 +56,12 @@ describe("Auth.js sign-out event", () => {
     await signOut?.({ token: {} as JWT });
 
     expect(mocks.revokeAuthTokens).not.toHaveBeenCalled();
+  });
+
+  it("exports a synchronous route-handler wrapper", () => {
+    const handler = vi.fn();
+
+    expect(routeAuth).toBe(mocks.routeAuth);
+    expect(routeAuth(handler)).toBe(handler);
   });
 });

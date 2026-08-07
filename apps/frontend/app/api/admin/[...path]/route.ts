@@ -20,7 +20,7 @@
 import { NextResponse } from "next/server";
 import type { NextAuthRequest } from "next-auth";
 
-import { auth } from "@/lib/auth/auth";
+import { routeAuth } from "@/lib/auth/auth";
 import { getLiveAccount } from "@/lib/auth/live-account";
 import { isStaff } from "@/lib/rbac/roles";
 import { API_BASE } from "@/lib/api/client";
@@ -152,7 +152,7 @@ async function handle(req: NextAuthRequest, segments: string[]) {
   });
 }
 
-const authenticatedHandler = auth(async (req, ctx) => {
+const authenticatedHandler = routeAuth(async (req, ctx) => {
   const path = (await ctx.params).path;
   if (!Array.isArray(path)) {
     return NextResponse.json(

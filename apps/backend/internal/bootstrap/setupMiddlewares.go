@@ -38,6 +38,12 @@ func setupMiddlewares(r *gin.Engine, cfg *config.Config, log *zap.Logger) {
 	r.Use(middleware.MaxBodySize(middleware.DefaultJSONBodyLimit, multipartLimit))
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(middleware.RateLimit(rate.Limit(100), 200))
-	r.Use(gzip.Gzip(gzip.DefaultCompression))
+	// promhttp already negotiates and applies gzip for /metrics. Wrapping it in
+	// Gin's gzip middleware compresses the payload a second time; Prometheus
+	// removes one layer and then fails to parse the remaining gzip stream.
+	r.Use(gzip.Gzip(
+		gzip.DefaultCompression,
+		gzip.WithExcludedPaths([]string{"/metrics"}),
+	))
 
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
 )
@@ -628,20 +629,78 @@ func (r *productRepository) Update(ctx context.Context, id int64, req models.Upd
 }
 
 // ─────────────────────────────────────────────────────────────
-// Delete  (hard delete — variants cascade via FK)
+// Delete hard-deletes products that have never entered an immutable inventory
+// or order audit trail. Current stock and cart rows are operational state, so
+// they are removed in the same transaction before variants cascade.
 // ─────────────────────────────────────────────────────────────
 
 func (r *productRepository) Delete(ctx context.Context, id int64) error {
-	const q = `DELETE FROM products WHERE id = $1`
-
-	res, err := r.db.Exec(ctx, q, id)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("productRepository.Delete: %w", err)
+		return fmt.Errorf("productRepository.Delete begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM products WHERE id = $1 FOR UPDATE)`, id).Scan(&exists); err != nil {
+		return fmt.Errorf("productRepository.Delete lock: %w", err)
+	}
+	if !exists {
+		return models.ErrNotFound
+	}
+
+	var hasHistory bool
+	const historyQuery = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM inventory_movements im
+			JOIN product_variants pv ON pv.id = im.product_variant_id
+			WHERE pv.product_id = $1
+			UNION ALL
+			SELECT 1 FROM order_items oi WHERE oi.product_id = $1
+		)`
+	if err := tx.QueryRow(ctx, historyQuery, id).Scan(&hasHistory); err != nil {
+		return fmt.Errorf("productRepository.Delete history check: %w", err)
+	}
+	if hasHistory {
+		return models.ErrProductHasHistory
+	}
+
+	// These rows intentionally use restrictive FKs. They are safe to discard
+	// only after the audit-history check above succeeds.
+	for _, cleanupQuery := range []string{
+		`DELETE FROM cart_items
+		 WHERE product_variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)`,
+		`DELETE FROM inventory
+		 WHERE product_variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)`,
+	} {
+		if _, err := tx.Exec(ctx, cleanupQuery, id); err != nil {
+			return fmt.Errorf("productRepository.Delete cleanup: %w", err)
+		}
+	}
+
+	res, err := tx.Exec(ctx, `DELETE FROM products WHERE id = $1`, id)
+	if err != nil {
+		if isForeignKeyViolation(err) {
+			return models.ErrProductHasHistory
+		}
+		return fmt.Errorf("productRepository.Delete product: %w", err)
 	}
 	if res.RowsAffected() == 0 {
 		return models.ErrNotFound
 	}
+	if err := tx.Commit(ctx); err != nil {
+		if isForeignKeyViolation(err) {
+			return models.ErrProductHasHistory
+		}
+		return fmt.Errorf("productRepository.Delete commit: %w", err)
+	}
 	return nil
+}
+
+func isForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
 
 // ─────────────────────────────────────────────────────────────

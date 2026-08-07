@@ -4,11 +4,12 @@ import "errors"
 
 var (
 	// Generic
-	ErrNotFound      = errors.New("record not found")
-	ErrAlreadyExists = errors.New("record already exists")
-	ErrInvalidState  = errors.New("record is in an invalid state")
-	ErrConflict      = errors.New("conflict")
-	ErrAccessDenied  = errors.New("access denied")
+	ErrNotFound          = errors.New("record not found")
+	ErrAlreadyExists     = errors.New("record already exists")
+	ErrInvalidState      = errors.New("record is in an invalid state")
+	ErrConflict          = errors.New("conflict")
+	ErrAccessDenied      = errors.New("access denied")
+	ErrProductHasHistory = errors.New("product has inventory or order history")
 
 	// Hero slides
 	ErrHeroSchedule     = errors.New("hero slide schedule is invalid")

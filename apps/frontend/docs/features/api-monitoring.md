@@ -32,12 +32,8 @@ Next.js /admin/monitoring  ──server──►  Prometheus HTTP API
 
 ## Run observability stack (dev)
 
-Prerequisites: backend compose network already up
-(`rumera-dev_rumera_network` by default).
-
 ```bash
-cd apps/backend/deploy/observability
-docker compose -f docker-compose.observability.yml up -d
+make dev-up
 
 # Prometheus UI
 open http://localhost:9090
@@ -50,16 +46,14 @@ open http://localhost:3001
 ### Frontend env
 
 ```bash
-# Server-side only (Next server → Prometheus)
-PROMETHEUS_URL=http://localhost:9090
+# Server-side only (Next container → Prometheus; set by dev compose)
+PROMETHEUS_URL=http://prometheus:9090
 
 # Optional link on the board
 NEXT_PUBLIC_GRAFANA_URL=http://localhost:3001
 ```
 
-In Docker, the Next container may need
-`PROMETHEUS_URL=http://rumera_prometheus:9090` (or the Prometheus service DNS
-on the shared network).
+Outside Docker, use `PROMETHEUS_URL=http://localhost:9090` instead.
 
 ## Truthful empty states
 

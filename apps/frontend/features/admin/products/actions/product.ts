@@ -80,6 +80,14 @@ export async function deleteProduct(id: number): Promise<DeleteProductResult> {
           message: "اجازهٔ حذف این محصول را ندارید.",
         };
       }
+      if (error.status === 409 && error.code === "PRODUCT_HAS_HISTORY") {
+        return {
+          ok: false,
+          code: error.code,
+          message:
+            "این محصول سابقهٔ انبار یا سفارش دارد و حذف دائمی آن ممکن نیست. برای پنهان‌کردن آن، محصول را غیرفعال کنید.",
+        };
+      }
       return {
         ok: false,
         code: error.code,

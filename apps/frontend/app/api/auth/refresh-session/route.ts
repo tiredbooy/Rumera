@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { safeCallbackUrl } from "@/features/auth/redirects";
-import { auth } from "@/lib/auth/auth";
+import { routeAuth } from "@/lib/auth/auth";
 
-export const GET = auth((request) => {
+export const GET = routeAuth((request) => {
   const callbackUrl = safeCallbackUrl(
     request.nextUrl.searchParams.get("callbackUrl"),
     "/account",

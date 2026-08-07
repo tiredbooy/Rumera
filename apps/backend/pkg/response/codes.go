@@ -96,6 +96,7 @@ var (
 
 	ErrProductNotFound    = AppCode{"PRODUCT_NOT_FOUND", http.StatusNotFound, "product not found"}
 	ErrProductUnavailable = AppCode{"PRODUCT_UNAVAILABLE", http.StatusConflict, "product is not available"}
+	ErrProductHasHistory  = AppCode{"PRODUCT_HAS_HISTORY", http.StatusConflict, "product has inventory or order history and cannot be permanently deleted"}
 
 	// =========================================================
 	// Order
@@ -133,6 +134,7 @@ var registry = map[string]AppCode{
 	// Product
 	"PRODUCT_NOT_FOUND":   ErrProductNotFound,
 	"PRODUCT_UNAVAILABLE": ErrProductUnavailable,
+	"PRODUCT_HAS_HISTORY": ErrProductHasHistory,
 	"OUT_OF_STOCK":        ErrOutOfStock,
 
 	// Cart

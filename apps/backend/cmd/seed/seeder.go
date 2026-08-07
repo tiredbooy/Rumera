@@ -61,10 +61,11 @@ func (s *seeder) run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("tags: %w", err)
 	}
-	if err := s.seedOptionCatalog(ctx); err != nil {
+	optionIDs, err := s.seedOptionCatalog(ctx)
+	if err != nil {
 		return fmt.Errorf("option catalog: %w", err)
 	}
-	variants, err := s.seedProducts(ctx, brandIDs, catIDs, tagIDs)
+	variants, err := s.seedProducts(ctx, brandIDs, catIDs, tagIDs, optionIDs)
 	if err != nil {
 		return fmt.Errorf("products: %w", err)
 	}

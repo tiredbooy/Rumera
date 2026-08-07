@@ -30,6 +30,8 @@ type productServiceRepo struct {
 	syncCalls     int
 	syncProductID int64
 	syncTagIDs    []int64
+	deleteErr     error
+	deleteID      int64
 }
 
 func (r *productServiceRepo) GetBySlug(_ context.Context, slug string) (*models.Product, error) {
@@ -79,6 +81,11 @@ func (r *productServiceRepo) SyncTags(_ context.Context, productID int64, tagIDs
 	r.syncProductID = productID
 	r.syncTagIDs = append([]int64(nil), tagIDs...)
 	return nil
+}
+
+func (r *productServiceRepo) Delete(_ context.Context, id int64) error {
+	r.deleteID = id
+	return r.deleteErr
 }
 
 func TestProductServiceGetBySlugTrimsAndPreservesExactSlug(t *testing.T) {
@@ -189,5 +196,18 @@ func TestProductServiceUpdateRejectsIdentityOwnedByAnotherProduct(t *testing.T) 
 	}
 	if repo.slugExcludeID != 42 || repo.updateCalls != 0 {
 		t.Fatalf("exclusion/update calls = %d/%d; want 42/0", repo.slugExcludeID, repo.updateCalls)
+	}
+}
+
+func TestProductServiceDeleteMapsProtectedHistoryToConflict(t *testing.T) {
+	repo := &productServiceRepo{deleteErr: models.ErrProductHasHistory}
+
+	err := NewProductService(repo, nil, nil).Delete(context.Background(), 42)
+
+	if !errors.Is(err, apperr.ErrProductHasHistory) {
+		t.Fatalf("delete error = %v; want ErrProductHasHistory", err)
+	}
+	if repo.deleteID != 42 {
+		t.Fatalf("deleted id = %d; want 42", repo.deleteID)
 	}
 }

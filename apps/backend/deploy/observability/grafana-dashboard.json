@@ -1,14 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "description": "Prometheus data source scraping the Rumera backend /metrics endpoint.",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
   "annotations": {
     "list": [
       {
@@ -34,20 +24,8 @@
   "templating": {
     "list": [
       {
-        "current": {},
-        "hide": 0,
-        "includeAll": false,
-        "label": "Data source",
-        "name": "DS_PROMETHEUS",
-        "options": [],
-        "query": "prometheus",
-        "refresh": 1,
-        "regex": "",
-        "type": "datasource"
-      },
-      {
         "current": { "selected": true, "text": "All", "value": "$__all" },
-        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
         "definition": "label_values(http_requests_total, route)",
         "hide": 0,
         "includeAll": true,
@@ -76,7 +54,7 @@
     {
       "type": "timeseries",
       "title": "Request rate (req/s) by route",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
       "fieldConfig": {
         "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } },
@@ -85,7 +63,7 @@
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "lastNotNull"] }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum by (route) (rate(http_requests_total{route=~\"$route\"}[5m]))",
           "legendFormat": "{{route}}"
         }
@@ -94,7 +72,7 @@
     {
       "type": "timeseries",
       "title": "5xx error ratio",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
       "fieldConfig": {
         "defaults": {
@@ -108,7 +86,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
           "legendFormat": "5xx ratio"
         }
@@ -117,7 +95,7 @@
     {
       "type": "timeseries",
       "title": "Latency p50 / p95 / p99 (all routes)",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
       "fieldConfig": {
         "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 0 } },
@@ -126,17 +104,17 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p50"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p95"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p99"
         }
@@ -145,7 +123,7 @@
     {
       "type": "timeseries",
       "title": "p99 latency by route",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 9 },
       "fieldConfig": {
         "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 0 } },
@@ -154,7 +132,7 @@
       "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "histogram_quantile(0.99, sum by (le, route) (rate(http_request_duration_seconds_bucket{route=~\"$route\"}[5m])))",
           "legendFormat": "{{route}}"
         }
@@ -170,7 +148,7 @@
     {
       "type": "timeseries",
       "title": "DB pool connections by pool",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
       "fieldConfig": {
         "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "line", "fillOpacity": 10 } },
@@ -178,15 +156,15 @@
       },
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "db_pool_acquired_conns", "legendFormat": "{{pool}} acquired" },
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "db_pool_idle_conns", "legendFormat": "{{pool}} idle" },
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "db_pool_max_conns", "legendFormat": "{{pool}} max" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "db_pool_acquired_conns", "legendFormat": "{{pool}} acquired" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "db_pool_idle_conns", "legendFormat": "{{pool}} idle" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "db_pool_max_conns", "legendFormat": "{{pool}} max" }
       ]
     },
     {
       "type": "gauge",
       "title": "DB pool utilisation (acquired / max)",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 6, "x": 12, "y": 18 },
       "fieldConfig": {
         "defaults": {
@@ -199,13 +177,13 @@
       },
       "options": { "showThresholdLabels": false, "showThresholdMarkers": true },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "db_pool_acquired_conns / db_pool_max_conns", "legendFormat": "{{pool}}" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "db_pool_acquired_conns / db_pool_max_conns", "legendFormat": "{{pool}}" }
       ]
     },
     {
       "type": "timeseries",
       "title": "Cache outcomes (ops/s)",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 6, "x": 18, "y": 18 },
       "fieldConfig": {
         "defaults": { "unit": "ops", "min": 0, "custom": { "drawStyle": "line", "fillOpacity": 10, "stacking": { "mode": "normal" } } },
@@ -213,13 +191,13 @@
       },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (result) (rate(cache_requests_total[5m]))", "legendFormat": "{{result}}" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (result) (rate(cache_requests_total[5m]))", "legendFormat": "{{result}}" }
       ]
     },
     {
       "type": "timeseries",
       "title": "Analytics queue depth vs capacity",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
       "fieldConfig": {
         "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "line", "fillOpacity": 10 } },
@@ -229,14 +207,14 @@
       },
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "analytics_queue_depth", "legendFormat": "{{queue}} depth" },
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "analytics_queue_capacity", "legendFormat": "{{queue}} capacity" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "analytics_queue_depth", "legendFormat": "{{queue}} depth" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "analytics_queue_capacity", "legendFormat": "{{queue}} capacity" }
       ]
     },
     {
       "type": "gauge",
       "title": "Analytics queue saturation (depth / capacity)",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
       "fieldConfig": {
         "defaults": {
@@ -249,7 +227,7 @@
       },
       "options": { "showThresholdLabels": false, "showThresholdMarkers": true },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "analytics_queue_depth / analytics_queue_capacity", "legendFormat": "{{queue}}" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "analytics_queue_depth / analytics_queue_capacity", "legendFormat": "{{queue}}" }
       ]
     }
   ]

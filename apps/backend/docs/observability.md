@@ -18,8 +18,8 @@ under [`pkg/metrics`](../pkg/metrics), [`pkg/tracing`](../pkg/tracing) and
 |-------|-------|-------------------|--------------|---------|
 | Prometheus metrics | [`pkg/metrics/metrics.go`](../pkg/metrics/metrics.go), [`pkg/middleware/metrics.go`](../pkg/middleware/metrics.go) | `GET /metrics` (Prometheus text format) | `METRICS_ENABLED` | `true` |
 | OpenTelemetry tracing | [`pkg/tracing/tracing.go`](../pkg/tracing/tracing.go) | OTLP/gRPC spans to a collector | `OTEL_ENABLED` | `false` |
-| Grafana dashboard | [`deploy/observability/grafana-dashboard.json`](../deploy/observability/grafana-dashboard.json) | "Rumera Backend — RED + Pools + Queue" (uid `rumera-backend-red`) | — (load into Grafana) | not loaded |
-| Alert rules | [`deploy/observability/prometheus-rules.yml`](../deploy/observability/prometheus-rules.yml) | 6 alerts in 3 groups | — (load into Prometheus) | not loaded |
+| Grafana dashboard | [`deploy/observability/grafana-dashboard.json`](../deploy/observability/grafana-dashboard.json) | "Rumera Backend — RED + Pools + Queue" (uid `rumera-backend-red`) | — | auto-provisioned in dev |
+| Alert rules | [`deploy/observability/prometheus-rules.yml`](../deploy/observability/prometheus-rules.yml) | 6 alerts in 3 groups | — | auto-loaded in dev |
 | Liveness probe | [`internal/routes/routes.go`](../internal/routes/routes.go) | `GET /health` | — | always on |
 | Readiness probe | [`internal/bootstrap/newRouter.go`](../internal/bootstrap/newRouter.go) | `GET /health/ready` | — | always on |
 
@@ -31,42 +31,28 @@ no-ops.
 
 ---
 
-## Current state (honest)
+## Current state
 
-The backend **emits** everything above out of the box. What's missing is the
-consumer side:
+The development stack starts Prometheus and Grafana automatically. Prometheus
+scrapes the backend's `/metrics`; Grafana auto-provisions the datasource and the
+Rumera API dashboard. Production keeps observability as a separate stack so its
+ports and credentials can be isolated from public application traffic.
 
-- **Nothing scrapes `/metrics`.** Neither `docker-compose.dev.yml` nor
-  `docker-compose.prod.yml` defines a Prometheus, Grafana, or OTel-collector
-  service. Metrics are exposed but unread.
-- **The dashboard and alert rules are dead artifacts.** They live under
-  [`deploy/observability/`](../deploy/observability) but nothing loads them.
-- **Tracing exports to nowhere.** With `OTEL_ENABLED=false` it does nothing; if
-  you flip it on today, the default endpoint `localhost:4317` resolves to nothing
-  inside the container (no collector service exists), so spans silently fail to
-  export.
-
-This guide fixes the metrics gap with a runnable Prometheus + Grafana stack
-([`deploy/observability/docker-compose.observability.yml`](../deploy/observability/docker-compose.observability.yml))
-and documents how to wire a tracing collector when you want traces.
+Tracing still exports to nowhere by default. With `OTEL_ENABLED=false` it does
+nothing; if you flip it on today, the default endpoint `localhost:4317` resolves
+to nothing inside the container (no collector service exists), so spans silently
+fail to export.
 
 ---
 
 ## Quick start: stand up the stack
 
-The observability stack joins the backend's **existing** compose network as an
-external network, then Prometheus scrapes `backend:8080/metrics` by service name.
+In development, Prometheus and Grafana join the same compose network as the API,
+and Prometheus scrapes `backend:8080/metrics` by service name.
 
 ```bash
-# 1. Bring the backend stack up first — it creates the shared bridge network.
-docker compose -f docker-compose.dev.yml up -d        # project: rumera-dev
-
-# 2. (Optional) confirm the real network name.
-docker network ls | grep rumera                       # expect rumera-dev_rumera_network
-
-# 3. Launch Prometheus + Grafana from the observability directory.
-cd apps/backend/deploy/observability
-docker compose -f docker-compose.observability.yml up -d
+# Prometheus and Grafana are included; no second compose command is needed.
+make dev-up
 ```
 
 For **production** (project name `rumera` → network `rumera_rumera_network`),
@@ -103,7 +89,14 @@ Hot-reload Prometheus after editing `prometheus.yml` (no restart needed):
 curl -X POST http://localhost:9090/-/reload
 ```
 
-Tear down only the observability stack (leaves the backend running):
+In development, stop only the monitoring services while leaving the application
+running with:
+
+```bash
+docker compose --env-file .env.dev -f docker-compose.dev.yml stop prometheus grafana
+```
+
+For production's separate observability stack, tear it down with:
 
 ```bash
 docker compose -f docker-compose.observability.yml down
