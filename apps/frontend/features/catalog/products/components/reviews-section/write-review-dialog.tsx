@@ -74,7 +74,7 @@ export function WriteReviewDialog({
         return;
       }
       if (error instanceof ReviewMutationError && error.status === 403) {
-        toast.error("تنها خریداران این محصول می‌توانند نظر ثبت کنند");
+        toast.error("اجازهٔ ثبت نظر برای این حساب وجود ندارد");
         return;
       }
       toast.error("ثبت نظر ناموفق بود. دوباره تلاش کنید.");
@@ -91,6 +91,10 @@ export function WriteReviewDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="font-serif text-2xl">نظر شما</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            اگر این محصول را خریده باشید، نظر شما با نشان «خرید تأییدشده» نمایش
+            داده می‌شود.
+          </p>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-5">
           <div>

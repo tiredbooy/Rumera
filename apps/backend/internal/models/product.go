@@ -93,6 +93,7 @@ type ProductFilter struct {
 	CategoryID         *int64   `query:"category_id"`
 	IncludeDescendants bool     `query:"include_descendants"`
 	BrandID            *int64   `query:"brand_id"`
+	BrandSlug          *string  `query:"brand" validate:"omitempty,max=255"`
 	TagID              *int64   `query:"tag_id"`
 	IsActive           *bool    `query:"is_active"`
 	MinPrice           *float64 `query:"min_price"`

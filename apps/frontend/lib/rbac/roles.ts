@@ -38,5 +38,20 @@ export function permissionsForRole(
   role: Role | string | undefined | null,
 ): Permission[] {
   if (!role) return [];
+  // Prefer operator-saved dynamic matrix (Task 082a) when available in-browser.
+  if (typeof window !== "undefined") {
+    try {
+      const raw = window.localStorage.getItem(
+        "rumera:role-capability-matrix:v1",
+      );
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<Record<Role, Permission[]>>;
+        const fromStore = parsed[role as Role];
+        if (Array.isArray(fromStore)) return fromStore;
+      }
+    } catch {
+      // Fall through to static defaults.
+    }
+  }
   return ROLE_PERMISSIONS[role as Role] ?? [];
 }

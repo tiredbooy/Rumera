@@ -8,23 +8,25 @@ import "time"
 
 // ProductListItem — lightweight, used in paginated list
 type ProductListItem struct {
-	ID                    int64          `json:"id"`
-	Title                 string         `json:"title"`
-	Code                  *string        `json:"code,omitempty"`
-	Slug                  *string        `json:"slug,omitempty"`
-	Image                 *ImageResponse `json:"image_response"`
-	Brand                 *string        `json:"brand,omitempty"` // brand title, joined
-	Category              *string        `json:"category,omitempty"`
-	Tags                  []TagResponse  `json:"tags,omitempty"`
-	IsActive              bool           `json:"is_active"`
+	ID       int64          `json:"id"`
+	Title    string         `json:"title"`
+	Code     *string        `json:"code,omitempty"`
+	Slug     *string        `json:"slug,omitempty"`
+	Image    *ImageResponse `json:"image_response"`
+	Brand    *string        `json:"brand,omitempty"` // brand title, joined
+	Category *string        `json:"category,omitempty"`
+	Tags     []TagResponse  `json:"tags,omitempty"`
+	IsActive bool           `json:"is_active"`
 	// Weight is unit package weight in kilograms (same column as product detail).
 	// Omitted when unset so admin UIs can flag shippable SKUs missing weight.
-	Weight                *float64       `json:"weight,omitempty"`
-	MinPrice              float64        `json:"min_price"` // cheapest active variant
-	MaxPrice              float64        `json:"max_price"` // most expensive active variant
-	ActiveVariantCount    int            `json:"active_variant_count"`
-	AvailableVariantCount int            `json:"available_variant_count"`
-	PurchasableVariantID  *int64         `json:"purchasable_variant_id,omitempty"`
+	Weight                *float64 `json:"weight,omitempty"`
+	MinPrice              float64  `json:"min_price"` // cheapest active variant
+	MaxPrice              float64  `json:"max_price"` // most expensive active variant
+	ActiveVariantCount    int      `json:"active_variant_count"`
+	AvailableVariantCount int      `json:"available_variant_count"`
+	// AvailableStock is sellable stock summed across active variants.
+	AvailableStock       int64  `json:"available_stock"`
+	PurchasableVariantID *int64 `json:"purchasable_variant_id,omitempty"`
 }
 
 // ProductDetail — full response for GET /products/:id

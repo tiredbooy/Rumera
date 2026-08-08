@@ -46,15 +46,21 @@ export const getBrand = cache(
   (id: number): Promise<Brand> => publicRequest<Brand>(`/brands/${id}`),
 );
 
+export const getBrandBySlug = cache(
+  (slug: string): Promise<Brand> =>
+    publicRequest<Brand>(`/brands/slug/${encodeURIComponent(slug)}`),
+);
+
 /** Lightweight brand chip for marquee / discovery links. */
 export type FeaturedBrand = {
   id: number;
   title: string;
+  slug?: string;
 };
 
 /**
  * Featured brands for homepage discovery. Returns real ids when the API is
- * available so marquee items can deep-link to `/products?brand_id=…`.
+ * available so marquee items can deep-link to `/products?brand=…`.
  * On failure falls back to title-only chips (no inventing brand ids).
  */
 export async function getFeaturedBrands(limit = 16): Promise<FeaturedBrand[]> {
@@ -67,6 +73,7 @@ export async function getFeaturedBrands(limit = 16): Promise<FeaturedBrand[]> {
       .map((brand) => ({
         id: brand.id,
         title: brand.title.trim(),
+        slug: brand.slug,
       }))
       .filter((brand) => brand.title.length > 0 && brand.id > 0);
     if (brands.length > 0) return brands;
@@ -75,7 +82,7 @@ export async function getFeaturedBrands(limit = 16): Promise<FeaturedBrand[]> {
   }
 
   return FALLBACK_BRANDS.map((title, index) => ({
-    // Negative sentinel: never used as a query brand_id.
+    // Negative sentinel: fallback labels have no backend slug and stay unlinked.
     id: -(index + 1),
     title,
   }));

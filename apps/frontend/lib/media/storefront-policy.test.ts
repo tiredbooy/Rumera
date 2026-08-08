@@ -17,6 +17,15 @@ describe("storefront media policy", () => {
     expect(policy.format).toBe("webp");
   });
 
+  it("matches recommendation image sizing to the wide rail breakpoints", () => {
+    const policy = mediaPolicyFor("recommendation");
+    expect(policy.widths).toEqual([280, 400, 560, 720]);
+    expect(policy.height).toBe(540);
+    expect(policy.sizes).toContain("calc(100vw - 4.5rem)");
+    expect(policy.sizes).toContain("21.5rem");
+    expect(policy.sizes).toContain("22.5rem");
+  });
+
   it("extracts storage keys from relative and absolute media URLs", () => {
     expect(storageKeyFromMediaUrl("/media/products/12/cover.webp")).toBe(
       "products/12/cover.webp",

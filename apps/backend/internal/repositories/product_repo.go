@@ -268,6 +268,13 @@ func buildProductFilterSQL(f models.ProductFilter) productFilterSQL {
 		where = append(where, "p.brand_id = @brand_id")
 		args["brand_id"] = *f.BrandID
 	}
+	if f.BrandSlug != nil {
+		where = append(where, `EXISTS (
+			SELECT 1 FROM brands filter_brand
+			WHERE filter_brand.id = p.brand_id AND filter_brand.slug = @brand_slug
+		)`)
+		args["brand_slug"] = *f.BrandSlug
+	}
 	if f.IsActive != nil {
 		where = append(where, "p.is_active = @is_active")
 		args["is_active"] = *f.IsActive
@@ -375,6 +382,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		COALESCE(pr.max_price, 0) AS max_price,
 		COALESCE(pr.active_variant_count, 0) AS active_variant_count,
 		COALESCE(pr.available_variant_count, 0) AS available_variant_count,
+		COALESCE(pr.available_stock, 0) AS available_stock,
 		pr.purchasable_variant_id,
 		COALESCE(tag_data.ids, ARRAY[]::BIGINT[]) AS tag_ids,
 		COALESCE(tag_data.titles, ARRAY[]::TEXT[]) AS tag_titles,
@@ -397,6 +405,12 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 					0
 				) > 0
 			) AS available_variant_count,
+			COALESCE(SUM(
+				GREATEST(
+					COALESCE(i.stock_on_hand, 0) - COALESCE(i.committed_stock, 0),
+					0
+				)
+			), 0) AS available_stock,
 			CASE
 				WHEN COUNT(*) = 1
 					AND COALESCE(MAX(
@@ -461,6 +475,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 			maxPrice       float64
 			activeCount    int
 			availableCount int
+			availableStock int64
 			purchasableID  *int64
 			tagIDs         []int64
 			tagTitles      []string
@@ -477,7 +492,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 		if err := rows.Scan(
 			&productID, &title, &code, &slug, &isActive, &weight,
 			&brand, &category, &minPrice, &maxPrice,
-			&activeCount, &availableCount, &purchasableID,
+			&activeCount, &availableCount, &availableStock, &purchasableID,
 			&tagIDs, &tagTitles,
 			&imgID, &imgURL, &imgStorageKey, &imgAltText, &imgWidth, &imgHeight,
 			&imgSortOrder, &imgIsPrimary,
@@ -513,6 +528,7 @@ func (r *productRepository) GetAll(ctx context.Context, f models.ProductFilter) 
 			MaxPrice:              maxPrice,
 			ActiveVariantCount:    activeCount,
 			AvailableVariantCount: availableCount,
+			AvailableStock:        availableStock,
 			PurchasableVariantID:  purchasableID,
 		}
 

@@ -37,6 +37,7 @@ func TestSetupRegistersWithoutPanic(t *testing.T) {
 		"GET /api/v1/admin/users/:userID/audit":                     false,
 		"GET /api/v1/categories/slug/:slug":                         false,
 		"GET /api/v1/categories/:id":                                false,
+		"GET /api/v1/brands/slug/:slug":                             false,
 		"GET /api/v1/products/slug/:slug":                           false,
 		"GET /api/v1/admin/products/:id":                            false,
 		"POST /api/v1/admin/products/aggregate":                     false,

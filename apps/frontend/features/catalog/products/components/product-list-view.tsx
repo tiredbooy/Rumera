@@ -4,7 +4,11 @@ import { ArrowLeft, ArrowRight, PackageOpen } from "lucide-react";
 
 import { JsonLd } from "@/components/json-ld";
 import { Button } from "@/components/ui/button";
-import { listBrands } from "@/features/catalog/brands/api";
+import {
+  getBrand,
+  getBrandBySlug,
+  listBrands,
+} from "@/features/catalog/brands/api";
 import { listCategories } from "@/features/catalog/categories/api";
 import { listProducts } from "@/features/catalog/products/api/public";
 import {
@@ -32,16 +36,31 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
   const raw = await searchParams;
   const query = parseProductListRouteQuery(raw);
 
+  if (query.legacyBrandId && !query.brand) {
+    const legacyBrand = await getBrand(query.legacyBrandId).catch(() => null);
+    redirect(
+      productListHref(
+        {
+          search: query.search,
+          brand: legacyBrand?.slug,
+          sortBy: query.sortBy,
+          orderBy: query.orderBy,
+        },
+        query.page,
+      ),
+    );
+  }
+
   if (query.needsRedirect) {
     redirect(productListHref(query, query.page));
   }
 
-  const [data, categories, brandsPage] = await Promise.all([
+  const [data, categories, brandsPage, selectedBrand] = await Promise.all([
     listProducts({
       page: query.page,
       limit: PRODUCT_LIST_PAGE_SIZE,
       search: query.search,
-      brand_id: query.brandId,
+      brand: query.brand,
       sortBy: query.sortBy,
       orderBy: query.orderBy,
     }),
@@ -57,10 +76,14 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
         has_prev: false,
       },
     })),
+    query.brand
+      ? getBrandBySlug(query.brand).catch(() => null)
+      : Promise.resolve(null),
   ]);
   const { results, pagination } = data;
   const brands = brandsPage.results ?? [];
-  const activeBrand = brands.find((b) => b.id === query.brandId);
+  const activeBrand =
+    selectedBrand ?? brands.find((brand) => brand.slug === query.brand);
 
   const pageHref = (page: number) => productListHref(query, page);
   const allProductsHref = productListHref(
@@ -71,6 +94,10 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
     },
     1,
   );
+
+  if (query.brand && !activeBrand) {
+    redirect(allProductsHref);
+  }
 
   return (
     <>
@@ -101,13 +128,13 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
         <div className="mt-6 flex flex-wrap gap-2">
           <Button
             size="sm"
-            variant={query.brandId ? "outline" : "default"}
+            variant={query.brand ? "outline" : "default"}
             className="h-10 rounded-full"
             asChild
           >
             <Link href={allProductsHref}>همهٔ محصولات</Link>
           </Button>
-          {query.brandId ? (
+          {query.brand ? (
             <Button
               size="sm"
               variant="secondary"
@@ -158,12 +185,12 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
             aria-label="برندها"
           >
             {brands.map((brand) => {
-              const active = query.brandId === brand.id;
+              const active = query.brand === brand.slug;
               return (
                 <Link
                   key={brand.id}
                   href={
-                    active ? allProductsHref : productListBrandHref(brand.id)
+                    active ? allProductsHref : productListBrandHref(brand.slug)
                   }
                   className={cn(
                     "rounded-full border px-4 py-1.5 text-sm transition-colors",

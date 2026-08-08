@@ -78,6 +78,7 @@ const product = {
   max_price: 100,
   active_variant_count: 1,
   available_variant_count: 1,
+  available_stock: 5,
 };
 
 function pagination(

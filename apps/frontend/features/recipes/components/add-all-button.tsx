@@ -120,11 +120,12 @@ export function AddAllIngredientsButton({
   const pending = status === "loading" || bulkAdd.isPending;
   return (
     <Button
+      type="button"
       size="lg"
       onClick={onClick}
       disabled={pending}
       aria-label={`افزودن همهٔ مواد (${faNum(available.length)} مورد)`}
-      className="h-12 shrink-0 cursor-pointer px-6 text-sm"
+      className="h-12 shrink-0 cursor-pointer px-5 text-sm sm:px-6"
     >
       {pending ? (
         <Loader2 className="animate-spin" aria-hidden="true" />

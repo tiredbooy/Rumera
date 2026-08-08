@@ -112,6 +112,13 @@ func (s *ProductService) GetAll(ctx context.Context, filter models.ProductFilter
 	if filter.IncludeDescendants && filter.CategoryID == nil {
 		return nil, 0, apperr.ErrInvalidRequest
 	}
+	if filter.BrandSlug != nil {
+		slug := normalizePublicSlug(*filter.BrandSlug)
+		if slug == "" {
+			return nil, 0, apperr.ErrInvalidRequest
+		}
+		filter.BrandSlug = &slug
+	}
 
 	items, total, err := s.productRepo.GetAll(ctx, filter)
 	if err != nil {

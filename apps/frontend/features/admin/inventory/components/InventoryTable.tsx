@@ -170,8 +170,18 @@ export function InventoryTable({
       getValue: (r) => r.status,
       options: [
         { value: "in_stock", label: "موجود" },
-        { value: "low", label: "رو به اتمام" },
+        { value: "low", label: "رو به اتمام (≤ آستانه)" },
         { value: "out", label: "ناموجود" },
+      ],
+    },
+    {
+      id: "critical",
+      label: "موجودی بحرانی",
+      getValue: (r) =>
+        r.available_stock > 0 && r.available_stock < 3 ? "critical" : "ok",
+      options: [
+        { value: "critical", label: "کمتر از ۳ عدد" },
+        { value: "ok", label: "۳ و بیشتر یا صفر" },
       ],
     },
   ];

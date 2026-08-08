@@ -39,7 +39,8 @@ GET /products
 | Param | Type | Description |
 |-------|------|-------------|
 | `category_id` | int | Filter by category |
-| `brand_id` | int | Filter by brand |
+| `brand` | string | Filter by canonical brand slug, e.g. `jack-daniel` |
+| `brand_id` | int | Legacy/admin numeric filter; public links should use `brand` |
 | `tag_id` | int | Filter by tag |
 | `is_active` | bool | Filter by active flag |
 | `min_price` | number | Minimum variant price |
@@ -67,7 +68,8 @@ values fall back to `created_at`.
       "min_price": 39.9,
       "max_price": 89.0,
       "active_variant_count": 2,
-      "available_variant_count": 1
+      "available_variant_count": 1,
+      "available_stock": 2
     }
   ],
   "pagination": {
@@ -80,6 +82,11 @@ values fall back to `created_at`.
   }
 }
 ```
+
+`available_stock` is the sellable quantity summed across active variants after
+committed stock is subtracted. It is `0` when no active variant has sellable
+stock. Storefronts may use it for truthful low-stock disclosure, but should not
+display high-stock quantities as urgency messaging.
 
 **Errors:** `400 INVALID_QUERY`.
 

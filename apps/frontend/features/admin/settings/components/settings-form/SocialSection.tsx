@@ -13,7 +13,7 @@ export function SocialSection({
   errors: FieldErrors<SiteSettingsFormValues>;
 }) {
   return (
-    <TabsContent value="social" className="mt-5">
+    <TabsContent value="social" forceMount className="mt-5 data-[state=inactive]:hidden">
       <Panel
         title="شبکه‌های اجتماعی"
         description="نشانی کامل صفحات. موارد خالی در فروشگاه نمایش داده نمی‌شوند."

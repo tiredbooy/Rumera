@@ -11,6 +11,7 @@ import {
   isQuickPurchasable,
   productPublicHref,
 } from "@/features/catalog/products/catalogue-presentation";
+import { lowStockLabel } from "@/features/catalog/products/stock-display";
 import type { ProductListItem } from "@/features/catalog/products/types";
 import { faNum, formatPrice } from "@/lib/products";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,11 @@ const AVAILABILITY_CHIP: Record<
   },
 };
 
+const LOW_STOCK_CHIP = {
+  tone: "bg-amber-500",
+  chip: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+};
+
 /** Luxe storefront card backed only by the real product-list projection. */
 export function ProductCard({
   product,
@@ -78,7 +84,11 @@ export function ProductCard({
     0,
   );
   const availability = catalogueAvailability(product);
-  const chip = AVAILABILITY_CHIP[availability.kind];
+  const lowStock =
+    availability.kind === "ready"
+      ? lowStockLabel(product.available_stock)
+      : null;
+  const chip = lowStock ? LOW_STOCK_CHIP : AVAILABILITY_CHIP[availability.kind];
 
   const imageContent = (
     <StorefrontMedia
@@ -90,7 +100,7 @@ export function ProductCard({
       intrinsicWidth={image?.width}
       intrinsicHeight={image?.height}
       priority={priority}
-      className="transition-transform duration-700 ease-cellar group-hover/product:scale-[1.04] motion-reduce:transition-none"
+      className="transition-transform duration-300 ease-cellar group-hover/product:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none"
     />
   );
 
@@ -122,16 +132,16 @@ export function ProductCard({
             <div className="absolute inset-0">{imageContent}</div>
           )}
 
-          {/* Soft bottom scrim so overlay CTAs stay legible on light photos */}
+          {/* Soft bottom scrim appears only with the hover/focus commerce overlay. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-[15] h-20 bg-gradient-to-t from-background/80 via-background/25 to-transparent opacity-90 transition-opacity duration-300 group-hover/product:opacity-100"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-[15] h-20 bg-gradient-to-t from-background/80 via-background/25 to-transparent opacity-0 transition-opacity duration-300 group-focus-within/product:opacity-100 motion-reduce:transition-none [@media(hover:hover)_and_(pointer:fine)]:group-hover/product:opacity-100"
           />
 
           {/* Sheen catch-light (matches recommendation rail language) */}
           <span
             aria-hidden
-            className="sheen pointer-events-none absolute inset-0 z-[12] -translate-x-full opacity-0 transition-all duration-700 ease-out group-hover/product:translate-x-full group-hover/product:opacity-100 motion-reduce:hidden"
+            className="sheen pointer-events-none absolute inset-0 z-[12] -translate-x-full opacity-0 transition-[transform,opacity] duration-300 ease-cellar group-hover/product:translate-x-full group-hover/product:opacity-100 motion-reduce:hidden"
           />
 
           {product.category ? (
@@ -172,7 +182,7 @@ export function ProductCard({
                 className={cn("size-1.5 rounded-full", chip.tone)}
                 aria-hidden
               />
-              {availability.label}
+              {lowStock ?? availability.label}
             </span>
           </div>
 
@@ -252,8 +262,16 @@ export function ProductCard({
                   variant="ghost"
                   className="h-11 shrink-0 rounded-2xl px-3 font-semibold text-primary hover:bg-accent"
                 >
-                  <Link href={href}>
-                    جزئیات
+                  <Link
+                    href={href}
+                    aria-label={`مشاهده و خرید ${product.title}`}
+                  >
+                    <span className="[@media(any-pointer:coarse)]:hidden">
+                      جزئیات
+                    </span>
+                    <span className="hidden [@media(any-pointer:coarse)]:inline">
+                      مشاهده و خرید
+                    </span>
                     <ArrowLeft className="size-4 transition-transform duration-200 group-hover/product:-translate-x-0.5 motion-reduce:transition-none" />
                   </Link>
                 </Button>

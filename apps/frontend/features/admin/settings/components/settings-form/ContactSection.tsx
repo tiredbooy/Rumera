@@ -14,7 +14,7 @@ export function ContactSection({
   errors: FieldErrors<SiteSettingsFormValues>;
 }) {
   return (
-    <TabsContent value="contact" className="mt-5">
+    <TabsContent value="contact" forceMount className="mt-5 data-[state=inactive]:hidden">
       <Panel
         title="اطلاعات تماس"
         description="راه‌های ارتباط مشتری با پشتیبانی."

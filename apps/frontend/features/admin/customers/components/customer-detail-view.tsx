@@ -20,6 +20,7 @@ import { faDate } from "@/lib/utils/date";
 
 import { UserAccountActions } from "./UserAccountActions";
 import { UserAuditHistory } from "./user-audit-history";
+import { WalletCreditForm } from "./wallet-credit-form";
 
 const AUDIT_PAGE_SIZE = 20;
 
@@ -192,6 +193,10 @@ export async function CustomerDetailView({
             isSelf={isSelf}
           />
         </section>
+      </div>
+
+      <div className="mt-6">
+        <WalletCreditForm userId={user.user_id} userLabel={displayName} />
       </div>
 
       {audit ? (

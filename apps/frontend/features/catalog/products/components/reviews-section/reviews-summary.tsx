@@ -40,7 +40,7 @@ export function ReviewsSummary({
   return (
     <div className="lg:sticky lg:top-24 lg:self-start">
       <h2 id="reviews-heading" className="eyebrow mb-3">
-        <MessageSquare className="size-3.5" /> نظرات خریداران
+        <MessageSquare className="size-3.5" /> نظرات
       </h2>
       <div className="flex items-end gap-3">
         <span className="font-serif text-5xl text-foil">
@@ -110,8 +110,9 @@ export function ReviewsSummary({
 
       <div className="mt-6">
         {writeAction}
-        <p className="mt-2 text-center text-[11px] text-muted-foreground">
-          فقط خریداران می‌توانند برای این محصول نظر ثبت کنند.
+        <p className="mt-2 text-center text-[11px] leading-relaxed text-muted-foreground">
+          همه می‌توانند نظر بگذارند؛ نظرات خریداران با نشان «خرید تأییدشده»
+          مشخص می‌شوند.
         </p>
       </div>
     </div>

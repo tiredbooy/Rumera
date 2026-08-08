@@ -13,12 +13,19 @@ import type {
   ProductVariant,
 } from "@/features/catalog/products/types";
 import {
+  buildVariantAxes,
+  findVariantForSelection,
+  isOptionValueAvailable,
+  selectionFromVariant,
+} from "@/features/catalog/products/variant-matrix";
+import {
   useWishlist,
   useAddWishlistItem,
   useRemoveWishlistItem,
 } from "@/features/wishlist/hooks";
 import { useRecordInteraction } from "@/features/recommendations/hooks";
 import { AddToCartButton } from "@/features/cart/components/add-to-cart-button";
+import { lowStockLabel } from "@/features/catalog/products/stock-display";
 import { AlertButton } from "./alert-button";
 
 const MAX_QTY = 12;
@@ -37,21 +44,43 @@ function availableStock(variant: ProductVariant | undefined) {
 }
 
 /**
- * ProductPurchasePanel — client-side buy box for the PDP. Owns variant selection,
- * a discount-aware price block (compare-at strikethrough + saving), a quantity
- * stepper, add-to-cart, restock/price alerts, and an optimistic, auth-aware
- * wishlist toggle. Also renders a sticky mobile action bar so the primary CTA
- * stays reachable while the long page scrolls.
+ * ProductPurchasePanel — modern buy box: multi-axis variant matrix when the
+ * catalogue provides option types, clean price block, qty, cart, alerts, wishlist,
+ * and sticky mobile CTA bar.
  */
 export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
   const variants = (product.variants ?? []).filter((v) => v.is_active);
+  const axes = React.useMemo(() => buildVariantAxes(variants), [variants]);
+  const useMatrix = axes.length > 0;
+
   const defaultVariant =
     variants.find((variant) => availableStock(variant) > 0) ?? variants[0];
+
   const [selectedId, setSelectedId] = React.useState<number | undefined>(
     defaultVariant?.id,
   );
+  const [selection, setSelection] = React.useState<Record<string, string>>(
+    () => selectionFromVariant(defaultVariant, axes),
+  );
   const [qty, setQty] = React.useState(1);
-  const selected = variants.find((v) => v.id === selectedId) ?? defaultVariant;
+
+  // Keep matrix selection → variant in sync.
+  React.useEffect(() => {
+    if (!useMatrix) return;
+    const match = findVariantForSelection(variants, selection);
+    if (match && match.id !== selectedId) {
+      setSelectedId(match.id);
+      setQty(1);
+    }
+  }, [useMatrix, variants, selection, selectedId]);
+
+  const selected =
+    variants.find((v) => v.id === selectedId) ??
+    (useMatrix
+      ? findVariantForSelection(variants, selection)
+      : undefined) ??
+    defaultVariant;
+
   const selectedIndex = variants.findIndex(
     (variant) => variant.id === selected?.id,
   );
@@ -71,22 +100,26 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
       : 0;
   const saving = onSale && compareAt ? compareAt - selected!.price : 0;
 
-  // Portal the sticky mobile bar to <body> so ancestor backdrop-blur/overflow
-  // (which establish a containing block) can't trap a position:fixed child.
-  // useSyncExternalStore → hydration-safe client-only flag without an effect.
   const mounted = React.useSyncExternalStore(
     () => () => {},
-    () => true, // client snapshot
-    () => false, // server snapshot
+    () => true,
+    () => false,
   );
 
-  // Switching variants always starts a fresh, stock-safe quantity selection.
   function selectVariant(id: number) {
     setSelectedId(id);
     setQty(1);
+    const next = variants.find((v) => v.id === id);
+    if (next && useMatrix) {
+      setSelection(selectionFromVariant(next, axes));
+    }
   }
 
-  // Wishlist — keyed by variant; remove needs the wishlist-item row id.
+  function pickAxisValue(axisKey: string, value: string) {
+    setSelection((current) => ({ ...current, [axisKey]: value }));
+    setQty(1);
+  }
+
   const { status } = useSession();
   const authed = status === "authenticated";
   const wishlist = useWishlist(authed);
@@ -114,7 +147,6 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
       addWish.mutate(selected.id, {
         onSuccess: () => {
           toast.success("به علاقه‌مندی‌ها افزوده شد");
-          // Warm personalisation — fire-and-forget, never blocks the UI.
           record.mutate({
             product_id: product.id,
             interaction_type: "wishlist",
@@ -127,10 +159,67 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
   }
 
   return (
-    <div data-testid="purchase-panel">
-      {variants.length > 1 ? (
-        <fieldset className="mb-6">
-          <legend className="mb-2 text-sm text-muted-foreground">
+    <div data-testid="purchase-panel" className="space-y-6">
+      {useMatrix ? (
+        <div className="space-y-5">
+          {axes.map((axis) => (
+            <fieldset key={axis.key}>
+              <legend className="mb-2.5 text-sm font-medium text-foreground">
+                {axis.title}
+              </legend>
+              <div className="flex flex-wrap gap-2" role="list">
+                {axis.values.map((value) => {
+                  const isSel = selection[axis.key] === value;
+                  const exists = isOptionValueAvailable(
+                    variants,
+                    selection,
+                    axis.key,
+                    value,
+                    false,
+                  );
+                  const inStock = isOptionValueAvailable(
+                    variants,
+                    selection,
+                    axis.key,
+                    value,
+                    true,
+                  );
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      role="listitem"
+                      disabled={!exists}
+                      onClick={() => pickAxisValue(axis.key, value)}
+                      aria-pressed={isSel}
+                      aria-label={
+                        !exists
+                          ? `${value}، در دسترس نیست`
+                          : !inStock
+                            ? `${value}، ناموجود`
+                            : value
+                      }
+                      className={cn(
+                        "min-h-11 rounded-xl border px-4 py-2 text-sm transition-all duration-200",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                        "disabled:cursor-not-allowed disabled:opacity-40",
+                        isSel
+                          ? "border-primary bg-primary/10 font-semibold text-primary ring-1 ring-primary/25"
+                          : "border-border bg-background hover:border-primary/40 hover:bg-accent/40",
+                        exists && !inStock && "line-through decoration-muted-foreground/50",
+                      )}
+                    >
+                      {value}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ))}
+        </div>
+      ) : variants.length > 1 ? (
+        <fieldset>
+          <legend className="mb-2.5 text-sm font-medium text-foreground">
             انتخاب گزینه
           </legend>
           <div className="flex flex-wrap gap-2">
@@ -146,12 +235,14 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
                     value={variant.id}
                     checked={isSel}
                     onChange={() => selectVariant(variant.id)}
-                    aria-label={variantStock > 0 ? label : `${label}، ناموجود`}
+                    aria-label={
+                      variantStock > 0 ? label : `${label}، ناموجود`
+                    }
                     className="peer sr-only"
                   />
                   <span
                     className={cn(
-                      "flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:outline-none",
+                      "flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm transition-all duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:outline-none",
                       isSel
                         ? "border-primary bg-primary/10 font-medium text-primary ring-1 ring-primary/30"
                         : "border-border hover:border-primary/40 hover:bg-accent/40",
@@ -171,11 +262,22 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
         </fieldset>
       ) : null}
 
-      <div role="status" aria-live="polite" aria-atomic="true">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="rounded-2xl border border-border/60 bg-background/60 p-4 sm:p-5"
+      >
         {selected ? (
           <>
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-              <span className="font-serif text-4xl text-foil">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground">
+              قیمت
+              {selectedLabel ? (
+                <span className="font-normal"> · {selectedLabel}</span>
+              ) : null}
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+              <span className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
                 {formatPrice(selected.price)}
               </span>
               {onSale ? (
@@ -203,9 +305,9 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
                 isAvailable ? "text-primary" : "text-wine",
               )}
             >
-              {isAvailable
-                ? `${faNum(stock)} عدد آمادهٔ سفارش`
-                : "این گزینه در حال حاضر ناموجود است."}
+              {!isAvailable
+                ? "این گزینه در حال حاضر ناموجود است."
+                : (lowStockLabel(stock) ?? "آمادهٔ سفارش")}
             </p>
           </>
         ) : (
@@ -215,9 +317,8 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
         )}
       </div>
 
-      {/* Quantity + primary actions */}
       {selected ? (
-        <div className="mt-7 space-y-4">
+        <div className="space-y-4">
           {isAvailable ? (
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground" id="qty-label">
@@ -281,19 +382,17 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
         </div>
       ) : null}
 
-      {/* Sticky mobile bar — primary CTA stays in reach through the long page.
-          Portaled to <body> so it's truly viewport-fixed. */}
       {mounted
         ? createPortal(
             <div
-              className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/90 px-4 py-3 backdrop-blur-md lg:hidden [padding-bottom:calc(env(safe-area-inset-bottom)+0.75rem)]"
+              className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/95 px-4 py-3 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur-md lg:hidden [padding-bottom:calc(env(safe-area-inset-bottom)+0.75rem)]"
               aria-label="خرید سریع"
             >
               <div className="mx-auto flex max-w-7xl items-center gap-3">
                 <div className="min-w-0 flex-1 leading-tight">
                   {selected ? (
                     <>
-                      <p className="truncate font-serif text-lg text-foil">
+                      <p className="truncate font-serif text-lg text-foreground">
                         {formatPrice(selected.price)}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
@@ -329,7 +428,6 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
   );
 }
 
-/** Heart toggle shared by the inline panel and the sticky mobile bar. */
 function WishlistToggle({
   inWishlist,
   pending,

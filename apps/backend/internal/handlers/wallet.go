@@ -23,15 +23,41 @@ func (h *Handler) GetWallet(c *gin.Context) {
 	response.OK(c, mappers.ToWalletResponse(wallet))
 }
 
-// DepositToWallet was removed: a public self-service deposit endpoint let any
-// authenticated user credit their own spendable balance for free. Wallet credit
-// now flows only through verified payments, refunds, gift-card/loyalty
-// redemption and admin actions (which call WalletService.Deposit directly).
-//
-// WithdrawFromWallet was removed for the same class of risk: a public burn/cash-
-// out endpoint let customers destroy balance without a payout rail, KYC, or
-// admin review. Wallet debits now happen only via order purchase (WalletService
-// .Purchase) or future admin/ops tooling.
+// DepositToWallet (public) was removed: self-service free credit is unsafe.
+// Wallet credit now flows only through verified payments, refunds, gift-card/
+// loyalty redemption, and AdminCreditWallet below.
+
+// AdminCreditWallet — POST /admin/users/:userID/wallet/credit
+// Ops-only top-up of a customer's wallet (gift, goodwill, manual settlement).
+func (h *Handler) AdminCreditWallet(c *gin.Context) {
+	userID, ok := h.paramUUID(c, "userID")
+	if !ok {
+		return
+	}
+	// Resolve internal numeric id from public UUID.
+	target, err := h.User.GetByIDIncludingInactive(c.Request.Context(), userID)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	var req struct {
+		Amount      float64 `json:"amount" validate:"required,gt=0"`
+		Description string  `json:"description" validate:"omitempty,max=500"`
+	}
+	if !h.bindJSON(c, &req) {
+		return
+	}
+	desc := req.Description
+	if desc == "" {
+		desc = "افزایش موجودی توسط مدیر"
+	}
+	tx, err := h.Wallet.Deposit(c.Request.Context(), target.ID, req.Amount, nil, &desc)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+	response.Created(c, mappers.ToWalletTransactionResponse(tx))
+}
 
 // WithdrawFromWallet is intentionally not registered. Kept as a 410 handler so
 // any stale client that still POSTs /wallet/withdraw gets a clear signal.

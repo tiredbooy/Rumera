@@ -14,7 +14,7 @@ export function SeoSection({
   errors: FieldErrors<SiteSettingsFormValues>;
 }) {
   return (
-    <TabsContent value="seo" className="mt-5">
+    <TabsContent value="seo" forceMount className="mt-5 data-[state=inactive]:hidden">
       <Panel
         title="سئو و متادیتا"
         description="مقادیر پیش‌فرض صفحاتی که متادیتای اختصاصی ندارند."

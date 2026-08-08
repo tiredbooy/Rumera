@@ -48,11 +48,12 @@ beforeEach(() => {
 });
 
 describe("RolesView", () => {
-  it("renders the live single-role policy and member counts without a fake matrix", async () => {
+  it("renders the live single-role policy, member counts, and capability matrix", async () => {
     const markup = renderToStaticMarkup(await RolesView());
 
     expect(mocks.getAdminRoles).toHaveBeenCalledOnce();
     expect(markup).toContain("مدل تک‌نقشی فعال است");
+    expect(markup).toContain("ماتریس دسترسی پویا");
     expect(markup).toContain("مشتری");
     expect(markup).toContain("فروشنده");
     expect(markup).toContain("مدیر کل");
@@ -60,8 +61,8 @@ describe("RolesView", () => {
     expect(markup).toContain("۱۰");
     expect(markup).toContain("بدون دسترسی به پنل");
     expect(markup).toContain("ورود به پنل مجاز");
-    expect(markup).not.toMatch(/manager|support/i);
-    expect(markup).not.toContain("مشاهدهٔ محصولات");
+    expect(markup).toContain("products:read");
+    expect(markup).not.toMatch(/\bmanager\b|\bsupport\b/i);
   });
 
   it("shows an error instead of fabricated roles or counts", async () => {

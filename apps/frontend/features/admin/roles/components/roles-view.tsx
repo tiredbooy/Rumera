@@ -9,6 +9,7 @@ import type { AdminAuthorizationSummary } from "@/features/customers/types";
 import { AdminDataErrorState } from "@/features/dashboard/components/admin-data-error-state";
 import { PageHeader } from "@/features/dashboard/components/page-header";
 import { ApiError } from "@/lib/api/errors";
+import { CapabilityMatrix } from "@/features/admin/roles/components/capability-matrix";
 import { faNum } from "@/lib/products";
 import { ROLE_LABELS, type Role } from "@/lib/rbac/roles";
 import { cn } from "@/lib/utils";
@@ -80,7 +81,9 @@ export async function RolesView() {
         </Button>
       </section>
 
-      <section aria-labelledby="roles-summary-title">
+      <CapabilityMatrix />
+
+      <section aria-labelledby="roles-summary-title" className="mt-8">
         <h2 id="roles-summary-title" className="mb-3 font-serif text-lg">
           خلاصهٔ نقش‌ها
         </h2>

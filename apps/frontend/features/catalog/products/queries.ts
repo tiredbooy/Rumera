@@ -34,6 +34,8 @@ export interface ProductListQuery extends PaginationQuery {
   /** Effective only with category_id; includes that category's full subtree. */
   include_descendants?: boolean;
   brand_id?: number;
+  /** Public, stable brand slug filter. */
+  brand?: string;
   tag_id?: number;
   is_active?: boolean;
   min_price?: number;

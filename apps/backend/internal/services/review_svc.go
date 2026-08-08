@@ -41,15 +41,14 @@ func (s *ReviewService) Create(ctx context.Context, userID int64, req models.Cre
 	if already {
 		return nil, apperr.ErrConflict
 	}
+	// Non-buyers may leave feedback; verified_purchase badges distinguish trust.
+	// HasPurchased still runs so we can stamp the row honestly.
 	verifiedPurchase, err := s.reviewRepo.HasPurchased(ctx, userID, req.ProductID)
 	if err != nil {
 		return nil, apperr.ErrInternal
 	}
-	if !verifiedPurchase {
-		return nil, apperr.ErrAccessDenied
-	}
 
-	review, err := s.reviewRepo.Create(ctx, userID, req, true)
+	review, err := s.reviewRepo.Create(ctx, userID, req, verifiedPurchase)
 	if err != nil {
 		if errors.Is(err, models.ErrConflict) {
 			return nil, apperr.ErrConflict

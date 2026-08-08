@@ -40,6 +40,7 @@ const product: ProductListItem = {
   max_price: 1000,
   active_variant_count: 1,
   available_variant_count: 1,
+  available_stock: 5,
   purchasable_variant_id: 2,
 };
 

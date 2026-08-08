@@ -25,11 +25,22 @@ interface ProductCardActionsProps {
   hasAvailableVariants: boolean;
 }
 
+export const PRODUCT_CARD_ACTIONS_OVERLAY_CLASS = cn(
+  "absolute inset-x-3 bottom-3 z-20 transition-[transform,opacity] duration-300 ease-cellar",
+  "pointer-events-none translate-y-1 opacity-0",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-hover/product:pointer-events-auto",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-hover/product:translate-y-0",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-hover/product:opacity-100",
+  "group-focus-within/product:pointer-events-auto group-focus-within/product:translate-y-0 group-focus-within/product:opacity-100",
+  "motion-reduce:transform-none motion-reduce:transition-none",
+);
+
 /**
  * Overlay commerce controls for ProductCard.
  *
- * Mobile: always visible over the bottom media scrim (no hover dependency).
- * Desktop: CTA lifts slightly on card hover; wishlist stays glass-chrome.
+ * Wishlist stays always available (corner chrome).
+ * Quick-add / option CTAs stay off the media until fine-pointer hover or
+ * keyboard focus. Touch users use the persistent purchase link in the card body.
  */
 export function ProductCardActions({
   productId,
@@ -100,10 +111,10 @@ export function ProductCardActions({
           className={cn(
             "absolute end-3 top-3 z-20 flex size-11 cursor-pointer items-center justify-center rounded-full",
             "border border-border/50 bg-background/85 text-foreground shadow-e1 backdrop-blur-md",
-            "outline-none transition-[color,background-color,transform,box-shadow] duration-200",
-            "hover:scale-105 hover:bg-background hover:text-wine hover:shadow-e2",
+            "transition-[color,background-color,box-shadow] duration-200",
+            "hover:bg-background hover:text-wine hover:shadow-e2",
             "focus-visible:ring-2 focus-visible:ring-primary",
-            "disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none motion-reduce:hover:scale-100",
+            "disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none",
             wishlistItem && "border-wine/30 text-wine",
           )}
         >
@@ -116,11 +127,7 @@ export function ProductCardActions({
       ) : null}
 
       <div
-        className={cn(
-          "absolute inset-x-3 bottom-3 z-20 translate-y-0 opacity-100 transition-[transform,opacity] duration-300 ease-cellar",
-          "sm:translate-y-1 sm:opacity-95 sm:group-hover/product:translate-y-0 sm:group-hover/product:opacity-100",
-          "motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none",
-        )}
+        className={PRODUCT_CARD_ACTIONS_OVERLAY_CLASS}
       >
         {purchasableVariantId ? (
           <AddToCartButton
@@ -128,7 +135,7 @@ export function ProductCardActions({
             productId={productId}
             label="افزودن سریع"
             ariaLabel={`افزودن سریع ${productTitle} به سبد`}
-            className="h-11 w-full rounded-2xl bg-primary/95 px-4 text-primary-foreground shadow-e2 backdrop-blur-sm hover:bg-primary"
+            className="h-11 w-full rounded-2xl bg-primary/95 px-4 text-primary-foreground shadow-e2 backdrop-blur-sm hover:bg-primary max-sm:text-xs"
           />
         ) : hasActiveVariants && hasAvailableVariants && productHref ? (
           <Button

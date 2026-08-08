@@ -9,12 +9,13 @@ import {
   productDetailHref,
   productShopAnchor,
 } from "@/features/recipes/commerce";
+import { lowStockLabel } from "@/features/catalog/products/stock-display";
 import type { ShoppableProduct } from "@/features/recipes/types";
 import {
   formatRecipeProductRole,
   formatRecipeQuantity,
 } from "@/features/recipes/utils";
-import { faNum, formatPrice } from "@/lib/products";
+import { formatPrice } from "@/lib/products";
 import { cn } from "@/lib/utils";
 
 export function ShoppableProductCard({
@@ -36,6 +37,9 @@ export function ShoppableProductCard({
   const roleLabel = formatRecipeProductRole(product.role);
   const altHref = alternativeSearchHref(product.product_title);
   const anchor = productShopAnchor(product.product_variant_id);
+  const stockLine = product.is_available
+    ? lowStockLabel(product.available_stock)
+    : null;
 
   return (
     <article
@@ -103,9 +107,9 @@ export function ShoppableProductCard({
                 {formatPrice(product.compare_at_price!)}
               </span>
             ) : null}
-            {product.is_available && product.available_stock > 0 ? (
+            {stockLine ? (
               <span className="text-[11px] text-muted-foreground">
-                {faNum(product.available_stock)} عدد موجود
+                {stockLine}
               </span>
             ) : null}
           </div>

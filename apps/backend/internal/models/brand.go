@@ -10,6 +10,7 @@ import "time"
 type Brand struct {
 	ID          int64     `db:"id"           json:"id"`
 	Title       string    `db:"title"        json:"title"`
+	Slug        string    `db:"slug"         json:"slug"`
 	Country     *string   `db:"country"      json:"country,omitempty"`
 	FoundedYear *int      `db:"founded_year" json:"founded_year,omitempty"`
 	ImageURL    *string   `db:"image_url"    json:"image_url,omitempty"`
@@ -24,6 +25,7 @@ type Brand struct {
 
 type CreateBrandReq struct {
 	Title       string  `json:"title"        validate:"required,max=255"`
+	Slug        *string `json:"slug"         validate:"omitempty,max=255"`
 	Country     *string `json:"country"      validate:"omitempty,max=80"`
 	FoundedYear *int    `json:"founded_year" validate:"omitempty,min=1000"`
 	ImageURL    *string `json:"image_url"    validate:"omitempty,url"`
@@ -32,6 +34,7 @@ type CreateBrandReq struct {
 
 type UpdateBrandReq struct {
 	Title       *string `json:"title"        validate:"omitempty,max=255"`
+	Slug        *string `json:"slug"         validate:"omitempty,max=255"`
 	Country     *string `json:"country"      validate:"omitempty,max=80"`
 	FoundedYear *int    `json:"founded_year" validate:"omitempty,min=1000"`
 	ImageURL    *string `json:"image_url"    validate:"omitempty,url"`

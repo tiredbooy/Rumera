@@ -10,11 +10,14 @@ const (
 	UserRoleCustomer = "customer"
 	UserRoleVendor   = "vendor"
 	UserRoleAdmin    = "admin"
+	// UserRoleStaff is a lower-privilege panel operator. Staff may enter the
+	// admin API only with an explicit capability grant (role_capabilities).
+	UserRoleStaff = "staff"
 )
 
 func IsAssignableUserRole(role string) bool {
 	switch role {
-	case UserRoleCustomer, UserRoleVendor, UserRoleAdmin:
+	case UserRoleCustomer, UserRoleVendor, UserRoleAdmin, UserRoleStaff:
 		return true
 	default:
 		return false
@@ -22,7 +25,12 @@ func IsAssignableUserRole(role string) bool {
 }
 
 func AssignableUserRoles() []string {
-	return []string{UserRoleCustomer, UserRoleVendor, UserRoleAdmin}
+	return []string{UserRoleCustomer, UserRoleVendor, UserRoleAdmin, UserRoleStaff}
+}
+
+// IsPanelRole reports whether the role may enter the admin panel (subject to capabilities).
+func IsPanelRole(role string) bool {
+	return role == UserRoleAdmin || role == UserRoleStaff
 }
 
 func IsUserGender(gender string) bool {

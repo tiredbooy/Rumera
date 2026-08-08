@@ -16,15 +16,22 @@ func TestProductListItemPurchasableVariantIDJSON(t *testing.T) {
 	if strings.Contains(string(withoutVariant), "purchasable_variant_id") {
 		t.Fatalf("nil variant id must be omitted: %s", withoutVariant)
 	}
+	if !strings.Contains(string(withoutVariant), `"available_stock":0`) {
+		t.Fatalf("aggregate stock must always be serialized: %s", withoutVariant)
+	}
 
 	variantID := int64(42)
 	item.PurchasableVariantID = &variantID
+	item.AvailableStock = 2
 	withVariant, err := json.Marshal(item)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(withVariant), `"purchasable_variant_id":42`) {
 		t.Fatalf("variant id must be serialized: %s", withVariant)
+	}
+	if !strings.Contains(string(withVariant), `"available_stock":2`) {
+		t.Fatalf("aggregate stock must be serialized: %s", withVariant)
 	}
 
 	item.Tags = []TagResponse{{ID: 7, Title: "Gift"}}

@@ -1,5 +1,6 @@
 "use client";
 
+import type { MouseEvent } from "react";
 import { Loader2, ShoppingBag } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -7,8 +8,8 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { useAddCartItem } from "@/features/cart/api";
+import { cartMutationErrorMessage } from "@/features/cart/errors";
 import { useRecordInteraction } from "@/features/recommendations/hooks";
-import { ApiClientError } from "@/lib/api/store-client";
 import { cn } from "@/lib/utils";
 
 interface AddToCartButtonProps {
@@ -37,7 +38,11 @@ export function AddToCartButton({
   const add = useAddCartItem();
   const record = useRecordInteraction();
 
-  function onClick() {
+  function onClick(event: MouseEvent<HTMLButtonElement>) {
+    // Product cards nest this control over a media link — never navigate away.
+    event.preventDefault();
+    event.stopPropagation();
+
     if (status === "loading") return;
     if (status !== "authenticated") {
       toast.info("برای افزودن به سبد ابتدا وارد شوید");
@@ -45,18 +50,32 @@ export function AddToCartButton({
       router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
       return;
     }
-    if (!productVariantId) return;
+
+    const variantId = Number(productVariantId);
+    if (!Number.isFinite(variantId) || variantId < 1) {
+      toast.error("این محصول گزینهٔ قابل خرید ندارد");
+      return;
+    }
+
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty < 1) {
+      toast.error("تعداد نامعتبر است");
+      return;
+    }
 
     add.mutate(
-      { product_variant_id: productVariantId, quantity },
+      { product_variant_id: variantId, quantity: Math.trunc(qty) },
       {
         onSuccess: (cart) => {
           toast.success("به سبد خرید افزوده شد", {
-            action: { label: "مشاهدهٔ سبد", onClick: () => router.push("/cart") },
+            action: {
+              label: "مشاهدهٔ سبد",
+              onClick: () => router.push("/cart"),
+            },
           });
           const resolvedProductId =
             productId ??
-            cart.items.find((item) => item.variant_id === productVariantId)
+            cart.items.find((item) => item.variant_id === variantId)
               ?.product_id;
           if (resolvedProductId) {
             void record
@@ -68,18 +87,14 @@ export function AddToCartButton({
               .catch(() => undefined);
           }
         },
-        onError: (error) =>
-          toast.error(
-            error instanceof ApiClientError && error.code === "OUT_OF_STOCK"
-              ? "موجودی کافی نیست"
-              : "افزودن به سبد ناموفق بود",
-          ),
+        onError: (error) => toast.error(cartMutationErrorMessage(error)),
       },
     );
   }
 
   return (
     <Button
+      type="button"
       size="lg"
       className={cn("h-12 px-7 text-sm", className)}
       onClick={onClick}

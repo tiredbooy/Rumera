@@ -4,6 +4,7 @@ import type { PaginationQuery } from "@/lib/api/types";
 export interface Brand {
   id: number;
   title: string;
+  slug: string;
   country?: string;
   founded_year?: number;
   image_url?: string;
@@ -14,6 +15,7 @@ export interface Brand {
 
 export interface CreateBrandInput {
   title: string;
+  slug?: string | null;
   country?: string | null;
   founded_year?: number | null;
   image_url?: string | null;
@@ -26,6 +28,7 @@ export interface CreateBrandInput {
  */
 export interface UpdateBrandInput {
   title?: string | null;
+  slug?: string | null;
   country?: string | null;
   founded_year?: number | null;
   image_url?: string | null;

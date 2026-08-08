@@ -3,7 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { SiteSettings } from "@/features/settings/types";
 import { SettingsForm } from "./SettingsForm";
@@ -15,6 +15,16 @@ vi.mock("next/navigation", () => ({
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
+
+beforeAll(() => {
+  // Radix tabs measure content when forceMount keeps panels mounted.
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+});
 
 const settings: SiteSettings = {
   store: { name: "رومرا", tagline: "", logoUrl: "", description: "" },

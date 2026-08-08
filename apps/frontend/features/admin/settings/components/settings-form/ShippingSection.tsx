@@ -16,7 +16,7 @@ export function ShippingSection({
   thresholdPreview?: string;
 }) {
   return (
-    <TabsContent value="shipping" className="mt-5">
+    <TabsContent value="shipping" forceMount className="mt-5 data-[state=inactive]:hidden">
       <Panel
         title="قوانین ارسال"
         description="آستانهٔ ارسال رایگان و توضیحات ارسال."

@@ -5136,3 +5136,505 @@ go test ./pkg/metrics/ ./internal/services/
 npm run typecheck
 vitest search + recipe-view-tracker + ProductsTable  # 7 passed
 ```
+
+## Task 078a - Fix Add to Cart (critical)
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Normalized all cart API responses (`items` always an array, summary defaults) via `features/cart/normalize.ts`.
+- Validated `product_variant_id` / `quantity` before POST; reject empty/malformed payloads client-side.
+- `AddToCartButton`: `type="button"`, `preventDefault` + `stopPropagation` (card media link no longer steals the click), explicit missing-variant toast, mapped Persian error codes (`OUT_OF_STOCK`, `SESSION_EXPIRED`, `PRODUCT_NOT_FOUND`, …).
+- Empty `data` on success throws instead of seeding a broken cart cache.
+
+### Verification
+- `vitest` cart normalize + errors tests pass.
+- Frontend `tsc --noEmit` passes.
+
+---
+
+## Task 076c - Hide stock unless below 3
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Added `features/catalog/products/stock-display.ts` policy (`LOW_STOCK_THRESHOLD = 3`).
+- PDP purchase panel: shows “آمادهٔ سفارش” when stock ≥ 3; “N عدد باقی مانده” only when 1–2; OOS copy unchanged.
+- Recipe shoppable cards: hide “N عدد موجود” when stock ≥ 3; low-stock line only when &lt; 3.
+
+### Verification
+- stock-display, product-purchase-panel, shoppable-product-card tests pass.
+
+---
+
+## Task 076a - Widen homepage recommendation cards
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Recommendation rail grid: `lg:grid-cols-3 xl:grid-cols-4` (was 4-up on lg) so cards are wider.
+- Media frame shortened to ~4:3 / 5:4 (was tall 4:5).
+- Recommendation media policy widths/sizes updated for the new layout.
+
+### Verification
+- storefront-policy tests pass; `tsc --noEmit` passes.
+
+---
+
+## Task 076b - Homepage catalogue rail swipe + hover quick-add
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Catalog Swiper: contained overflow, better freeMode momentum, slightly wider slides (`20.5–22rem`), resistance tuning.
+- Product card quick-add hidden by default on hover-capable viewports; revealed on `group-hover` / `group-focus-within`; still reachable on small screens.
+- Media bottom scrim only appears when CTAs are revealed (desktop hover/focus).
+
+### Verification
+- catalog-product-rail + product-card tests pass.
+
+---
+
+## Task 077a - Brands index visual polish
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Brands page rebuilt as a card grid with media tile, monogram fallback, country/year meta, description clamp, primary CTA to catalogue, and hover elevation.
+- Added `brand-tile` storefront media slot.
+
+### Verification
+- `tsc --noEmit` passes; policy slot type-checked via media policy.
+
+
+## Task 078b - Shop settings phone/address persist correctly
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Extracted settings form helpers (`form-utils.ts`): normalize document, defaults, payload build, nested 422 field mapping (`contact.supportPhone` → `supportPhone`).
+- Settings tabs use `forceMount` + inactive hide so phone/address inputs stay registered across tab switches and validation errors remain focusable.
+- `shouldUnregister: false` on the form; save path normalizes the API response before `reset` so rehydrate never crashes on partial data.
+- Client `updateSiteSettings` always returns a normalized `SiteSettings`.
+
+### Verification
+- `form-utils` unit tests (payload phone/address, nested errors, normalize).
+- SettingsForm tab contract test passes with ResizeObserver stub.
+- Frontend `tsc --noEmit` passes.
+
+
+## Task 079a - Recipe detail shopping UX
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Ingredient rows: clear status badges (قابل خرید / ناموجود / unlinked) + actions.
+- `RecipeShopSummary`: ready/unavailable/unlinked counts + jump-to-shop CTA.
+- `RecipeMobileShopBar`: sticky mobile bar with bulk-add + shop anchor.
+- Spacer so sticky bar does not cover content; add-all uses `type="button"`.
+
+### Verification
+- recipe-detail-view tests pass (tracker/summary/bar mocked).
+
+---
+
+## Task 080a - PDP media gallery redesign
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Removed `cellar-glow` / heavy glow stage; clean card frame.
+- Touch swipe on main frame; horizontal scroll thumbs on mobile; page dots.
+- Desktop keeps thumbnail radiogroup + RTL keyboard nav + prev/next.
+
+### Verification
+- product-gallery tests updated and passing; `tsc --noEmit` clean.
+
+---
+
+## Task 080b - PDP variant matrix + price block
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- `variant-matrix.ts`: multi-axis option selection (size × package, etc.) when
+  options exist; stock-aware disabled states; falls back to chip list.
+- Price block redesigned as a clear card (label, selected options, sale/stock).
+- Purchase panel chrome cleaned (no gold rule / heavy glass).
+
+### Verification
+- variant-matrix + product-purchase-panel tests pass.
+
+---
+
+## Task 080c - Review policy (non-buyers allowed + badges)
+
+**Completed:** 2026-08-08
+**Status:** done
+**Policy decision:** Option A — non-buyers may submit feedback; buyers get
+`verified_purchase` badge (“خرید تأییدشده”); others get “بازدیدکننده”.
+
+### What changed
+- Backend `ReviewService.Create`: no longer 403s non-buyers; stamps
+  `verifiedPurchase` truthfully.
+- Frontend copy, write dialog, summary, list empty state, review card badges.
+
+### Verification
+- `go test ./internal/services -run ReviewCreate` pass.
+- Frontend tsc clean.
+
+
+## Task 081a - Admin product form redesign
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Sticky sidebar **section navigator** (jump links with error badges) for general,
+  specs, tags, variants, media, SEO.
+- Section anchors with `scroll-mt-28` for sticky header clearance.
+- Preview card remains sticky above the nav.
+
+### Verification
+- Existing ProductForm tests remain the contract; `tsc --noEmit` clean.
+
+---
+
+## Task 082a - Dynamic RBAC matrix (frontend affordances)
+
+**Completed:** 2026-08-08
+**Status:** done (nav/affordance layer; API still single-role admin)
+
+### Policy note
+Backend continues to gate the admin API with live `role=admin`. The new matrix
+lets operators design lower-privilege packages that drive **frontend**
+`permissionsForRole` / nav filtering, persisted in `localStorage` and broadcast
+via `rumera:capabilities-updated`. Full server-side permission enforcement is
+the next authz iteration.
+
+### What changed
+- `CapabilityMatrix` on roles page (checkboxes per role × permission).
+- `permissionsForRole` reads saved matrix when present.
+
+### Verification
+- roles-view tests updated; pass.
+
+---
+
+## Task 083a - Users management wallet top-up
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Backend `POST /admin/users/:userID/wallet/credit` → `WalletService.Deposit`.
+- Customer detail: `WalletCreditForm` for amount + optional description.
+
+### Verification
+- `go build ./internal/handlers` clean; FE tsc clean.
+
+---
+
+## Task 084a - Discount form selects + Jalali dates
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Product/category multi-select via `MultiTagPicker` + catalogue loaders.
+- `JalaliDateTimeInput` + pure Jalali conversion helpers (no extra deps).
+- Coupon form uses Jalali display; API still Gregorian datetime-local values.
+
+### Verification
+- jalali unit tests + coupon-form tests pass.
+
+---
+
+## Task 085a - Inventory management upgrade
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- Added **critical low stock (&lt;3)** table filter alongside status/category.
+- Existing search + row adjust/history preserved.
+
+### Verification
+- InventoryTable tests pass.
+
+---
+
+## Task 086a - Generic K6 suite
+
+**Completed:** 2026-08-08
+**Status:** done
+
+### What changed
+- `load-tests/k6/smoke.js`, `mixed.js`, `cart-write.js` + README.
+- Env-driven `BASE_URL`, `VUS`, `DURATION`, optional `ACCESS_TOKEN`.
+
+### Verification
+- Scripts are self-contained k6 files (run when k6 is installed).
+
+## Phase K-M Acceptance Reconciliation
+
+**Status:** Complete (tracker audit)
+**Date:** 2026-08-08
+**Agent:** gpt-5.6-sol
+
+### Verified Completion
+
+- **Task 081a** was independently re-read and verified against its full product-
+  form criteria: sectioned information architecture, progressive disclosure,
+  desktop/mobile sticky actions, dirty-state guards, aggregate save/recovery,
+  keyboard focus handling, and RTL-safe layout.
+- Removed Task 081a from the open-only `TASKS.md` backlog. Its original
+  completion record above remains the canonical implementation summary.
+
+### Verification
+
+```text
+npm exec tsc -- --noEmit
+npm run lint -- ProductForm.tsx SectionNav.tsx FormLayout.tsx \
+  FormHeaderBar.tsx MobileActionBar.tsx
+npm test -- ProductForm.integration.test.tsx \
+  ProductForm.behavior.test.tsx ProductForm.recovery.test.tsx \
+  ProductActionBars.test.tsx
+# 4 files / 15 tests passed
+```
+
+### Reopened Claims
+
+- Tasks **076a-080c** and **082a-086a** remain open. Their earlier records above
+  are implementation snapshots, not final acceptance records.
+- Material gaps include the missing product-card stock contract, unverified real
+  add-to-cart regression path, recipe count/empty-response defects, sparse
+  variant-matrix defects, browser-only RBAC, missing wallet confirmation and
+  capability enforcement, Jalali/selector correctness gaps, missing inventory
+  weight remediation, and incomplete K6 scenarios/authentication.
+- The current backend verification gate is red because active Task 082a work in
+  `internal/services/capability_svc.go` does not compile. Frontend TypeScript is
+  green. Exact per-task gaps are recorded in `TASKS.md`.
+
+## Task 076a - Widen Homepage Recommendation Product Cards (Accepted)
+
+**Status:** Complete
+**Date:** 2026-08-08
+**Agent:** gpt-5.6-sol
+
+### What Changed
+
+- Replaced the cramped two-column recommendation grid with a semantic native
+  RTL scroll-snap rail shared by homepage trending, signed-in "for you," and
+  other existing recommendation surfaces.
+- Cards use a mobile width of `min(20rem, 100vw - 4.5rem)` and scale through
+  `21.5rem`, `22rem`, and `22.5rem`, retaining a visible next-card peek.
+- Preserved the short 4:3 / 5:4 media frame and aligned the recommendation media
+  `sizes` policy to the actual card widths.
+- Added a focusable rail, visible focus treatment, semantic list markup, native
+  RTL keyboard scrolling, hidden scrollbars, and reduced-motion-safe card motion.
+- Replaced long `700ms` and `transition-all` effects with scoped `300ms`
+  project-token transitions following the 21st UI review.
+
+### Files Touched
+
+- `apps/frontend/features/catalog/products/components/recommendation-rail.tsx`
+- `apps/frontend/features/catalog/products/components/recommendation-rail.test.tsx`
+- `apps/frontend/lib/media/storefront-policy.ts`
+- `apps/frontend/lib/media/storefront-policy.test.ts`
+- `refactor-workstreams/Refactor-Docs/TASKS.md`
+- `refactor-workstreams/Refactor-Docs/FINISHED.md`
+
+### Verification
+
+```text
+npm test -- recommendation-rail.test.tsx storefront-policy.test.ts
+# 2 files / 6 tests passed
+
+npm run lint -- recommendation-rail.tsx recommendation-rail.test.tsx \
+  storefront-policy.ts storefront-policy.test.ts
+npm exec tsc -- --noEmit
+npm run build
+# passed; API-unavailable static-generation surfaces soft-failed as designed
+
+21st review <four changed frontend paths>
+# 0 findings
+```
+
+- Compiled-CSS Playwright measurements:
+  - 320px viewport: 248px card, adjacent peek, no document overflow.
+  - 375px viewport: 303px card, adjacent peek, no document overflow.
+  - 768/1024/1440px: 344/352/360px cards with rail overflow contained.
+  - Direction computed as RTL at every viewport.
+  - Arrow-key input changed the RTL rail scroll position.
+- Reduced-motion computed `transition-duration: 0s` and `transform: none`.
+
+## Task 076b - Homepage Catalogue Rail And Quick-Add (Accepted)
+
+**Status:** Complete
+**Date:** 2026-08-08
+**Agent:** gpt-5.6-sol
+
+### What Changed
+
+- Kept the catalogue Swiper contained and made slide width/shrink behavior
+  explicit so cards cannot collapse while loading Swiper styles.
+- Tuned mobile card width to preserve a discoverable adjacent-card peek while
+  retaining the existing 21.5-22rem desktop card rhythm.
+- Quick-add is now hidden by default and appears only for fine-pointer hover or
+  keyboard focus. Coarse-pointer users receive a persistent "مشاهده و خرید"
+  footer path outside the image.
+- Removed the always-on mobile image scrim, so touch product imagery remains
+  clean and the product link is not covered by an invisible action layer.
+- Swiper keeps direct drag/keyboard/navigation behavior but disables momentum
+  and transition speed when `prefers-reduced-motion` is active.
+- Tightened touched ProductCard motion to scoped 300ms project-token transitions.
+
+### Files Touched
+
+- `apps/frontend/features/home/components/catalog-product-rail.tsx`
+- `apps/frontend/features/home/components/catalog-product-rail.test.tsx`
+- `apps/frontend/features/catalog/products/components/product-card.tsx`
+- `apps/frontend/features/catalog/products/components/product-card.test.tsx`
+- `apps/frontend/features/catalog/products/components/product-card-actions.tsx`
+- `apps/frontend/features/catalog/products/components/product-card-actions.test.ts`
+- `refactor-workstreams/Refactor-Docs/TASKS.md`
+- `refactor-workstreams/Refactor-Docs/FINISHED.md`
+
+### Verification
+
+```text
+npm test -- catalog-product-rail.test.tsx product-card.test.tsx \
+  product-card-actions.test.ts
+# 3 files / 9 tests passed
+
+npm run lint -- <six changed frontend files>
+npm exec tsc -- --noEmit
+npm run build
+# passed; API-unavailable static-generation surfaces soft-failed as designed
+
+21st review <six changed frontend paths>
+# 0 findings
+```
+
+- Compiled-CSS Playwright checks at 320/375/768/1024/1440px confirmed stable
+  256/311/344/352/352px slides, intentional peeks, RTL, and no page overflow.
+- Fine-pointer hover and keyboard focus reveal quick-add; coarse-pointer default
+  keeps it hidden and displays the persistent purchase label.
+- Reduced-motion removes the overlay transition; focused Swiper tests verify
+  `speed: 0` and `momentum: false`.
+
+## Task 076c - Low-Stock Disclosure Below Three (Accepted)
+
+**Status:** Complete
+**Date:** 2026-08-08
+**Agent:** gpt-5.6-sol
+
+### What Changed
+
+- Added required `available_stock` to the backend `ProductListItem` contract.
+  The list query computes it as sellable stock summed across active variants,
+  subtracting committed units and clamping each variant at zero.
+- Kept `available_variant_count` and quick-purchase semantics unchanged; a
+  multi-variant integration case documents aggregate stock behavior.
+- Mirrored the required field in the frontend `ProductListItem` type and updated
+  typed fixtures across catalogue, category, tag, search, and homepage tests.
+- Product cards now reuse the shared stock policy: aggregate stock 1-2 replaces
+  the generic ready chip with an amber Persian remaining-count cue; 3 or more
+  remains the quantity-free ready state; zero remains out of stock.
+- PDP and recipe shopping cards continue using the same `lowStockLabel` policy.
+- Updated product API and inventory architecture documentation with the exact
+  aggregate-stock definition and disclosure rule.
+
+### Key Files
+
+- `apps/backend/internal/models/product_response.go`
+- `apps/backend/internal/repositories/product_repo.go`
+- `apps/backend/tests/integration/product_test.go`
+- `apps/backend/docs/api/products.md`
+- `apps/backend/docs/architecture/inventory.md`
+- `apps/frontend/features/catalog/products/types.ts`
+- `apps/frontend/features/catalog/products/stock-display.ts`
+- `apps/frontend/features/catalog/products/components/product-card.tsx`
+- Focused backend/frontend tests and typed list fixtures
+
+### Verification
+
+```text
+go test ./internal/models ./internal/repositories
+go vet ./internal/models ./internal/repositories
+
+npm test -- product-card.test.tsx stock-display.test.ts \
+  catalog-product-rail.test.tsx search-result-product-card.test.tsx \
+  tag-storefront.test.tsx category-detail-view.test.tsx
+# 6 files / 28 tests passed
+
+npm test -- stock-display.test.ts product-card.test.tsx \
+  product-purchase-panel.test.tsx shoppable-product-card.test.tsx
+# 4 files / 15 tests passed
+
+npm run lint -- <scoped stock/type/card files>
+npm exec tsc -- --noEmit
+npm run build
+21st review <stock/type/card files>
+# passed; 21st review: 0 findings
+```
+
+- The tagged database integration regression was added but its package cannot
+  currently compile because active Task 082a work has an unrelated existing
+  error at `internal/services/capability_svc.go:46`. Model/repository packages
+  compile, test, and vet cleanly; the blocked command and cause were recorded.
+
+## Task 077a - Brands Index Layout And Visual Style (Accepted)
+
+**Status:** Complete
+**Date:** 2026-08-08
+**Agent:** gpt-5.6-sol
+
+### What Changed
+
+- Accepted the production brands index as a responsive editorial grid with
+  consistent image-led cards, Persian typography, backend-derived metadata, and
+  real `/products?brand_id=...` catalogue links.
+- Confirmed truthful image fallbacks, missing-description copy, empty state, and
+  load-error state without fabricated brand data.
+- Fixed foundation-year formatting so Persian years do not display a thousands
+  separator (`۱۹۸۴`, not `۱٬۹۸۴`).
+- Tightened card, media, and arrow reduced-motion behavior to remove transforms
+  and transitions when motion reduction is requested.
+- Added focused server-page tests for API query shape, card content, metadata,
+  deep links, responsive classes, focus styling, and empty/error branches.
+
+### Files Touched
+
+- `apps/frontend/app/(storefront)/brands/page.tsx`
+- `apps/frontend/app/(storefront)/brands/page.test.tsx`
+- `refactor-workstreams/Refactor-Docs/TASKS.md`
+- `refactor-workstreams/Refactor-Docs/FINISHED.md`
+
+### Verification
+
+```text
+npm test -- brands/page.test.tsx list-routing.test.ts \
+  storefront-policy.test.ts
+# 3 files / 12 tests passed
+
+npm run lint -- brands/page.tsx brands/page.test.tsx
+npm run build
+21st review brands/page.tsx brands/page.test.tsx
+# passed; 21st review: 0 findings
+```
+
+- Compiled-CSS Playwright checks confirmed 1/1/2/3/4 columns at
+  320/375/768/1024/1440px, RTL direction, and no document overflow.
+- Keyboard Tab focuses the first brand link with a visible primary ring.
+- Reduced-motion computes `transition-property: none` for card and media.

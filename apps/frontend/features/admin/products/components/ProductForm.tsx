@@ -37,6 +37,7 @@ import {
 import { FormHeaderBar } from "./product-form/sidebar/FormHeaderBar";
 import { MobileActionBar } from "./product-form/sidebar/MobileActionBar";
 import { PreviewCard } from "./product-form/sidebar/PreviewCard";
+import { ProductFormSectionNav } from "./product-form/SectionNav";
 import { GeneralInfoSection } from "./product-form/GeneralInfoSection";
 import { SpecificationsSection } from "./product-form/SpecificationsSection";
 import { VariantsSection } from "./product-form/VariantsSection";
@@ -579,60 +580,118 @@ export function ProductForm({
       <fieldset disabled={editorLocked} className="contents">
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="flex flex-col gap-6">
-            <GeneralInfoSection
-              register={register}
-              control={control}
-              errors={errors}
-              categories={categories}
-              brands={brands}
-            />
-            <SpecificationsSection
-              register={register}
-              control={control}
-              errors={errors}
-            />
-            <TagsSection
-              control={control}
-              errors={errors}
-              initialTags={product?.tags}
-              disabled={editorLocked}
-            />
-            <VariantsSection
-              register={register}
-              control={control}
-              setValue={setValue}
-              errors={errors}
-              fields={fields}
-              append={append}
-              remove={remove}
-              optionTypes={optionTypes}
-              productVariants={product?.variants}
-              error={variantError}
-              disabled={editorLocked}
-            />
+            <div id="product-section-general" className="scroll-mt-28">
+              <GeneralInfoSection
+                register={register}
+                control={control}
+                errors={errors}
+                categories={categories}
+                brands={brands}
+              />
+            </div>
+            <div id="product-section-specs" className="scroll-mt-28">
+              <SpecificationsSection
+                register={register}
+                control={control}
+                errors={errors}
+              />
+            </div>
+            <div id="product-section-tags" className="scroll-mt-28">
+              <TagsSection
+                control={control}
+                errors={errors}
+                initialTags={product?.tags}
+                disabled={editorLocked}
+              />
+            </div>
+            <div id="product-section-variants" className="scroll-mt-28">
+              <VariantsSection
+                register={register}
+                control={control}
+                setValue={setValue}
+                errors={errors}
+                fields={fields}
+                append={append}
+                remove={remove}
+                optionTypes={optionTypes}
+                productVariants={product?.variants}
+                error={variantError}
+                disabled={editorLocked}
+              />
+            </div>
 
-            <ImagesSection
-              uploaderRef={uploaderRef}
-              productId={product?.id ?? null}
-              mode={mode}
-              initialImages={product?.images ?? []}
-              disabled={editorLocked}
-              error={mediaError}
-              onDirtyChange={setMediaDirty}
-              onGalleryChange={setGallerySnapshot}
-            />
+            <div id="product-section-images" className="scroll-mt-28">
+              <ImagesSection
+                uploaderRef={uploaderRef}
+                productId={product?.id ?? null}
+                mode={mode}
+                initialImages={product?.images ?? []}
+                disabled={editorLocked}
+                error={mediaError}
+                onDirtyChange={setMediaDirty}
+                onGalleryChange={setGallerySnapshot}
+              />
+            </div>
 
-            <SeoSection register={register} errors={errors} />
+            <div id="product-section-seo" className="scroll-mt-28">
+              <SeoSection register={register} errors={errors} />
+            </div>
           </div>
 
           <aside className="flex flex-col gap-6">
-            <div className="lg:sticky lg:top-20">
+            <div className="flex flex-col gap-4 lg:sticky lg:top-20">
               <PreviewCard
                 imageUrl={gallerySnapshot.primaryUrl}
                 title={title}
                 brandName={brandName}
                 isActive={isActive}
                 mode={mode}
+              />
+              <ProductFormSectionNav
+                className="hidden lg:block"
+                sections={[
+                  {
+                    id: "product-section-general",
+                    label: "اطلاعات کلی",
+                    hint: "نام، دسته، برند",
+                    hasError: Boolean(
+                      errors.title ||
+                        errors.slug ||
+                        errors.category_id ||
+                        errors.brand_id,
+                    ),
+                  },
+                  {
+                    id: "product-section-specs",
+                    label: "مشخصات",
+                    hint: "وزن، مبدأ، ABV",
+                    hasError: Boolean(errors.weight || errors.abv),
+                  },
+                  {
+                    id: "product-section-tags",
+                    label: "برچسب‌ها",
+                    hasError: Boolean(errors.tag_ids),
+                  },
+                  {
+                    id: "product-section-variants",
+                    label: "تنوع و قیمت",
+                    hint: "SKU و گزینه‌ها",
+                    hasError: Boolean(errors.variants || variantError),
+                  },
+                  {
+                    id: "product-section-images",
+                    label: "رسانه",
+                    hasError: Boolean(mediaError),
+                  },
+                  {
+                    id: "product-section-seo",
+                    label: "سئو",
+                    hint: "اختیاری",
+                    hasError: Boolean(
+                      errors.meta_title || errors.meta_description,
+                    ),
+                  },
+                ]}
               />
             </div>
           </aside>

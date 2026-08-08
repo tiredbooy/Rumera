@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -55,6 +55,7 @@ const numOrNull = (v?: string) => (v && v.trim() !== "" ? Number(v) : null);
 function defaults(brand?: Brand): BrandFormValues {
   return {
     title: brand?.title ?? "",
+    slug: brand?.slug ?? "",
     country: brand?.country ?? "",
     founded_year: brand?.founded_year != null ? String(brand.founded_year) : "",
     image_url: brand?.image_url ?? "",
@@ -175,8 +176,8 @@ export function BrandForm({
 
   const {
     register,
+    control,
     handleSubmit,
-    watch,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<BrandFormValues>({
@@ -184,12 +185,14 @@ export function BrandForm({
     defaultValues: defaults(brand),
   });
 
-  const title = watch("title");
-  const imageUrl = watch("image_url");
+  const title = useWatch({ control, name: "title" });
+  const imageUrl = useWatch({ control, name: "image_url" });
+  const country = useWatch({ control, name: "country" });
 
   function toPayload(v: BrandFormValues): CreateBrandInput {
     return {
       title: v.title.trim(),
+      slug: strOrNull(v.slug),
       country: strOrNull(v.country),
       founded_year: numOrNull(v.founded_year),
       image_url: strOrNull(v.image_url),
@@ -271,6 +274,22 @@ export function BrandForm({
               autoComplete="off"
               aria-invalid={!!errors.title}
               {...register("title")}
+            />
+          </Field>
+          <Field
+            id="slug"
+            label="شناسهٔ نشانی"
+            error={errors.slug?.message}
+            hint="مثلاً jack-daniel؛ اگر خالی باشد از نام برند ساخته می‌شود."
+            full
+          >
+            <Input
+              id="slug"
+              dir="ltr"
+              autoComplete="off"
+              placeholder="jack-daniel"
+              aria-invalid={!!errors.slug}
+              {...register("slug")}
             />
           </Field>
           <Field
@@ -393,7 +412,7 @@ export function BrandForm({
             <LogoPreview url={imageUrl} title={title} />
             <p className="mt-4 font-medium">{title || "نام برند"}</p>
             <p className="text-xs text-muted-foreground">
-              {watch("country") || "کشور سازنده"}
+              {country || "کشور سازنده"}
             </p>
           </div>
 

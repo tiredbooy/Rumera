@@ -46,6 +46,15 @@ vi.mock("./shoppable-product-card", () => ({
 vi.mock("./recipe-card", () => ({
   RecipeCard: () => <article data-related-card="true" />,
 }));
+vi.mock("./recipe-mobile-shop-bar", () => ({
+  RecipeMobileShopBar: () => <div data-mobile-shop-bar="true" />,
+}));
+vi.mock("./recipe-shop-summary", () => ({
+  RecipeShopSummary: () => <div data-shop-summary="true" />,
+}));
+vi.mock("./recipe-view-tracker", () => ({
+  RecipeViewTracker: () => null,
+}));
 
 import { RecipeDetailView } from "./recipe-detail-view";
 

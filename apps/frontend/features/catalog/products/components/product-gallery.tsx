@@ -9,13 +9,9 @@ import { faNum } from "@/lib/products";
 import type { ProductImage } from "@/features/catalog/products/types";
 
 /**
- * ProductGallery — the PDP's image viewer. A large primary frame (`.cellar-glow`
- * lit, contain-fit so bottle silhouettes never crop) with a thumbnail rail that
- * swaps the active image. Fully keyboard-driven: the thumbnail strip is a roving
- * `radiogroup` (← → / Home / End move + select, RTL-aware); the main frame
- * advances with ← →; the active thumb carries a gold ring. An image counter sits
- * over the frame. Falls back to `fallback` (the Bottle placeholder) when the
- * product has no photography.
+ * ProductGallery — clean PDP media viewer (no glow backdrop).
+ * Desktop: main frame + thumbnail radiogroup.
+ * Mobile: swipeable main frame (touch), compact horizontal thumbs, app-like chrome.
  */
 export function ProductGallery({
   images,
@@ -28,6 +24,7 @@ export function ProductGallery({
 }) {
   const [active, setActive] = React.useState(0);
   const thumbRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
+  const touchStartX = React.useRef<number | null>(null);
   const count = images.length;
   const safeActive = count > 0 ? Math.min(active, count - 1) : 0;
   const current = images[safeActive];
@@ -65,10 +62,29 @@ export function ProductGallery({
     }
   }
 
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.changedTouches[0]?.clientX ?? null;
+  }
+
+  function onTouchEnd(e: React.TouchEvent) {
+    if (count < 2 || touchStartX.current == null) return;
+    const endX = e.changedTouches[0]?.clientX;
+    if (endX == null) return;
+    const delta = endX - touchStartX.current;
+    touchStartX.current = null;
+    // RTL: swipe finger to the left (negative delta) → next image in sequence.
+    if (Math.abs(delta) < 40) return;
+    if (delta < 0) go(safeActive + 1);
+    else go(safeActive - 1);
+  }
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3 sm:gap-4">
       <div
-        className="cellar-glow border-hairline shadow-e2 group/frame relative flex aspect-square items-center justify-center overflow-hidden rounded-[2rem] outline-none ring-1 ring-foreground/10 focus-visible:ring-3 focus-visible:ring-primary/60 focus-visible:ring-offset-2"
+        className={cn(
+          "border-hairline shadow-e1 group/frame relative flex aspect-square items-center justify-center overflow-hidden rounded-3xl bg-card outline-none ring-1 ring-foreground/8 sm:rounded-[1.75rem]",
+          "focus-visible:ring-3 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        )}
         role={count > 1 ? "group" : undefined}
         aria-roledescription={count > 1 ? "گالری تصاویر" : undefined}
         aria-label={count > 1 ? title : undefined}
@@ -83,11 +99,13 @@ export function ProductGallery({
             go(safeActive - 1);
           }
         }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
       >
         {current ? (
           <div
             key={current.id}
-            className="animate-in fade-in-0 zoom-in-95 absolute inset-0 p-10 duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+            className="animate-in fade-in-0 absolute inset-0 p-6 duration-300 ease-out motion-reduce:animate-none sm:p-8 md:p-10"
           >
             <StorefrontMedia
               slot="product-gallery"
@@ -104,14 +122,13 @@ export function ProductGallery({
           fallback
         )}
 
-        {/* Prev / next + counter — only when there's more than one image */}
         {count > 1 ? (
           <>
             <button
               type="button"
               onClick={() => go(safeActive + 1)}
               aria-label="تصویر بعدی"
-              className="absolute end-4 top-1/2 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/80 text-foreground opacity-90 shadow-e1 outline-none ring-1 ring-foreground/10 backdrop-blur-sm transition-[opacity,transform,background-color] duration-200 hover:scale-105 hover:bg-background hover:opacity-100 focus-visible:ring-3 focus-visible:ring-primary/60 motion-reduce:transition-none"
+              className="absolute end-3 top-1/2 z-10 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground opacity-90 shadow-e1 outline-none backdrop-blur-sm transition-[opacity,transform,background-color] duration-200 hover:scale-105 hover:bg-background hover:opacity-100 focus-visible:ring-3 focus-visible:ring-primary/60 motion-reduce:transition-none sm:end-4"
             >
               <ChevronLeft className="size-5" />
             </button>
@@ -119,16 +136,31 @@ export function ProductGallery({
               type="button"
               onClick={() => go(safeActive - 1)}
               aria-label="تصویر قبلی"
-              className="absolute start-4 top-1/2 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/80 text-foreground opacity-90 shadow-e1 outline-none ring-1 ring-foreground/10 backdrop-blur-sm transition-[opacity,transform,background-color] duration-200 hover:scale-105 hover:bg-background hover:opacity-100 focus-visible:ring-3 focus-visible:ring-primary/60 motion-reduce:transition-none"
+              className="absolute start-3 top-1/2 z-10 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground opacity-90 shadow-e1 outline-none backdrop-blur-sm transition-[opacity,transform,background-color] duration-200 hover:scale-105 hover:bg-background hover:opacity-100 focus-visible:ring-3 focus-visible:ring-primary/60 motion-reduce:transition-none sm:start-4"
             >
               <ChevronRight className="size-5" />
             </button>
             <span
               aria-live="polite"
-              className="absolute bottom-4 start-1/2 -translate-x-1/2 rounded-full bg-background/70 px-2.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground backdrop-blur-sm"
+              className="absolute bottom-3 start-1/2 z-10 -translate-x-1/2 rounded-full border border-border/50 bg-background/90 px-3 py-1 text-xs font-medium tabular-nums text-muted-foreground shadow-e1 backdrop-blur-sm sm:bottom-4"
             >
               {faNum(safeActive + 1)} / {faNum(count)}
             </span>
+            {/* Mobile page dots */}
+            <div
+              className="absolute inset-x-0 bottom-12 flex justify-center gap-1.5 sm:hidden"
+              aria-hidden
+            >
+              {images.map((img, i) => (
+                <span
+                  key={img.id}
+                  className={cn(
+                    "size-1.5 rounded-full transition-colors",
+                    i === safeActive ? "bg-primary" : "bg-foreground/20",
+                  )}
+                />
+              ))}
+            </div>
           </>
         ) : null}
       </div>
@@ -137,7 +169,7 @@ export function ProductGallery({
         <div
           role="radiogroup"
           aria-label="تصاویر محصول"
-          className="grid grid-cols-5 gap-3"
+          className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:grid sm:grid-cols-5 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0 [&::-webkit-scrollbar]:hidden"
           onKeyDown={onThumbKey}
         >
           {images.map((img, i) => (
@@ -153,13 +185,13 @@ export function ProductGallery({
               onClick={() => setActive(i)}
               aria-label={`تصویر ${faNum(i + 1)} از ${title}`}
               className={cn(
-                "border-hairline relative aspect-square cursor-pointer overflow-hidden rounded-2xl bg-card ring-1 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+                "border-hairline relative aspect-square w-[4.5rem] shrink-0 cursor-pointer overflow-hidden rounded-2xl bg-card ring-1 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:w-auto",
                 i === safeActive
                   ? "ring-2 ring-primary"
                   : "ring-foreground/5 hover:ring-primary/40",
               )}
             >
-              <div className="absolute inset-0 p-2.5">
+              <div className="absolute inset-0 p-2 sm:p-2.5">
                 <StorefrontMedia
                   slot="product-thumb"
                   storageKey={img.storage_key}

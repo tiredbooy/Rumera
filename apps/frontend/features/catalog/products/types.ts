@@ -54,6 +54,8 @@ export interface ProductListItem {
   max_price: number; // most expensive variant
   active_variant_count: number;
   available_variant_count: number;
+  /** Sellable stock summed across active variants. */
+  available_stock: number;
   /** Present only when exactly one active variant can be selected safely. */
   purchasable_variant_id?: number;
 }

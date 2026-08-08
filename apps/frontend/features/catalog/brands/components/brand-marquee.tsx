@@ -35,14 +35,14 @@ export function BrandMarquee({
             <span
               className={cn(
                 "font-serif text-lg tracking-wide text-muted-foreground/70 transition-colors",
-                item.id > 0 && "hover:text-foreground",
+                item.slug && "hover:text-foreground",
               )}
             >
               {item.title}
             </span>
           );
 
-          if (item.id <= 0) {
+          if (!item.slug) {
             return (
               <span key={`${item.title}-${i}`} aria-hidden={isDuplicate}>
                 {label}
@@ -53,7 +53,7 @@ export function BrandMarquee({
           return (
             <Link
               key={`${item.id}-${i}`}
-              href={productListBrandHref(item.id)}
+              href={productListBrandHref(item.slug)}
               aria-hidden={isDuplicate}
               tabIndex={isDuplicate ? -1 : undefined}
               className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"

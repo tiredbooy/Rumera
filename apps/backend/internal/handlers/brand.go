@@ -50,6 +50,16 @@ func (h *Handler) GetBrand(c *gin.Context) {
 	response.OK(c, brand)
 }
 
+// GetBrandBySlug — GET /brands/slug/:slug
+func (h *Handler) GetBrandBySlug(c *gin.Context) {
+	brand, err := h.Brand.GetBySlug(c.Request.Context(), c.Param("slug"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.OK(c, brand)
+}
+
 // UpdateBrand — PATCH /admin/brands/:id
 func (h *Handler) UpdateBrand(c *gin.Context) {
 	id, ok := h.paramInt64(c, "id")

@@ -6,6 +6,7 @@ import type {
   ApiSuccess,
 } from "@/lib/api/types";
 
+import { normalizeSiteSettings } from "../form-utils";
 import type { SiteSettings, UpdateSiteSettingsInput } from "../types";
 
 export class SettingsApiError extends Error {
@@ -52,5 +53,5 @@ export function updateSiteSettings(
   return settingsRequest<SiteSettings>("admin/settings", {
     method: "PUT",
     body: JSON.stringify(input),
-  });
+  }).then((data) => normalizeSiteSettings(data as SiteSettings));
 }

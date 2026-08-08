@@ -22,12 +22,14 @@ func TestIsForeignKeyViolationRecognizesWrappedPostgresError(t *testing.T) {
 func TestBuildProductFilterSQLScopesCategoryDescendantsInDatabase(t *testing.T) {
 	categoryID := int64(7)
 	brandID := int64(3)
+	brandSlug := "jack-daniel"
 	active := true
 	filter := models.ProductFilter{
 		BaseFilter:         models.BaseFilter{Search: "single malt"},
 		CategoryID:         &categoryID,
 		IncludeDescendants: true,
 		BrandID:            &brandID,
+		BrandSlug:          &brandSlug,
 		IsActive:           &active,
 	}
 
@@ -44,13 +46,16 @@ func TestBuildProductFilterSQLScopesCategoryDescendantsInDatabase(t *testing.T) 
 	if !strings.Contains(query.whereSQL, "p.category_id IN (SELECT id FROM category_scope)") {
 		t.Fatalf("product filter does not use recursive category scope: %q", query.whereSQL)
 	}
-	for _, clause := range []string{"p.title ILIKE @search ESCAPE", "p.brand_id = @brand_id", "p.is_active = @is_active"} {
+	for _, clause := range []string{"p.title ILIKE @search ESCAPE", "p.brand_id = @brand_id", "filter_brand.slug = @brand_slug", "p.is_active = @is_active"} {
 		if !strings.Contains(query.whereSQL, clause) {
 			t.Fatalf("global filter %q was lost: %q", clause, query.whereSQL)
 		}
 	}
 	if query.args["category_id"] != categoryID || query.args["search"] != "%single malt%" {
 		t.Fatalf("query args = %#v", query.args)
+	}
+	if query.args["brand_slug"] != brandSlug {
+		t.Fatalf("brand slug arg = %#v", query.args["brand_slug"])
 	}
 }
 

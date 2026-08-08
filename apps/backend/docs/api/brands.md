@@ -9,6 +9,7 @@ Legend: 🌐 public · 🔒 customer · 🛡️ admin
 | Method | Path | Tier | Description |
 |--------|------|------|-------------|
 | GET | `/brands` | 🌐 public | List brands (paginated, filterable) |
+| GET | `/brands/slug/:slug` | 🌐 public | Get a brand by canonical slug |
 | GET | `/brands/:id` | 🌐 public | Get a single brand |
 | POST | `/admin/brands` | 🛡️ admin | Create a brand |
 | PATCH | `/admin/brands/:id` | 🛡️ admin | Update a brand |
@@ -40,6 +41,7 @@ Default sort is `created_at` `desc`.
     {
       "id": 7,
       "title": "Glenmore",
+      "slug": "glenmore",
       "country": "Scotland",
       "founded_year": 1894,
       "image_url": "https://cdn.example.com/brands/glenmore.png",
@@ -74,8 +76,9 @@ GET /brands/:id
 ```json
 {
   "data": {
-    "id": 7,
-    "title": "Glenmore",
+      "id": 7,
+      "title": "Glenmore",
+      "slug": "glenmore",
     "country": "Scotland",
     "founded_year": 1894,
     "image_url": "https://cdn.example.com/brands/glenmore.png",
@@ -85,6 +88,20 @@ GET /brands/:id
   }
 }
 ```
+
+**Errors:** `400 INVALID_PARAMS`, `404 NOT_FOUND`.
+
+---
+
+## Get brand by slug
+
+```
+GET /brands/slug/glenmore
+```
+
+Returns the same `Brand` representation as the ID route. Public catalogue URLs
+use this stable key as `/products?brand=glenmore`; numeric brand IDs are not part
+of the canonical storefront URL.
 
 **Errors:** `400 INVALID_PARAMS`, `404 NOT_FOUND`.
 
@@ -102,6 +119,7 @@ Authorization: Bearer <access_token>
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
 | `title` | string | ✓ | max 255 |
+| `slug` | string | | max 255; generated from title when omitted |
 | `country` | string | | max 80 |
 | `founded_year` | int | | min 1000 |
 | `image_url` | string | | valid url |
@@ -110,6 +128,7 @@ Authorization: Bearer <access_token>
 ```json
 {
   "title": "Glenmore",
+  "slug": "glenmore",
   "country": "Scotland",
   "founded_year": 1894,
   "image_url": "https://cdn.example.com/brands/glenmore.png",
@@ -135,6 +154,7 @@ All fields optional; only supplied fields are updated.
 | Field | Type | Validation |
 |-------|------|------------|
 | `title` | string | max 255 |
+| `slug` | string | max 255; canonicalized and unique |
 | `country` | string | max 80 |
 | `founded_year` | int | min 1000 |
 | `image_url` | string | valid url |

@@ -484,7 +484,7 @@ func TestProductRepositoryListUsesSellableStockAndCompleteImageMetadata(t *testi
 		t.Fatalf("reserved list = %+v, total %d, err %v", items, total, err)
 	}
 	item := items[0]
-	if item.AvailableVariantCount != 0 || item.PurchasableVariantID != nil {
+	if item.AvailableVariantCount != 0 || item.AvailableStock != 0 || item.PurchasableVariantID != nil {
 		t.Fatalf("fully committed item is purchasable: %+v", item)
 	}
 	if item.Image == nil || item.Image.SortOrder != 4 || !item.Image.IsPrimary {
@@ -502,8 +502,33 @@ func TestProductRepositoryListUsesSellableStockAndCompleteImageMetadata(t *testi
 		t.Fatalf("available list = %+v, total %d, err %v", items, total, err)
 	}
 	item = items[0]
-	if item.AvailableVariantCount != 1 || item.PurchasableVariantID == nil || *item.PurchasableVariantID != variantID {
+	if item.AvailableVariantCount != 1 || item.AvailableStock != 1 || item.PurchasableVariantID == nil || *item.PurchasableVariantID != variantID {
 		t.Fatalf("released item availability = %+v", item)
+	}
+
+	var secondVariantID int64
+	if err := testPool.QueryRow(ctx,
+		`INSERT INTO product_variants (product_id, sku, price, is_active)
+		 VALUES ($1, 'RESERVED-2', 150, TRUE)
+		 RETURNING id`,
+		productID,
+	).Scan(&secondVariantID); err != nil {
+		t.Fatalf("insert second variant: %v", err)
+	}
+	if _, err := testPool.Exec(ctx,
+		`INSERT INTO inventory (product_variant_id, stock_on_hand, committed_stock)
+		 VALUES ($1, 1, 0)`,
+		secondVariantID,
+	); err != nil {
+		t.Fatalf("insert second inventory: %v", err)
+	}
+	items, total, err = repo.GetAll(ctx, filter)
+	if err != nil || total != 1 || len(items) != 1 {
+		t.Fatalf("multi-variant list = %+v, total %d, err %v", items, total, err)
+	}
+	item = items[0]
+	if item.AvailableVariantCount != 2 || item.AvailableStock != 2 || item.PurchasableVariantID != nil {
+		t.Fatalf("aggregate availability = %+v", item)
 	}
 }
 

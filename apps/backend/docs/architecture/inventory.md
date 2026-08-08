@@ -211,10 +211,12 @@ adjustment thresholds — run with `make test-integration` when
 
 ## How catalogue reads stock
 
-Public product list/detail expose **available** (and related counts such as
-`available_variant_count`). Frontend presentation
-(`catalogue-presentation.ts`) must treat zero available as out-of-stock, not
-guess from `stock_on_hand`.
+Public product lists expose `available_stock`, the sum of sellable stock across
+active variants after committed units are subtracted, plus related counts such
+as `available_variant_count`. Product detail exposes the same sellable quantity
+per variant. Frontend presentation must treat zero available as out-of-stock,
+not guess from `stock_on_hand`; product cards disclose the aggregate count only
+when it is below the storefront threshold.
 
 Wishlist/cart should not treat committed units as free stock (integration
 coverage: committed unavailable to cart/wishlist).

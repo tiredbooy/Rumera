@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { JalaliDateTimeInput } from "@/components/ui/jalali-datetime-input";
+import { MultiTagPicker } from "@/features/admin/shared/multi-tag-picker";
 import {
   CouponApiError,
   useCreateAdminCoupon,
@@ -134,9 +136,13 @@ const formFields = new Set<keyof CouponFormValues>([
 export function CouponForm({
   mode,
   coupon,
+  productOptions = [],
+  categoryOptions = [],
 }: {
   mode: "create" | "edit";
   coupon?: Coupon;
+  productOptions?: { id: number; title: string }[];
+  categoryOptions?: { id: number; title: string }[];
 }) {
   const router = useRouter();
   const createCoupon = useCreateAdminCoupon();
@@ -379,29 +385,45 @@ export function CouponForm({
         </Field>
         <Field
           id="starts_at"
-          label="شروع اعتبار"
+          label="شروع اعتبار (شمسی)"
           error={errors.starts_at?.message}
+          bindControl={false}
         >
-          <Input
-            id="starts_at"
-            type="datetime-local"
-            step={1}
-            dir="ltr"
-            {...register("starts_at")}
+          <Controller
+            name="starts_at"
+            control={control}
+            render={({ field }) => (
+              <JalaliDateTimeInput
+                id="starts_at"
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                disabled={busy}
+                invalid={Boolean(errors.starts_at)}
+              />
+            )}
           />
         </Field>
         <Field
           id="expires_at"
-          label="پایان اعتبار"
+          label="پایان اعتبار (شمسی)"
           error={errors.expires_at?.message}
           hint="خالی یعنی بدون تاریخ پایان"
+          bindControl={false}
         >
-          <Input
-            id="expires_at"
-            type="datetime-local"
-            step={1}
-            dir="ltr"
-            {...register("expires_at")}
+          <Controller
+            name="expires_at"
+            control={control}
+            render={({ field }) => (
+              <JalaliDateTimeInput
+                id="expires_at"
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                disabled={busy}
+                invalid={Boolean(errors.expires_at)}
+              />
+            )}
           />
         </Field>
       </Section>
@@ -448,26 +470,72 @@ export function CouponForm({
         </Field>
         {applicability === "specific" ? (
           <>
-            <Field
-              id="product_ids"
-              label="شناسه‌های محصول"
-              error={errors.product_ids?.message}
-              hint="مثال: ۱۲، ۱۸، ۲۴"
-            >
-              <Input id="product_ids" dir="ltr" {...register("product_ids")} />
-            </Field>
-            <Field
-              id="category_ids"
-              label="شناسه‌های دسته"
-              error={errors.category_ids?.message}
-              hint="مثال: ۳، ۷"
-            >
-              <Input
-                id="category_ids"
-                dir="ltr"
-                {...register("category_ids")}
+            <div className="sm:col-span-2">
+              <Controller
+                name="product_ids"
+                control={control}
+                render={({ field }) => {
+                  const selected = field.value
+                    .split(",")
+                    .map((part) => Number(part.trim()))
+                    .filter((id) => Number.isFinite(id) && id > 0);
+                  return (
+                    <MultiTagPicker
+                      label="محصول‌ها"
+                      emptyLabel="محصولی برای انتخاب بارگذاری نشده است."
+                      options={productOptions}
+                      value={selected}
+                      disabled={busy}
+                      onChange={(next) =>
+                        field.onChange(next.join(", "))
+                      }
+                    />
+                  );
+                }}
               />
-            </Field>
+              {errors.product_ids?.message ? (
+                <p role="alert" className="mt-1 text-xs text-destructive">
+                  {errors.product_ids.message}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  جستجو و انتخاب چند محصول به‌جای وارد کردن شناسه.
+                </p>
+              )}
+            </div>
+            <div className="sm:col-span-2">
+              <Controller
+                name="category_ids"
+                control={control}
+                render={({ field }) => {
+                  const selected = field.value
+                    .split(",")
+                    .map((part) => Number(part.trim()))
+                    .filter((id) => Number.isFinite(id) && id > 0);
+                  return (
+                    <MultiTagPicker
+                      label="دسته‌ها"
+                      emptyLabel="دسته‌ای برای انتخاب بارگذاری نشده است."
+                      options={categoryOptions}
+                      value={selected}
+                      disabled={busy}
+                      onChange={(next) =>
+                        field.onChange(next.join(", "))
+                      }
+                    />
+                  );
+                }}
+              />
+              {errors.category_ids?.message ? (
+                <p role="alert" className="mt-1 text-xs text-destructive">
+                  {errors.category_ids.message}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  جستجو و انتخاب چند دسته به‌جای وارد کردن شناسه.
+                </p>
+              )}
+            </div>
           </>
         ) : null}
       </Section>

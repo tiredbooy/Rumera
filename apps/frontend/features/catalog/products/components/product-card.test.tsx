@@ -55,6 +55,7 @@ const product: ProductListItem = {
   max_price: 987_654_321_000,
   active_variant_count: 1,
   available_variant_count: 1,
+  available_stock: 4,
   purchasable_variant_id: 9,
 };
 
@@ -81,6 +82,9 @@ describe("ProductCard", () => {
     expect(markup).not.toContain("محدود");
     expect(markup).toContain("+۱");
     expect(markup).toContain('href="/products/reserve-bottle"');
+    expect(markup).toContain('aria-label="مشاهده و خرید بطری رزرو ویژه"');
+    expect(markup).toContain("[@media(any-pointer:coarse)]:inline");
+    expect(markup).not.toContain("max-sm:opacity-90");
     expect(markup).toContain("backdrop-blur");
   });
 
@@ -123,6 +127,20 @@ describe("ProductCard", () => {
     // Real zero price for an active variant is shown, not treated as missing.
     expect(markup).toContain(formatPrice(0));
     expect(markup).not.toContain("قیمت ثبت نشده");
+  });
+
+  it("shows remaining stock only when aggregate sellable stock is below three", () => {
+    const lowStockMarkup = renderToStaticMarkup(
+      <ProductCard product={{ ...product, available_stock: 2 }} />,
+    );
+    const thresholdMarkup = renderToStaticMarkup(
+      <ProductCard product={{ ...product, available_stock: 3 }} />,
+    );
+
+    expect(lowStockMarkup).toContain("۲ عدد باقی مانده");
+    expect(lowStockMarkup).not.toContain("آمادهٔ سفارش");
+    expect(thresholdMarkup).toContain("آمادهٔ سفارش");
+    expect(thresholdMarkup).not.toContain("۳ عدد باقی مانده");
   });
 
   it("withholds price and commerce links when the product has no active variants", () => {

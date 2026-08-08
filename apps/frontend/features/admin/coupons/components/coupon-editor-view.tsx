@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CouponApiError, useAdminCoupon } from "@/features/coupons/api";
 import { PageHeader } from "@/features/dashboard/components/page-header";
 
-import { CouponForm } from "./coupon-form";
+import { CouponFormWithOptions } from "./coupon-form-with-options";
 
 function BackButton() {
   return (
@@ -28,7 +28,7 @@ export function CouponCreateView() {
         description="ارزش، بازهٔ اعتبار و محدودیت‌های مصرف را مشخص کنید."
         actions={<BackButton />}
       />
-      <CouponForm mode="create" />
+      <CouponFormWithOptions mode="create" />
     </>
   );
 }
@@ -83,7 +83,7 @@ export function CouponEditView({ id }: { id: number }) {
         description={coupon.data.code}
         actions={<BackButton />}
       />
-      <CouponForm mode="edit" coupon={coupon.data} />
+      <CouponFormWithOptions mode="edit" coupon={coupon.data} />
     </>
   );
 }

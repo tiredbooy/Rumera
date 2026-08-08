@@ -19,10 +19,12 @@ import (
 type BrandRepository interface {
 	Create(ctx context.Context, req models.CreateBrandReq) (*models.Brand, error)
 	GetByID(ctx context.Context, id int64) (*models.Brand, error)
+	GetBySlug(ctx context.Context, slug string) (*models.Brand, error)
 	GetAll(ctx context.Context, filter models.BrandFilter) ([]*models.Brand, int64, error)
 	Update(ctx context.Context, id int64, req models.UpdateBrandReq) (*models.Brand, error)
 	Delete(ctx context.Context, id int64) error
 	ExistsByTitle(ctx context.Context, title string) (bool, error)
+	ExistsBySlug(ctx context.Context, slug string, excludeID int64) (bool, error)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -43,12 +45,14 @@ func NewBrandRepository(db *pgxpool.Pool) BrandRepository {
 
 func (r *brandRepository) Create(ctx context.Context, req models.CreateBrandReq) (*models.Brand, error) {
 	const q = `
-		INSERT INTO brands (title, country, founded_year, image_url, description)
-		VALUES (@title, @country, @founded_year, @image_url, @description)
-		RETURNING *`
+		INSERT INTO brands (title, slug, country, founded_year, image_url, description)
+		VALUES (@title, @slug, @country, @founded_year, @image_url, @description)
+		RETURNING id, title, slug, country, founded_year, image_url, description,
+		          created_at, updated_at`
 
 	args := pgx.NamedArgs{
 		"title":        req.Title,
+		"slug":         req.Slug,
 		"country":      req.Country,
 		"founded_year": req.FoundedYear,
 		"image_url":    req.ImageURL,
@@ -72,7 +76,10 @@ func (r *brandRepository) Create(ctx context.Context, req models.CreateBrandReq)
 // ─────────────────────────────────────────────────────────────
 
 func (r *brandRepository) GetByID(ctx context.Context, id int64) (*models.Brand, error) {
-	const q = `SELECT * FROM brands WHERE id = $1`
+	const q = `
+		SELECT id, title, slug, country, founded_year, image_url, description,
+		       created_at, updated_at
+		FROM brands WHERE id = $1`
 
 	rows, err := r.db.Query(ctx, q, id)
 	if err != nil {
@@ -85,6 +92,26 @@ func (r *brandRepository) GetByID(ctx context.Context, id int64) (*models.Brand,
 			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("brandRepository.GetByID scan: %w", err)
+	}
+	return &brand, nil
+}
+
+func (r *brandRepository) GetBySlug(ctx context.Context, slug string) (*models.Brand, error) {
+	const q = `
+		SELECT id, title, slug, country, founded_year, image_url, description,
+		       created_at, updated_at
+		FROM brands WHERE slug = $1`
+
+	rows, err := r.db.Query(ctx, q, slug)
+	if err != nil {
+		return nil, fmt.Errorf("brandRepository.GetBySlug: %w", err)
+	}
+	brand, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Brand])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("brandRepository.GetBySlug scan: %w", err)
 	}
 	return &brand, nil
 }
@@ -132,7 +159,8 @@ func (r *brandRepository) GetAll(ctx context.Context, f models.BrandFilter) ([]*
 	args["offset"] = f.Offset()
 
 	q := fmt.Sprintf(`
-		SELECT *, COUNT(*) OVER() AS total_count
+		SELECT id, title, slug, country, founded_year, image_url, description,
+		       created_at, updated_at, COUNT(*) OVER() AS total_count
 		FROM brands
 		WHERE %s
 		ORDER BY %s %s
@@ -154,7 +182,7 @@ func (r *brandRepository) GetAll(ctx context.Context, f models.BrandFilter) ([]*
 	for rows.Next() {
 		var b models.Brand
 		if err := rows.Scan(
-			&b.ID, &b.Title, &b.Country,
+			&b.ID, &b.Title, &b.Slug, &b.Country,
 			&b.FoundedYear, &b.ImageURL, &b.Description,
 			&b.CreatedAt, &b.UpdatedAt,
 			&total,
@@ -182,6 +210,10 @@ func (r *brandRepository) Update(ctx context.Context, id int64, req models.Updat
 		sets = append(sets, "title = @title")
 		args["title"] = *req.Title
 	}
+	if req.Slug != nil {
+		sets = append(sets, "slug = @slug")
+		args["slug"] = *req.Slug
+	}
 	if req.Country != nil {
 		sets = append(sets, "country = @country")
 		args["country"] = *req.Country
@@ -206,7 +238,8 @@ func (r *brandRepository) Update(ctx context.Context, id int64, req models.Updat
 	q := fmt.Sprintf(`
 		UPDATE brands SET %s
 		WHERE id = @id
-		RETURNING *`,
+		RETURNING id, title, slug, country, founded_year, image_url, description,
+		          created_at, updated_at`,
 		strings.Join(sets, ", "),
 	)
 
@@ -254,6 +287,15 @@ func (r *brandRepository) ExistsByTitle(ctx context.Context, title string) (bool
 	var exists bool
 	if err := r.db.QueryRow(ctx, q, title).Scan(&exists); err != nil {
 		return false, fmt.Errorf("brandRepository.ExistsByTitle: %w", err)
+	}
+	return exists, nil
+}
+
+func (r *brandRepository) ExistsBySlug(ctx context.Context, slug string, excludeID int64) (bool, error) {
+	const q = `SELECT EXISTS(SELECT 1 FROM brands WHERE slug = $1 AND id <> $2)`
+	var exists bool
+	if err := r.db.QueryRow(ctx, q, slug, excludeID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("brandRepository.ExistsBySlug: %w", err)
 	}
 	return exists, nil
 }

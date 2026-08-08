@@ -2,11 +2,9 @@ package services
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/pkg/apperr"
 )
 
 type reviewRepoStub struct {
@@ -50,30 +48,30 @@ func (s *reviewRepoStub) GetPending(ctx context.Context, userID int64) ([]models
 	return s.getPendingFn(ctx, userID)
 }
 
-func TestReviewCreateRequiresDeliveredPurchase(t *testing.T) {
-	created := false
+func TestReviewCreateAllowsNonBuyerWithUnverifiedFlag(t *testing.T) {
+	verified := true
 	repo := &reviewRepoStub{
-		createFn: func(context.Context, int64, models.CreateReviewReq, bool) (*models.Review, error) {
-			created = true
-			return &models.Review{}, nil
+		createFn: func(_ context.Context, _ int64, _ models.CreateReviewReq, value bool) (*models.Review, error) {
+			verified = value
+			return &models.Review{ID: 22}, nil
 		},
 		hasReviewedFn:  func(context.Context, int64, int64) (bool, error) { return false, nil },
 		hasPurchasedFn: func(context.Context, int64, int64) (bool, error) { return false, nil },
 	}
 	service := NewReviewService(repo, nil)
 
-	_, err := service.Create(context.Background(), 1, models.CreateReviewReq{
+	review, err := service.Create(context.Background(), 1, models.CreateReviewReq{
 		ProductID: 7,
 		Title:     "Title",
 		Content:   "Content",
 		Rating:    5,
 	})
 
-	if !errors.Is(err, apperr.ErrAccessDenied) {
-		t.Fatalf("err = %v; want ErrAccessDenied", err)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
 	}
-	if created {
-		t.Fatal("review was created without a delivered purchase")
+	if review.ID != 22 || verified {
+		t.Fatalf("review = %#v, verified = %v; want unverified non-buyer review", review, verified)
 	}
 }
 

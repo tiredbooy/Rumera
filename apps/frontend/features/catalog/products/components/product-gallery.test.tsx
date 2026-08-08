@@ -53,10 +53,13 @@ describe("ProductGallery keyboard interaction", () => {
     expect(frame.className).toContain("focus-visible:ring-3");
     const next = screen.getByRole("button", { name: "تصویر بعدی" });
     const previous = screen.getByRole("button", { name: "تصویر قبلی" });
-    expect(next).toHaveClass("end-4", "size-11", "opacity-90");
-    expect(previous).toHaveClass("start-4", "size-11", "opacity-90");
-    expect(previous).toHaveClass("size-11");
+    expect(next).toHaveClass("size-11", "opacity-90");
+    expect(next.className).toMatch(/end-3|end-4/);
+    expect(previous).toHaveClass("size-11", "opacity-90");
+    expect(previous.className).toMatch(/start-3|start-4/);
     expect(previous.className).toContain("focus-visible:ring-3");
+    // Clean frame: no cellar-glow backdrop on the media stage.
+    expect(frame.className).not.toContain("cellar-glow");
 
     fireEvent.click(next);
     expect(screen.getByRole("img", { name: "تصویر دوم" })).toBeInTheDocument();

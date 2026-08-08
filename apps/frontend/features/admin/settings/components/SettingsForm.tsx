@@ -20,10 +20,13 @@ import {
   SettingsApiError,
   updateSiteSettings,
 } from "@/features/settings/api/client";
-import type {
-  SiteSettings,
-  UpdateSiteSettingsInput,
-} from "@/features/settings/types";
+import {
+  defaultsFromSettings,
+  mapSettingsFieldErrors,
+  normalizeSiteSettings,
+  toSettingsPayload,
+} from "@/features/settings/form-utils";
+import type { SiteSettings } from "@/features/settings/types";
 import {
   siteSettingsFormSchema,
   type SiteSettingsFormValues,
@@ -36,106 +39,6 @@ import { ShippingSection } from "./settings-form/ShippingSection";
 import { SocialSection } from "./settings-form/SocialSection";
 import { StoreSection } from "./settings-form/StoreSection";
 
-// ── Validation ──────────────────────────────────────────────────────────────
-// Every field is a string in the form (freeThreshold is a numeric string),
-// coerced to the API shape on submit. The flat schema keys mirror the backend
-// json names so the 422 `error.fields` map onto the inputs 1:1 via setError.
-
-/** Backend json field name → flat form field. Used to map 422 errors onto inputs. */
-const FIELD_KEYS = new Set<keyof SiteSettingsFormValues>([
-  "name",
-  "tagline",
-  "logoUrl",
-  "description",
-  "supportEmail",
-  "supportPhone",
-  "address",
-  "workingHours",
-  "instagram",
-  "telegram",
-  "whatsapp",
-  "twitter",
-  "youtube",
-  "linkedin",
-  "freeThreshold",
-  "note",
-  "defaultTitle",
-  "defaultDescription",
-  "ogImage",
-  "keywords",
-  "enabled",
-  "message",
-]);
-
-function defaults(s: SiteSettings): SiteSettingsFormValues {
-  return {
-    name: s.store.name ?? "",
-    tagline: s.store.tagline ?? "",
-    logoUrl: s.store.logoUrl ?? "",
-    description: s.store.description ?? "",
-    supportEmail: s.contact.supportEmail ?? "",
-    supportPhone: s.contact.supportPhone ?? "",
-    address: s.contact.address ?? "",
-    workingHours: s.contact.workingHours ?? "",
-    instagram: s.social.instagram ?? "",
-    telegram: s.social.telegram ?? "",
-    whatsapp: s.social.whatsapp ?? "",
-    twitter: s.social.twitter ?? "",
-    youtube: s.social.youtube ?? "",
-    linkedin: s.social.linkedin ?? "",
-    freeThreshold:
-      s.shipping.freeThreshold != null ? String(s.shipping.freeThreshold) : "",
-    note: s.shipping.note ?? "",
-    defaultTitle: s.seo.defaultTitle ?? "",
-    defaultDescription: s.seo.defaultDescription ?? "",
-    ogImage: s.seo.ogImage ?? "",
-    keywords: s.seo.keywords ?? "",
-    enabled: s.maintenance.enabled ?? false,
-    message: s.maintenance.message ?? "",
-  };
-}
-
-/** Flat form values → the full wholesale-replace payload (every group, every field). */
-function toPayload(v: SiteSettingsFormValues): UpdateSiteSettingsInput {
-  return {
-    store: {
-      name: v.name.trim(),
-      tagline: v.tagline.trim(),
-      logoUrl: v.logoUrl.trim(),
-      description: v.description,
-    },
-    contact: {
-      supportEmail: v.supportEmail.trim(),
-      supportPhone: v.supportPhone.trim(),
-      address: v.address,
-      workingHours: v.workingHours.trim(),
-    },
-    social: {
-      instagram: v.instagram.trim(),
-      telegram: v.telegram.trim(),
-      whatsapp: v.whatsapp.trim(),
-      twitter: v.twitter.trim(),
-      youtube: v.youtube.trim(),
-      linkedin: v.linkedin.trim(),
-    },
-    shipping: {
-      freeThreshold:
-        v.freeThreshold.trim() === "" ? 0 : Number(v.freeThreshold),
-      note: v.note,
-    },
-    seo: {
-      defaultTitle: v.defaultTitle.trim(),
-      defaultDescription: v.defaultDescription,
-      ogImage: v.ogImage.trim(),
-      keywords: v.keywords,
-    },
-    maintenance: {
-      enabled: v.enabled,
-      message: v.message,
-    },
-  };
-}
-
 const TABS = [
   { value: "store", label: "فروشگاه", icon: Store },
   { value: "contact", label: "تماس", icon: Phone },
@@ -147,6 +50,7 @@ const TABS = [
 
 export function SettingsForm({ settings }: { settings: SiteSettings }) {
   const router = useRouter();
+  const initial = normalizeSiteSettings(settings);
 
   const {
     register,
@@ -158,7 +62,9 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
     formState: { errors, isSubmitting, isDirty },
   } = useForm<SiteSettingsFormValues>({
     resolver: zodResolver(siteSettingsFormSchema),
-    defaultValues: defaults(settings),
+    defaultValues: defaultsFromSettings(initial),
+    // Keep values when tab panels unmount so phone/address edits are never dropped.
+    shouldUnregister: false,
   });
 
   const maintenanceEnabled = watch("enabled");
@@ -170,17 +76,14 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
 
   function applyServerErrors(e: unknown) {
     if (e instanceof SettingsApiError) {
-      if (e.fields) {
-        Object.entries(e.fields)
-          .filter(([key]) => FIELD_KEYS.has(key as keyof SiteSettingsFormValues))
-          .forEach(([key, msgs], index) => {
-            setError(
-              key as keyof SiteSettingsFormValues,
-              { message: msgs[0] },
-              { shouldFocus: index === 0 },
-            );
-          });
-      }
+      const mapped = mapSettingsFieldErrors(e.fields);
+      Object.entries(mapped).forEach(([key, message], index) => {
+        setError(
+          key as keyof SiteSettingsFormValues,
+          { message },
+          { shouldFocus: index === 0 },
+        );
+      });
       toast.error(e.message || "ذخیرهٔ تنظیمات ناموفق بود.");
     } else {
       toast.error("خطای غیرمنتظره رخ داد.");
@@ -189,10 +92,11 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
 
   async function onSubmit(v: SiteSettingsFormValues) {
     try {
-      const updated = await updateSiteSettings(toPayload(v));
+      const updated = await updateSiteSettings(toSettingsPayload(v));
+      const normalized = normalizeSiteSettings(updated);
       toast.success("تنظیمات سایت ذخیره شد.");
       // Re-baseline the form to the server truth (clears the dirty state).
-      reset(defaults(updated));
+      reset(defaultsFromSettings(normalized));
       router.refresh();
     } catch (e) {
       applyServerErrors(e);

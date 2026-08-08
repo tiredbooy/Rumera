@@ -14,7 +14,7 @@ export function StoreSection({
   errors: FieldErrors<SiteSettingsFormValues>;
 }) {
   return (
-    <TabsContent value="store" className="mt-5">
+    <TabsContent value="store" forceMount className="mt-5 data-[state=inactive]:hidden">
       <Panel title="اطلاعات فروشگاه" description="نام، شعار و معرفی فروشگاه.">
         <Field id="name" label="نام فروشگاه" error={errors.name?.message} full>
           <Input id="name" aria-invalid={!!errors.name} {...register("name")} />

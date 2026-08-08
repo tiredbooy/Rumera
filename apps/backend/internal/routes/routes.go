@@ -94,6 +94,7 @@ func registerPublicRoutes(v1 *gin.RouterGroup, h *handlers.Handler) {
 
 	// Brands & tags
 	v1.GET("/brands", h.ListBrands)
+	v1.GET("/brands/slug/:slug", h.GetBrandBySlug)
 	v1.GET("/brands/:id", h.GetBrand)
 	v1.GET("/tags", h.ListTags)
 	v1.GET("/tags/:id", h.GetTag)
@@ -236,6 +237,7 @@ func registerAdminRoutes(v1 *gin.RouterGroup, h *handlers.Handler, jwt token.Man
 	a.GET("/users/:userID/audit", h.GetUserAudit)
 	a.PATCH("/users/:userID", h.UpdateUser)
 	a.DELETE("/users/:userID", h.DeleteUser)
+	a.POST("/users/:userID/wallet/credit", h.AdminCreditWallet)
 
 	// Products
 	a.GET("/products", h.ListAdminProducts)

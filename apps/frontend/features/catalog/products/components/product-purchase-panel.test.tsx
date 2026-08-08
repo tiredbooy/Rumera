@@ -120,7 +120,7 @@ describe("ProductPurchasePanel", () => {
     expect(
       screen.queryByRole("radio", { name: "غیرفعال" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("۲ عدد آمادهٔ سفارش");
+    expect(screen.getByRole("status")).toHaveTextContent("۲ عدد باقی مانده");
 
     const cartButtons = screen.getAllByTestId("add-to-cart");
     expect(cartButtons).toHaveLength(2);

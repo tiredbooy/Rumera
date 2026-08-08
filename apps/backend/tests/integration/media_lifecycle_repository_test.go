@@ -96,7 +96,7 @@ func TestMediaReconcileProtectsEveryDatabaseReference(t *testing.T) {
 		t.Fatalf("insert category reference: %v", err)
 	}
 	if _, err := testPool.Exec(ctx,
-		`INSERT INTO brands (title, image_url) VALUES ('Referenced brand', $1)`,
+		`INSERT INTO brands (title, slug, image_url) VALUES ('Referenced brand', 'referenced-brand', $1)`,
 		"/media/"+brandLegacy,
 	); err != nil {
 		t.Fatalf("insert brand reference: %v", err)

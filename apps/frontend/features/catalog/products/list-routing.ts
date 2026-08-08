@@ -7,6 +7,7 @@ import {
 
 export const PRODUCT_LIST_PAGE_SIZE = 12;
 export const PRODUCT_LIST_SEARCH_MAX_LENGTH = 80;
+export const PRODUCT_LIST_BRAND_MAX_LENGTH = 255;
 
 /** Storefront sort control — labels map 1:1 to backend-supported fields. */
 export const PRODUCT_LIST_SORT_OPTIONS = [
@@ -53,15 +54,26 @@ export type ProductListSearchParamsRecord = Record<
 export type ProductListRouteQuery = {
   page: number;
   search?: string;
-  /** Backend product list filter: exact brand id when present. */
-  brandId?: number;
+  /** Canonical public brand slug, serialized as `brand=jack-daniel`. */
+  brand?: string;
+  /** Existing numeric URLs are resolved once and redirected to `brand`. */
+  legacyBrandId?: number;
   sortBy: ProductSortField;
   orderBy: ProductSortDirection;
   sortMode: ProductListSortMode;
   needsRedirect: boolean;
 };
 
-const QUERY_KEYS = new Set(["page", "search", "sortBy", "orderBy", "brand_id"]);
+const QUERY_KEYS = new Set([
+  "page",
+  "search",
+  "sortBy",
+  "orderBy",
+  "brand",
+  "brand_id",
+]);
+
+const BRAND_SLUG_PATTERN = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u;
 
 function parsePage(value: ProductListSearchParamValue): number | null {
   if (value === undefined) return 1;
@@ -109,17 +121,34 @@ export function parseProductListRouteQuery(
     }
   }
 
-  let brandId: number | undefined;
-  const rawBrandId = searchParams.brand_id;
-  if (rawBrandId !== undefined) {
-    if (typeof rawBrandId !== "string" || !/^[1-9]\d*$/.test(rawBrandId)) {
+  let brand: string | undefined;
+  const rawBrand = searchParams.brand;
+  if (rawBrand !== undefined) {
+    if (typeof rawBrand !== "string") {
       needsRedirect = true;
     } else {
-      const parsed = Number(rawBrandId);
-      if (Number.isSafeInteger(parsed)) {
-        brandId = parsed;
+      const normalized = rawBrand.trim().toLowerCase();
+      if (
+        normalized.length > 0 &&
+        normalized.length <= PRODUCT_LIST_BRAND_MAX_LENGTH &&
+        BRAND_SLUG_PATTERN.test(normalized)
+      ) {
+        brand = normalized;
+        if (rawBrand !== normalized) needsRedirect = true;
       } else {
         needsRedirect = true;
+      }
+    }
+  }
+
+  let legacyBrandId: number | undefined;
+  const rawBrandId = searchParams.brand_id;
+  if (rawBrandId !== undefined) {
+    needsRedirect = true;
+    if (typeof rawBrandId === "string" && /^[1-9]\d*$/.test(rawBrandId)) {
+      const parsed = Number(rawBrandId);
+      if (Number.isSafeInteger(parsed)) {
+        legacyBrandId = parsed;
       }
     }
   }
@@ -156,19 +185,28 @@ export function parseProductListRouteQuery(
     needsRedirect = true;
   }
 
-  return { page, search, brandId, sortBy, orderBy, sortMode, needsRedirect };
+  return {
+    page,
+    search,
+    brand,
+    legacyBrandId,
+    sortBy,
+    orderBy,
+    sortMode,
+    needsRedirect,
+  };
 }
 
 export function productListHref(
   query: Pick<
     ProductListRouteQuery,
-    "search" | "sortBy" | "orderBy" | "brandId"
+    "search" | "sortBy" | "orderBy" | "brand"
   >,
   page: number,
 ): string {
   const params = new URLSearchParams();
   if (query.search) params.set("search", query.search);
-  if (query.brandId != null) params.set("brand_id", String(query.brandId));
+  if (query.brand) params.set("brand", query.brand);
   if (!(query.sortBy === "created_at" && query.orderBy === "desc")) {
     params.set("sortBy", query.sortBy);
     params.set("orderBy", query.orderBy);
@@ -179,9 +217,9 @@ export function productListHref(
 }
 
 /** Deep-link to the full catalogue filtered by a single brand. */
-export function productListBrandHref(brandId: number): string {
+export function productListBrandHref(brand: string): string {
   return productListHref(
-    { brandId, sortBy: "created_at", orderBy: "desc" },
+    { brand, sortBy: "created_at", orderBy: "desc" },
     1,
   );
 }

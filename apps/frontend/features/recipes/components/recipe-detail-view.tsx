@@ -26,6 +26,8 @@ import {
 import { AddAllIngredientsButton } from "@/features/recipes/components/add-all-button";
 import { RecipeCard } from "@/features/recipes/components/recipe-card";
 import { RecipeIngredientList } from "@/features/recipes/components/recipe-ingredient-list";
+import { RecipeMobileShopBar } from "@/features/recipes/components/recipe-mobile-shop-bar";
+import { RecipeShopSummary } from "@/features/recipes/components/recipe-shop-summary";
 import { RecipeViewTracker } from "@/features/recipes/components/recipe-view-tracker";
 import { ShoppableProductCard } from "@/features/recipes/components/shoppable-product-card";
 import {
@@ -84,6 +86,9 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
     recipe.ingredients,
     recipe.products,
   );
+  const linkedIngredientCount = commerceIngredients.filter(
+    (ing) => ing.linked,
+  ).length;
   const shopId = shopSectionId();
 
   const shoppableProductIds = recipe.products.map((p) => p.product_id);
@@ -208,15 +213,14 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
                 ingredients={commerceIngredients}
                 servings={recipe.servings}
               />
-              {recipe.products.length > 0 ? (
-                <a
-                  href={`#${shopId}`}
-                  className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/10 px-4 text-sm font-medium text-primary outline-none transition-colors hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-primary/40 lg:hidden"
-                >
-                  <ShoppingBag className="size-4" aria-hidden />
-                  مشاهدهٔ محصولات قابل خرید
-                </a>
-              ) : null}
+              <RecipeShopSummary
+                linkedCount={linkedIngredientCount}
+                availableCount={availableCount}
+                totalIngredients={commerceIngredients.length}
+                shopHref={
+                  recipe.products.length > 0 ? `#${shopId}` : undefined
+                }
+              />
             </div>
           </section>
 
@@ -276,7 +280,16 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
             </ul>
           </div>
         ) : null}
+
+        {/* Mobile sticky shop bar spacer */}
+        {recipe.products.length > 0 ? (
+          <div aria-hidden className="h-24 lg:hidden" />
+        ) : null}
       </section>
+
+      {recipe.products.length > 0 ? (
+        <RecipeMobileShopBar products={recipe.products} shopId={shopId} />
+      ) : null}
 
       {/* Related */}
       {related.length > 0 || relatedUnavailable ? (

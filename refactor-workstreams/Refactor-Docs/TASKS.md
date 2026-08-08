@@ -19,30 +19,32 @@ earlier unblocked task remains.
 - Do not guess ambiguous contracts. Record the blocker and stop that task.
 - Do not add compatibility re-export shims unless the task explicitly documents
   a concrete temporary need and removal task.
-- Lettered IDs such as `Task 064a` are complete, independently claimable tasks.
+- Lettered IDs such as `Task 076a` are complete, independently claimable tasks.
   A task-group heading is organizational only and is never claimed as a whole.
 - A dependency on a task group means every lettered task in that group must be
   complete unless the dependent task names a narrower dependency.
 
-## Backlog status (2026-08-05)
+## Backlog Status (2026-08-08 Acceptance Reconciliation)
 
-- Tasks **000–063** (Phases A–F and closing audit) are **complete**.
-- Full completion records live in `FINISHED.md` only (append-only history).
-- This file is the **open backlog** starting at **Task Group 064**.
-- Do not re-list completed `[x]` items here.
+- Tasks **000-075**, **076a-077a**, and **081a** are complete and live in
+  `FINISHED.md` only.
+- This file contains only open work: **078a-080c** and **082a-086a**.
+- Phase K-M completion claims were re-audited against their exact acceptance
+  criteria and current implementation. Tasks 076a-077a have now passed their
+  material implementation and applicable contract, responsive, RTL, keyboard,
+  reduced-motion, and focused test gates.
+- Earlier Phase K-M entries in append-only `FINISHED.md` are preserved as
+  implementation snapshots; the reconciliation record there identifies the
+  claims that were reopened.
 
 ## Remaining Cross-Task Gates
 
-- Start Task Group 064 storefront work before assuming card/rail changes are
-  stable for later discovery tasks.
-- Complete **064a** before treating homepage/catalog card height as final
-  (064b reuses the same `ProductCard`).
-- Complete **065a** before large admin form IA changes that depend on nav
-  placement copy.
-- Complete shared selection work (**066e**) before or with product/journal/
-  recipe form polish when those forms share tag/category pickers.
-- Start **067a** / **067b** after content-form resilience patterns exist so
-  dashboards can reuse the same error/empty/recovery language where useful.
+- Fix **078a** before relying on recipe/PDP buy flows (**079a**, **080b**) as
+  fully verifiable.
+- Complete **080a**/**080b** before treating storefront product purchase UX as
+  final.
+- Complete **082a** before closing **083a** so user and wallet mutations use
+  server-enforced capabilities.
 
 ## Contract And Naming Policy
 
@@ -73,302 +75,137 @@ earlier unblocked task remains.
 
 ---
 
-## Phase G - Storefront polish, discovery, and operator UX (post-063)
+## Phase K - Storefront Polish, Commerce Correctness, And Discovery UX
 
-Evidence for this phase includes the storefront product-card screenshot review
-(2026-08-05): card overall quality is strong; media height is too tall and can
-break visual rhythm; the homepage catalogue strip must be a horizontal rail
-(not a tall vertical scroll of oversized cards); discovery paths to full
-catalogue and brands must be obvious; admin/account operators need clearer nav
-grouping, easier forms (product / journal / recipes / hero), easier
-tag/category selection, and stronger fault-tolerance against human error.
+### Task Group 078 - Cart reliability and shop settings correctness
 
-### Task Group 064 - Product card media and homepage catalogue rail
+- [ ] **Task 078a - Fix Add to Cart: actually adds without client/API errors**
+  - Reproduce and fix the current failure from storefront CTA through cart
+    client, BFF, and backend contract.
+  - Verify single-add, variant-required products, truthful errors, and
+    non-blocking recommendation tracking.
+  - Re-audit gap: normalization/error helpers are tested, but the original
+    failure was not reproduced and no regression test proves a real successful
+    add through the button/API path.
 
-- [x] **Task 064a - Constrain product-card image height without breaking card style**
-  - Keep the overall luxury `ProductCard` design (hierarchy, availability chip,
-    tags, price, CTAs) that already works well.
-  - Replace the overly tall media crop (currently a tall portrait ratio such as
-    `aspect-[4/5]`) with a **shorter, fixed-height (or fixed aspect) media
-    region** so cards stay consistent in grids and rails.
-  - Ensure images use `object-cover` (or the canonical storefront media policy)
-    inside a stable frame: no layout shift, no stretched logos, no card height
-    blow-ups when intrinsic image ratios differ.
-  - Align `StorefrontMedia` / `product-card` slot policy heights with the new
-    frame; update focused card tests and visual checks at 320–1440px.
-  - Scope: `product-card.tsx`, storefront media policy/slot for product cards,
-    any consumers that hard-code the old crop assumptions.
-  - Depends: none (first claimable task of Phase G).
+- [ ] **Task 078b - Shop settings: phone, address, and related fields persist correctly**
+  - Values must save, rehydrate, and reflect without silent failure.
+  - Match backend contracts; provide field validation and retry on network error.
+  - Cover mutation plus reload and one failure path.
+  - Re-audit gap: payload/rehydration helpers exist, but retry and the required
+    mutation-to-reload/failure tests are missing.
 
-- [x] **Task 064b - Homepage catalogue: horizontal Swiper rail (fix vertical scroll bug)**
-  - In the homepage section that shows product cards (“منتخب فروشگاه” /
-    `CatalogSection` and any sibling rails with the same bug), stop presenting
-    products as a tall multi-row grid that forces long vertical scrolling of
-    oversized cards.
-  - Implement a **horizontal** product rail using **Swiper** (add the dependency
-    if needed; prefer accessible defaults: keyboard, RTL, touch, reduced motion).
-  - Reuse the shared `ProductCard` (after 064a height fix). Cards must not
-    collapse or stretch unevenly in the track; fixed card/media height is part
-    of the contract.
-  - Provide clear prev/next controls (or equivalent), peek of adjacent slides on
-    large screens, and graceful empty state when there are no products.
-  - Cover with component tests and a responsive smoke check; do not invent
-    product fields.
-  - Depends: Task 064a.
+### Task Group 079 - Recipe detail shopping experience
 
-- [x] **Task 064c - Make “all products” and brand selection easy to reach**
-  - Improve storefront discovery so users can flow quickly to **full product
-    catalogue** (`/products` or equivalent) and **brand browsing/selection**
-    without hunting in the header.
-  - Add or strengthen primary CTAs on the homepage catalogue section, navigation
-    (desktop + mobile drawer), and any brand entry points that already exist in
-    the domain; deep-link brand chips/filters only when backed by real routes or
-    catalogue query contracts.
-  - Keep RTL, keyboard, and permission-free public access; do not invent brands
-    client-side.
-  - Verify 320–1440px and that empty brand/product states stay truthful.
-  - Depends: Task 064b preferred (shared homepage section), but may land after
-    064a if scoped only to nav/links.
+- [ ] **Task 079a - Recipe detail: clear, smooth UX to buy what the recipe needs**
+  - Keep ingredients, linked products, quantities, unavailable/unlinked states,
+    and API-backed single/bulk add paths clear and mobile-first.
+  - Respect the 076c stock policy and do not invent recipe/product fields.
+  - Re-audit gap: summary counts mix product and ingredient units, an empty bulk
+    response can report false success, and summary/mobile/cart behavior lacks
+    focused coverage.
 
-### Task Group 065 - Admin sidebar information architecture
+### Task Group 080 - Product detail page redesign
 
-- [x] **Task 065a - Organize admin sidebar into clearer groups**
-  - Audit `lib/rbac/nav.ts` (`ADMIN_NAV`) and the dashboard shell presentation.
-  - Regroup items so operators scan by job (e.g. catalogue, commerce ops,
-    content, customers, insights, system) rather than a flat or mixed list.
-  - Keep permission filtering (`filterNav` / capabilities) correct; empty groups
-    must still drop when the user lacks all items.
-  - Preserve Persian labels, active-route highlighting, mobile drawer behavior,
-    and keyboard order; update `nav` tests.
-  - Depends: none (can run in parallel with storefront 064* only if no file
-    conflict; if parallel agents, claim after 064c to reduce churn).
+- [ ] **Task 080a - PDP media gallery redesign (desktop + mobile)**
+  - Use a clean stable gallery with thumbnails, appropriate zoom/lightbox,
+    app-like mobile swipe, truthful missing media, keyboard operation, and
+    reduced-motion safety.
+  - Re-audit gap: missing media is presented as a product illustration without
+    placeholder disclosure; reduced-motion and RTL centering have gaps; touch,
+    empty, and responsive states are not covered.
 
-### Task Group 066 - Admin content forms: ease of use and fault tolerance
+- [ ] **Task 080b - PDP variant selector and price block redesign**
+  - Support real single-axis and multi-axis option combinations with correct
+    selected price/availability and honest unavailable states.
+  - Keep CTA/cart and the 076c stock rule aligned with backend data.
+  - Re-audit gap: sparse matrices can make valid variants unreachable,
+    heterogeneous option sets can invent combinations, control semantics fail
+    scoped lint, and no integration test proves selection-to-price/cart changes.
 
-Goal: product, journal (blog), recipes, and hero editors must be easy, resilient
-to human mistakes, and recover gracefully from partial/network failures without
-lying about backend support.
-
-- [x] **Task 066a - Product admin form: usability, validation, and fault tolerance**
-  - Walk the create/edit product flow (variants, media, tags, categories,
-    aggregate save) and remove friction: clear sections, required-field cues,
-    sticky/save feedback, dirty-state leave guards, and recoverable errors.
-  - Handle human errors: invalid prices, empty variants, conflicting options,
-    failed media attach after product create, offline/timeout with retry without
-    duplicate creates when the API contract allows.
-  - Prefer progressive disclosure over one endless form; keep domain APIs and
-    wire contracts authoritative.
-  - Extend focused form/integration tests for failure and recovery paths.
-  - Depends: Task 065a recommended for nav IA consistency.
-
-- [x] **Task 066b - Journal (blog) admin form: usability and fault tolerance**
-  - Same resilience goals as 066a for journal article + category admin: draft
-    safety, cover media staging, validation focus, partial-failure recovery, and
-    clear success/error toasts.
-  - Do not invent CMS fields; match backend journal contracts.
-  - Depends: Task 066a for shared patterns where practical (or document reuse).
-
-- [x] **Task 066c - Recipe admin form: usability and fault tolerance**
-  - Improve recipe create/edit (cover, ingredients, shoppable links, status) so
-    operators cannot easily publish broken or half-saved recipes.
-  - Guard human errors on ingredient/product links, quantities, and media; recover
-    from owner-create-then-cover-attach failures already known in the domain.
-  - Depends: Task 066a patterns; may share media uploader behavior with 066b.
-
-- [x] **Task 066d - Hero-slide admin form: usability and fault tolerance**
-  - Make hero slide editing (media, copy, CTA, publication windows/status) hard
-    to misuse: preview fidelity, validation, and failed-publish recovery.
-  - Prevent silent invalid states (e.g. published with missing media/CTA when
-    required by product rules).
-  - Depends: Task 066a patterns.
-
-- [x] **Task 066e - Easier tag and category selection (shared admin UX)**
-  - Improve multi-select / search / create-or-pick flows for **tags** and
-    **categories** used on product (and other content forms that attach them).
-  - Support large lists without endless scrolling only: search, keyboard, clear
-    selection chips, empty and error states, and no false “saved” when the
-    mutation fails.
-  - Extract a reusable pattern only if two or more forms need it; otherwise
-    improve the primary product selectors first and reuse deliberately.
-  - Depends: useful before or alongside 066a–066c; claim with the first form
-    that needs it if blocked, otherwise after 066a.
-
-### Task Group 067 - Account and admin dashboards: fault tolerance and human errors
-
-- [x] **Task 067a - Admin dashboard shell and modules: fault tolerance**
-  - Across admin overview and module boards (lists, detail panes, mutations):
-    standardize loading, empty, error, retry, and permission-denied states.
-  - Prevent destructive actions without confirm; block double-submit; show field-
-    level and form-level errors that match backend validation.
-  - Prefer shared dashboard primitives already in the design system; do not paper
-    over 403/404 with fake success.
-  - Add or extend tests for error and retry paths on at least one list + one
-    mutation surface per high-traffic module if missing.
-  - Depends: Task Group 066 recommended so form patterns align.
-
-- [x] **Task 067b - Account dashboard: fault tolerance and human errors**
-  - Apply the same resilience bar to the customer account shell and pages
-    (orders, addresses, wishlist, wallet, settings, etc.): network failure,
-    empty data, validation mistakes, and session/auth edge cases.
-  - Keep copy Persian-first and actions reversible where the API supports it.
-  - Depends: Task 067a preferred for shared language/components.
+- [ ] **Task 080c - Product feedback: non-buyer policy and comment UX**
+  - Keep Option A: authenticated non-buyers may comment; delivered-order buyers
+    receive a verified-purchase badge and other authors receive a visitor badge.
+  - Re-audit gap: backend API docs still state purchase is required, frontend
+    policy/badge states lack tests, and full backend verification is blocked by
+    the active 082a compile failure.
 
 ---
 
-## Phase H - Operations trust, discovery, and recommendation fidelity
+## Phase L - Admin Operator Power: RBAC, Users, Discounts, Inventory
 
-Ordered from foundational data → operator tools → storefront discovery →
-observability. Claim top to bottom unless a task lists a narrower dependency.
+Task 081a is complete and archived in `FINISHED.md`.
 
-### Task Group 068 - Shipping accuracy foundations
+### Task Group 082 - Dynamic roles and RBAC
 
-- [x] **Task 068a - Make product weight trustworthy for shipping quotes**
-  - Surface product `weight` (kg) clearly in admin product specifications with
-    unit labels, validation hints, and empty-state guidance when weight is
-    missing (quotes fall back to zero weight).
-  - On inventory or product list admin surfaces, flag active shippable products
-    that lack weight so operators can fix them before checkout under-quotes.
-  - Do not invent weights; only report missing/zero and link to edit.
-  - Cover validation and any new empty/warning UI with focused tests.
-  - Depends: none.
+- [ ] **Task 082a - Dynamic admin roles and capability assignment**
+  - Define roles, assign capabilities, and support lower-privilege staff versus
+    full admins using real server data.
+  - Capabilities must drive nav filtering, server route guards, BFF checks, and
+    backend authorization.
+  - Provide role/capability administration and denied-route tests.
+  - Re-audit gap: the shipped matrix is browser-only `localStorage` over fixed
+    roles. Active backend hardening is not wired, dynamic role CRUD is absent,
+    and `capability_svc.go` currently does not compile.
 
-- [x] **Task 068b - Admin shipping quote simulator (real API)**
-  - On zone detail and/or method editor, add a simulator: region code, package
-    weight (kg), order subtotal → call existing public/admin-available
-    `GET /shipping/available` (or equivalent BFF) and show ranked methods with
-    estimated cost from the **authoritative** backend policy.
-  - Truthful empty/error/retry states when the API is offline or region has no
-    methods; never invent rates client-side as the only source of truth (client
-    preview may remain as a secondary hint).
-  - Persian labels, keyboard-friendly form, tests for parse/submit and error path.
-  - Depends: Task 068a recommended (weight context), not hard-blocked.
+### Task Group 083 - User management and wallet operations
 
-### Task Group 069 - Content form selection UX
+- [ ] **Task 083a - Users management: inspect, edit, and wallet top-up**
+  - Keep truthful profile/status/role editing and wallet credit through real APIs.
+  - Require confirmation, operation-specific permission gates, audit-friendly
+    results, duplicate protection, and focused tests.
+  - Re-audit gap: wallet credit has no confirmation, capability gate,
+    idempotency/audit actor, or focused tests; role editing remains hard-coded and
+    depends on 082a.
 
-- [x] **Task 069a - Journal, recipe, and hero forms: easier selection and resilience**
-  - Port searchable id select / chip-search patterns (from product form) to
-    journal, recipe, and hero admin editors wherever tags, categories, or large
-    option lists appear.
-  - Ensure loading/error/retry for remote option lists; dirty/submit locking
-    already present must not regress.
-  - Focused tests per form surface touched.
-  - Depends: Task Group 066 patterns (complete).
+### Task Group 084 - Discount form connected to catalogue
 
-### Task Group 070 - Dashboard error coverage and recommendation signals
+- [ ] **Task 084a - Discount create/edit: product/category selects + Jalali dates**
+  - Use searchable real catalogue selectors, Jalali date input, truthful
+    loading/empty/error/retry states, validation, and focused tests.
+  - Re-audit gap: product lookup is limited to the first 100 items, loader errors
+    are swallowed, and Jalali input rejects its Persian-digit example and can
+    retain a stale valid value after invalid edits; focused coverage is missing.
 
-- [x] **Task 070a - Roll out shared dashboard error/empty/loading states**
-  - Apply `DashboardErrorState` / loading / empty primitives across remaining
-    high-traffic admin boards (products, inventory, payments, analytics,
-    customers, shipping list) and any account pages still using ad-hoc error UI.
-  - Consistent retry affordances; no fake success on 403/404.
-  - Update board tests that assert retry button labels.
-  - Depends: Task 067a complete.
+### Task Group 085 - Inventory management upgrade
 
-- [x] **Task 070b - Record add_to_cart and purchase interactions for recommendations**
-  - Ensure cart add (single + bulk where applicable) and successful order
-    completion emit recommendation interactions (`add_to_cart`, `purchase`) with
-    correct product ids when the user is authenticated, matching backend
-    `InteractionType` weights.
-  - Fire-and-forget; never block commerce on interaction failure; no guest spam.
-  - Tests or integration coverage that the client calls are wired (mock store
-    request).
-  - Depends: none (backend already accepts weighted types).
-
-### Task Group 071 - Storefront brand index
-
-- [x] **Task 071a - Brand storefront index and deep links**
-  - Add a public brands listing route (e.g. `/brands`) backed by `listBrands`,
-    linking each brand to `/products?brand_id=…`.
-  - Wire nav (desktop + mobile) and homepage “all brands” CTA to this index.
-  - Empty/error states truthful; SEO metadata; focused tests.
-  - Depends: Task 064c brand_id routing (complete).
-
-### Task Group 072 - Recommendation observability
-
-- [x] **Task 072a - Admin recommendation observability surface**
-  - Expose an admin-only page (or dashboard module) summarizing recommendation
-    health using **existing** backend capabilities where available: document
-    cron refresh job, link to monitoring if metrics exist, and/or read-only
-    endpoints for profile/interaction stats if already exposed.
-  - If no stats API exists, implement the minimal admin-safe read that does not
-    invent personalization scores: e.g. last job notes from docs + config, or a
-    thin backend summary only when justified by evidence.
-  - Permission-gated; empty/error states; tests for gate + render.
-  - Depends: Task 070b preferred so cart/purchase signals exist before ops UI.
-
-### Task Group 073 - Shipping zone region ergonomics
-
-- [x] **Task 073a - Shipping zone map / postcode guidance**
-  - Extend region coverage UX beyond presets: clearer postcode/province help,
-    optional free-text “bulk paste” panel, and operator guidance for IR vs
-    international codes without requiring a true geographic map if no map
-    provider is configured.
-  - If a map is out of scope without API keys, ship an excellent code-first
-    editor (already chip-based) plus documentation in the form description.
-  - Tests for bulk paste / parse helpers.
-  - Depends: shipping form chip editor (landed in prior work).
+- [ ] **Task 085a - Inventory management: clearer ops and safer stock edits**
+  - Keep search/filters, storefront-aligned critical stock visibility, safe
+    API-backed edits, and truthful empty/error/retry states.
+  - Surface missing shipping-weight remediation in the inventory workflow.
+  - Re-audit gap: inventory contracts/UI do not expose the missing-weight signal,
+    and the new below-3 filter path has no focused test.
 
 ---
 
-## Claim order (recommended)
+## Phase M - Load And Performance Testing Harness
 
-### Phase G (complete)
-1. **064a** → **064b** → **064c** → **065a** → **066\*** → **067\***
+### Task Group 086 - Generic K6 load scripts
 
-### Phase H (complete)
-1. **068a** → **068b**
-2. **069a**
-3. **070a** → **070b**
-4. **071a**
-5. **072a**
-6. **073a**
-
----
-
-## Phase I - Recommendation signal fidelity and ops metrics
-
-- [x] **Task 074a - Wire productId into every commerce cart path**
-  - Pass `productId` into all `AddToCartButton` call sites (product card, PDP,
-    recipe shoppable, journal article cards).
-  - Record `add_to_cart` from wishlist single and bulk add paths.
-  - Keep fire-and-forget; never block commerce.
-
-- [x] **Task 074b - Metrics-backed admin recommendation stats**
-  - Backend `GET /admin/recommendations/stats` with interaction totals, unique
-    users, profile count, and breakdown by interaction type for a day window.
-  - Admin page renders live stats + trending sample (truthful empty/error).
-
-### Phase I claim order
-1. **074a** → **074b**
+- [ ] **Task 086a - Create a generic K6 script suite for Rumera**
+  - Provide env-driven smoke, mixed browse/cart, optional authenticated paths,
+    thresholds, safe fixtures, and local/staging documentation.
+  - Cover home, catalogue, product detail, and at least one safe write path.
+  - Re-audit gap: product detail is absent, thresholds are hard-coded, documented
+    bearer auth does not work through the default Next BFF, write checks accept
+    unauthorized responses, fixtures are not isolated, and K6 was not executed.
 
 ---
 
-## Phase J - More recommendation signals, metrics, shipping weight filter
+## Claim Order
 
-- [x] **Task 075a - Record search_click from storefront search results**
-  - When a signed-in shopper opens a product from search hit results, record
-    `search_click` with product_id (fire-and-forget). Do not fire for idle
-    suggestions/category chips alone unless the product came from the query hits.
-  - Depends: interaction API accepts search_click (already).
+### Phase K
+1. **078a** -> **078b**
+2. **079a** after **078a**
+3. **080a** -> **080b** -> **080c**
 
-- [x] **Task 075b - Record recipe_view on recipe detail for signed-in users**
-  - On recipe detail mount, for each linked shoppable product_id, record
-    `recipe_view` once per mount (authenticated only, fire-and-forget).
-  - Depends: none.
+### Phase L
+1. **082a** -> **083a**
+2. **084a**
+3. **085a**
 
-- [x] **Task 075c - Prometheus counters for recommendation interactions**
-  - Increment a Prometheus counter labeled by interaction_type on successful
-    RecordInteraction; expose via existing `/metrics`.
-  - Document series name on admin recommendations page.
-  - Depends: none.
+### Phase M
+1. **086a** after the authenticated cart path and fixture policy are stable.
 
-- [x] **Task 075d - Admin products filter: missing shipping weight only**
-  - Add a ProductsTable facet filter for active products missing/zero weight so
-    operators can isolate work without scanning the whole catalogue.
-  - Depends: list weight field (068a).
-
-### Phase J claim order
-1. **075a** → **075b** → **075c** → **075d**
-
-When a task completes: append a full record to `FINISHED.md`, mark the checkbox
-`[x]` here, and clear `IN_PROGRESS.md`.
+When a task completes: append a full verified record to `FINISHED.md`, remove
+its block from this open backlog, and clear `IN_PROGRESS.md`.

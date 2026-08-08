@@ -83,21 +83,29 @@ describe("product list routing", () => {
     );
   });
 
-  it("parses and serializes brand_id filters without inventing brands", () => {
-    expect(parseProductListRouteQuery({ brand_id: "12" })).toMatchObject({
-      brandId: 12,
+  it("parses human-readable brand slugs and marks numeric URLs as legacy", () => {
+    expect(parseProductListRouteQuery({ brand: "jack-daniel" })).toMatchObject({
+      brand: "jack-daniel",
       needsRedirect: false,
     });
-    expect(parseProductListRouteQuery({ brand_id: "0" })).toMatchObject({
-      brandId: undefined,
+    expect(parseProductListRouteQuery({ brand: " Jack-Daniel " })).toMatchObject({
+      brand: "jack-daniel",
+      needsRedirect: true,
+    });
+    expect(parseProductListRouteQuery({ brand: "jack--daniel" })).toMatchObject({
+      brand: undefined,
+      needsRedirect: true,
+    });
+    expect(parseProductListRouteQuery({ brand_id: "12" })).toMatchObject({
+      legacyBrandId: 12,
       needsRedirect: true,
     });
     expect(
       productListHref(
-        { brandId: 12, sortBy: "created_at", orderBy: "desc" },
+        { brand: "jack-daniel", sortBy: "created_at", orderBy: "desc" },
         1,
       ),
-    ).toBe("/products?brand_id=12");
+    ).toBe("/products?brand=jack-daniel");
   });
 
   it("exposes only backend-backed sort options in the control", () => {

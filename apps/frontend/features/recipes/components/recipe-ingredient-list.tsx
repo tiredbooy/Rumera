@@ -82,12 +82,26 @@ export function RecipeIngredientList({
                     </p>
                   ) : null}
                   {linked ? (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {available
-                        ? `موجود در فروشگاه: ${linked.product_title}`
-                        : `مرتبط: ${linked.product_title} (ناموجود)`}
+                    <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
+                          available
+                            ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                            : "bg-destructive/10 text-destructive",
+                        )}
+                      >
+                        {available ? "قابل خرید" : "ناموجود"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {linked.product_title}
+                      </span>
                     </p>
-                  ) : null}
+                  ) : (
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      لینک فروشگاهی ندارد
+                    </p>
+                  )}
 
                   <div className="mt-2 flex flex-wrap gap-2">
                     {linked && available && ing.shopAnchor ? (

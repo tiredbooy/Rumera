@@ -10,6 +10,16 @@ export const brandFormSchema = z.object({
     .trim()
     .min(1, "نام برند الزامی است")
     .max(255, "حداکثر ۲۵۵ نویسه"),
+  slug: z
+    .string()
+    .trim()
+    .max(255, "حداکثر ۲۵۵ نویسه")
+    .refine(
+      (value) =>
+        value === "" ||
+        /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u.test(value.toLowerCase()),
+      { message: "شناسهٔ نشانی باید از حروف، عدد و خط تیره ساخته شود" },
+    ),
   country: z.string().trim().max(80, "حداکثر ۸۰ نویسه"),
   founded_year: z.string().refine(
     (value) =>

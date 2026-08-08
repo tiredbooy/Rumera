@@ -26,7 +26,7 @@ export function MaintenanceSection({
   maintenanceEnabled: boolean;
 }) {
   return (
-    <TabsContent value="maintenance" className="mt-5">
+    <TabsContent value="maintenance" forceMount className="mt-5 data-[state=inactive]:hidden">
       <Panel
         title="حالت تعمیر و نگهداری"
         description="با فعال‌سازی، فروشگاه برای بازدیدکنندگان قفل می‌شود."

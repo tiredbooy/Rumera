@@ -204,8 +204,7 @@ export async function ProductDetailView({ params }: ProductDetailViewProps) {
             ) : null}
 
             {/* Purchase panel (owns variant selection + wishlist) */}
-            <div className="shadow-e2 relative mt-7 overflow-hidden rounded-3xl border border-border/60 bg-card/60 p-5 backdrop-blur-sm sm:p-6">
-              <div aria-hidden className="rule-gold absolute inset-x-6 top-0" />
+            <div className="shadow-e1 relative mt-7 overflow-hidden rounded-3xl border border-border/70 bg-card p-5 sm:p-6">
               <ProductPurchasePanel product={product} />
             </div>
 

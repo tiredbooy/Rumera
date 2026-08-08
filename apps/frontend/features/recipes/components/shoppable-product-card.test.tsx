@@ -47,7 +47,21 @@ describe("ShoppableProductCard", () => {
       `href="/products/${encodeURIComponent(product.product_slug!)}"`,
     );
     expect(markup).toContain('aria-label="افزودن محصول دستور به سبد خرید"');
-    expect(markup).toContain("۳ عدد موجود");
+    // Stock ≥ 3 is hidden on storefront (only low stock is disclosed).
+    expect(markup).not.toContain("عدد موجود");
+    expect(markup).not.toContain("عدد باقی مانده");
+  });
+
+  it("shows remaining stock only when below three", () => {
+    const markup = renderToStaticMarkup(
+      <ShoppableProductCard
+        product={{
+          ...product,
+          available_stock: 2,
+        }}
+      />,
+    );
+    expect(markup).toContain("۲ عدد باقی مانده");
   });
 
   it("offers a catalogue search alternative when the product is unavailable", () => {

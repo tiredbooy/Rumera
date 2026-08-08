@@ -15,6 +15,7 @@ export type StorefrontMediaSlot =
   | "product-thumb"
   | "recommendation"
   | "wishlist"
+  | "brand-tile"
   | "category-card"
   | "category-hero"
   | "category-thumb"
@@ -94,13 +95,28 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     fallbackClassName: CARD_FALLBACK,
   },
   recommendation: {
-    width: 640,
-    widths: [240, 360, 480, 640],
-    sizes: "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw",
+    // Match the wide scroll-snap rail from mobile peek through desktop.
+    width: 720,
+    height: 540,
+    widths: [280, 400, 560, 720],
+    sizes:
+      "(max-width: 391px) calc(100vw - 4.5rem), (max-width: 639px) 20rem, (max-width: 1023px) 21.5rem, (max-width: 1279px) 22rem, 22.5rem",
     format: "webp",
     quality: 80,
     fit: "cover",
     monogram: "ر",
+    fallbackClassName: CARD_FALLBACK,
+  },
+  "brand-tile": {
+    width: 640,
+    height: 360,
+    widths: [320, 480, 640, 800],
+    sizes:
+      "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 20rem",
+    format: "webp",
+    quality: 80,
+    fit: "cover",
+    monogram: "ب",
     fallbackClassName: CARD_FALLBACK,
   },
   wishlist: {
