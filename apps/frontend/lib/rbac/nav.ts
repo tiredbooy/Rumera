@@ -126,6 +126,12 @@ export const ADMIN_NAV: NavGroup[] = [
         icon: Users,
         permission: PERMISSIONS.CUSTOMERS_READ,
       },
+      {
+        label: "باشگاه مشتریان",
+        href: "/admin/loyalty",
+        icon: Award,
+        permission: PERMISSIONS.CUSTOMERS_READ,
+      },
     ],
   },
   {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/internal/features/catalog/category"
 	"go.uber.org/zap"
 )
 
@@ -62,7 +62,7 @@ func (s *seeder) seedCategories(ctx context.Context) (map[string]int64, error) {
 				s.log.Info("skip category (exists)", zap.String("name", it.name))
 				continue
 			}
-			req := models.CreateCategoryReq{
+			req := category.CreateCategoryReq{
 				Title:        it.name,
 				Slug:         sp(it.slug),
 				Description:  sp(it.desc),

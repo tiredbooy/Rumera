@@ -1,5 +1,7 @@
 # Orders
 
+
+**Implementation (feature slice):** `internal/features/orders/`
 Place, list, and inspect orders, cancel pending orders, and manage every order from the admin surface.
 
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope, pagination, and sorting.
@@ -23,9 +25,18 @@ See [Authentication](../authentication.md) for the token model and trust tiers, 
 ```
 POST /orders
 Authorization: Bearer <access_token>
+Idempotency-Key: <uuid-once-per-checkout-intent>   # strongly recommended
 ```
 
 Creates an order for the authenticated user from their current cart context. Stock is reserved and any coupon is validated at this point.
+
+**Idempotency (PH-011):** optional `Idempotency-Key` (8–128 printable ASCII). When
+present, a successful 2xx response is cached under a **scoped** store key
+(`cust:{uid}:POST:…`). Retries with the same key + same body return the stored
+response without creating a second order. Same key + different body → `409`.
+Missing key still works (no HTTP cache). See
+[idempotency.md](../architecture/idempotency.md) and
+[idempotency-runbook.md](../architecture/idempotency-runbook.md).
 
 **Request body** — `CreateOrderReq`
 
@@ -36,6 +47,18 @@ Creates an order for the authenticated user from their current cart context. Sto
 | `shipping_method_id` | int | ✓ | min `1` |
 | `coupon_code` | string | | optional |
 | `notes` | string | | optional |
+| `is_gift` | bool | | when true, gift settings must be enabled |
+| `gift_message` | string | | max 500; only when `is_gift` |
+| `gift_option_ids` | string[] | | modular add-on ids from site settings `gift.options` (PH-060); **server-priced** |
+| `gift_wrap` | bool | | legacy; if true without ids, selects option id `gift_wrap` when enabled |
+| `hide_price` | bool | | hide prices on packing slip when gift |
+| `scheduled_delivery_date` | RFC3339 | | optional preferred delivery |
+
+**Gift add-ons (PH-060):** selected ids are resolved against **current** public
+gift settings. Unknown/disabled id → `422 INVALID_GIFT_OPTION`. Gift mode while
+settings `gift.enabled=false` → `422 GIFT_DISABLED`. Fee is snapshotted on the
+order as `gift_addons` + `gift_addons_fee` and included in generated
+`total_amount` (`subtotal − discount + shipping + tax + gift_addons_fee`).
 
 ```json
 {
@@ -43,7 +66,11 @@ Creates an order for the authenticated user from their current cart context. Sto
   "payment_method": "wallet",
   "shipping_method_id": 3,
   "coupon_code": "WELCOME10",
-  "notes": "Leave at the front desk"
+  "notes": "Leave at the front desk",
+  "is_gift": true,
+  "gift_message": "برای تو ❤️",
+  "gift_option_ids": ["gift_wrap", "gift_card"],
+  "hide_price": true
 }
 ```
 

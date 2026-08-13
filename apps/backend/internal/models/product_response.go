@@ -86,20 +86,31 @@ type OptionValueResponse struct {
 	Value           string `json:"value"`             // e.g. "Red"
 }
 
-// MeiliProduct — the document shape indexed in MeiliSearch.
-// Keep it flat and search-friendly — no nested objects.
+// MeiliProduct — flat document shape for the Meilisearch products index (PH-030b).
+// Display fields keep original text; *_search fields use pkg/searchtext.Normalize
+// so Persian confusables match the live Postgres ILIKE path (PH-030a).
+// Inventory/availability is intentionally absent — hydrate from Postgres on cutover.
 type MeiliProduct struct {
-	ID              int64    `json:"id"`
-	Title           string   `json:"title"`
-	Code            *string  `json:"code"`
-	Slug            *string  `json:"slug"`
-	Description     *string  `json:"description"`
-	BrandID         *int64   `json:"brand_id"`
-	CategoryID      *int64   `json:"category_id"`
-	Tags            []string `json:"tags"` // tag titles for full-text search
-	MetaTags        []string `json:"meta_tags"`
-	MinPrice        float64  `json:"min_price"`
-	MaxPrice        float64  `json:"max_price"`
-	IsActive        bool     `json:"is_active"`
-	CountryOfOrigin *string  `json:"country_of_origin"`
+	ID    int64   `json:"id"`
+	Title string  `json:"title"`
+	Code  *string `json:"code,omitempty"`
+	Slug  *string `json:"slug,omitempty"`
+	// Description is optional long text; may be large — still indexed for discovery.
+	Description   *string  `json:"description,omitempty"`
+	BrandID       *int64   `json:"brand_id,omitempty"`
+	BrandTitle    *string  `json:"brand_title,omitempty"`
+	CategoryID    *int64   `json:"category_id,omitempty"`
+	CategoryTitle *string  `json:"category_title,omitempty"`
+	Tags          []string `json:"tags,omitempty"` // tag titles
+	MetaTags      []string `json:"meta_tags,omitempty"`
+	MinPrice      float64  `json:"min_price"`
+	MaxPrice      float64  `json:"max_price"`
+	IsActive      bool     `json:"is_active"`
+	CountryOfOrigin *string `json:"country_of_origin,omitempty"`
+
+	// Normalized search fields (primary searchableAttributes in Meili settings).
+	TitleSearch       string `json:"title_search"`
+	DescriptionSearch string `json:"description_search,omitempty"`
+	BrandSearch       string `json:"brand_search,omitempty"`
+	CategorySearch    string `json:"category_search,omitempty"`
 }

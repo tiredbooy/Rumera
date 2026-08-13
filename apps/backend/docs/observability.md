@@ -125,16 +125,47 @@ cardinality; unmatched requests collapse to `route="unmatched"`.
 | `db_pool_max_conns` | gauge | `pool` | Max connections the pool is configured to hold. |
 | `analytics_queue_depth` | gauge | `queue` (`events`) | Buffered analytics events awaiting flush; trending toward capacity = back-pressure. |
 | `analytics_queue_capacity` | gauge | `queue` | Max events the buffer holds before dropping. |
+| `idempotency_claim_total` | counter | `result` (`won`/`lost`/`error`) | Idempotency store claim attempts (PH-011b). |
+| `idempotency_replay_total` | counter | — | Stored HTTP response returned without re-running the handler. |
+| `idempotency_conflict_total` | counter | `reason` (`body`/`inflight`) | Idempotency 409 responses. |
+| `idempotency_complete_error_total` | counter | — | Failed to persist a successful (2xx) response body. |
+| `idempotency_missing_key_total` | counter | `route` | Key omitted on a wrapped route when auto-key is disabled (FE adoption). |
+| `orders_created_total` | counter | `result` (`ok`/`error`) | Place-order attempts (PH-013b). |
+| `orders_create_duration_seconds` | histogram | — | CreateOrder wall time incl. stock reserve TX. |
+| `payments_settled_total` | counter | `result` (`confirmed`/`failed`/`error`) | Confirm/Fail outcomes. |
+| `payments_confirm_duration_seconds` | histogram | — | Confirm wall time (paid + deduct TX). |
+| `inventory_ops_total` | counter | `op` (`reserve`/`deduct`/`release`), `result` | Stock lifecycle ops. |
+| `wallet_ops_total` | counter | `direction` (`credit`/`debit`), `result` | Wallet ledger ops (admin credit, deposit, withdraw, purchase). |
+| `loyalty_award_total` | counter | `reason`, `result` (`ok`/`replay`/`skip`/`error`) | Cellar Club awards (PH-040e). |
+| `loyalty_redeem_total` | counter | `result` (`ok`/`replay`/`insufficient`/`error`) | Loyalty redeem attempts (PH-040e). |
 
 The `db_pool_*` and `analytics_queue_*` gauges are `GaugeFunc` values read at
 **scrape time** from `pool.Stat()` / the live queue, and are registered in
 [`internal/bootstrap/app.go`](../internal/bootstrap/app.go) only when
 `METRICS_ENABLED` is true. Go runtime and process collectors (goroutines, GC,
-heap, open FDs, CPU) are included automatically.
+heap, open FDs, CPU) are included automatically. Idempotency + business saga
+counters are always registered with the private registry (incremented only when
+the corresponding code paths run).
 
-> **No business metrics exist.** There is no series for orders, payments,
-> revenue, or inventory — those domains are services/repositories with no
-> Prometheus instrumentation. See [the gaps](#production--security).
+### Money-path saga spans (PH-013b)
+
+When `OTEL_ENABLED=true`, services start named spans via `pkg/tracing.Start`
+(no-op when tracing is off):
+
+| Span name | Where |
+|-----------|--------|
+| `orders.CreateOrder` | place order (cart → reserve → pending payment) |
+| `payments.Confirm` | webhook/gateway confirm + deduct |
+| `payments.Fail` | gateway fail path |
+| `inventory.ReserveForOrder` / `DeductForOrder` / `ReleaseForOrder` | stock lifecycle |
+| `wallet.AdminCredit` / `Deposit` / `Withdraw` / `Purchase` | ledger |
+
+Local scrape (no full prod stack required):
+
+```bash
+# With API running and METRICS_ENABLED=true (default)
+curl -s localhost:8080/metrics | grep -E 'orders_created|payments_settled|inventory_ops|wallet_ops|loyalty_|idempotency_'
+```
 
 ### Useful PromQL
 
@@ -233,18 +264,14 @@ Verify end-to-end: with OTEL on, each HTTP request produces an otelgin server
 span with child otelpgx query spans; the request log line's `trace_id` should
 match the trace in the Jaeger UI (<http://localhost:16686>).
 
-### Span-coverage gaps
+### Span coverage (PH-013b)
 
-The app relies **only** on otelgin (HTTP boundary) and otelpgx (per-query) —
-there are **zero custom spans**. The blind spots:
+In addition to otelgin (HTTP) and otelpgx (SQL), money/stock services open
+custom spans via `pkg/tracing.Start` (see table above): `orders.CreateOrder`,
+`payments.Confirm`/`Fail`, inventory reserve/deduct/release, wallet ops.
 
-- **Order-creation saga** ([`internal/services/order_svc.go`](../internal/services/order_svc.go)):
-  `BeginTx → coupon limits → inventory reserve → commit → pending payment` emits
-  no domain spans; you see leaf SQL spans with no parent operation grouping them.
-- **Payment webhook** ([`internal/handlers/webhook.go`](../internal/handlers/webhook.go)):
-  the money path that confirms orders/payments is untraced beyond the generic
-  server span.
-- **Order-cancellation compensation** (inventory release on cancel) is untraced.
+Residual blind spots:
+
 - **Redis cache layer** ([`pkg/cache`](../pkg/cache)) has no `redisotel` hook —
   cache round-trips never appear as spans.
 - **Cron jobs** ([`internal/corn`](../internal/corn)) run outside any trace

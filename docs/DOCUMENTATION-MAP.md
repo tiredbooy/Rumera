@@ -3,7 +3,8 @@
 **Purpose:** tell any reader *what documentation exists*, *where it lives*, and
 *what is still thin* so they can navigate without tribal knowledge.
 
-**Hub:** [`docs/README.md`](./README.md) — preferred human entry.
+**Hub:** [`docs/README.md`](./README.md) — preferred human entry.  
+**Dual-track process:** [`DOCUMENTATION-DUAL-TRACK.md`](./DOCUMENTATION-DUAL-TRACK.md) — project docs ↔ Obsidian brain (required for material changes).
 
 ---
 
@@ -18,6 +19,10 @@ docs/                              # monorepo-wide long-form docs
 ├── README.md                      # hub
 ├── SYSTEM-OVERVIEW.md
 ├── DOCUMENTATION-MAP.md           # this file
+├── DOCUMENTATION-DUAL-TRACK.md
+├── PH-DUAL-DOC-MATRIX.md          # PH epic ↔ project ↔ Obsidian (PH-050a)
+├── BACKLOG-PRODUCTION-HARDENING.md
+├── FEATURE-ROADMAP.md
 ├── TESTING.md
 └── DOCKER.md
 
@@ -76,9 +81,14 @@ apps/frontend/docs/
 | [README.md](./README.md) | Hub + quick jumps |
 | [SYSTEM-OVERVIEW.md](./SYSTEM-OVERVIEW.md) | Full-system architecture |
 | [DOCUMENTATION-MAP.md](./DOCUMENTATION-MAP.md) | This inventory |
+| [DOCUMENTATION-DUAL-TRACK.md](./DOCUMENTATION-DUAL-TRACK.md) | Dual-track rules (project ↔ Obsidian) |
+| [PH-DUAL-DOC-MATRIX.md](./PH-DUAL-DOC-MATRIX.md) | PH epic dual-doc closure map (PH-050a) |
+| [READ-THE-SYSTEM.md](./READ-THE-SYSTEM.md) | Founder one-hour reading outline (PH-050b) |
+| [BACKLOG-PRODUCTION-HARDENING.md](./BACKLOG-PRODUCTION-HARDENING.md) | Ordered hardening + product backlog pointer |
+| [FEATURE-ROADMAP.md](./FEATURE-ROADMAP.md) | Shipped program + deferred / residuals |
 | [TESTING.md](./TESTING.md) | Go unit/integration, Vitest, Playwright status |
 | [DOCKER.md](./DOCKER.md) | Compose, nginx |
-| FEATURE-ROADMAP / IMPROVEMENT-* | Historical |
+| IMPROVEMENT-OPPORTUNITIES | Historical audit + PH status overlay |
 
 ### Backend core (`apps/backend/docs/`)
 
@@ -98,8 +108,16 @@ apps/frontend/docs/
 | data-stores.md | All data planes |
 | **inventory.md** | Stock model + order lifecycle |
 | payments-and-webhooks.md | Settlement |
+| money-and-stock-sagas.md | End-to-end money narrative (PH-000c) |
+| idempotency.md · idempotency-runbook.md | Money replay platform (PH-011) |
+| error-messages.md | User-clear error catalogue (PH-012c) |
+| rbac.md | Staff capabilities (PH-021) |
+| loyalty.md | Cellar Club rules (PH-040) |
+| wallet-topup.md | Gateway top-up (PH-041) |
+| gift-card-purchase.md | Customer buy gift card (PH-042) |
+| box-subscriptions.md | Cellar box model (PH-043) |
 | media-pipeline.md | Uploads / transforms |
-| search.md | Product search + analytics |
+| search.md | Product search + analytics + Meili readiness |
 | notifications-kafka.md | Async notify |
 | processes-and-jobs.md | Binaries + cron |
 
@@ -120,6 +138,7 @@ apps/frontend/docs/
 | storefront-commerce | Catalogue / cart / checkout |
 | search | `/search` UX |
 | account-tour | Customer dashboard |
+| loyalty · wallet · gift-cards · subscriptions | Growth account surfaces (PH-040…043) |
 | content-and-seo | Home, journal, recipes, SEO |
 | recipe-commerce | Recipe → shop |
 | admin-console | Staff shell |
@@ -141,11 +160,12 @@ apps/frontend/docs/
 | Catalogue / cart / checkout | API | features/storefront-commerce |
 | **Inventory** | **architecture/inventory** + API | **features/inventory** |
 | Payments / webhooks | architecture/payments-and-webhooks | commerce + admin payments |
-| Account (wallet, loyalty, …) | API | features/account-tour |
+| Account (wallet, loyalty, …) | API + wallet-topup / loyalty / gift / box | features/account-tour + domain FE docs |
 | Search | architecture/search | features/search |
 | Media | architecture/media-pipeline | features/media-and-cache |
 | Notifications | architecture/notifications-kafka | — |
 | Admin shell | — | features/admin-console |
+| Dual-doc PH program | PH-DUAL-DOC-MATRIX | Obsidian Connect + Journeys MOC |
 | Testing | docs/TESTING | Vitest section |
 | Docker | docs/DOCKER | — |
 
@@ -158,6 +178,8 @@ apps/frontend/docs/
 3. **Playwright runbook** — after Task 062 lands a suite (stub in TESTING.md).
 4. **Age gate / compliance** — small surface, still code-only.
 5. **Persian OG font vendoring** — acceptance note only.
+6. ~~**PH-050b** one-hour outline~~ — [READ-THE-SYSTEM.md](./READ-THE-SYSTEM.md).
+7. Product residuals listed in [FEATURE-ROADMAP.md](./FEATURE-ROADMAP.md) (gateway redirect URL, sub address PATCH, Meili cutover, …).
 
 ---
 
@@ -165,5 +187,6 @@ apps/frontend/docs/
 
 - **Clear and detailed:** who-for blurb, mental model, code map, do/don’t, related links.
 - **Right folder:** platform/architecture vs features/journey vs api/contract.
-- **Real paths** (`internal/services/…`, `features/inventory/…`).
+- **Real paths** (`internal/features/<domain>/…`, `apps/frontend/features/…`).
 - Link from hub READMEs + this map when adding a file.
+- Dual-track: [DOCUMENTATION-DUAL-TRACK.md](./DOCUMENTATION-DUAL-TRACK.md) · program matrix [PH-DUAL-DOC-MATRIX.md](./PH-DUAL-DOC-MATRIX.md).

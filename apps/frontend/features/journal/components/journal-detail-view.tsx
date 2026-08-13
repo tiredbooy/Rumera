@@ -70,8 +70,8 @@ export async function JournalDetailView({ params }: JournalDetailViewProps) {
       />
 
       <article aria-labelledby="journal-article-title">
-        <header className="cellar-glow border-b border-border/60">
-          <div className="container-px mx-auto max-w-3xl py-14 text-center sm:py-16">
+        <header className="content-header-glow border-b border-border/50">
+          <div className="container-px mx-auto max-w-3xl py-12 text-center sm:py-14">
             <nav
               className="mb-8 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground"
               aria-label="مسیر صفحه"

@@ -19,6 +19,17 @@ tags: [ops, quality]
 | Lint | `npm run lint` | `apps/frontend` |
 | Go vet | `go vet ./...` | `apps/backend` |
 
+## Critical pure paths (PH-013c)
+
+Local only — **no CI**:
+
+```bash
+cd apps/backend
+go test ./pkg/token/ ./internal/middlewares/ ./pkg/middleware/ ./internal/features/payments/ -count=1
+```
+
+Covers: JWT guards · RequirePermission · Auth rehydrate · idempotency store · webhook fail→stock release.
+
 ## Integration focus
 
 Money/stock-critical: inventory reserve, coupons concurrency, media pipeline, gift cards, products — tag `integration`.

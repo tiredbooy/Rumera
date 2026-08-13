@@ -29,7 +29,11 @@ Living encyclopedia of important variables. Source of truth in code: `apps/backe
 | `REDIS_ADDR` `REDIS_PASSWORD` `REDIS_DB` | Cache |
 | `CACHE_BREAKER_THRESHOLD` `CACHE_BREAKER_COOLDOWN` | Redis circuit breaker |
 | `DB_RETRY_MAX_ATTEMPTS` `DB_RETRY_BASE_BACKOFF` | Transient SQL retries |
-| `MEILI_HOST` `MEILI_API_KEY` | Meilisearch (prepared; search still ILIKE) |
+| `MEILI_ENABLED` `MEILI_HOST` `MEILI_API_KEY` `MEILI_INDEX_UID` | Meili readiness (default off; search still ILIKE) |
+| `CRON_MEILI_REINDEX_SCHEDULE` | Full products index rebuild when Meili client up |
+| `LOYALTY_EARN_DIVISOR` `LOYALTY_REDEEM_VALUE` `LOYALTY_SIGNUP_BONUS` `LOYALTY_REFERRAL_REWARD` | Cellar Club rates (live) |
+| `LOYALTY_REVIEW_BONUS` `LOYALTY_BIRTHDAY_BONUS` `LOYALTY_BIRTHDAY_TZ` | Live PH-040b — see [[Loyalty Backend]] |
+| `CRON_LOYALTY_BIRTHDAY_SCHEDULE` | Daily birthday awards job |
 
 ## Backend — auth & security
 

@@ -13,7 +13,7 @@ describe("cartMutationErrorMessage", () => {
       cartMutationErrorMessage(
         new ApiClientError(401, "SESSION_EXPIRED", "sign in"),
       ),
-    ).toBe("نشست شما منقضی شده؛ دوباره وارد شوید");
+    ).toMatch(/نشست/);
     expect(
       cartMutationErrorMessage(
         new ApiClientError(404, "PRODUCT_NOT_FOUND", "missing"),
@@ -25,5 +25,13 @@ describe("cartMutationErrorMessage", () => {
     expect(cartMutationErrorMessage(new Error("boom"))).toBe(
       "افزودن به سبد ناموفق بود",
     );
+  });
+
+  it("surfaces specific OUT_OF_STOCK copy not a generic-only failure", () => {
+    const msg = cartMutationErrorMessage(
+      new ApiClientError(409, "OUT_OF_STOCK", "not enough stock available"),
+    );
+    expect(msg).toMatch(/موجودی/);
+    expect(msg).not.toBe("افزودن به سبد ناموفق بود");
   });
 });

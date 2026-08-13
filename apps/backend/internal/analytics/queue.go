@@ -6,8 +6,7 @@ import (
 	"sync"
 	"time"
 
-	models "github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/services"
+	featanalytics "github.com/tiredbooy/internal/features/analytics"
 )
 
 const (
@@ -18,9 +17,9 @@ const (
 )
 
 type Queue struct {
-	ch      chan *models.EventReq
+	ch      chan *featanalytics.EventReq
 	wg      sync.WaitGroup
-	service *services.EventService
+	service *featanalytics.EventService
 
 	batchSize   int
 	flushEvery  time.Duration
@@ -33,12 +32,12 @@ func WithBatchSize(n int) QueueOption            { return func(q *Queue) { q.bat
 func WithFlushEvery(d time.Duration) QueueOption { return func(q *Queue) { q.flushEvery = d } }
 func WithWorkerCount(n int) QueueOption          { return func(q *Queue) { q.workerCount = n } }
 func WithChannelSize(n int) QueueOption {
-	return func(q *Queue) { q.ch = make(chan *models.EventReq, n) }
+	return func(q *Queue) { q.ch = make(chan *featanalytics.EventReq, n) }
 }
 
-func NewQueue(svc *services.EventService, opts ...QueueOption) *Queue {
+func NewQueue(svc *featanalytics.EventService, opts ...QueueOption) *Queue {
 	q := &Queue{
-		ch:          make(chan *models.EventReq, defaultChannelSize),
+		ch:          make(chan *featanalytics.EventReq, defaultChannelSize),
 		service:     svc,
 		batchSize:   defaultBatchSize,
 		flushEvery:  defaultFlushEvery,
@@ -59,7 +58,7 @@ func (q *Queue) Depth() int { return len(q.ch) }
 func (q *Queue) Capacity() int { return cap(q.ch) }
 
 // Push is called by middleware — never blocks, drops on full channel.
-func (q *Queue) Push(e *models.EventReq) {
+func (q *Queue) Push(e *featanalytics.EventReq) {
 	select {
 	case q.ch <- e:
 	default:
@@ -86,7 +85,7 @@ func (q *Queue) Shutdown() {
 func (q *Queue) worker(ctx context.Context, id int) {
 	defer q.wg.Done()
 
-	batch := make([]*models.EventReq, 0, q.batchSize)
+	batch := make([]*featanalytics.EventReq, 0, q.batchSize)
 	ticker := time.NewTicker(q.flushEvery)
 	defer ticker.Stop()
 

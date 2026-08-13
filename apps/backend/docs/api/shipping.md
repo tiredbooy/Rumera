@@ -1,5 +1,7 @@
 # Shipping
 
+**Implementation (feature slice):** `internal/features/shipping/`
+
 Shipping zones, their methods, and checkout rate estimation. Zone/method reads are public; managing zones and methods is admin-only.
 
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.
@@ -10,7 +12,7 @@ See [Authentication](../authentication.md) for the token model and trust tiers, 
 | GET | `/shipping/zones/:id` | 🌐 public | Get a zone (with its methods) |
 | GET | `/shipping/zones/:id/methods` | 🌐 public | List a zone's methods |
 | GET | `/shipping/methods/:id` | 🌐 public | Get a single method |
-| GET | `/shipping/available` | 🌐 public | Methods available for checkout by region + weight |
+| GET | `/shipping/available` | 🌐 public | Methods available for checkout by region + **package weight (kg)** |
 | POST | `/admin/shipping/zones` | 🛡️ admin | Create a zone |
 | PATCH | `/admin/shipping/zones/:id` | 🛡️ admin | Update a zone |
 | DELETE | `/admin/shipping/zones/:id` | 🛡️ admin | Delete a zone |
@@ -140,15 +142,18 @@ GET /shipping/methods/:id
 ## Available methods for checkout
 
 ```
-GET /shipping/available?region=<code>&weight=<kg>
+GET /shipping/available?region=<code>&weight=<kg>&subtotal=<amount>
 ```
 
-Returns the methods deliverable to a region, with `estimated_cost` calculated from each method's `rate_type` and the supplied package weight.
+Returns the methods deliverable to a region, with `estimated_cost` calculated from each method's `rate_type` and the supplied **package weight**.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `region` | string | ✓ | Region code, e.g. `US` |
-| `weight` | float | | Package weight in kg (default `0`, must be ≥ 0) |
+| `region` | string | ✓ | Region code (storefront: address **country**), e.g. `IR` |
+| `weight` | float | | Package weight in kg (default `0`, must be ≥ 0). Storefront: Σ cart `weight_kg × quantity` (PH-020c). |
+| `subtotal` | float | | Cart subtotal for free-above / percentage rates (default `0`) |
+
+**Storefront truth (PH-020c):** FE passes the summed cart package weight; place-order **re-sums** line weights from catalogue and re-authorizes the method. Methods with `max_weight_kg` below the package are excluded.
 
 **Response** `200 OK` — `data` array of `ShippingMethodResponse` with `estimated_cost` populated:
 
@@ -160,7 +165,7 @@ Returns the methods deliverable to a region, with `estimated_cost` calculated fr
 }
 ```
 
-**Errors:** `400 INVALID_QUERY` (missing `region`, or negative/non-numeric `weight`).
+**Errors:** `400 INVALID_QUERY` (missing `region`, or negative/non-numeric `weight` / `subtotal`).
 
 ---
 

@@ -13,7 +13,7 @@ type SubscriptionsPanelProps = {
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
-  onSkip: (id: number) => void;
+  onRequestSkip: (id: number) => void;
   onResume: (id: number) => void;
   onRequestPause: (id: number) => void;
   onRequestCancel: (id: number) => void;
@@ -26,7 +26,7 @@ export function SubscriptionsPanel({
   isLoading,
   isError,
   onRetry,
-  onSkip,
+  onRequestSkip,
   onResume,
   onRequestPause,
   onRequestCancel,
@@ -72,10 +72,10 @@ export function SubscriptionsPanel({
         <span className="mb-1 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15">
           <PackageOpen className="size-6" aria-hidden />
         </span>
-        <p className="font-serif text-xl leading-tight">هنوز اشتراکی ندارید</p>
+        <p className="font-serif text-xl leading-tight">هنوز باکسی فعال نیست</p>
         <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-          یک باکس دوره‌ای فعال کنید تا منتخب‌های سرداب به‌طور منظم به دستتان
-          برسد.
+          یک باکس سرداب فعال کنید تا منتخب فیزیکی دوره‌ای به‌طور منظم به دستتان
+          برسد. توقف، رد دوره یا لغو همیشه در دسترس است.
         </p>
       </div>
     );
@@ -93,7 +93,7 @@ export function SubscriptionsPanel({
               : undefined
           }
           busy={busyId === subscription.id}
-          onSkip={() => onSkip(subscription.id)}
+          onRequestSkip={() => onRequestSkip(subscription.id)}
           onResume={() => onResume(subscription.id)}
           onRequestPause={() => onRequestPause(subscription.id)}
           onRequestCancel={() => onRequestCancel(subscription.id)}

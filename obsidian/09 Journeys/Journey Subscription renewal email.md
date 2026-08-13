@@ -6,23 +6,37 @@ tags: [journey]
 **Brain:** [[Project Brain]] · [[Connect 09 Journeys]]
 
 
-# Journey: Subscription renewal email
+# Journey: Subscription renewal email (box due)
+
+## Product framing
+
+This is a **physical box due reminder** (PH-043b RTL email), not a streaming
+renewal bill. The job does **not** charge a card or open a digital entitlement.
 
 ## Actor
 
-System cron + subscriber
+System cron + cellar-box subscriber
 
 ## Happy path
 
-1. Active subscription with `next_renewal_at` due → [[Subscriptions]]
-2. `subscription_renewal_job` finds due rows
-3. Email “box is ready” + link to `/account/subscriptions`
-4. Advance next renewal by cadence
+1. Active subscription with `next_renewal_at` ≤ now → [[Subscriptions]]
+2. `subscription_renewal_job` loads due rows (limit 500; active + user active)
+3. Email: subject «باکس سرداب شما آماده است»
+   - HTML `lang=fa` `dir=rtl`
+   - Reminder + no auto-pay honesty
+   - CTA «مدیریت باکس در حساب من» → `/account/subscriptions`
+4. Advance `next_renewal_at` by one cadence (`NextRenewal`)
 
 ## Failure branches
 
-- Email fail → logged; renewal still advances (check job code)
-- **No charge** in this journey yet — payment not automated
+- Email fail → logged; **date still advances** (avoids re-spamming the same due set every tick)
+- Advance SQL fail → logged; row may remain due next tick
+- Paused / cancelled → never selected by `FindDue`
+
+## Money
+
+**None.** Charging declined for this program ([[ADR Box auto-charge declined]] / PH-043c).
+Do not document this journey as “billing ran.”
 
 ## Domains touched
 
@@ -30,6 +44,8 @@ System cron + subscriber
 
 ## Related
 
-[[Journeys MOC]] · [[Subscriptions Backend]] · [[Known gaps]] (charging)
+[[Journeys MOC]] · [[Subscriptions Backend]] · [[Journey Manage cellar box]] ·
+[[Known gaps]] (charging) · project `architecture/box-subscriptions.md` ·
+`internal/corn/subscription_renewal_email.go`
 
 #journey

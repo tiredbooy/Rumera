@@ -24,6 +24,7 @@ const ALLOW = new Set([
   "auth/password/validate",
   "auth/otp/request",
   "categories/tree",
+  "settings",
 ])
 
 async function handle(req: NextRequest, segments: string[]) {

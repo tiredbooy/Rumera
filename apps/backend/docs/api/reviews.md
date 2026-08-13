@@ -1,5 +1,8 @@
 # Reviews
 
+**Implementation (feature slice):** `internal/features/reviews/`  
+Composed from `internal/routes/routes.go`. API contracts unchanged.
+
 Product reviews: public browsing, customer write/react/images, and admin moderation.
 
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.

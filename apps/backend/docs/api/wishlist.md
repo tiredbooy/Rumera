@@ -2,6 +2,10 @@
 
 Every customer has exactly one wishlist, created automatically on first access. Add and remove product variants, check membership, and clear the list.
 
+**Implementation (feature slice):** `internal/features/wishlist/`  
+(handler · service · repository · model · mapper · `routes.go` → `RegisterCustomer`).  
+Composed from `internal/routes/routes.go`. API contracts below are unchanged.
+
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.
 
 | Method | Path | Tier | Description |

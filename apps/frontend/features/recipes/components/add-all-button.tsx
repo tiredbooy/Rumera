@@ -13,6 +13,7 @@ import type {
   SkippedCartItemReason,
 } from "@/features/cart/types";
 import type { ShoppableProduct } from "@/features/recipes/types";
+import { apiErrorToast } from "@/lib/api/user-facing-error";
 import { faNum } from "@/lib/products";
 
 const SKIP_REASON_LABELS: Record<SkippedCartItemReason, string> = {
@@ -112,7 +113,10 @@ export function AddAllIngredientsButton({
             toast.error(feedback.title, { description: feedback.description });
           }
         },
-        onError: () => toast.error("افزودن به سبد ناموفق بود"),
+        onError: (error) => {
+          const t = apiErrorToast(error, "افزودن به سبد ناموفق بود");
+          toast.error(t.title, { description: t.description });
+        },
       },
     );
   }

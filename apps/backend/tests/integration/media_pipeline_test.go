@@ -3,6 +3,9 @@
 package integration
 
 import (
+	"github.com/tiredbooy/internal/features/inventory"
+	"github.com/tiredbooy/internal/features/catalog/variant"
+	"github.com/tiredbooy/internal/features/catalog/product"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -18,13 +21,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/tiredbooy/internal/handlers"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
+	"github.com/tiredbooy/internal/features/media"
 	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/imaging"
 	"github.com/tiredbooy/pkg/storage"
+	"github.com/tiredbooy/pkg/validator"
 	"go.uber.org/zap"
 )
 
@@ -32,8 +34,8 @@ func TestMediaPipelineUploadServeDeleteAndPathSafety(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "products")
 	productID := seedProduct(t)
-	service, store, cache := integrationMediaService(t, repositories.NewProductRepository(testPool))
-	handler := handlers.New(handlers.Deps{Media: service, Log: zap.NewNop()})
+	service, store, cache := integrationMediaService(t, product.NewRepository(testPool))
+	handler := media.NewHandler(service, nil, validator.New())
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.POST("/admin/products/:id/images", handler.UploadProductImage)
@@ -114,7 +116,7 @@ func TestMediaPipelineReplacesOwnerAndRollsBackRejectedUpload(t *testing.T) {
 		).Scan(&recipeID); err != nil {
 			t.Fatalf("insert recipe: %v", err)
 		}
-		service, store, cache := integrationMediaService(t, repositories.NewProductRepository(testPool))
+		service, store, cache := integrationMediaService(t, product.NewRepository(testPool))
 		first, err := service.UploadOwnerImage(ctx, "recipes", recipeID, "cover", integrationPNG(t), models.NullablePatch[string]{})
 		if err != nil {
 			t.Fatalf("upload first cover: %v", err)
@@ -148,7 +150,7 @@ func TestMediaPipelineReplacesOwnerAndRollsBackRejectedUpload(t *testing.T) {
 	t.Run("foreign-key rejection removes newly stored original", func(t *testing.T) {
 		resetTables(t, "products")
 		productID := seedProduct(t)
-		productRepo := repositories.NewProductRepository(testPool)
+		productRepo := product.NewRepository(testPool)
 		deletingRepo := &deleteProductAfterIdentityRepository{
 			pool: testPool, delegate: productRepo,
 		}
@@ -169,7 +171,7 @@ func TestMediaPipelineRejectsCrossOwnerProductImageMutations(t *testing.T) {
 	firstProductID := seedProduct(t)
 	secondProductID := seedProduct(t)
 	variantID := seedVariant(t, firstProductID)
-	service, store, cache := integrationMediaService(t, repositories.NewProductRepository(testPool))
+	service, store, cache := integrationMediaService(t, product.NewRepository(testPool))
 
 	owned, err := service.Upload(ctx, firstProductID, integrationPNG(t), nil, true)
 	if err != nil {
@@ -189,7 +191,7 @@ func TestMediaPipelineRejectsCrossOwnerProductImageMutations(t *testing.T) {
 	if err := store.Put(ctx, variantKey, bytes.NewReader(integrationPNG(t))); err != nil {
 		t.Fatalf("store variant image: %v", err)
 	}
-	variantImage, err := repositories.NewProductImageRepository(testPool).Create(ctx, &models.ProductImage{
+	variantImage, err := product.NewImageRepository(testPool).Create(ctx, &models.ProductImage{
 		ProductID:        &firstProductID,
 		ProductVariantID: &variantID,
 		ImageURL:         "/media/" + variantKey,
@@ -203,7 +205,7 @@ func TestMediaPipelineRejectsCrossOwnerProductImageMutations(t *testing.T) {
 		t.Fatalf("render variant image: %v", err)
 	}
 
-	handler := handlers.New(handlers.Deps{Media: service, Log: zap.NewNop()})
+	handler := media.NewHandler(service, nil, validator.New())
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.PATCH("/admin/products/:id/images/:imageId", handler.UpdateProductImage)
@@ -279,7 +281,7 @@ func TestMediaPipelineRejectsCrossOwnerProductImageMutations(t *testing.T) {
 		})
 	}
 
-	imageRepo := repositories.NewProductImageRepository(testPool)
+	imageRepo := product.NewImageRepository(testPool)
 	for name, imageID := range map[string]int64{
 		"owned product image":  owned.ID,
 		"second product image": second.ID,
@@ -314,24 +316,24 @@ func TestMediaPipelineProductAndVariantDeleteCleanOwnedMedia(t *testing.T) {
 		resetTables(t, "products")
 		productID := seedProduct(t)
 		variantID := seedVariant(t, productID)
-		productRepo := repositories.NewProductRepository(testPool)
-		media, store, cache := integrationMediaService(t, productRepo)
-		lifecycle := services.NewMediaLifecycleService(
-			store, cache, repositories.NewMediaLifecycleRepository(testPool), zap.NewNop(),
+		productRepo := product.NewRepository(testPool)
+		mediaSvc, store, cache := integrationMediaService(t, productRepo)
+		lifecycle := media.NewLifecycleService(
+			store, cache, media.NewLifecycleRepository(testPool), zap.NewNop(),
 		)
-		galleryImage, err := media.Upload(ctx, productID, integrationPNG(t), nil, true)
+		galleryImage, err := mediaSvc.Upload(ctx, productID, integrationPNG(t), nil, true)
 		if err != nil {
 			t.Fatalf("upload product image: %v", err)
 		}
 		variantKey := fmt.Sprintf("products/%d/variants/%d/delete.webp", productID, variantID)
 		variantImage := createStoredVariantImage(t, ctx, store, productID, variantID, variantKey)
 		for _, key := range []string{*galleryImage.StorageKey, *variantImage.StorageKey} {
-			if _, _, err := media.Transform(ctx, key, imaging.Options{Format: imaging.FormatPNG, Width: 1}); err != nil {
+			if _, _, err := mediaSvc.Transform(ctx, key, imaging.Options{Format: imaging.FormatPNG, Width: 1}); err != nil {
 				t.Fatalf("render %q: %v", key, err)
 			}
 		}
 
-		if err := services.NewProductService(productRepo, lifecycle, media).Delete(ctx, productID); err != nil {
+		if err := product.NewService(productRepo, lifecycle, mediaSvc).Delete(ctx, productID); err != nil {
 			t.Fatalf("delete product: %v", err)
 		}
 		assertRowCount(t, "products", 0)
@@ -350,18 +352,18 @@ func TestMediaPipelineProductAndVariantDeleteCleanOwnedMedia(t *testing.T) {
 		resetTables(t, "products")
 		productID := seedProduct(t)
 		variantID := seedVariant(t, productID)
-		productRepo := repositories.NewProductRepository(testPool)
-		media, store, cache := integrationMediaService(t, productRepo)
-		lifecycle := services.NewMediaLifecycleService(
-			store, cache, repositories.NewMediaLifecycleRepository(testPool), zap.NewNop(),
+		productRepo := product.NewRepository(testPool)
+		mediaSvc, store, cache := integrationMediaService(t, productRepo)
+		lifecycle := media.NewLifecycleService(
+			store, cache, media.NewLifecycleRepository(testPool), zap.NewNop(),
 		)
 		variantKey := fmt.Sprintf("products/%d/variants/%d/delete.webp", productID, variantID)
 		createStoredVariantImage(t, ctx, store, productID, variantID, variantKey)
-		if _, _, err := media.Transform(ctx, variantKey, imaging.Options{Format: imaging.FormatPNG, Width: 1}); err != nil {
+		if _, _, err := mediaSvc.Transform(ctx, variantKey, imaging.Options{Format: imaging.FormatPNG, Width: 1}); err != nil {
 			t.Fatalf("render variant image: %v", err)
 		}
 
-		variantService := services.NewVariantService(repositories.NewVariantRepository(testPool), repositories.NewInventoryRepository(testPool), lifecycle)
+		variantService := variant.NewService(variant.NewRepository(testPool), inventory.NewRepository(testPool), lifecycle)
 		if err := variantService.Delete(ctx, variantID); err != nil {
 			t.Fatalf("delete variant: %v", err)
 		}
@@ -388,7 +390,7 @@ func createStoredVariantImage(
 	if err := store.Put(ctx, key, bytes.NewReader(integrationPNG(t))); err != nil {
 		t.Fatalf("store variant original: %v", err)
 	}
-	image, err := repositories.NewProductImageRepository(testPool).Create(ctx, &models.ProductImage{
+	image, err := product.NewImageRepository(testPool).Create(ctx, &models.ProductImage{
 		ProductID:        &productID,
 		ProductVariantID: &variantID,
 		ImageURL:         "/media/" + key,
@@ -408,7 +410,7 @@ type productMediaIdentityRepository interface {
 func integrationMediaService(
 	t *testing.T,
 	productRepo productMediaIdentityRepository,
-) (*services.MediaService, *storage.LocalStorage, *storage.LocalStorage) {
+) (*media.Service, *storage.LocalStorage, *storage.LocalStorage) {
 	t.Helper()
 	store, err := storage.NewLocalStorage(t.TempDir())
 	if err != nil {
@@ -418,18 +420,18 @@ func integrationMediaService(
 	if err != nil {
 		t.Fatalf("create media cache: %v", err)
 	}
-	lifecycle := services.NewMediaLifecycleService(
-		store, cache, repositories.NewMediaLifecycleRepository(testPool), zap.NewNop(),
+	lifecycle := media.NewLifecycleService(
+		store, cache, media.NewLifecycleRepository(testPool), zap.NewNop(),
 	)
-	service := services.NewMediaService(
+	service := media.NewService(
 		store,
 		cache,
-		repositories.NewProductImageRepository(testPool),
+		product.NewImageRepository(testPool),
 		productRepo,
-		repositories.NewContentMediaRepository(testPool),
+		media.NewContentRepository(testPool),
 		lifecycle,
 		imaging.New(),
-		services.MediaConfig{
+		media.Config{
 			MaxUploadBytes: 1 << 20, MaxDimension: 4000,
 			MaxSourceDimension: 12000, MaxSourcePixels: 40_000_000,
 		},
@@ -440,7 +442,7 @@ func integrationMediaService(
 
 type deleteProductAfterIdentityRepository struct {
 	pool     *pgxpool.Pool
-	delegate repositories.ProductRepository
+	delegate product.Repository
 }
 
 func (r *deleteProductAfterIdentityRepository) GetMediaIdentity(ctx context.Context, productID int64) (string, error) {

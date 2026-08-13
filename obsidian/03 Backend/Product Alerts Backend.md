@@ -1,5 +1,5 @@
 ---
-tags: [backend]
+tags: [backend, account, alerts]
 ---
 
 <!-- brain-hub -->
@@ -8,32 +8,19 @@ tags: [backend]
 
 # Product Alerts Backend
 
-## API surface (customer)
+Restock / price-drop alerts + cron
 
-Typical routes (see API docs if present): create / list / delete product alerts for the JWT user.
+## Package (feature slice)
 
-## Service behavior
+```text
+apps/backend/internal/features/alerts/
+  doc.go → routes.go → handler.go → service.go → repository.go → model.go
+```
 
-`AlertService`:
-
-- Validates alert type: restock | price_drop
-- Loads variant; 404 if missing
-- Restock: conflict if currently available
-- Persists alert with reference price
-
-## Cron
-
-`AlertCheckJob`:
-
-- `FindPending` batch
-- Build email subject/body
-- `mailer.Send` when configured
-- `MarkNotified` for sent IDs
-
-**Note:** delivery is direct mailer from cron, parallel to [[Notifications]] Dispatcher used by OTP/order email. Unifying later would be a product decision — not done yet.
+Mounted via `RegisterCustomer` / `RegisterAdmin` from `internal/routes/routes.go`.
 
 ## Related
 
-[[Product Alerts]] · [[Processes and Jobs]] · [[Inventory Backend]] · [[Catalogue]]
+[[Account Domain]] · [[ADR Backend feature packages]] · [[Backend package map]] · [[Loyalty Wallet Gift Cards]]
 
-#backend
+#backend #alerts

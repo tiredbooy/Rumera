@@ -12,7 +12,7 @@ tags:
 
 Header search → `/search?q=` → RSC `listProducts({ search })` → product cards.
 
-Engine is backend [[Search Backend]] (ILIKE today).
+Engine is backend [[Search Backend]] (Persian-aware ILIKE, PH-030a). Meili index readiness exists server-side (PH-030b) but FE must not call Meili.
 
 Related: [[Search]] · [[Catalogue]] · [[Storefront Commerce FE]]
 

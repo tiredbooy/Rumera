@@ -35,7 +35,12 @@ import { ROLE_LABELS } from "@/lib/rbac/roles";
 
 import { Field } from "./user-edit-form/Field";
 
-const ROLE_OPTIONS: AdminUserRole[] = ["customer", "vendor", "admin"];
+const ROLE_OPTIONS: AdminUserRole[] = [
+  "customer",
+  "vendor",
+  "admin",
+  "staff",
+];
 const GENDER_OPTIONS: Array<{ value: UserGender; label: string }> = [
   { value: "female", label: "زن" },
   { value: "male", label: "مرد" },

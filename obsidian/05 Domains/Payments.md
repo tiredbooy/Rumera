@@ -26,6 +26,7 @@ Settlement of [[Orders]] — not free-form staff “mark paid” over random HTT
 
 ## Related
 
-[[Payments Backend]] · [[Journey Payment webhook settle]] · [[Playbook Debug Webhook]] · [[Loyalty Wallet Gift Cards]] · [[Money and stock rules]]
+[[Payments Backend]] · [[Journey Payment webhook settle]] · [[Journey Idempotent retry checkout webhook]] ·  
+[[Playbook Debug Webhook]] · [[Playbook Debug Idempotency]] · [[Loyalty Wallet Gift Cards]] · [[Money and stock rules]]
 
 #domain #payments

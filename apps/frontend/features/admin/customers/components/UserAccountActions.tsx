@@ -21,31 +21,22 @@ import {
   deactivateAdminUser,
   updateAdminUser,
 } from "@/features/customers/client";
+import { apiErrorMessage } from "@/lib/api/user-facing-error";
 
 export function actionErrorMessage(error: unknown): string {
-  if (!(error instanceof AdminCustomerApiError)) {
-    return "عملیات ناموفق بود. دوباره تلاش کنید.";
+  if (error instanceof AdminCustomerApiError) {
+    // Self-lockout: more specific than generic ACCESS_DENIED map.
+    if (error.code === "ACCESS_DENIED") {
+      return "نقش یا وضعیت حساب خودتان قابل تغییر نیست.";
+    }
+    if (error.code === "CONFLICT" || error.status === 409) {
+      return "نمی‌توان آخرین مدیر فعال را غیرفعال کرد. ابتدا مدیر دیگری بسازید.";
+    }
+    if (error.code === "AUTH_CHECK_UNAVAILABLE" || error.status === 502) {
+      return "بررسی دسترسی مدیریتی موقتاً ممکن نیست. دوباره تلاش کنید.";
+    }
   }
-  if (error.code === "ACCESS_DENIED") {
-    return "نقش یا وضعیت حساب خودتان قابل تغییر نیست.";
-  }
-  if (
-    error.status === 401 ||
-    error.code === "INSUFFICIENT_PERMISSIONS" ||
-    error.code === "INVALID_TOKEN" ||
-    error.code === "MISSING_TOKEN" ||
-    error.code === "SESSION_EXPIRED"
-  ) {
-    return "دسترسی مدیریتی این نشست لغو یا منقضی شده است. دوباره وارد شوید.";
-  }
-  if (error.code === "AUTH_CHECK_UNAVAILABLE" || error.status === 502) {
-    return "بررسی دسترسی مدیریتی موقتاً ممکن نیست. دوباره تلاش کنید.";
-  }
-  if (error.status === 403) return "اجازهٔ انجام این عملیات را ندارید.";
-  if (error.status === 404 || error.code === "USER_NOT_FOUND") {
-    return "کاربر یافت نشد.";
-  }
-  return error.message || "عملیات ناموفق بود.";
+  return apiErrorMessage(error, "عملیات ناموفق بود. دوباره تلاش کنید.");
 }
 
 export function UserAccountActions({

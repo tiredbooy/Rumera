@@ -34,6 +34,20 @@ Browse catalogue / search / category / recipe shop
 All **prices, stock, shipping quotes, and order totals** come from the Go API.
 The frontend may format and display; it must not invent availability or totals.
 
+### Failures (PH-012d)
+
+Checkout, cart, gift redeem, and loyalty redeem use
+`lib/api/user-facing-error` so shoppers see **specific** reasons
+(`OUT_OF_STOCK`, coupon codes, wallet/points shortfalls, invalid gift codes)
+instead of a generic “خطا”. See `docs/platform/api-layer.md` § User-facing errors.
+
+### Shipping package weight (PH-020c)
+
+- Cart lines carry optional `weight_kg` from the catalogue.
+- Checkout sums `packageWeightKg(items)` → `GET /shipping/available?region&weight&subtotal`.
+- Region is the selected address **country** code only.
+- Place-order path re-sums weights on the backend; missing line weights contribute 0 (admin should fix via PH-020b missing-weight signal).
+
 ---
 
 ## Catalogue

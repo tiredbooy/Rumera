@@ -3,14 +3,15 @@
 package integration
 
 import (
+	"github.com/tiredbooy/internal/features/catalog/product"
 	"context"
 	"errors"
+	"github.com/tiredbooy/internal/features/catalog/tag"
 	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
 )
 
 func TestEnsureTagSlugsUpgradesLegacySchema(t *testing.T) {
@@ -94,10 +95,10 @@ func TestTagRepositoryCRUDListAndConflicts(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "products", "tags")
 	ctx := context.Background()
-	repo := repositories.NewTagRepository(testPool)
+	repo := tag.NewRepository(testPool)
 	description := "seasonal bottles"
 
-	created, err := repo.Create(ctx, models.CreateTagReq{
+	created, err := repo.Create(ctx, tag.CreateTagReq{
 		Title:       "Summer",
 		Slug:        "summer",
 		Description: &description,
@@ -114,7 +115,7 @@ func TestTagRepositoryCRUDListAndConflicts(t *testing.T) {
 		t.Fatalf("get tag = %+v, %v", byID, err)
 	}
 
-	filter := models.TagFilter{BaseFilter: models.BaseFilter{
+	filter := tag.TagFilter{BaseFilter: models.BaseFilter{
 		PaginationParams: models.PaginationParams{Page: 1, Limit: 20},
 		SortBy:           "title",
 		OrderBy:          "asc",
@@ -125,18 +126,18 @@ func TestTagRepositoryCRUDListAndConflicts(t *testing.T) {
 		t.Fatalf("list tags = %+v, total %d, err %v", rows, total, err)
 	}
 
-	if _, err := repo.Create(ctx, models.CreateTagReq{Title: "Summer", Slug: "other"}); !errors.Is(err, models.ErrConflict) {
+	if _, err := repo.Create(ctx, tag.CreateTagReq{Title: "Summer", Slug: "other"}); !errors.Is(err, models.ErrConflict) {
 		t.Fatalf("duplicate title err = %v; want ErrConflict", err)
 	}
-	if _, err := repo.Create(ctx, models.CreateTagReq{Title: "Other", Slug: "summer"}); !errors.Is(err, models.ErrConflict) {
+	if _, err := repo.Create(ctx, tag.CreateTagReq{Title: "Other", Slug: "summer"}); !errors.Is(err, models.ErrConflict) {
 		t.Fatalf("duplicate slug err = %v; want ErrConflict", err)
 	}
-	other, err := repo.Create(ctx, models.CreateTagReq{Title: "Other", Slug: "other"})
+	other, err := repo.Create(ctx, tag.CreateTagReq{Title: "Other", Slug: "other"})
 	if err != nil {
 		t.Fatalf("create conflict target: %v", err)
 	}
 	conflictingSlug := other.Slug
-	if _, err := repo.Update(ctx, created.ID, models.UpdateTagReq{Slug: &conflictingSlug}); !errors.Is(err, models.ErrConflict) {
+	if _, err := repo.Update(ctx, created.ID, tag.UpdateTagReq{Slug: &conflictingSlug}); !errors.Is(err, models.ErrConflict) {
 		t.Fatalf("duplicate update err = %v; want ErrConflict", err)
 	}
 	if err := repo.Delete(ctx, other.ID); err != nil {
@@ -145,7 +146,7 @@ func TestTagRepositoryCRUDListAndConflicts(t *testing.T) {
 
 	title := "Summer edit"
 	slug := "summer-edit"
-	update := models.UpdateTagReq{Title: &title, Slug: &slug}
+	update := tag.UpdateTagReq{Title: &title, Slug: &slug}
 	update.Description.Set = true
 	updated, err := repo.Update(ctx, created.ID, update)
 	if err != nil {
@@ -156,7 +157,7 @@ func TestTagRepositoryCRUDListAndConflicts(t *testing.T) {
 	}
 
 	productID := seedProduct(t)
-	productRepo := repositories.NewProductRepository(testPool)
+	productRepo := product.NewRepository(testPool)
 	if err := productRepo.AttachTags(ctx, productID, []int64{created.ID}); err != nil {
 		t.Fatalf("attach product tag: %v", err)
 	}

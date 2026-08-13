@@ -20,6 +20,7 @@ export function CheckoutReviewStep({
   payment,
   isGift,
   giftMessage,
+  giftOptionLabels,
   items,
   onEditAddress,
   onEditShipping,
@@ -30,6 +31,7 @@ export function CheckoutReviewStep({
   payment: PaymentMethod;
   isGift: boolean;
   giftMessage: string;
+  giftOptionLabels?: string[];
   items: CartItem[];
   onEditAddress: () => void;
   onEditShipping: () => void;
@@ -72,6 +74,11 @@ export function CheckoutReviewStep({
             <span className="text-foreground">
               این سفارش به‌عنوان هدیه ارسال می‌شود
             </span>
+            {giftOptionLabels && giftOptionLabels.length > 0 ? (
+              <span className="mt-0.5 block">
+                {giftOptionLabels.join(" · ")}
+              </span>
+            ) : null}
             {giftMessage ? (
               <span className="mt-0.5 block">«{giftMessage}»</span>
             ) : null}

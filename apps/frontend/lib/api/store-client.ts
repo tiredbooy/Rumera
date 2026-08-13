@@ -3,13 +3,14 @@
  * Returns the backend's JSON body verbatim (callers pick `.data` or `.results`)
  * and throws a typed error from the `{ error }` envelope.
  */
-import type { ApiErrorEnvelope } from "./types"
+import type { ApiErrorEnvelope, ApiFieldErrors } from "./types"
 
 export class ApiClientError extends Error {
   constructor(
     public readonly status: number,
     public readonly code: string,
-    message: string
+    message: string,
+    public readonly fields?: ApiFieldErrors,
   ) {
     super(message)
     this.name = "ApiClientError"
@@ -33,7 +34,8 @@ export async function storeRequest<T>(path: string, opts: RequestInit = {}): Pro
     throw new ApiClientError(
       res.status,
       error?.code ?? "UNKNOWN",
-      error?.message ?? res.statusText
+      error?.message ?? res.statusText,
+      error?.fields,
     )
   }
   return body as T

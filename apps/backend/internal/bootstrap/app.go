@@ -12,8 +12,10 @@ import (
 	"github.com/tiredbooy/internal/analytics"
 	"github.com/tiredbooy/internal/corn"
 	"github.com/tiredbooy/internal/logger"
+	"github.com/tiredbooy/pkg/async"
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/database"
+	"github.com/tiredbooy/pkg/meili"
 	"github.com/tiredbooy/pkg/metrics"
 	"github.com/tiredbooy/pkg/tracing"
 	"go.uber.org/zap"
@@ -43,6 +45,8 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("logger: %w", err)
 	}
+	// Detached goroutines (OTP, order email, counters) recover panics via pkg/async.
+	async.SetLogger(log)
 
 	// Tracing must be initialised before the DB pools: the pgx instrumentation
 	// captures the global tracer provider at construction, so the real provider
@@ -72,11 +76,22 @@ func New() (*App, error) {
 			cfg.CacheBreakerCooldown, log)
 	}
 
-	// ── 5. Search (add when pkg/search is ready) ─────────────────────────────
-	// meili, err := search.NewMeilisearch(cfg, log)
+	// ── 5. Meilisearch (PH-030b readiness; optional, not storefront path) ────
+	// When MEILI_ENABLED=false (default), skip entirely. When true but Meili is
+	// down, warn and continue — product discovery stays on Postgres ILIKE.
+	var meiliClient *meili.Client
+	if cfg.MeiliEnabled {
+		client, meiliErr := meili.New(cfg.MeiliHost, cfg.MeiliAPIKey, cfg.MeiliIndexUID, log)
+		if meiliErr != nil {
+			log.Warn("meilisearch unavailable at startup; reindex job disabled",
+				zap.Error(meiliErr), zap.String("host", cfg.MeiliHost))
+		} else {
+			meiliClient = client
+		}
+	}
 
 	// ── 6. Dependency graph (repos → services → handlers) ────────────────────
-	c := build(cfg, log, dbs, cacheStore)
+	c := build(cfg, log, dbs, cacheStore, meiliClient)
 
 	// Expose live DB-pool and analytics-queue state to Prometheus. These are
 	// scrape-time gauges, so they must be registered once the pools and queue

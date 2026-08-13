@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"github.com/tiredbooy/internal/features/catalog/product"
 	"context"
 	"errors"
 	"fmt"
@@ -11,8 +12,11 @@ import (
 
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/tiredbooy/internal/features/hero"
+	"github.com/tiredbooy/internal/features/media"
+	"github.com/tiredbooy/internal/features/blog"
+	"github.com/tiredbooy/internal/features/recipes"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
 )
 
 func TestProductMediaIdentityIncludesInactiveOwners(t *testing.T) {
@@ -28,7 +32,7 @@ func TestProductMediaIdentityIncludesInactiveOwners(t *testing.T) {
 		t.Fatalf("insert draft product: %v", err)
 	}
 
-	slug, err := repositories.NewProductRepository(testPool).GetMediaIdentity(ctx, productID)
+	slug, err := product.NewRepository(testPool).GetMediaIdentity(ctx, productID)
 	if err != nil || slug != "draft-bottle" {
 		t.Fatalf("GetMediaIdentity = %q, %v; want draft-bottle, nil", slug, err)
 	}
@@ -49,14 +53,14 @@ func TestContentMediaKeysTrackCanonicalURLChanges(t *testing.T) {
 		).Scan(&id); err != nil {
 			t.Fatalf("insert hero: %v", err)
 		}
-		repo := repositories.NewHeroSlideRepository(testPool)
-		if _, err := repo.Update(ctx, id, &models.HeroSlideUpdateReq{ImageURL: mediaValuePatch(url)}); err != nil {
+		repo := hero.NewRepository(testPool)
+		if _, err := repo.Update(ctx, id, &hero.HeroSlideUpdateReq{ImageURL: mediaValuePatch(url)}); err != nil {
 			t.Fatalf("keep hero URL: %v", err)
 		}
 		assertColumnString(t, "hero_slides", "image_storage_key", id, &key)
 
 		external := "https://images.example/hero.webp"
-		if _, err := repo.Update(ctx, id, &models.HeroSlideUpdateReq{ImageURL: mediaValuePatch(external)}); err != nil {
+		if _, err := repo.Update(ctx, id, &hero.HeroSlideUpdateReq{ImageURL: mediaValuePatch(external)}); err != nil {
 			t.Fatalf("replace hero URL: %v", err)
 		}
 		assertColumnString(t, "hero_slides", "image_storage_key", id, nil)
@@ -72,14 +76,14 @@ func TestContentMediaKeysTrackCanonicalURLChanges(t *testing.T) {
 		).Scan(&id); err != nil {
 			t.Fatalf("insert recipe: %v", err)
 		}
-		repo := repositories.NewRecipeRepository(testPool)
-		if _, err := repo.Update(ctx, id, &models.RecipeUpdateReq{ImageURL: mediaValuePatch(url)}); err != nil {
+		repo := recipes.NewRepository(testPool)
+		if _, err := repo.Update(ctx, id, &recipes.RecipeUpdateReq{ImageURL: mediaValuePatch(url)}); err != nil {
 			t.Fatalf("keep recipe URL: %v", err)
 		}
 		assertColumnString(t, "recipes", "image_storage_key", id, &key)
 
 		external := "https://images.example/recipe.webp"
-		if _, err := repo.Update(ctx, id, &models.RecipeUpdateReq{ImageURL: mediaValuePatch(external)}); err != nil {
+		if _, err := repo.Update(ctx, id, &recipes.RecipeUpdateReq{ImageURL: mediaValuePatch(external)}); err != nil {
 			t.Fatalf("replace recipe URL: %v", err)
 		}
 		assertColumnString(t, "recipes", "image_storage_key", id, nil)
@@ -96,14 +100,14 @@ func TestContentMediaKeysTrackCanonicalURLChanges(t *testing.T) {
 		).Scan(&id); err != nil {
 			t.Fatalf("insert journal: %v", err)
 		}
-		repo := repositories.NewBlogRepository(testPool)
-		if _, err := repo.Update(ctx, id, &models.BlogUpdateReq{ImageURL: mediaValuePatch(url)}); err != nil {
+		repo := blog.NewRepository(testPool)
+		if _, err := repo.Update(ctx, id, &blog.BlogUpdateReq{ImageURL: mediaValuePatch(url)}); err != nil {
 			t.Fatalf("keep journal URL: %v", err)
 		}
 		assertColumnString(t, "blogs", "image_storage_key", id, &key)
 
 		external := "https://images.example/journal.webp"
-		if _, err := repo.Update(ctx, id, &models.BlogUpdateReq{ImageURL: mediaValuePatch(external)}); err != nil {
+		if _, err := repo.Update(ctx, id, &blog.BlogUpdateReq{ImageURL: mediaValuePatch(external)}); err != nil {
 			t.Fatalf("replace journal URL: %v", err)
 		}
 		assertColumnString(t, "blogs", "image_storage_key", id, nil)
@@ -115,7 +119,7 @@ func TestProductImageRepositorySerializesOrderingAndPrimaryWrites(t *testing.T) 
 	resetTables(t, "products")
 	ctx := context.Background()
 	productID := seedProduct(t)
-	repo := repositories.NewProductImageRepository(testPool)
+	repo := product.NewImageRepository(testPool)
 
 	const imageCount = 8
 	var wg sync.WaitGroup
@@ -285,7 +289,7 @@ func TestContentMediaRepositoryAttachesEveryOwnerSlot(t *testing.T) {
 		t.Fatalf("insert journal owner: %v", err)
 	}
 
-	repo := repositories.NewContentMediaRepository(testPool)
+	repo := media.NewContentRepository(testPool)
 	tests := []struct {
 		name      string
 		ownerType string
@@ -336,7 +340,7 @@ func TestContentMediaRepositoryAttachesEveryOwnerSlot(t *testing.T) {
 		t.Fatalf("replacement attachment = %+v; want detached key and recipe slug", attachment)
 	}
 	staleAlt := mediaValuePatch("stale alt")
-	_, err = repositories.NewRecipeRepository(testPool).Update(ctx, recipeID, &models.RecipeUpdateReq{
+	_, err = recipes.NewRepository(testPool).Update(ctx, recipeID, &recipes.RecipeUpdateReq{
 		ImageAlt:         staleAlt,
 		ExpectedImageURL: mediaValuePatch(oldRecipeURL),
 	})

@@ -5,9 +5,9 @@ export default function AccountSubscriptionsPage() {
   return (
     <>
       <AccountPageHeader
-        eyebrow="باکس دوره‌ای"
-        title="اشتراک‌ها"
-        description="باکس دوره‌ای رومرا را مدیریت کنید — توقف، رد کردن یا لغو در هر زمان."
+        eyebrow="باکس فیزیکی"
+        title="باکس سرداب"
+        description="مدیریت باکس دوره‌ای — تاریخ ارسال بعدی، توقف موقت، رد یک دوره یا لغو. پرداخت خودکار در این مرحله انجام نمی‌شود."
       />
       <SubscriptionsView />
     </>

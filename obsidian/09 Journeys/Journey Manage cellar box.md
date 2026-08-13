@@ -1,0 +1,60 @@
+---
+tags: [journey]
+---
+
+<!-- brain-hub -->
+**Brain:** [[Project Brain]] · [[Connect 09 Journeys]]
+
+
+# Journey: Manage cellar box (customer)
+
+## Product framing
+
+Customer manages a **recurring physical box** — pause, skip a period, cancel,
+or reactivate. Account copy is box/shipment oriented, **not** “watch / stream / seats.”
+(PH-043b UX polish)
+
+## Actor
+
+Signed-in customer
+
+## Happy paths
+
+### Subscribe
+
+1. Open `/account/subscriptions`
+2. Choose cadence monthly or quarterly
+3. Optional ship-to from address book (default preferred)
+4. `POST /subscriptions` → active `cellar-box`, `next_renewal_at` = now + cadence
+5. Toast: box active; **no payment** taken
+
+### Pause / skip / cancel / resume
+
+1. Card shows plan, cadence, **ارسال باکس بعدی** + honesty hint, optional ship-to
+2. Pause / skip / cancel open confirm dialogs with effect copy
+3. Actions map to `PATCH /subscriptions/:id` `{ "action": "…" }`
+4. Backend enforces [[Subscriptions]] lifecycle matrix (`AllowedAction`)
+
+| UI intent | Action | Effect |
+|-----------|--------|--------|
+| توقف موقت | pause | stop due emails / box windows |
+| رد کردن این دوره | skip | next date + one cadence |
+| لغو اشتراک | cancel | no more boxes until resume |
+| از سر گرفتن / فعال‌سازی مجدد | resume | → active |
+
+## Failure branches
+
+- Invalid transition → `INVALID_REQUEST` (surfaced via `apiErrorToast`)
+- Not owned → `NOT_FOUND`
+- Missing address on active card → callout (create still allowed without address)
+
+## Domains touched
+
+[[Subscriptions]] · [[Account Domain]] · [[Addresses Backend]] (select + display)
+
+## Related
+
+[[Journeys MOC]] · [[Subscriptions Backend]] · [[Journey Subscription renewal email]] ·
+[[Account FE]] · project `apps/frontend/docs/features/subscriptions.md`
+
+#journey

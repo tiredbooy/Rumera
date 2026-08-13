@@ -12,7 +12,8 @@ tags:
 
 Architectural choices that keep recurring in PRs and agent sessions.
 
-- [[ADR Thin routes and domain features]]
+- [[ADR Thin routes and domain features]] (frontend)
+- [[ADR Backend feature packages]] (Go vertical slices + route composer)
 - [[ADR BFF never exposes access tokens]]
 - [[ADR Stock available not on-hand]]
 - [[ADR Order reserve and pay deduct atomic]]

@@ -1,6 +1,6 @@
 /**
- * Frontend capability predicates shared by guards and UI. The backend still
- * enforces the admin role for every admin API request.
+ * Frontend capability predicates shared by guards and UI. Backend repeats the
+ * same checks with RequirePermission on admin surfaces.
  */
 import type { Permission } from "./permissions";
 

@@ -4,33 +4,33 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/internal/features/catalog/brand"
 	"go.uber.org/zap"
 )
 
 // ── brands ──────────────────────────────────────────────────────────────────
 
 func (s *seeder) seedBrands(ctx context.Context) (map[string]int64, error) {
-	type brand struct {
+	type brandSeed struct {
 		key string
-		req models.CreateBrandReq
+		req brand.CreateBrandReq
 	}
-	items := []brand{
-		{"chateau-margaux", models.CreateBrandReq{
+	items := []brandSeed{
+		{"chateau-margaux", brand.CreateBrandReq{
 			Title:       "شاتو مارگو",
 			Country:     sp("فرانسه"),
 			FoundedYear: ip(1815),
 			ImageURL:    sp("https://images.unsplash.com/photo-1474722883778-792e7990302f?auto=format&fit=crop&w=600&q=80"),
 			Description: sp("یکی از کهن‌ترین تاکستان‌های بوردو، نماد ظرافت و اصالت در شراب‌سازی فرانسوی."),
 		}},
-		{"glen-highland", models.CreateBrandReq{
+		{"glen-highland", brand.CreateBrandReq{
 			Title:       "گلن هایلند",
 			Country:     sp("اسکاتلند"),
 			FoundedYear: ip(1824),
 			ImageURL:    sp("https://images.unsplash.com/photo-1569529465841-dfecdab7503b?auto=format&fit=crop&w=600&q=80"),
 			Description: sp("تقطیرکننده‌ای افسانه‌ای از ارتفاعات اسکاتلند با ویسکی‌های مالت تک‌خاستگاه."),
 		}},
-		{"casa-del-sol", models.CreateBrandReq{
+		{"casa-del-sol", brand.CreateBrandReq{
 			Title:       "کاسا دل سول",
 			Country:     sp("مکزیک"),
 			FoundedYear: ip(1942),

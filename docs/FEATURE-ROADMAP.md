@@ -11,15 +11,61 @@
 
 🎉 **All planned features shipped.** Add new ones below as they come up.
 
-## Known follow-ups (intentionally deferred)
+## Production-hardening program (2026-08)
 
-- **Loyalty:** earn-on-review and birthday-bonus triggers, and an admin UI to tune
-  earn rates / tiers (rates are env-configurable today: `LOYALTY_*`).
-- **Gift cards:** online "buy a gift card" purchase flow (today they're issued by
-  staff via `POST /api/v1/admin/gift-cards` and redeemed by customers to wallet).
-- **Subscriptions:** auto-fulfilment + auto-charge on renewal — needs a tokenized
-  recurring payment method + box-contents selection. Today the renewal cron emails
-  the customer when a box is due and rolls the date; management (pause/skip/cancel)
-  is fully wired.
-- **Recommendations:** feed the taste-profile into the behavioural rec engine's
-  weighting (today the profile powers a category/budget "برای شما" rail).
+Canonical backlog:
+[`BACKLOG-PRODUCTION-HARDENING.md`](./BACKLOG-PRODUCTION-HARDENING.md) →
+`refactor-workstreams/production-hardening-and-product/TASKS.md`.
+
+Dual-doc closure map: [`PH-DUAL-DOC-MATRIX.md`](./PH-DUAL-DOC-MATRIX.md) (PH-050a).
+
+| Phase | Status |
+|-------|--------|
+| 0 Docs OS (PH-000*) | **Done** |
+| 1 Correctness (PH-010…013) | **Done** |
+| 2 Operator trust (PH-020…021) | **Done** |
+| 3 Search (PH-030*) | **Done** (Meili cutover still deferred) |
+| 4 Growth (PH-040…043) | **Done** (PH-043c closed: **no** auto-charge — decision) |
+| 5 Dual-doc gate (PH-050*) | **Done** (matrix + [READ-THE-SYSTEM.md](./READ-THE-SYSTEM.md)) |
+
+### Shipped in this program (do not re-open)
+
+- Idempotency platform (PH-011) · models/errors (PH-012) · async/metrics/tests (PH-013)
+- Inventory weight + checkout truth (PH-020) · RBAC residual (PH-021)
+- Persian ILIKE search + Meili readiness without cutover (PH-030)
+- Loyalty rules/earn/UX/admin rates/analytics hooks (PH-040)
+- Gateway wallet top-up (PH-041) · gift card purchase (PH-042)
+- Cellar box product model + management UX + RTL due email (PH-043a–b)
+- Box auto-charge **declined** for this program (PH-043c decision)
+
+## Explicitly deferred (do not build without go-ahead)
+
+| Item | Notes |
+|------|--------|
+| CI / GitHub Actions / CD | No server for founder right now |
+| Multi-currency | Toman only |
+| Multi-warehouse | Single stock pool |
+| Crypto payment rails | Maybe later — not now |
+| Netflix-style digital subscriptions | Box e-com only |
+| Multi-tenant | Not a goal |
+| Box **tokenized auto-charge** | Closed PH-043c — re-open only with criteria in `apps/backend/docs/architecture/box-auto-charge-decision.md` |
+| Meili **storefront cutover** | Readiness done; cutover separate decision |
+
+**Deferred ADR (vault):** Obsidian `11 Decisions/ADR Deferred product and platform.md`.
+
+## Known residuals (small, intentional)
+
+- Wallet / gift purchase: embed real **gateway redirect URL** in FE when provider returns it
+- Gift cards: optional **email delivery** of code (mine list works today)
+- Subscriptions: PATCH address on existing sub; `ListByUser` **LIMIT**; contents preference only if product asks
+- Loyalty: DB-tunable rates / staff adjust API (env rates are live read-only)
+- Recommendations: stronger taste-profile weighting into behavioural engine
+- Ops: Prometheus/Grafana **scrape** profile (app metrics already instrumented)
+
+---
+
+## Related
+
+- [DOCUMENTATION-DUAL-TRACK.md](./DOCUMENTATION-DUAL-TRACK.md)
+- [DOCUMENTATION-MAP.md](./DOCUMENTATION-MAP.md)
+- [IMPROVEMENT-OPPORTUNITIES.md](./IMPROVEMENT-OPPORTUNITIES.md) — historical audit; see status banner

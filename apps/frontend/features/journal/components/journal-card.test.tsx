@@ -45,5 +45,7 @@ describe("JournalCard", () => {
     expect(markup.match(/<a\b/g)).toHaveLength(1);
     expect(markup).toContain("تازه‌ترین نوشته");
     expect(markup).not.toContain("نوشتهٔ منتخب");
+    expect(markup).toContain('data-journal-card="featured"');
+    expect(markup).toContain("ring-primary/15");
   });
 });

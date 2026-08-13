@@ -1,7 +1,7 @@
 /**
- * Admin console shell. `requireStaff` now means exactly `role === "admin"`;
- * signed-out users go to /login and other roles to /forbidden. Frontend
- * capabilities organize the sidebar inside that admin-only boundary.
+ * Admin console shell. `requireStaff` admits panel roles (`admin` superuser
+ * and capability-gated `staff`). Signed-out users go to /login and other roles
+ * to /forbidden. Sidebar items filter by live server capabilities.
  *
  * `force-dynamic` because everything here is authenticated, per-user, live data.
  */

@@ -7,16 +7,15 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	models "github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/services"
+	featanalytics "github.com/tiredbooy/internal/features/analytics"
 )
 
 type SearchCronJob struct {
 	db  *pgxpool.Pool
-	svc *services.SearchSummaryService
+	svc *featanalytics.SearchSummaryService
 }
 
-func NewSearchCronJob(db *pgxpool.Pool, svc *services.SearchSummaryService) *SearchCronJob {
+func NewSearchCronJob(db *pgxpool.Pool, svc *featanalytics.SearchSummaryService) *SearchCronJob {
 	return &SearchCronJob{db: db, svc: svc}
 }
 
@@ -44,7 +43,7 @@ func (j *SearchCronJob) Run(ctx context.Context) {
 	slog.Info("search summary job: done", "terms", len(reqs), "date", yesterday.Format("2006-01-02"))
 }
 
-func (j *SearchCronJob) aggregate(ctx context.Context, date time.Time) ([]*models.SearchSummaryUpsertReq, error) {
+func (j *SearchCronJob) aggregate(ctx context.Context, date time.Time) ([]*featanalytics.SearchSummaryUpsertReq, error) {
 	from := date
 	to := date.AddDate(0, 0, 1)
 
@@ -98,9 +97,9 @@ func (j *SearchCronJob) aggregate(ctx context.Context, date time.Time) ([]*model
 	}
 
 	// ── per-term engagement and conversion ────────────────────────────────────
-	reqs := make([]*models.SearchSummaryUpsertReq, 0, len(bases))
+	reqs := make([]*featanalytics.SearchSummaryUpsertReq, 0, len(bases))
 	for _, b := range bases {
-		req := &models.SearchSummaryUpsertReq{
+		req := &featanalytics.SearchSummaryUpsertReq{
 			Date:             date,
 			QueryText:        b.queryText,
 			SearchCount:      b.searchCount,
@@ -181,7 +180,7 @@ func (j *SearchCronJob) aggregate(ctx context.Context, date time.Time) ([]*model
 	return reqs, nil
 }
 
-func (j *SearchCronJob) topClickedProducts(ctx context.Context, queryText string, from, to time.Time) ([]models.TopClickedProduct, error) {
+func (j *SearchCronJob) topClickedProducts(ctx context.Context, queryText string, from, to time.Time) ([]featanalytics.TopClickedProduct, error) {
 	rows, err := j.db.Query(ctx, `
 		SELECT payload->>'product_id' AS product_id, COUNT(*) AS click_count
 		FROM events
@@ -204,9 +203,9 @@ func (j *SearchCronJob) topClickedProducts(ctx context.Context, queryText string
 	}
 	defer rows.Close()
 
-	var products []models.TopClickedProduct
+	var products []featanalytics.TopClickedProduct
 	for rows.Next() {
-		var p models.TopClickedProduct
+		var p featanalytics.TopClickedProduct
 		if err := rows.Scan(&p.ProductID, &p.ClickCount); err != nil {
 			return nil, err
 		}
@@ -215,7 +214,7 @@ func (j *SearchCronJob) topClickedProducts(ctx context.Context, queryText string
 	return products, rows.Err()
 }
 
-func (j *SearchCronJob) commonFilters(ctx context.Context, queryText string, from, to time.Time) ([]models.CommonFilterUsed, error) {
+func (j *SearchCronJob) commonFilters(ctx context.Context, queryText string, from, to time.Time) ([]featanalytics.CommonFilterUsed, error) {
 	rows, err := j.db.Query(ctx, `
 		SELECT
 			payload->>'filter_name'     AS filter,
@@ -236,9 +235,9 @@ func (j *SearchCronJob) commonFilters(ctx context.Context, queryText string, fro
 	}
 	defer rows.Close()
 
-	var filters []models.CommonFilterUsed
+	var filters []featanalytics.CommonFilterUsed
 	for rows.Next() {
-		var f models.CommonFilterUsed
+		var f featanalytics.CommonFilterUsed
 		if err := rows.Scan(&f.Filter, &f.Value, &f.Count); err != nil {
 			return nil, err
 		}

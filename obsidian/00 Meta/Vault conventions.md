@@ -24,6 +24,40 @@ and [[How to use this vault]].
 - Keep notes **short, linked, and typed**.
 - Keep **canonical depth** in repo docs; vault points at them.
 
+## Dual-track documentation (required)
+
+Rumera uses **two tracks**. Material changes update **both**.
+
+| Track | Location | Job |
+|-------|----------|-----|
+| Project docs | `docs/`, `apps/*/docs/` | Procedures, API contracts, architecture depth |
+| This vault | `obsidian/` | Graph, journeys, ADRs, ownership, mental models |
+
+Canonical process (repo): `docs/DOCUMENTATION-DUAL-TRACK.md`  
+Vault playbook: [[Playbook Document a change]]  
+Bridge hub: [[Documentation Bridge]]
+
+### Hard rule — money / auth / inventory
+
+Any change that touches money, auth/sessions/RBAC, or stock must:
+
+1. Update project architecture and/or API docs  
+2. Touch the domain note(s)  
+3. Create or update a **journey** when the live path changed  
+
+### When to write an ADR
+
+Sticky policy or boundary (money/stock, auth, search strategy, explicit non-goals,
+new cross-feature ownership) → `11 Decisions/ADR …` and link constrained domains.
+See dual-track doc §3.
+
+### Definition of done (docs half of any task)
+
+- Project paths updated  
+- Vault notes updated (no broken wikilinks)  
+- Bridge / [[Known gaps]] adjusted when relevant  
+- Workstream `FINISHED.md` lists both tracks
+
 ---
 
 ## Note types (summary)

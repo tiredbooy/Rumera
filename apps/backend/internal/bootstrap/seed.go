@@ -4,8 +4,7 @@ import (
 	"context"
 
 	config "github.com/tiredbooy/configs"
-	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
+	"github.com/tiredbooy/internal/features/users"
 	"github.com/tiredbooy/pkg/crypto"
 	"github.com/tiredbooy/pkg/database"
 	"go.uber.org/zap"
@@ -21,7 +20,7 @@ func seedAdmin(ctx context.Context, cfg *config.Config, dbs *database.Connection
 		return nil
 	}
 
-	userRepo := repositories.NewUserRepository(dbs.DB)
+	userRepo := users.NewRepository(dbs.DB)
 
 	exists, err := userRepo.ExistsByEmail(ctx, cfg.AdminEmail)
 	if err != nil {
@@ -36,7 +35,7 @@ func seedAdmin(ctx context.Context, cfg *config.Config, dbs *database.Connection
 		return err
 	}
 
-	if _, err := userRepo.Create(ctx, models.CreateUserReq{
+	if _, err := userRepo.Create(ctx, users.CreateUserReq{
 		Email: cfg.AdminEmail,
 		Role:  "admin",
 	}, hash); err != nil {

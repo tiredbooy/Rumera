@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/tiredbooy/internal/services"
+	"github.com/tiredbooy/internal/features/recommendations"
 )
 
 // RecommendationRefreshJob rebuilds affinity profiles for recently-active users
@@ -13,12 +13,12 @@ import (
 // compute path: the request reads a ready-made profile instead of aggregating a
 // user's whole interaction + order history inline.
 type RecommendationRefreshJob struct {
-	svc        services.RecommendationService
+	svc        recommendations.Service
 	windowDays int
 	maxUsers   int
 }
 
-func NewRecommendationRefreshJob(svc services.RecommendationService, windowDays, maxUsers int) *RecommendationRefreshJob {
+func NewRecommendationRefreshJob(svc recommendations.Service, windowDays, maxUsers int) *RecommendationRefreshJob {
 	return &RecommendationRefreshJob{svc: svc, windowDays: windowDays, maxUsers: maxUsers}
 }
 

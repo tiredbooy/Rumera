@@ -39,6 +39,3 @@ var (
 	ErrHasChildren    = errors.New("category has children and cannot be deleted")
 	ErrHierarchyCycle = errors.New("category hierarchy would contain a cycle")
 )
-
-// TaxRate is applied to the post-discount subtotal.
-const TaxRate = 0.08

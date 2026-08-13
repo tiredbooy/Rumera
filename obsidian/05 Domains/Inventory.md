@@ -31,11 +31,23 @@ available_stock = stock_on_hand - committed_stock
 | Pay success | Deduct | Payment Confirm TX |
 | Staff restock | Adjust | [[Inventory FE]] |
 
+## Weight on list wire (PH-020a)
+
+Admin inventory list/detail now includes catalogue package weight:
+
+| Field | Meaning |
+|-------|---------|
+| `weight` | kg from `products.weight` (omitted when unset) |
+| `missing_weight` | true if null or ≤ 0 — fix product before shipping quotes |
+
+FE type: `InventoryItem` in `features/inventory/types.ts`.  
+UI: badge + filter + KPI + detail callout (**PH-020b** / Refactor-Docs **085a** closed).
+
 ## Code
 
-- BE: [[Inventory Backend]] · `inventory_svc.go`
+- BE: [[Inventory Backend]] · `features/inventory`
 - FE: [[Inventory FE]] · `/admin/inventory`
-- Docs: `architecture/inventory.md` via [[Docs Bridge Backend]]
+- Docs: `architecture/inventory.md` · `api/inventory.md` via [[Docs Bridge Backend]]
 
 ## Related
 

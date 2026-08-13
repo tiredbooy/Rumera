@@ -10,9 +10,9 @@
  * `/api/admin/admin/products`. Read-only catalogue lookups the form needs
  * (`products/:id`, `categories`, `brands`, `tags`) are reached the same way.
  *
- * Two guards keep this from being an open proxy: the caller must have the admin
- * role and the first path segment must be on the allowlist. The backend repeats
- * the admin-role check; it does not authorize these routes per capability.
+ * Two guards keep this from being an open proxy: the caller must have a panel
+ * role (admin|staff) and the first path segment must be on the allowlist. The
+ * backend repeats the panel-role check and enforces per-surface capabilities.
  *
  * Unlike `/api/store`, this preserves `multipart/form-data` bodies verbatim so
  * image uploads pass through with their boundary intact.

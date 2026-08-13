@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/tiredbooy/internal/features/catalog/category"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
 )
 
 func categoryPatchValue[T any](value T) models.NullablePatch[T] {
@@ -123,7 +123,7 @@ func TestCategoryRepositoryClearsNullableFields(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "categories")
 	ctx := context.Background()
-	repo := repositories.NewCategoryRepository(testPool)
+	repo := category.NewRepository(testPool)
 
 	var parentID int64
 	if err := testPool.QueryRow(ctx,
@@ -139,7 +139,7 @@ func TestCategoryRepositoryClearsNullableFields(t *testing.T) {
 		t.Fatalf("insert child: %v", err)
 	}
 
-	updated, err := repo.Update(ctx, childID, models.UpdateCategoryReq{
+	updated, err := repo.Update(ctx, childID, category.UpdateCategoryReq{
 		Slug:        models.NullablePatch[string]{Set: true},
 		ParentID:    models.NullablePatch[int64]{Set: true},
 		Description: models.NullablePatch[string]{Set: true},
@@ -157,7 +157,7 @@ func TestCategoryRepositorySerializesConcurrentParentSwaps(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "categories")
 	ctx := context.Background()
-	repo := repositories.NewCategoryRepository(testPool)
+	repo := category.NewRepository(testPool)
 
 	var firstID, secondID int64
 	if err := testPool.QueryRow(ctx,
@@ -175,14 +175,14 @@ func TestCategoryRepositorySerializesConcurrentParentSwaps(t *testing.T) {
 	results := make(chan error, 2)
 	go func() {
 		<-start
-		_, err := repo.Update(ctx, firstID, models.UpdateCategoryReq{
+		_, err := repo.Update(ctx, firstID, category.UpdateCategoryReq{
 			ParentID: categoryPatchValue(secondID),
 		})
 		results <- err
 	}()
 	go func() {
 		<-start
-		_, err := repo.Update(ctx, secondID, models.UpdateCategoryReq{
+		_, err := repo.Update(ctx, secondID, category.UpdateCategoryReq{
 			ParentID: categoryPatchValue(firstID),
 		})
 		results <- err

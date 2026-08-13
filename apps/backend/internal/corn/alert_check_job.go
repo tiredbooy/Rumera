@@ -5,21 +5,20 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/pkg/notify"
+	"github.com/tiredbooy/internal/features/alerts"
+		"github.com/tiredbooy/pkg/notify"
 )
 
 // AlertCheckJob scans subscribed product alerts, emails the ones whose condition
 // (back in stock / price dropped) is now satisfied, and marks them notified so
 // each fires exactly once.
 type AlertCheckJob struct {
-	alerts  repositories.AlertRepository
+	alerts  alerts.Repository
 	mailer  notify.Mailer
 	siteURL string
 }
 
-func NewAlertCheckJob(alerts repositories.AlertRepository, mailer notify.Mailer, siteURL string) *AlertCheckJob {
+func NewAlertCheckJob(alerts alerts.Repository, mailer notify.Mailer, siteURL string) *AlertCheckJob {
 	return &AlertCheckJob{alerts: alerts, mailer: mailer, siteURL: siteURL}
 }
 
@@ -52,12 +51,12 @@ func (j *AlertCheckJob) Run(ctx context.Context) {
 	slog.Info("alert check job: done", "notified", len(sent))
 }
 
-func alertEmail(a models.PendingAlert, siteURL string) (subject, body string) {
+func alertEmail(a alerts.PendingAlert, siteURL string) (subject, body string) {
 	link := siteURL
 	if a.ProductSlug != nil {
 		link = fmt.Sprintf("%s/products/%s", siteURL, *a.ProductSlug)
 	}
-	if a.AlertType == models.AlertRestock {
+	if a.AlertType == alerts.AlertRestock {
 		subject = "دوباره موجود شد — " + a.ProductTitle
 		body = fmt.Sprintf(
 			`<p>خبر خوب! «%s» دوباره موجود شد.</p><p><a href="%s">همین حالا ببینید</a></p>`,

@@ -2,6 +2,7 @@ package response
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/tiredbooy/pkg/apperr"
 )
@@ -75,13 +76,24 @@ var (
 	// Business / E-commerce
 	// =========================================================
 
-	ErrOutOfStock       = AppCode{"OUT_OF_STOCK", http.StatusConflict, "item is out of stock"}
-	ErrCartEmpty        = AppCode{"CART_EMPTY", http.StatusBadRequest, "cart is empty"}
-	ErrInvalidCoupon    = AppCode{"INVALID_COUPON", http.StatusBadRequest, "coupon code is invalid"}
-	ErrCouponExpired    = AppCode{"COUPON_EXPIRED", http.StatusBadRequest, "coupon has expired"}
-	ErrPaymentFailed    = AppCode{"PAYMENT_FAILED", http.StatusPaymentRequired, "payment processing failed"}
-	ErrOrderCancelled   = AppCode{"ORDER_CANCELLED", http.StatusConflict, "order has been cancelled"}
-	ErrOrderAlreadyPaid = AppCode{"ORDER_ALREADY_PAID", http.StatusConflict, "order has already been paid"}
+	ErrOutOfStock         = AppCode{"OUT_OF_STOCK", http.StatusConflict, "not enough stock available for one or more items"}
+	ErrCartEmpty          = AppCode{"CART_EMPTY", http.StatusBadRequest, "cart is empty — add items before checkout"}
+	ErrInvalidCoupon      = AppCode{"INVALID_COUPON", http.StatusBadRequest, "coupon code is invalid or does not exist"}
+	ErrCouponExpired      = AppCode{"COUPON_EXPIRED", http.StatusBadRequest, "this coupon has expired"}
+	ErrCouponNotActive    = AppCode{"COUPON_NOT_ACTIVE", http.StatusBadRequest, "this coupon is not active yet"}
+	ErrCouponUsageLimit   = AppCode{"COUPON_USAGE_LIMIT", http.StatusConflict, "this coupon has reached its usage limit"}
+	ErrCouponUserLimit    = AppCode{"COUPON_USER_LIMIT", http.StatusConflict, "you have already used this coupon the maximum number of times"}
+	ErrOrderBelowMin      = AppCode{"ORDER_BELOW_MINIMUM", http.StatusBadRequest, "order total is below the coupon minimum"}
+	ErrInvalidShipping    = AppCode{"INVALID_SHIPPING_METHOD", http.StatusBadRequest, "shipping method is invalid or unavailable for this address"}
+	ErrInsufficientFunds  = AppCode{"INSUFFICIENT_FUNDS", http.StatusConflict, "insufficient wallet balance"}
+	ErrInsufficientPoints = AppCode{"INSUFFICIENT_POINTS", http.StatusConflict, "insufficient loyalty points"}
+	ErrWalletNotFound     = AppCode{"WALLET_NOT_FOUND", http.StatusNotFound, "wallet not found"}
+	ErrGiftCardInvalid    = AppCode{"GIFT_CARD_INVALID", http.StatusNotFound, "gift card code is invalid or already redeemed"}
+	ErrPaymentFailed      = AppCode{"PAYMENT_FAILED", http.StatusPaymentRequired, "payment processing failed"}
+	ErrOrderCancelled     = AppCode{"ORDER_CANCELLED", http.StatusConflict, "order has been cancelled"}
+	ErrOrderAlreadyPaid   = AppCode{"ORDER_ALREADY_PAID", http.StatusConflict, "order has already been paid"}
+	ErrAccountDisabled    = AppCode{"ACCOUNT_DISABLED", http.StatusForbidden, "this account is disabled"}
+	ErrInvalidState       = AppCode{"INVALID_STATE", http.StatusConflict, "resource is in an invalid state for this action"}
 
 	// =========================================================
 	// User
@@ -114,24 +126,33 @@ var registry = map[string]AppCode{
 	"UNAUTHORIZED":     ErrUnauthorized,
 	"VALIDATION_ERROR": ErrValidationError,
 	"INVALID_REQUEST":  ErrInvalidRequest,
+	"INVALID_STATE":    ErrInvalidState,
 
-	// User
+	// User / auth
 	"USER_NOT_FOUND":      ErrUserNotFound,
 	"USER_ALREADY_EXISTS": ErrUserAlreadyExists,
+	"ACCOUNT_DISABLED":    ErrAccountDisabled,
+	"INVALID_CREDENTIALS": ErrInvalidCredentials,
+	"INVALID_TOKEN":       ErrInvalidToken,
+	"EXPIRED_TOKEN":       ErrExpiredToken,
 
-	// Wallet
-	"INSUFFICIENT_FUNDS": ErrPaymentFailed,
-	"WALLET_NOT_FOUND":   ErrNotFound,
+	// Wallet / loyalty / gift
+	"INSUFFICIENT_FUNDS":  ErrInsufficientFunds,
+	"INSUFFICIENT_POINTS": ErrInsufficientPoints,
+	"WALLET_NOT_FOUND":    ErrWalletNotFound,
+	"GIFT_CARD_INVALID":   ErrGiftCardInvalid,
 
 	// Wishlist
 	"WISHLIST_NOT_FOUND": AppCode{"WISHLIST_NOT_FOUND", http.StatusNotFound, "wishlist not found"},
 
-	// Order
-	"ORDER_NOT_FOUND":    ErrOrderNotFound,
-	"ORDER_CANCELLED":    ErrOrderCancelled,
-	"ORDER_ALREADY_PAID": ErrOrderAlreadyPaid,
+	// Order / shipping / payment
+	"ORDER_NOT_FOUND":         ErrOrderNotFound,
+	"ORDER_CANCELLED":         ErrOrderCancelled,
+	"ORDER_ALREADY_PAID":      ErrOrderAlreadyPaid,
+	"INVALID_SHIPPING_METHOD": ErrInvalidShipping,
+	"PAYMENT_FAILED":          ErrPaymentFailed,
 
-	// Product
+	// Product / stock
 	"PRODUCT_NOT_FOUND":   ErrProductNotFound,
 	"PRODUCT_UNAVAILABLE": ErrProductUnavailable,
 	"PRODUCT_HAS_HISTORY": ErrProductHasHistory,
@@ -141,13 +162,71 @@ var registry = map[string]AppCode{
 	"CART_EMPTY": ErrCartEmpty,
 
 	// Coupon
-	"INVALID_COUPON": ErrInvalidCoupon,
-	"COUPON_EXPIRED": ErrCouponExpired,
+	"INVALID_COUPON":      ErrInvalidCoupon,
+	"COUPON_EXPIRED":      ErrCouponExpired,
+	"COUPON_NOT_ACTIVE":   ErrCouponNotActive,
+	"COUPON_USAGE_LIMIT":  ErrCouponUsageLimit,
+	"COUPON_USER_LIMIT":   ErrCouponUserLimit,
+	"ORDER_BELOW_MINIMUM": ErrOrderBelowMin,
 }
 
+// FromAppError maps a typed *apperr.AppError to a stable HTTP AppCode.
+// Registry entries fix status + default message; a non-empty AppError.Message
+// is preferred so services can be more specific without inventing new codes.
+// Unknown codes no longer collapse to INTERNAL_ERROR when Code+Message are set
+// (PH-012c) — FE/ops must still see a stable machine code and human text.
 func FromAppError(e *apperr.AppError) AppCode {
-	if ac, ok := registry[e.Code]; ok {
-		return ac
+	if e == nil {
+		return ErrInternalError
 	}
-	return ErrInternalError
+	if ac, ok := registry[e.Code]; ok {
+		msg := ac.Message
+		if e.Message != "" {
+			msg = e.Message
+		}
+		return AppCode{Code: ac.Code, StatusCode: ac.StatusCode, Message: msg}
+	}
+	msg := e.Message
+	if msg == "" {
+		msg = "request failed"
+	}
+	if e.Code == "" {
+		return ErrInternalError
+	}
+	return AppCode{
+		Code:       e.Code,
+		StatusCode: guessStatusForCode(e.Code),
+		Message:    msg,
+	}
+}
+
+func guessStatusForCode(code string) int {
+	switch code {
+	case "INTERNAL_ERROR", "DATABASE_ERROR", "UNKNOWN_ERROR":
+		return http.StatusInternalServerError
+	case "UNAUTHORIZED", "INVALID_TOKEN", "EXPIRED_TOKEN", "MISSING_TOKEN", "INVALID_CREDENTIALS", "SESSION_EXPIRED":
+		return http.StatusUnauthorized
+	case "FORBIDDEN", "ACCESS_DENIED", "INSUFFICIENT_PERMISSIONS", "ACCOUNT_DISABLED":
+		return http.StatusForbidden
+	case "NOT_FOUND":
+		return http.StatusNotFound
+	case "CONFLICT", "INVALID_STATE":
+		return http.StatusConflict
+	case "VALIDATION_ERROR":
+		return http.StatusUnprocessableEntity
+	case "PAYMENT_FAILED":
+		return http.StatusPaymentRequired
+	}
+	switch {
+	case strings.HasSuffix(code, "_NOT_FOUND"):
+		return http.StatusNotFound
+	case strings.HasPrefix(code, "INSUFFICIENT"),
+		strings.HasPrefix(code, "OUT_OF_"),
+		strings.Contains(code, "ALREADY"),
+		strings.Contains(code, "CONFLICT"),
+		strings.Contains(code, "LIMIT"):
+		return http.StatusConflict
+	default:
+		return http.StatusBadRequest
+	}
 }

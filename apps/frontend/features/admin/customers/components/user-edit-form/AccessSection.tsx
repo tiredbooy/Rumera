@@ -18,7 +18,12 @@ import { cn } from "@/lib/utils";
 import { Field } from "./Field";
 
 /** Roles accepted by the admin user update validator. */
-const ROLE_OPTIONS: AdminUserRole[] = ["customer", "vendor", "admin"];
+const ROLE_OPTIONS: AdminUserRole[] = [
+  "customer",
+  "vendor",
+  "admin",
+  "staff",
+];
 
 export function AccessSection({
   control,
@@ -185,6 +190,17 @@ export function AccessSection({
           <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
           <p className="text-xs leading-relaxed">
             نقش «مدیر کل» دسترسی کامل به پنل مدیریت می‌دهد. با احتیاط اعطا کنید.
+          </p>
+        </div>
+      ) : null}
+      {!isSelf && watchedRole === "staff" ? (
+        <div
+          className="mt-4 flex items-start gap-2.5 rounded-xl bg-muted/40 px-3.5 py-3 text-muted-foreground ring-1 ring-inset ring-border/60"
+          role="note"
+        >
+          <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <p className="text-xs leading-relaxed">
+            نقش «اپراتور» فقط سطوحی را می‌بیند که در ماتریس دسترسی اعطا شده‌اند.
           </p>
         </div>
       ) : null}

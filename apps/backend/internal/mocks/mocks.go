@@ -11,8 +11,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/tiredbooy/internal/features/wallet"
+	"github.com/tiredbooy/internal/features/coupons"
+	"github.com/tiredbooy/internal/features/shipping"
+	"github.com/tiredbooy/internal/features/cart"
+	"github.com/tiredbooy/internal/features/inventory"
+	"github.com/tiredbooy/internal/features/orders"
+	"github.com/tiredbooy/internal/features/payments"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
 )
 
 // ── FakeTx ───────────────────────────────────────────────────────────────────
@@ -54,24 +60,35 @@ func txOr(tx pgx.Tx) pgx.Tx {
 
 type OrderRepo struct {
 	Tx           pgx.Tx
-	CreateFn     func(ctx context.Context, tx pgx.Tx, req models.CreateOrderReq, userID int64, subtotal, discountAmount, shippingCost, taxAmount float64, couponID *int64) (*models.Order, error)
-	GetItemsFn   func(ctx context.Context, orderID int64) ([]models.OrderItemResponse, error)
+	CreateFn     func(ctx context.Context, tx pgx.Tx, req orders.CreateOrderReq, userID int64, subtotal, discountAmount, shippingCost, taxAmount, giftAddonsFee float64, giftAddonsJSON []byte, giftWrap bool, couponID *int64) (*orders.Order, error)
+	GetItemsFn   func(ctx context.Context, orderID int64) ([]orders.OrderItemResponse, error)
 	CancelFn     func(ctx context.Context, id, userID int64) error
 	MarkAsPaidFn func(ctx context.Context, tx pgx.Tx, orderID int64) error
 }
 
 func (m *OrderRepo) BeginTx(context.Context) (pgx.Tx, error) { return txOr(m.Tx), nil }
-func (m *OrderRepo) Create(ctx context.Context, tx pgx.Tx, req models.CreateOrderReq, userID int64, subtotal, discountAmount, shippingCost, taxAmount float64, couponID *int64) (*models.Order, error) {
+func (m *OrderRepo) Create(ctx context.Context, tx pgx.Tx, req orders.CreateOrderReq, userID int64, subtotal, discountAmount, shippingCost, taxAmount, giftAddonsFee float64, giftAddonsJSON []byte, giftWrap bool, couponID *int64) (*orders.Order, error) {
 	if m.CreateFn != nil {
-		return m.CreateFn(ctx, tx, req, userID, subtotal, discountAmount, shippingCost, taxAmount, couponID)
+		return m.CreateFn(ctx, tx, req, userID, subtotal, discountAmount, shippingCost, taxAmount, giftAddonsFee, giftAddonsJSON, giftWrap, couponID)
 	}
-	return &models.Order{}, nil
+	return &orders.Order{}, nil
 }
-func (m *OrderRepo) GetItems(ctx context.Context, orderID int64) ([]models.OrderItemResponse, error) {
+func (m *OrderRepo) GetItems(ctx context.Context, orderID int64) ([]orders.OrderItemResponse, error) {
 	if m.GetItemsFn != nil {
 		return m.GetItemsFn(ctx, orderID)
 	}
 	return nil, nil
+}
+func (m *OrderRepo) GetStockLines(ctx context.Context, orderID int64) ([]inventory.StockLine, error) {
+	items, err := m.GetItems(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	lines := make([]inventory.StockLine, len(items))
+	for i, item := range items {
+		lines[i] = inventory.StockLine{VariantID: item.VariantID, Quantity: item.Quantity}
+	}
+	return lines, nil
 }
 func (m *OrderRepo) Cancel(ctx context.Context, id, userID int64) error {
 	if m.CancelFn != nil {
@@ -85,24 +102,24 @@ func (m *OrderRepo) MarkAsPaid(ctx context.Context, tx pgx.Tx, orderID int64) er
 	}
 	return nil
 }
-func (m *OrderRepo) GetByID(context.Context, int64) (*models.Order, error) { return nil, nil }
-func (m *OrderRepo) GetByIDAndUserID(context.Context, int64, int64) (*models.Order, error) {
+func (m *OrderRepo) GetByID(context.Context, int64) (*orders.Order, error) { return nil, nil }
+func (m *OrderRepo) GetByIDAndUserID(context.Context, int64, int64) (*orders.Order, error) {
 	return nil, nil
 }
-func (m *OrderRepo) GetAll(context.Context, models.OrderFilter) ([]models.OrderListItem, int64, error) {
+func (m *OrderRepo) GetAll(context.Context, orders.OrderFilter) ([]orders.OrderListItem, int64, error) {
 	return nil, 0, nil
 }
-func (m *OrderRepo) UpdateStatus(context.Context, int64, models.UpdateOrderStatusReq) (*models.Order, error) {
+func (m *OrderRepo) UpdateStatus(context.Context, int64, orders.UpdateOrderStatusReq) (*orders.Order, error) {
 	return nil, nil
 }
 
 // ── OrderItemRepository ──────────────────────────────────────────────────────
 
 type OrderItemRepo struct {
-	BulkCreateFn func(ctx context.Context, tx pgx.Tx, orderID int64, items []models.CartItemResponse) error
+	BulkCreateFn func(ctx context.Context, tx pgx.Tx, orderID int64, items []cart.CartItemResponse) error
 }
 
-func (m *OrderItemRepo) BulkCreate(ctx context.Context, tx pgx.Tx, orderID int64, items []models.CartItemResponse) error {
+func (m *OrderItemRepo) BulkCreate(ctx context.Context, tx pgx.Tx, orderID int64, items []cart.CartItemResponse) error {
 	if m.BulkCreateFn != nil {
 		return m.BulkCreateFn(ctx, tx, orderID, items)
 	}
@@ -112,18 +129,18 @@ func (m *OrderItemRepo) BulkCreate(ctx context.Context, tx pgx.Tx, orderID int64
 // ── CartRepository ───────────────────────────────────────────────────────────
 
 type CartRepo struct {
-	GetOrCreateFn func(ctx context.Context, userID int64) (*models.Cart, error)
-	GetItemsFn    func(ctx context.Context, cartID int64) ([]models.CartItemResponse, error)
+	GetOrCreateFn func(ctx context.Context, userID int64) (*cart.Cart, error)
+	GetItemsFn    func(ctx context.Context, cartID int64) ([]cart.CartItemResponse, error)
 	ClearFn       func(ctx context.Context, tx pgx.Tx, cartID int64) error
 }
 
-func (m *CartRepo) GetOrCreate(ctx context.Context, userID int64) (*models.Cart, error) {
+func (m *CartRepo) GetOrCreate(ctx context.Context, userID int64) (*cart.Cart, error) {
 	if m.GetOrCreateFn != nil {
 		return m.GetOrCreateFn(ctx, userID)
 	}
-	return &models.Cart{ID: 1}, nil
+	return &cart.Cart{ID: 1}, nil
 }
-func (m *CartRepo) GetItems(ctx context.Context, cartID int64) ([]models.CartItemResponse, error) {
+func (m *CartRepo) GetItems(ctx context.Context, cartID int64) ([]cart.CartItemResponse, error) {
 	if m.GetItemsFn != nil {
 		return m.GetItemsFn(ctx, cartID)
 	}
@@ -135,12 +152,12 @@ func (m *CartRepo) Clear(ctx context.Context, tx pgx.Tx, cartID int64) error {
 	}
 	return nil
 }
-func (m *CartRepo) GetByUserID(context.Context, int64) (*models.Cart, error) { return nil, nil }
+func (m *CartRepo) GetByUserID(context.Context, int64) (*cart.Cart, error) { return nil, nil }
 func (m *CartRepo) Delete(context.Context, int64) error                      { return nil }
-func (m *CartRepo) AddItem(context.Context, int64, models.AddCartItemReq) (*models.CartItem, error) {
+func (m *CartRepo) AddItem(context.Context, int64, cart.AddCartItemReq) (*cart.CartItem, error) {
 	return nil, nil
 }
-func (m *CartRepo) UpdateItem(context.Context, int64, int64, models.UpdateCartItemReq) (*models.CartItem, error) {
+func (m *CartRepo) UpdateItem(context.Context, int64, int64, cart.UpdateCartItemReq) (*cart.CartItem, error) {
 	return nil, nil
 }
 func (m *CartRepo) RemoveItem(context.Context, int64, int64) error { return nil }
@@ -148,7 +165,7 @@ func (m *CartRepo) RemoveItem(context.Context, int64, int64) error { return nil 
 // ── CouponRepository ─────────────────────────────────────────────────────────
 
 type CouponRepo struct {
-	GetByCodeFn           func(ctx context.Context, code string) (*models.Coupon, error)
+	GetByCodeFn           func(ctx context.Context, code string) (*coupons.Coupon, error)
 	CountUsagesFn         func(ctx context.Context, couponID int64) (int, error)
 	CountUsagesByUserFn   func(ctx context.Context, couponID, userID int64) (int, error)
 	LockByIDFn            func(ctx context.Context, tx pgx.Tx, id int64) error
@@ -156,7 +173,7 @@ type CouponRepo struct {
 	CountUsagesByUserTxFn func(ctx context.Context, tx pgx.Tx, couponID, userID int64) (int, error)
 }
 
-func (m *CouponRepo) GetByCode(ctx context.Context, code string) (*models.Coupon, error) {
+func (m *CouponRepo) GetByCode(ctx context.Context, code string) (*coupons.Coupon, error) {
 	if m.GetByCodeFn != nil {
 		return m.GetByCodeFn(ctx, code)
 	}
@@ -174,22 +191,22 @@ func (m *CouponRepo) CountUsagesByUser(ctx context.Context, couponID, userID int
 	}
 	return 0, nil
 }
-func (m *CouponRepo) Create(context.Context, models.CreateCouponReq) (*models.Coupon, error) {
+func (m *CouponRepo) Create(context.Context, coupons.CreateCouponReq) (*coupons.Coupon, error) {
 	return nil, nil
 }
-func (m *CouponRepo) GetByID(context.Context, int64) (*models.Coupon, error) { return nil, nil }
-func (m *CouponRepo) GetAll(context.Context, models.CouponFilter) ([]*models.Coupon, int64, error) {
+func (m *CouponRepo) GetByID(context.Context, int64) (*coupons.Coupon, error) { return nil, nil }
+func (m *CouponRepo) GetAll(context.Context, coupons.CouponFilter) ([]*coupons.Coupon, int64, error) {
 	return nil, 0, nil
 }
-func (m *CouponRepo) Update(context.Context, int64, models.UpdateCouponReq) (*models.Coupon, error) {
+func (m *CouponRepo) Update(context.Context, int64, coupons.UpdateCouponReq) (*coupons.Coupon, error) {
 	return nil, nil
 }
 func (m *CouponRepo) Delete(context.Context, int64) error                { return nil }
-func (m *CouponRepo) Deactivate(context.Context, int64) (*models.Coupon, error) {
+func (m *CouponRepo) Deactivate(context.Context, int64) (*coupons.Coupon, error) {
 	return nil, nil
 }
 func (m *CouponRepo) ExistsByCode(context.Context, string) (bool, error) { return false, nil }
-func (m *CouponRepo) GetByIDForUpdate(ctx context.Context, tx pgx.Tx, id int64) (*models.Coupon, error) {
+func (m *CouponRepo) GetByIDForUpdate(ctx context.Context, tx pgx.Tx, id int64) (*coupons.Coupon, error) {
 	return m.GetByID(ctx, id)
 }
 func (m *CouponRepo) CountUsagesByIDs(context.Context, []int64) (map[int64]int, error) {
@@ -226,51 +243,51 @@ func (m *CouponUsageRepo) Record(ctx context.Context, tx pgx.Tx, couponID, userI
 	}
 	return nil
 }
-func (m *CouponUsageRepo) GetByCouponID(context.Context, int64) ([]*models.CouponUsage, error) {
+func (m *CouponUsageRepo) GetByCouponID(context.Context, int64) ([]*coupons.CouponUsage, error) {
 	return nil, nil
 }
-func (m *CouponUsageRepo) GetByUserID(context.Context, int64) ([]*models.CouponUsage, error) {
+func (m *CouponUsageRepo) GetByUserID(context.Context, int64) ([]*coupons.CouponUsage, error) {
 	return nil, nil
 }
 
-// ── ShippingMethodRepository ─────────────────────────────────────────────────
+// ── Shipping MethodRepository ────────────────────────────────────────────────
 
 type ShippingMethodRepo struct {
-	GetByIDFn func(ctx context.Context, id int64) (*models.ShippingMethod, error)
+	GetByIDFn func(ctx context.Context, id int64) (*shipping.ShippingMethod, error)
 }
 
-func (m *ShippingMethodRepo) GetByID(ctx context.Context, id int64) (*models.ShippingMethod, error) {
+func (m *ShippingMethodRepo) GetByID(ctx context.Context, id int64) (*shipping.ShippingMethod, error) {
 	if m.GetByIDFn != nil {
 		return m.GetByIDFn(ctx, id)
 	}
-	return &models.ShippingMethod{ID: id}, nil
+	return &shipping.ShippingMethod{ID: id}, nil
 }
-func (m *ShippingMethodRepo) Create(context.Context, int64, models.CreateShippingMethodReq) (*models.ShippingMethod, error) {
+func (m *ShippingMethodRepo) Create(context.Context, int64, shipping.CreateShippingMethodReq) (*shipping.ShippingMethod, error) {
 	return nil, nil
 }
-func (m *ShippingMethodRepo) GetByZoneID(context.Context, int64, models.ShippingMethodFilter) ([]*models.ShippingMethod, int64, error) {
+func (m *ShippingMethodRepo) GetByZoneID(context.Context, int64, shipping.ShippingMethodFilter) ([]*shipping.ShippingMethod, int64, error) {
 	return nil, 0, nil
 }
-func (m *ShippingMethodRepo) GetAvailable(context.Context, int64, float64) ([]*models.ShippingMethod, error) {
+func (m *ShippingMethodRepo) GetAvailable(context.Context, int64, float64) ([]*shipping.ShippingMethod, error) {
 	return nil, nil
 }
-func (m *ShippingMethodRepo) Update(context.Context, int64, models.UpdateShippingMethodReq) (*models.ShippingMethod, error) {
+func (m *ShippingMethodRepo) Update(context.Context, int64, shipping.UpdateShippingMethodReq) (*shipping.ShippingMethod, error) {
 	return nil, nil
 }
 func (m *ShippingMethodRepo) Delete(context.Context, int64) error { return nil }
 
-// ── InventoryRepository ──────────────────────────────────────────────────────
+// ── Inventory Repository ─────────────────────────────────────────────────────
 
 type InventoryRepo struct {
 	Tx                   pgx.Tx
-	GetByVariantFn       func(ctx context.Context, variantID int64) (*models.Inventory, error)
+	GetByVariantFn       func(ctx context.Context, variantID int64) (*inventory.Inventory, error)
 	EnsureForVariantFn   func(ctx context.Context, variantID int64) error
 	EnsureForVariantTxFn func(ctx context.Context, tx pgx.Tx, variantID int64) error
-	AdjustFn             func(ctx context.Context, tx pgx.Tx, variantID int64, req models.AdjustStockReq, orderID *int64) error
+	AdjustFn             func(ctx context.Context, tx pgx.Tx, variantID int64, req inventory.AdjustStockReq, orderID *int64) error
 	ReserveFn            func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
 	ReleaseFn            func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
 	DeductFn             func(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error
-	UpdateReorderFn      func(ctx context.Context, variantID int64, req models.UpdateReorderReq) (*models.Inventory, error)
+	UpdateReorderFn      func(ctx context.Context, variantID int64, req inventory.UpdateReorderReq) (*inventory.Inventory, error)
 }
 
 func (m *InventoryRepo) BeginTx(context.Context) (pgx.Tx, error) { return txOr(m.Tx), nil }
@@ -293,22 +310,22 @@ func (m *InventoryRepo) Deduct(ctx context.Context, tx pgx.Tx, variantID int64, 
 	return nil
 }
 
-func (m *InventoryRepo) Adjust(ctx context.Context, tx pgx.Tx, variantID int64, req models.AdjustStockReq, orderID *int64) error {
+func (m *InventoryRepo) Adjust(ctx context.Context, tx pgx.Tx, variantID int64, req inventory.AdjustStockReq, orderID *int64) error {
 	if m.AdjustFn != nil {
 		return m.AdjustFn(ctx, tx, variantID, req, orderID)
 	}
 	return nil
 }
-func (m *InventoryRepo) GetByVariantID(ctx context.Context, variantID int64) (*models.Inventory, error) {
+func (m *InventoryRepo) GetByVariantID(ctx context.Context, variantID int64) (*inventory.Inventory, error) {
 	if m.GetByVariantFn != nil {
 		return m.GetByVariantFn(ctx, variantID)
 	}
 	return nil, nil
 }
-func (m *InventoryRepo) GetAll(context.Context, models.InventoryFilter) ([]*models.Inventory, int64, error) {
+func (m *InventoryRepo) GetAll(context.Context, inventory.InventoryFilter) ([]*inventory.Inventory, int64, error) {
 	return nil, 0, nil
 }
-func (m *InventoryRepo) GetLowStock(context.Context) ([]*models.Inventory, error) { return nil, nil }
+func (m *InventoryRepo) GetLowStock(context.Context) ([]*inventory.Inventory, error) { return nil, nil }
 func (m *InventoryRepo) EnsureForVariant(ctx context.Context, variantID int64) error {
 	if m.EnsureForVariantFn != nil {
 		return m.EnsureForVariantFn(ctx, variantID)
@@ -324,7 +341,7 @@ func (m *InventoryRepo) EnsureForVariantTx(ctx context.Context, tx pgx.Tx, varia
 	}
 	return nil
 }
-func (m *InventoryRepo) UpdateReorder(ctx context.Context, variantID int64, req models.UpdateReorderReq) (*models.Inventory, error) {
+func (m *InventoryRepo) UpdateReorder(ctx context.Context, variantID int64, req inventory.UpdateReorderReq) (*inventory.Inventory, error) {
 	if m.UpdateReorderFn != nil {
 		return m.UpdateReorderFn(ctx, variantID, req)
 	}
@@ -334,17 +351,17 @@ func (m *InventoryRepo) UpdateReorder(ctx context.Context, variantID int64, req 
 // ── MovementRepository ───────────────────────────────────────────────────────
 
 type MovementRepo struct {
-	GetAllFn       func(context.Context, models.MovementFilter) ([]*models.InventoryMovement, int64, error)
-	GetByVariantFn func(context.Context, int64) ([]*models.InventoryMovement, error)
+	GetAllFn       func(context.Context, inventory.MovementFilter) ([]*inventory.InventoryMovement, int64, error)
+	GetByVariantFn func(context.Context, int64) ([]*inventory.InventoryMovement, error)
 }
 
-func (m *MovementRepo) GetAll(ctx context.Context, filter models.MovementFilter) ([]*models.InventoryMovement, int64, error) {
+func (m *MovementRepo) GetAll(ctx context.Context, filter inventory.MovementFilter) ([]*inventory.InventoryMovement, int64, error) {
 	if m.GetAllFn != nil {
 		return m.GetAllFn(ctx, filter)
 	}
 	return nil, 0, nil
 }
-func (m *MovementRepo) GetByVariantID(ctx context.Context, variantID int64) ([]*models.InventoryMovement, error) {
+func (m *MovementRepo) GetByVariantID(ctx context.Context, variantID int64) ([]*inventory.InventoryMovement, error) {
 	if m.GetByVariantFn != nil {
 		return m.GetByVariantFn(ctx, variantID)
 	}
@@ -355,44 +372,50 @@ func (m *MovementRepo) GetByVariantID(ctx context.Context, variantID int64) ([]*
 
 type WalletRepo struct {
 	Tx            pgx.Tx
-	GetByUserIDFn func(ctx context.Context, userID int64) (*models.Wallet, error)
-	GetOrCreateFn func(ctx context.Context, userID int64) (*models.Wallet, error)
-	PurchaseFn    func(ctx context.Context, tx pgx.Tx, walletID int64, amount float64, orderID int64) (*models.WalletTransaction, error)
-	WithdrawFn    func(ctx context.Context, tx pgx.Tx, walletID int64, amount float64, orderID *int64, description *string) (*models.WalletTransaction, error)
+	GetByUserIDFn func(ctx context.Context, userID int64) (*wallet.Wallet, error)
+	GetOrCreateFn func(ctx context.Context, userID int64) (*wallet.Wallet, error)
+	PurchaseFn    func(ctx context.Context, tx pgx.Tx, walletID int64, amount float64, orderID int64) (*wallet.Transaction, error)
+	WithdrawFn    func(ctx context.Context, tx pgx.Tx, walletID int64, amount float64, orderID *int64, description *string) (*wallet.Transaction, error)
 }
 
 func (m *WalletRepo) BeginTx(context.Context) (pgx.Tx, error) { return txOr(m.Tx), nil }
-func (m *WalletRepo) GetByUserID(ctx context.Context, userID int64) (*models.Wallet, error) {
+func (m *WalletRepo) GetByUserID(ctx context.Context, userID int64) (*wallet.Wallet, error) {
 	if m.GetByUserIDFn != nil {
 		return m.GetByUserIDFn(ctx, userID)
 	}
-	return &models.Wallet{ID: 1}, nil
+	return &wallet.Wallet{ID: 1}, nil
 }
-func (m *WalletRepo) GetOrCreate(ctx context.Context, userID int64) (*models.Wallet, error) {
+func (m *WalletRepo) GetOrCreate(ctx context.Context, userID int64) (*wallet.Wallet, error) {
 	if m.GetOrCreateFn != nil {
 		return m.GetOrCreateFn(ctx, userID)
 	}
-	return &models.Wallet{ID: 1}, nil
+	return &wallet.Wallet{ID: 1}, nil
 }
-func (m *WalletRepo) Purchase(ctx context.Context, tx pgx.Tx, walletID int64, amount float64, orderID int64) (*models.WalletTransaction, error) {
+func (m *WalletRepo) Purchase(ctx context.Context, tx pgx.Tx, walletID int64, amount float64, orderID int64) (*wallet.Transaction, error) {
 	if m.PurchaseFn != nil {
 		return m.PurchaseFn(ctx, tx, walletID, amount, orderID)
 	}
-	return &models.WalletTransaction{}, nil
+	return &wallet.Transaction{}, nil
 }
-func (m *WalletRepo) Withdraw(ctx context.Context, tx pgx.Tx, walletID int64, amount float64, orderID *int64, description *string) (*models.WalletTransaction, error) {
+func (m *WalletRepo) Withdraw(ctx context.Context, tx pgx.Tx, walletID int64, amount float64, orderID *int64, description *string) (*wallet.Transaction, error) {
 	if m.WithdrawFn != nil {
 		return m.WithdrawFn(ctx, tx, walletID, amount, orderID, description)
 	}
-	return &models.WalletTransaction{}, nil
+	return &wallet.Transaction{}, nil
 }
-func (m *WalletRepo) Deposit(context.Context, pgx.Tx, int64, float64, *int64, *string) (*models.WalletTransaction, error) {
-	return &models.WalletTransaction{}, nil
+func (m *WalletRepo) Deposit(context.Context, pgx.Tx, int64, float64, *int64, *string) (*wallet.Transaction, error) {
+	return &wallet.Transaction{}, nil
 }
-func (m *WalletRepo) Refund(context.Context, pgx.Tx, int64, float64, int64) (*models.WalletTransaction, error) {
-	return &models.WalletTransaction{}, nil
+func (m *WalletRepo) FindAdminCreditByIdempotencyKey(context.Context, int64, string) (*wallet.Transaction, error) {
+	return nil, models.ErrNotFound
 }
-func (m *WalletRepo) GetTransactions(context.Context, int64, models.WalletTransactionFilter) ([]*models.WalletTransaction, int64, error) {
+func (m *WalletRepo) FindDepositByDescriptionMarker(context.Context, int64, string) (*wallet.Transaction, error) {
+	return nil, models.ErrNotFound
+}
+func (m *WalletRepo) Refund(context.Context, pgx.Tx, int64, float64, int64) (*wallet.Transaction, error) {
+	return &wallet.Transaction{}, nil
+}
+func (m *WalletRepo) GetTransactions(context.Context, int64, wallet.TransactionFilter) ([]*wallet.Transaction, int64, error) {
 	return nil, 0, nil
 }
 
@@ -400,33 +423,33 @@ func (m *WalletRepo) GetTransactions(context.Context, int64, models.WalletTransa
 
 type PaymentRepo struct {
 	Tx       pgx.Tx
-	GetAllFn func(ctx context.Context, filter models.PaymentTransactionFilter) ([]*models.PaymentTransaction, int64, error)
-	CreateFn func(ctx context.Context, tx pgx.Tx, req models.CreatePaymentTransactionReq) (*models.PaymentTransaction, error)
+	GetAllFn func(ctx context.Context, filter payments.PaymentTransactionFilter) ([]*payments.PaymentTransaction, int64, error)
+	CreateFn func(ctx context.Context, tx pgx.Tx, req payments.CreatePaymentTransactionReq) (*payments.PaymentTransaction, error)
 }
 
 func (m *PaymentRepo) BeginTx(context.Context) (pgx.Tx, error) { return txOr(m.Tx), nil }
-func (m *PaymentRepo) GetAll(ctx context.Context, filter models.PaymentTransactionFilter) ([]*models.PaymentTransaction, int64, error) {
+func (m *PaymentRepo) GetAll(ctx context.Context, filter payments.PaymentTransactionFilter) ([]*payments.PaymentTransaction, int64, error) {
 	if m.GetAllFn != nil {
 		return m.GetAllFn(ctx, filter)
 	}
 	return nil, 0, nil
 }
-func (m *PaymentRepo) Create(ctx context.Context, tx pgx.Tx, req models.CreatePaymentTransactionReq) (*models.PaymentTransaction, error) {
+func (m *PaymentRepo) Create(ctx context.Context, tx pgx.Tx, req payments.CreatePaymentTransactionReq) (*payments.PaymentTransaction, error) {
 	if m.CreateFn != nil {
 		return m.CreateFn(ctx, tx, req)
 	}
-	return &models.PaymentTransaction{}, nil
+	return &payments.PaymentTransaction{}, nil
 }
-func (m *PaymentRepo) GetByID(context.Context, int64) (*models.PaymentTransaction, error) {
+func (m *PaymentRepo) GetByID(context.Context, int64) (*payments.PaymentTransaction, error) {
 	return nil, nil
 }
-func (m *PaymentRepo) GetByTransactionID(context.Context, string) (*models.PaymentTransaction, error) {
+func (m *PaymentRepo) GetByTransactionID(context.Context, string) (*payments.PaymentTransaction, error) {
 	return nil, nil
 }
-func (m *PaymentRepo) Confirm(context.Context, pgx.Tx, models.ConfirmPaymentReq) (*models.PaymentTransaction, error) {
+func (m *PaymentRepo) Confirm(context.Context, pgx.Tx, payments.ConfirmPaymentReq) (*payments.PaymentTransaction, error) {
 	return nil, nil
 }
-func (m *PaymentRepo) Fail(context.Context, models.FailPaymentReq) (*models.PaymentTransaction, error) {
+func (m *PaymentRepo) Fail(context.Context, payments.FailPaymentReq) (*payments.PaymentTransaction, error) {
 	return nil, nil
 }
 
@@ -434,14 +457,14 @@ func (m *PaymentRepo) Fail(context.Context, models.FailPaymentReq) (*models.Paym
 
 var (
 	_ pgx.Tx                                    = (*FakeTx)(nil)
-	_ repositories.OrderRepository              = (*OrderRepo)(nil)
-	_ repositories.OrderItemRepository          = (*OrderItemRepo)(nil)
-	_ repositories.CartRepository               = (*CartRepo)(nil)
-	_ repositories.CouponRepository             = (*CouponRepo)(nil)
-	_ repositories.CouponUsageRepository        = (*CouponUsageRepo)(nil)
-	_ repositories.ShippingMethodRepository     = (*ShippingMethodRepo)(nil)
-	_ repositories.InventoryRepository          = (*InventoryRepo)(nil)
-	_ repositories.MovementRepository           = (*MovementRepo)(nil)
-	_ repositories.WalletRepository             = (*WalletRepo)(nil)
-	_ repositories.PaymentTransactionRepository = (*PaymentRepo)(nil)
+	_ orders.Repository                         = (*OrderRepo)(nil)
+	_ orders.ItemRepository                     = (*OrderItemRepo)(nil)
+	_ cart.Repository                           = (*CartRepo)(nil)
+	_ coupons.Repository                        = (*CouponRepo)(nil)
+	_ coupons.UsageRepository                   = (*CouponUsageRepo)(nil)
+	_ shipping.MethodRepository                 = (*ShippingMethodRepo)(nil)
+	_ inventory.Repository                      = (*InventoryRepo)(nil)
+	_ inventory.MovementRepository           = (*MovementRepo)(nil)
+	_ wallet.Repository                        = (*WalletRepo)(nil)
+	_ payments.Repository                       = (*PaymentRepo)(nil)
 )

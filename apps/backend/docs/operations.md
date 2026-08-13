@@ -188,6 +188,10 @@ each run is bounded by a 30-minute context.
 | `revenue_stats` | `0 30 2 * * *` (02:30) | Rolls up yesterday's revenue metrics |
 | `search_summary` | `0 45 2 * * *` (02:45) | Rolls up yesterday's search terms, clicks, conversions |
 | `recommendation_refresh` | `0 0 3 * * *` (03:00) | Rebuilds affinity profiles for recently-active users |
+| `idempotency_cleanup` | `0 30 3 * * *` (03:30) | Prunes `idempotency_keys` (+ product aggregate ops) older than `IDEMPOTENCY_KEY_RETENTION` (default **720h / 30d**) |
+
+Idempotency ops (inspect keys, stuck reclaim, FE headers):  
+[architecture/idempotency-runbook.md](./architecture/idempotency-runbook.md).
 
 Schedules are staggered so the nightly aggregations don't hit the analytics DB
 all at once.

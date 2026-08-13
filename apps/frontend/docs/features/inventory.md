@@ -28,6 +28,21 @@ create products in admin.
 Customers never use these screens. Sellable stock on the storefront comes from
 public product APIs (`available_*`), not from admin inventory clients.
 
+### Weight on inventory rows (PH-020a)
+
+`InventoryItem` includes:
+
+| Field | Notes |
+|-------|--------|
+| `weight?` | kg from product catalogue |
+| `missing_weight` | always boolean; true when weight unset or ≤ 0 |
+
+List API is the source of truth — do not invent weight on the FE.
+
+**PH-020b / 085a (shipped):** admin list shows a «وزن ناقص» badge + filter
+«وزن بسته‌بندی», KPI card «وزن ناقص», and variant detail callout with link to
+edit the product weight.
+
 ---
 
 ## Routes

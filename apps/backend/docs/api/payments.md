@@ -1,5 +1,7 @@
 # Payments
 
+
+**Implementation (feature slice):** `internal/features/payments/`
 Read-only admin access to payment transactions. Transactions are **created and transitioned by the order & gateway flow**, not over HTTP — so this surface only lets admins list and look up records. There are no create/update/delete endpoints.
 
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/internal/features/catalog/tag"
 	"go.uber.org/zap"
 )
 
@@ -30,7 +30,7 @@ func (s *seeder) seedTags(ctx context.Context) (map[string]int64, error) {
 			s.c.skipped1("tag")
 			continue
 		}
-		t, err := s.tag.Create(ctx, models.CreateTagReq{Title: title})
+		t, err := s.tag.Create(ctx, tag.CreateTagReq{Title: title})
 		if err != nil {
 			return nil, fmt.Errorf("create tag %q: %w", title, err)
 		}

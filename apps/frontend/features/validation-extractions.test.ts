@@ -45,6 +45,10 @@ describe("extracted validation contracts", () => {
       keywords: "",
       enabled: false,
       message: "",
+      giftEnabled: true,
+      giftMessageEnabled: true,
+      giftHidePriceEnabled: true,
+      giftOptions: [],
     };
 
     const parsed = siteSettingsFormSchema.parse(base);
@@ -70,6 +74,7 @@ describe("extracted validation contracts", () => {
   it("preserves brand year and URL refinement", () => {
     const base = {
       title: "برند",
+      slug: "",
       country: "",
       founded_year: String(BRAND_CURRENT_YEAR),
       image_url: "https://example.com/logo.png",

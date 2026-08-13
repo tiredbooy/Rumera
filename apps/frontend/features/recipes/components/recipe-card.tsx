@@ -45,8 +45,11 @@ export function RecipeCard({
           <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-black/10 opacity-90" />
           <div className="pointer-events-none absolute start-3 top-3 z-10 flex flex-col items-start gap-1.5 sm:start-4 sm:top-4">
             {recipe.is_featured ? (
-              <Badge className="bg-gold text-gold-foreground shadow-sm">
-                <Star className="size-3 fill-current" aria-hidden="true" />{" "}
+              <Badge className="border border-gold/35 bg-background/90 text-primary shadow-sm backdrop-blur-sm">
+                <Star
+                  className="size-3 fill-primary/30"
+                  aria-hidden="true"
+                />{" "}
                 منتخب
               </Badge>
             ) : null}

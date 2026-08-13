@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/internal/features/blog"
 	"go.uber.org/zap"
 )
 
@@ -93,7 +93,7 @@ func (s *seeder) seedBlogs(ctx context.Context) error {
 		// blogs now carry a dedicated cover (image_url) — surface it on cards and
 		// use it as the detail hero. Must be status=published with published_at so
 		// the public, published-only /blogs list returns the post.
-		req := &models.BlogReq{
+		req := &blog.BlogReq{
 			AuthorID:        author,
 			Title:           p.title,
 			Slug:            p.slug,
@@ -101,7 +101,7 @@ func (s *seeder) seedBlogs(ctx context.Context) error {
 			Excerpt:         sp(p.excerpt),
 			ImageURL:        sp(p.cover),
 			TimeToRead:      p.minutes,
-			Status:          models.BlogStatusPublished,
+			Status:          blog.BlogStatusPublished,
 			IsFeatured:      i == 0, // first post is the featured lead story
 			MetaTitle:       sp(p.metaTitle),
 			MetaDescription: sp(p.metaDesc),

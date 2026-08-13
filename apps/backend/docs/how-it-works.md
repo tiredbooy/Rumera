@@ -5,6 +5,25 @@
 > understand how Rumera works.
 >
 > _(Need this in Persian? It can be translated on request.)_
+>
+> **Engineers:** pair this with [architecture.md](./architecture.md) and
+> [domain-map.md](./architecture/domain-map.md). Dual-doc:
+> [`docs/DOCUMENTATION-DUAL-TRACK.md`](../../../docs/DOCUMENTATION-DUAL-TRACK.md).
+
+---
+
+## 0. How the “back office” is organised (2026)
+
+The Backend is not one giant pile of code. Each **business area** (products,
+cart, orders, payments, wallet, loyalty, …) is a **feature package** that owns
+its own routes and rules. A thin **router** only decides:
+
+- **Public door** — anyone (browse, login, payment webhook)
+- **Customer door** — logged-in shoppers (cart, checkout, account)
+- **Admin door** — staff with roles and permissions (catalogue, stock, refunds)
+
+Think of each feature package as a **department** in the shop. Departments talk
+through the manager (bootstrap wiring), not by raiding each other’s filing cabinets.
 
 ---
 

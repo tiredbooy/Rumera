@@ -8,8 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
+	"github.com/tiredbooy/internal/features/media"
 	"github.com/tiredbooy/pkg/storage"
 	"go.uber.org/zap"
 )
@@ -136,7 +135,7 @@ func TestMediaReconcileProtectsEveryDatabaseReference(t *testing.T) {
 		categoryLegacy: true, brandLegacy: true, reviewLegacy: true,
 		siteLogo: true, siteOG: true,
 	}
-	repo := repositories.NewMediaLifecycleRepository(testPool)
+	repo := media.NewLifecycleRepository(testPool)
 	keys, err := repo.ReferencedKeys(ctx)
 	if err != nil {
 		t.Fatalf("list referenced keys: %v", err)
@@ -183,8 +182,8 @@ func TestMediaReconcileProtectsEveryDatabaseReference(t *testing.T) {
 	if err := store.Put(ctx, orphan, strings.NewReader("orphan")); err != nil {
 		t.Fatalf("store orphan: %v", err)
 	}
-	lifecycle := services.NewMediaLifecycleService(store, cache, repo, zap.NewNop())
-	report, err := lifecycle.Reconcile(ctx, services.MediaReconcileOptions{
+	lifecycle := media.NewLifecycleService(store, cache, repo, zap.NewNop())
+	report, err := lifecycle.Reconcile(ctx, media.ReconcileOptions{
 		Apply: true,
 		Now:   time.Now().UTC().Add(time.Second),
 	})

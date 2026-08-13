@@ -24,6 +24,7 @@ const inventory = [
     sku: "SKU-14",
     category_title: "هدیه",
     unit_price: "125000",
+    missing_weight: false,
     stock_on_hand: 10,
     committed_stock: 2,
     available_stock: 8,
@@ -59,6 +60,27 @@ describe("InventoryTable", () => {
     render(<InventoryTable inventory={inventory} canWrite />);
     expect(
       screen.getByRole("button", { name: "تنظیم محصول آزمایشی" }),
+    ).toBeInTheDocument();
+  });
+
+  it("surfaces missing_weight remediation signal (PH-020b / 085a)", () => {
+    render(
+      <InventoryTable
+        canWrite={false}
+        inventory={[
+          {
+            ...inventory[0],
+            missing_weight: true,
+            weight: undefined,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("وزن ناقص")).toBeInTheDocument();
+    expect(
+      screen.getByTitle(
+        "وزن بسته‌بندی روی محصول ثبت نشده — برای محاسبهٔ ارسال لازم است",
+      ),
     ).toBeInTheDocument();
   });
 });

@@ -21,10 +21,12 @@ Steps typically: address → shipping quote → payment method → review → pl
 Server authorities:
 
 - Address ownership
-- Shipping region from **address country**
+- Shipping region from **address country** (never a client constant)
+- **Package weight** = Σ cart line `weight_kg × qty` (PH-020c); FE quotes with same sum; BE re-sums at CreateOrder
 - Coupon under lock
 - Totals
 - Creates [[Orders]] + reserve [[Inventory]] + pending [[Payments]]
+- **Gift mode (PH-060):** optional modular packaging / add-ons from [[Site Settings]] `gift.options`; FE shows prices for preview; BE re-prices and adds `gift_addons_fee` to total (see [[Journey Buy as gift]])
 
 ## FE
 

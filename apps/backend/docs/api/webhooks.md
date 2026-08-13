@@ -1,5 +1,7 @@
 # Webhooks
 
+
+**Implementation (feature slice):** `internal/features/payments/`
 Inbound callbacks from the payment gateway. These endpoints are **public** (the gateway carries no JWT) but every request is verified by an HMAC signature over the raw body — they are not part of the JWT-guarded route groups.
 
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.
@@ -29,12 +31,22 @@ If the server has no webhook secret configured, the endpoint is disabled and ret
 ```
 POST /webhooks/payment
 X-Webhook-Signature: <hex hmac_sha256 of the raw body>
+Idempotency-Key: <optional>   # if omitted, auto-derived from body hash
 ```
 
 Delivers the final result of a payment transaction.
 
 - On `"succeeded"`: the payment is confirmed (the order is marked paid) and the reserved stock is **deducted**.
 - On `"failed"`: the failure is recorded and the reserved stock is **released** back to sale.
+
+**Idempotency / replay (PH-011):**
+
+1. HTTP middleware stores successful responses (auto-key from body when header absent).
+2. `payment_transactions.transaction_id` is **UNIQUE** — cannot insert two rows for one gateway id.
+3. Confirm/Fail only move **pending** rows; if the row is already terminal, the handler returns
+   **`200`** with `{ "received": true, "replayed": true }` so gateways stop redelivery without double deduct.
+
+See [idempotency.md](../architecture/idempotency.md) · [payments-and-webhooks.md](../architecture/payments-and-webhooks.md).
 
 Duplicate or late callbacks for an already-settled transaction are acknowledged rather than retried.
 
@@ -60,6 +72,13 @@ Duplicate or late callbacks for an already-settled transaction are acknowledged 
 { "received": true }
 ```
 
+When the payment was already terminal (prior success/fail) and this delivery is a
+gateway redelivery, the body may include `"replayed": true`:
+
+```json
+{ "received": true, "replayed": true }
+```
+
 **Errors:**
 
 | HTTP | Meaning |
@@ -67,6 +86,7 @@ Duplicate or late callbacks for an already-settled transaction are acknowledged 
 | `503` | Webhook secret not configured (endpoint disabled) |
 | `401` | Missing or invalid signature |
 | `400` | Unreadable/invalid JSON body, empty `transaction_id`, or unknown `status` |
+| `409` | HTTP idempotency in-flight / body mismatch (rare on auto-key) |
 
 ---
 

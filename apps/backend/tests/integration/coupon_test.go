@@ -9,30 +9,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tiredbooy/internal/features/coupons"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
 )
 
 func TestCouponRepository_CRUDAndNullableUpdates(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "coupons")
 	ctx := context.Background()
-	repo := repositories.NewCouponRepository(testPool)
+	repo := coupons.NewRepository(testPool)
 	description := "launch offer"
 	maxDiscount := 25.0
 	maxUses := 10
 	expires := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Microsecond)
 	active := true
 
-	created, err := repo.Create(ctx, models.CreateCouponReq{
+	created, err := repo.Create(ctx, coupons.CreateCouponReq{
 		Code:              "CRUDTEST",
 		Description:       &description,
-		DiscountType:      models.DiscountTypePercentage,
+		DiscountType:      coupons.DiscountTypePercentage,
 		DiscountValue:     20,
 		MaxDiscountAmount: &maxDiscount,
 		MaxUses:           &maxUses,
 		MaxUsesPerUser:    2,
-		ApplicableTo:      &models.ApplicableTo{ProductIDs: []int64{1, 2}},
+		ApplicableTo:      &coupons.ApplicableTo{ProductIDs: []int64{1, 2}},
 		IsActive:          &active,
 		ExpiresAt:         &expires,
 	})
@@ -49,7 +49,7 @@ func TestCouponRepository_CRUDAndNullableUpdates(t *testing.T) {
 		t.Fatalf("get by code = %+v, %v", byCode, err)
 	}
 
-	filter := models.CouponFilter{BaseFilter: models.BaseFilter{
+	filter := coupons.CouponFilter{BaseFilter: models.BaseFilter{
 		PaginationParams: models.PaginationParams{Page: 1, Limit: 20},
 		SortBy:           "created_at",
 		OrderBy:          "desc",
@@ -64,9 +64,9 @@ func TestCouponRepository_CRUDAndNullableUpdates(t *testing.T) {
 	if rows[0].ApplicableTo == nil || len(rows[0].ApplicableTo.ProductIDs) != 2 {
 		t.Fatalf("listed applicability = %+v; want two products", rows[0].ApplicableTo)
 	}
-	if _, err := repo.Create(ctx, models.CreateCouponReq{
+	if _, err := repo.Create(ctx, coupons.CreateCouponReq{
 		Code:           "CRUDTEST",
-		DiscountType:   models.DiscountTypePercentage,
+		DiscountType:   coupons.DiscountTypePercentage,
 		DiscountValue:  10,
 		MaxUsesPerUser: 1,
 	}); !errors.Is(err, models.ErrConflict) {
@@ -74,7 +74,7 @@ func TestCouponRepository_CRUDAndNullableUpdates(t *testing.T) {
 	}
 
 	firstDescription := "first edit"
-	firstUpdate := models.UpdateCouponReq{
+	firstUpdate := coupons.UpdateCouponReq{
 		Description:       models.NullablePatch[string]{Set: true, Value: &firstDescription},
 		ExpectedUpdatedAt: created.UpdatedAt,
 	}
@@ -83,7 +83,7 @@ func TestCouponRepository_CRUDAndNullableUpdates(t *testing.T) {
 		t.Fatalf("first optimistic update: %v", err)
 	}
 	staleDescription := "stale edit"
-	staleUpdate := models.UpdateCouponReq{
+	staleUpdate := coupons.UpdateCouponReq{
 		Description:       models.NullablePatch[string]{Set: true, Value: &staleDescription},
 		ExpectedUpdatedAt: created.UpdatedAt,
 	}
@@ -91,7 +91,7 @@ func TestCouponRepository_CRUDAndNullableUpdates(t *testing.T) {
 		t.Fatalf("stale update error = %v; want ErrConflict", err)
 	}
 
-	filter = models.CouponFilter{BaseFilter: models.BaseFilter{
+	filter = coupons.CouponFilter{BaseFilter: models.BaseFilter{
 		PaginationParams: models.PaginationParams{Page: 99, Limit: 1},
 		SortBy:           "created_at",
 		OrderBy:          "desc",
@@ -104,7 +104,7 @@ func TestCouponRepository_CRUDAndNullableUpdates(t *testing.T) {
 		t.Fatalf("out-of-range list = %d rows, total %d; want 0 rows, total 1", len(rows), total)
 	}
 
-	update := models.UpdateCouponReq{}
+	update := coupons.UpdateCouponReq{}
 	update.Description.Set = true
 	update.MaxDiscountAmount.Set = true
 	update.MaxUses.Set = true
@@ -136,8 +136,8 @@ func TestCouponUsageLimit_HoldsUnderConcurrency(t *testing.T) {
 	o2 := seedOrder(t, uid)
 	orders := []int64{o1, o2}
 
-	couponRepo := repositories.NewCouponRepository(testPool)
-	usageRepo := repositories.NewCouponUsageRepository(testPool)
+	couponRepo := coupons.NewRepository(testPool)
+	usageRepo := coupons.NewUsageRepository(testPool)
 
 	// redeem mirrors enforceCouponLimitsTx + Record inside one transaction.
 	redeem := func(orderID int64) (bool, error) {

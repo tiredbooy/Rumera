@@ -11,6 +11,7 @@ tags: [brain, connect]
 
 - [[Decisions MOC]]
 - [[ADR Thin routes and domain features]]
+- [[ADR Backend feature packages]]
 - [[ADR BFF never exposes access tokens]]
 - [[ADR Stock available not on-hand]]
 - [[ADR Order reserve and pay deduct atomic]]
@@ -19,6 +20,9 @@ tags: [brain, connect]
 - [[ADR Dual databases main and analytics]]
 - [[ADR Origin-independent media paths]]
 - [[ADR Security posture baseline]]
+- [[ADR Deferred product and platform]]
+- [[ADR Box auto-charge declined]]
+- [[ADR Idempotency platform]]
 
 ## Role
 

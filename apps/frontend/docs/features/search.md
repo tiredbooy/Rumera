@@ -39,8 +39,15 @@ Both use `role="search"` and accessible labels (Persian).
 
 ## What the backend does (short)
 
-Today search is **Postgres `ILIKE` on product title**, not Meilisearch. Ranking
-and typo-tolerance are limited. Full pipeline and analytics: backend search doc.
+Today search is **Postgres `ILIKE` with Persian-aware normalize** (PH-030a), not
+Meilisearch. Free-text matches product **title, description, brand, and category**
+after normalizing Arabic/Persian confusables (`ك/ي` → `ک/ی`), stripping ZWNJ, and
+collapsing whitespace. Ranking and typo-tolerance remain limited.
+
+**PH-030b** prepared a Meili index client + full reindex cron behind
+`MEILI_ENABLED` (default off). Storefront is **not** cut over; dual-path design
+lives in backend `architecture/search.md`. Full pipeline and analytics: backend
+search doc.
 
 Do **not** call Meili from the browser. Do **not** invent a second client-side
 filter over a full catalogue download.

@@ -23,6 +23,7 @@ import type {
   Review,
   ReviewRating,
 } from "@/features/reviews/types";
+import { DEFAULT_REVIEW_BONUS_POINTS } from "@/features/loyalty/reasons";
 import { faNum } from "@/lib/products";
 import { cn } from "@/lib/utils";
 
@@ -61,9 +62,18 @@ export function WriteReviewDialog({
         interaction_type: "review",
         source: "pdp",
       });
-      toast.success("نظر شما ثبت شد", {
-        description: "پس از تأیید نمایش داده می‌شود.",
-      });
+      // PH-040c: transparent earn copy when backend stamps verified purchase
+      // (award is best-effort after create; default bonus matches LOYALTY_REVIEW_BONUS).
+      if (review.verified_purchase) {
+        toast.success("نظر شما ثبت شد", {
+          description: `شما ${faNum(DEFAULT_REVIEW_BONUS_POINTS)} امتیاز باشگاه بابت خرید تأییدشده دریافت کردید. جزئیات در «باشگاه مشتریان».`,
+        });
+      } else {
+        toast.success("نظر شما ثبت شد", {
+          description:
+            "پس از تأیید نمایش داده می‌شود. امتیاز باشگاه فقط برای خرید تأییدشده تعلق می‌گیرد.",
+        });
+      }
       setOpen(false);
       setTitle("");
       setContent("");

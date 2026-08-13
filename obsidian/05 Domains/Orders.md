@@ -14,6 +14,8 @@ Lifecycle object from place-order through fulfillment.
 
 Atomic TX: order + items + coupon usage + **inventory reserve**. Failure → nothing left.
 
+Send `Idempotency-Key` on place-order for safe client retries ([[ADR Idempotency platform]]).
+
 Post-commit: clear cart (best-effort), pending payment, later confirmation notify.
 
 ## Read

@@ -50,6 +50,22 @@ const settings: SiteSettings = {
     keywords: "",
   },
   maintenance: { enabled: false, message: "" },
+  gift: {
+    enabled: true,
+    messageEnabled: true,
+    messageMaxLength: 500,
+    hidePriceEnabled: true,
+    options: [
+      {
+        id: "gift_wrap",
+        label: "بسته‌بندی هدیه",
+        description: "",
+        price: 0,
+        enabled: true,
+        sortOrder: 0,
+      },
+    ],
+  },
   updatedAt: "2026-07-18T00:00:00Z",
 };
 
@@ -65,7 +81,7 @@ describe("SettingsForm responsive tabs", () => {
     const tabs = screen.getAllByRole("tab");
 
     expect(tablist).toHaveClass("w-full", "overflow-x-auto");
-    expect(tabs).toHaveLength(6);
+    expect(tabs).toHaveLength(7);
     tabs.forEach((tab) => expect(tab).toHaveClass("shrink-0", "px-3"));
   });
 });

@@ -5,17 +5,49 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	config "github.com/tiredbooy/configs"
-	"github.com/tiredbooy/internal/analytics"
+	analyticscapture "github.com/tiredbooy/internal/analytics"
 	"github.com/tiredbooy/internal/corn"
+	"github.com/tiredbooy/internal/features/addresses"
+	"github.com/tiredbooy/internal/features/alerts"
+	featanalytics "github.com/tiredbooy/internal/features/analytics"
+	"github.com/tiredbooy/internal/features/auth"
+	"github.com/tiredbooy/internal/features/blog"
+	"github.com/tiredbooy/internal/features/cart"
+	"github.com/tiredbooy/internal/features/catalog/brand"
+	"github.com/tiredbooy/internal/features/catalog/category"
+	"github.com/tiredbooy/internal/features/catalog/option"
+	"github.com/tiredbooy/internal/features/catalog/product"
+	"github.com/tiredbooy/internal/features/catalog/tag"
+	"github.com/tiredbooy/internal/features/catalog/variant"
+	"github.com/tiredbooy/internal/features/coupons"
+	"github.com/tiredbooy/internal/features/giftcard"
+	"github.com/tiredbooy/internal/features/hero"
+	"github.com/tiredbooy/internal/features/inventory"
+	"github.com/tiredbooy/internal/features/loyalty"
+	"github.com/tiredbooy/internal/features/media"
+	"github.com/tiredbooy/internal/features/orders"
+	"github.com/tiredbooy/internal/features/payments"
+	"github.com/tiredbooy/internal/features/rbac"
+	"github.com/tiredbooy/internal/features/recipes"
+	"github.com/tiredbooy/internal/features/recommendations"
+	"github.com/tiredbooy/internal/features/referral"
+	"github.com/tiredbooy/internal/features/reviews"
+	"github.com/tiredbooy/internal/features/shipping"
+	"github.com/tiredbooy/internal/features/site_settings"
+	"github.com/tiredbooy/internal/features/subscription"
+	"github.com/tiredbooy/internal/features/taste"
+	"github.com/tiredbooy/internal/features/users"
+	"github.com/tiredbooy/internal/features/wallet"
+	"github.com/tiredbooy/internal/features/wishlist"
 	"github.com/tiredbooy/internal/handlers"
 	"github.com/tiredbooy/internal/notifications"
 	notifpg "github.com/tiredbooy/internal/notifications/postgres"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
 	"github.com/tiredbooy/pkg/cache"
 	"github.com/tiredbooy/pkg/database"
 	"github.com/tiredbooy/pkg/imaging"
+	"github.com/tiredbooy/pkg/meili"
 	"github.com/tiredbooy/pkg/notify"
 	"github.com/tiredbooy/pkg/sms"
 	"github.com/tiredbooy/pkg/storage"
@@ -29,7 +61,7 @@ import (
 type container struct {
 	handler *handlers.Handler
 	jwt     token.Manager
-	queue   *analytics.Queue
+	queue   *analyticscapture.Queue
 	cache   cache.Store
 	dbs     *database.Connections
 	// cron is the in-process background-job scheduler. It is nil when
@@ -37,80 +69,23 @@ type container struct {
 	cron *cron.Runner
 }
 
-// build wires the whole dependency graph — repositories → services → HTTP
-// handlers — from the live database connections. It is the single place where
-// the object graph is assembled, keeping the rest of the codebase free of
-// construction noise.
-func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cacheStore cache.Store) *container {
+// build wires the whole dependency graph from the live database connections.
+// Feature packages own their repository → service → handler constructors
+// (features/<name>.New / Wire); this function only orders cross-feature deps
+// and assembles handlers.Deps for the routes composer.
+func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cacheStore cache.Store, meiliClient *meili.Client) *container {
 	db := dbs.DB
 	adb := dbs.AnalyticsDB
 
-	// ── Repositories (main database) ─────────────────────────────────────────
-	var (
-		userRepo          = repositories.NewUserRepository(db)
-		passwordResetRepo = repositories.NewPasswordResetRepository(db)
-		addressRepo       = repositories.NewAddressRepository(db)
-
-		productRepo        = repositories.NewProductRepository(db)
-		productImageRepo   = repositories.NewProductImageRepository(db)
-		contentMediaRepo   = repositories.NewContentMediaRepository(db)
-		mediaLifecycleRepo = repositories.NewMediaLifecycleRepository(db)
-		variantRepo        = repositories.NewVariantRepository(db)
-		optionRepo         = repositories.NewOptionRepository(db)
-		categoryRepo       = repositories.NewCategoryRepository(db)
-		brandRepo          = repositories.NewBrandRepository(db)
-		tagRepo            = repositories.NewTagRepository(db)
-
-		orderRepo       = repositories.NewOrderRepository(db)
-		orderItemRepo   = repositories.NewOrderItemRepository(db)
-		cartRepo        = repositories.NewCartRepository(db)
-		couponRepo      = repositories.NewCouponRepository(db)
-		couponUsageRepo = repositories.NewCouponUsageRepository(db)
-
-		shippingZoneRepo   = repositories.NewShippingZoneRepository(db)
-		shippingMethodRepo = repositories.NewShippingMethodRepository(db)
-
-		wishlistRepo     = repositories.NewWishlistRepository(db)
-		walletRepo       = repositories.NewWalletRepository(db)
-		alertRepo        = repositories.NewAlertRepository(db)
-		tasteRepo        = repositories.NewTasteProfileRepository(db)
-		loyaltyRepo      = repositories.NewLoyaltyRepository(db)
-		referralRepo     = repositories.NewReferralRepository(db)
-		giftCardRepo     = repositories.NewGiftCardRepository(db)
-		subscriptionRepo = repositories.NewSubscriptionRepository(db)
-		reviewRepo       = repositories.NewReviewRepository(db)
-		reviewImageRepo  = repositories.NewReviewImageRepository(db)
-		paymentRepo      = repositories.NewPaymentTransactionRepository(db)
-		inventoryRepo    = repositories.NewInventoryRepository(db)
-		movementRepo     = repositories.NewMovementRepository(db)
-
-		blogRepo         = repositories.NewBlogRepository(db)
-		blogCategoryRepo = repositories.NewBlogCategoryRepository(db)
-
-		heroSlideRepo = repositories.NewHeroSlideRepository(db)
-
-		siteSettingsRepo = repositories.NewSiteSettingsRepository(db)
-
-		recipeRepo         = repositories.NewRecipeRepository(db)
-		recommendationRepo = repositories.NewRecommendationRepository(db)
-	)
-
-	// ── Repositories (analytics database) ────────────────────────────────────
-	var (
-		eventRepo             = repositories.NewEventRepository(adb)
-		dailyProductStatsRepo = repositories.NewDailyProductStatsRepository(adb)
-		dailyRevenueStatsRepo = repositories.NewDailyRevenueStatsRepository(adb)
-		searchSummaryRepo     = repositories.NewSearchSummaryRepository(adb)
-	)
-
-	// ── Services ─────────────────────────────────────────────────────────────
+	// ── Platform (shared infrastructure) ─────────────────────────────────────
 	jwt := token.NewManager(cfg, log)
 	mailer := notify.New(cfg, log)
 	smsSender := sms.New(cfg, log)
-	eventService := services.NewEventService(eventRepo)
+	v := validator.New()
+	notifDispatcher := buildNotifications(cfg, log, db, smsSender, mailer)
 
-	// Media: originals live under MediaRoot, rendered variants under MediaCacheDir.
-	// Both directories are created at boot; a failure here is a fatal misconfig.
+	// ── Media storage + feature ──────────────────────────────────────────────
+	// Originals live under MediaRoot, rendered variants under MediaCacheDir.
 	mediaStore, err := storage.NewLocalStorage(cfg.MediaRoot)
 	if err != nil {
 		log.Fatal("media storage init", zap.Error(err))
@@ -124,149 +99,199 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	if err := mediaCache.DeletePrefix(context.Background(), "render"); err != nil {
 		log.Warn("media legacy cache cleanup", zap.Error(err))
 	}
-	mediaLifecycleService := services.NewMediaLifecycleService(
-		mediaStore, mediaCache, mediaLifecycleRepo, log,
+
+	productRepo, productImageRepo := product.NewRepos(db)
+	mediaHandler, mediaLifecycle, mediaSvc := media.New(
+		db, mediaStore, mediaCache, productImageRepo, productRepo,
+		mediaConfig(cfg), log, cacheStore, v,
 	)
+
+	// ── Analytics (analytics DB) ─────────────────────────────────────────────
+	analyticsMod := featanalytics.New(adb, v)
+
+	// ── Identity ─────────────────────────────────────────────────────────────
+	userHandler, userSvc := users.New(db, v)
+	capabilitySvc := rbac.NewService(rbac.NewRepository(db))
+	rbacHandler := rbac.NewHandler(capabilitySvc, v)
+	addressHandler, addressSvc := addresses.New(db, v)
+
+	// ── Account / loyalty graph ──────────────────────────────────────────────
+	// Wallet + loyalty before payment so payments can award points and loyalty
+	// can redeem into the wallet.
+	walletHandler, walletSvc := wallet.New(db, userSvc, v)
+	loyaltyHandler, loyaltySvc := loyalty.New(
+		db, walletSvc,
+		cfg.LoyaltyEarnDivisor, cfg.LoyaltyRedeemValue, cfg.LoyaltySignupBonus,
+		cfg.LoyaltyReviewBonus, cfg.LoyaltyBirthdayBonus, cfg.LoyaltyReferralReward,
+		cfg.LoyaltyBirthdayTZ,
+		v,
+	)
+	referralHandler, referralSvc := referral.New(db, loyaltySvc, cfg.LoyaltyReferralReward, v)
+	giftCardHandler, giftCardSvc := giftcard.New(db, walletSvc, v)
+	subscriptionHandler, subscriptionRepo := subscription.New(db, v)
+	wishlistHandler := wishlist.New(db, v)
+	tasteHandler := taste.New(db, v)
+
+	// ── Inventory + catalog ──────────────────────────────────────────────────
+	inventoryHandler, inventorySvc, inventoryRepo := inventory.New(db, v)
+	variantHandler, variantRepo := variant.New(db, inventoryRepo, mediaLifecycle, v, cacheStore)
+	productHandler := product.New(productRepo, mediaLifecycle, mediaSvc, v, cacheStore, log)
+	categoryHandler := category.New(db, mediaLifecycle, v, cacheStore, log)
+	brandHandler := brand.New(db, v)
+	tagHandler := tag.New(db, v)
+	optionHandler := option.New(db, v)
+	reviewHandler := reviews.New(db, v, loyaltySvc)
+
+	// ── Content ──────────────────────────────────────────────────────────────
+	heroSlideHandler := hero.New(db, mediaLifecycle, v)
+	blogHandler := blog.New(db, mediaLifecycle, v)
+	recipeHandler := recipes.New(db, mediaLifecycle, v, cacheStore, log)
+	siteSettingsHandler, siteSettingsSvc := site_settings.New(db, v, cacheStore, log)
+	recommendationHandler, recommendationSvc := recommendations.New(db, v)
+
+	// ── Commerce ─────────────────────────────────────────────────────────────
+	// Inventory first: payments deduct stock on confirm; orders reserve at checkout.
+	couponHandler, couponRepo, couponUsageRepo := coupons.New(db, v)
+	shippingHandler, shippingSvc := shipping.New(db, v)
+	cartHandler, cartRepo := cart.New(db, variantRepo, inventoryRepo, v)
+	alertHandler, alertRepo := alerts.New(db, variantRepo, inventoryRepo, v)
+
+	// payments.Service before orders.Service (orders create pending payments).
+	// order repos exist first so payments can MarkAsPaid / read stock lines.
+	// Orderless Confirm: wtop-* → wallet (PH-041a); gbuy-* → gift card (PH-042a).
+	orderRepo, orderItemRepo := orders.NewRepos(db)
+	paymentSvc := payments.NewServiceFromDB(db, orderRepo, inventorySvc, loyaltySvc, referralSvc, walletSvc, giftCardSvc)
+	// Wire payment starters after paymentSvc exists (avoid feature import cycles).
+	walletHandler = walletHandler.WithTopUp(walletTopUpAdapter{paymentSvc})
+	giftCardHandler = giftCardHandler.WithPurchase(giftCardPurchaseAdapter{paymentSvc})
+	orderHandler, orderSvc := orders.NewWithRepos(orderRepo, orderItemRepo, orders.Deps{
+		Cart:          cartRepo,
+		Coupons:       couponRepo,
+		CouponUsage:   couponUsageRepo,
+		Shipping:      shippingSvc,
+		Addresses:     addressSvc,
+		Inventory:     inventorySvc,
+		Payment:       paymentSvc,
+		GiftConfig:    siteSettingsSvc,
+		Users:         userSvc,
+		Notifications: notifDispatcher,
+		Mail:          mailer,
+		Validator:     v,
+	})
+	paymentHandler := payments.NewHTTP(paymentSvc, orderSvc, inventorySvc, cfg.CryptoWebhookKey, v)
+
+	// ── Auth (after users + loyalty for signup bonus + session kill) ──────────
+	authHandler := auth.Wire(auth.Deps{
+		DB:            db,
+		Users:         userSvc,
+		UserRepo:      users.NewRepository(db),
+		Validator:     v,
+		JWT:           jwt,
+		Log:           log,
+		Cache:         cacheStore,
+		Mail:          mailer,
+		SMS:           smsSender,
+		Notifications: notifDispatcher,
+		OTPTTL:        cfg.OTPTTL,
+		RefreshTTL:    time.Duration(cfg.JWTRefreshTokenTTL) * time.Minute,
+		Loyalty:       loyaltySvc,
+	})
+
+	// ── Composition root for routes ──────────────────────────────────────────
+	handler := handlers.New(handlers.Deps{
+		User:         userSvc,
+		Capabilities: capabilitySvc,
+
+		Auth:             authHandler,
+		Users:            userHandler,
+		RBAC:             rbacHandler,
+		Addresses:        addressHandler,
+		TasteProfiles:    tasteHandler,
+		Products:         productHandler,
+		MediaHTTP:        mediaHandler,
+		Variants:         variantHandler,
+		Options:          optionHandler,
+		Categories:       categoryHandler,
+		Brands:           brandHandler,
+		Tags:             tagHandler,
+		Carts:            cartHandler,
+		Alerts:           alertHandler,
+		Coupons:          couponHandler,
+		OrderHTTP:        orderHandler,
+		Wishlists:        wishlistHandler,
+		Wallets:          walletHandler,
+		Loyalties:        loyaltyHandler,
+		Referrals:        referralHandler,
+		GiftCards:        giftCardHandler,
+		Subscriptions:    subscriptionHandler,
+		Reviews:          reviewHandler,
+		Shippings:        shippingHandler,
+		Payments:         paymentHandler,
+		Inventories:      inventoryHandler,
+		Blogs:            blogHandler,
+		HeroSlides:       heroSlideHandler,
+		SiteSettingsHTTP: siteSettingsHandler,
+		Recipes:          recipeHandler,
+		Recommendations:  recommendationHandler,
+		Analytics:        analyticsMod.Handler,
+	})
+
+	return &container{
+		handler: handler,
+		jwt:     jwt,
+		queue:   analyticscapture.NewQueue(analyticsMod.Events),
+		cache:   cacheStore,
+		dbs:     dbs,
+		cron: buildCron(cfg, dbs,
+			analyticsMod.ProductStats, analyticsMod.RevenueStats, analyticsMod.SearchSummary,
+			recommendationSvc, alertRepo, subscriptionRepo, mailer,
+			productRepo, meiliClient, log, loyaltySvc),
+	}
+}
+
+// mediaConfig maps process config into the media feature Config.
+func mediaConfig(cfg *config.Config) media.Config {
 	allowedFormats := make(map[imaging.Format]bool, len(cfg.MediaAllowedFormats))
 	for _, f := range cfg.MediaAllowedFormats {
 		if fm, e := imaging.ParseFormat(strings.TrimSpace(f)); e == nil {
 			allowedFormats[fm] = true
 		}
 	}
-	mediaService := services.NewMediaService(
-		mediaStore, mediaCache, productImageRepo, productRepo, contentMediaRepo,
-		mediaLifecycleService, imaging.New(),
-		services.MediaConfig{
-			MaxUploadBytes:     int64(cfg.MediaMaxUploadMB) * 1024 * 1024,
-			DefaultQuality:     cfg.MediaDefaultQuality,
-			MaxDimension:       cfg.MediaMaxDimension,
-			MaxSourceDimension: cfg.MediaMaxSourceDimension,
-			MaxSourcePixels:    cfg.MediaMaxSourcePixels,
-			AllowedOutput:      allowedFormats,
-		}, log)
+	return media.Config{
+		MaxUploadBytes:     int64(cfg.MediaMaxUploadMB) * 1024 * 1024,
+		DefaultQuality:     cfg.MediaDefaultQuality,
+		MaxDimension:       cfg.MediaMaxDimension,
+		MaxSourceDimension: cfg.MediaMaxSourceDimension,
+		MaxSourcePixels:    cfg.MediaMaxSourcePixels,
+		AllowedOutput:      allowedFormats,
+	}
+}
 
-	// Analytics roll-up and recommendation services are pulled into named vars so
-	// the cron runner (built below) can reach them as well as the HTTP handlers.
-	productStatsService := services.NewDailyProductStatsService(dailyProductStatsRepo)
-	revenueStatsService := services.NewDailyRevenueStatsService(dailyRevenueStatsRepo)
-	searchSummaryService := services.NewSearchSummaryService(searchSummaryRepo)
-	recommendationService := services.NewRecommendationService(recommendationRepo)
-
-	// Wallet + loyalty are built before payment so the payment service can award
-	// points on a confirmed payment, and loyalty can redeem points into the wallet.
-	walletService := services.NewWalletService(walletRepo)
-	loyaltyService := services.NewLoyaltyService(
-		loyaltyRepo, walletService,
-		cfg.LoyaltyEarnDivisor, cfg.LoyaltyRedeemValue, cfg.LoyaltySignupBonus,
-	)
-	referralService := services.NewReferralService(referralRepo, loyaltyService, cfg.LoyaltyReferralReward)
-	giftCardService := services.NewGiftCardService(giftCardRepo, walletService)
-
-	// Inventory is constructed first: the payment service deducts stock inside the
-	// confirm transaction, and the order service reserves stock during checkout.
-	inventoryService := services.NewInventoryService(inventoryRepo, movementRepo)
-	paymentService := services.NewPaymentService(paymentRepo, orderRepo, inventoryService, loyaltyService, referralService)
-	shippingService := services.NewShippingService(shippingZoneRepo, shippingMethodRepo)
-	addressService := services.NewAddressService(addressRepo)
-	orderService := services.NewOrderService(
-		orderRepo, orderItemRepo, cartRepo,
-		couponRepo, couponUsageRepo, shippingService,
-		addressService, inventoryService, paymentService,
-	)
-
-	// Notifications: inline (default) or async outbox when NOTIFICATIONS_MODE=async.
+// buildNotifications selects inline (default) or async outbox delivery.
+func buildNotifications(
+	cfg *config.Config,
+	log *zap.Logger,
+	db *pgxpool.Pool,
+	smsSender sms.Sender,
+	mailer notify.Mailer,
+) *notifications.Dispatcher {
 	notifMode := strings.ToLower(strings.TrimSpace(cfg.NotificationsMode))
 	if notifMode == "" {
 		notifMode = "inline"
 	}
-	var notifDispatcher *notifications.Dispatcher
 	if notifMode == "async" {
-		store := notifpg.NewStore(db)
-		notifDispatcher = &notifications.Dispatcher{
+		log.Info("notifications mode: async (outbox → Kafka worker)")
+		return &notifications.Dispatcher{
 			Mode:   "async",
-			Outbox: store,
+			Outbox: notifpg.NewStore(db),
 			SMS:    smsSender,
 			Mail:   mailer,
 		}
-		log.Info("notifications mode: async (outbox → Kafka worker)")
-	} else {
-		notifDispatcher = &notifications.Dispatcher{
-			Mode: "inline",
-			SMS:  smsSender,
-			Mail: mailer,
-		}
 	}
-	deps := handlers.Deps{
-		Validator:     validator.New(),
-		JWT:           jwt,
-		Log:           log,
-		Cache:         cacheStore,
-		Notify:        mailer,
-		SMS:           smsSender,
-		Notifications: notifDispatcher,
-		OTPTTL:        cfg.OTPTTL,
-		RefreshTTL:    time.Duration(cfg.JWTRefreshTokenTTL) * time.Minute,
-		WebhookSecret: cfg.CryptoWebhookKey,
-
-		User:    services.NewUserService(userRepo),
-		Address: addressService,
-		TasteProfile:  services.NewTasteProfileService(tasteRepo),
-
-		Product:  services.NewProductService(productRepo, mediaLifecycleService, mediaService),
-		Media:    mediaService,
-		Variant:  services.NewVariantService(variantRepo, inventoryRepo, mediaLifecycleService),
-		Option:   services.NewOptionService(optionRepo),
-		Category: services.NewCategoryService(categoryRepo, mediaLifecycleService),
-		Brand:    services.NewBrandService(brandRepo),
-		Tag:      services.NewTagService(tagRepo),
-
-		Cart:         services.NewCartService(cartRepo, variantRepo, inventoryRepo, db),
-		Coupon:       services.NewCouponService(couponRepo),
-		Order:        orderService,
-		Wishlist:     services.NewWishlistService(wishlistRepo),
-		Wallet:       walletService,
-		Loyalty:      loyaltyService,
-		Referral:     referralService,
-		GiftCard:     giftCardService,
-		Subscription: services.NewSubscriptionService(subscriptionRepo),
-		Alert:        services.NewAlertService(alertRepo, variantRepo, inventoryRepo),
-		Review:       services.NewReviewService(reviewRepo, reviewImageRepo),
-		Shipping:     shippingService,
-		Payment:      paymentService,
-		Inventory:    inventoryService,
-
-		Blog:         services.NewBlogService(blogRepo, db, mediaLifecycleService),
-		BlogCategory: services.NewBlogCategoryService(blogCategoryRepo),
-
-		HeroSlide: services.NewHeroSlideService(heroSlideRepo, mediaLifecycleService),
-
-		SiteSettings: services.NewSiteSettingsService(siteSettingsRepo),
-
-		Recipe:         services.NewRecipeService(recipeRepo, db, mediaLifecycleService),
-		Recommendation: recommendationService,
-
-		Event:         eventService,
-		ProductStats:  productStatsService,
-		RevenueStats:  revenueStatsService,
-		SearchSummary: searchSummaryService,
-	}
-
-	handler := handlers.New(deps)
-	// Wire password-reset after the handler exists so session kill can call
-	// InvalidateUserSessions (refresh whitelist wipe) on the same instance.
-	passwordReset := services.NewPasswordResetService(passwordResetRepo, userRepo, mailer).
-		WithNotifier(notifDispatcher).
-		WithSessionKiller(handler)
-	handler.PasswordReset = passwordReset
-
-	return &container{
-		handler: handler,
-		jwt:     jwt,
-		queue:   analytics.NewQueue(eventService),
-		cache:   cacheStore,
-		dbs:     dbs,
-		cron: buildCron(cfg, dbs, productStatsService, revenueStatsService,
-			searchSummaryService, recommendationService, alertRepo, subscriptionRepo, mailer),
+	return &notifications.Dispatcher{
+		Mode: "inline",
+		SMS:  smsSender,
+		Mail: mailer,
 	}
 }
 
@@ -280,13 +305,17 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 func buildCron(
 	cfg *config.Config,
 	dbs *database.Connections,
-	productStats *services.DailyProductStatsService,
-	revenueStats *services.DailyRevenueStatsService,
-	searchSummary *services.SearchSummaryService,
-	recommendation services.RecommendationService,
-	alertRepo repositories.AlertRepository,
-	subscriptionRepo repositories.SubscriptionRepository,
+	productStats *featanalytics.DailyProductStatsService,
+	revenueStats *featanalytics.DailyRevenueStatsService,
+	searchSummary *featanalytics.SearchSummaryService,
+	recommendation recommendations.Service,
+	alertRepo alerts.Repository,
+	subscriptionRepo subscription.Repository,
 	mailer notify.Mailer,
+	productRepo product.Repository,
+	meiliClient *meili.Client,
+	log *zap.Logger,
+	loyaltySvc *loyalty.Service,
 ) *cron.Runner {
 	if !cfg.CronEnabled {
 		return nil
@@ -318,5 +347,58 @@ func buildCron(
 	runner.Register(cfg.CronSubscriptionSchedule, "subscription_renewal",
 		cron.NewSubscriptionRenewalJob(subscriptionRepo, mailer, cfg.PublicSiteURL).Run)
 
+	// Meili full reindex (PH-030b readiness). Only when client connected at boot.
+	// Does not switch storefront search off Postgres ILIKE.
+	if meiliClient != nil && productRepo != nil {
+		indexer := product.NewMeiliIndexer(productRepo, meiliClient, log)
+		runner.Register(cfg.CronMeiliReindexSchedule, "meili_reindex",
+			cron.NewMeiliReindexJob(indexer).Run)
+	}
+
+	// Loyalty birthday awards (PH-040b) — Asia/Tehran calendar by default.
+	if loyaltySvc != nil {
+		runner.Register(cfg.CronLoyaltyBirthdaySchedule, "loyalty_birthday",
+			cron.NewLoyaltyBirthdayJob(loyaltySvc).Run)
+	}
+
 	return runner
+}
+
+// walletTopUpAdapter adapts payments.Service to wallet.TopUpGateway without a
+// package cycle (wallet must not import payments).
+type walletTopUpAdapter struct {
+	svc *payments.Service
+}
+
+func (a walletTopUpAdapter) CreateWalletTopUp(ctx context.Context, userID int64, amount float64) (*wallet.TopUpIntentView, error) {
+	intent, err := a.svc.CreateWalletTopUp(ctx, userID, amount)
+	if err != nil {
+		return nil, err
+	}
+	return &wallet.TopUpIntentView{
+		PaymentID:     intent.PaymentID,
+		TransactionID: intent.TransactionID,
+		Amount:        intent.Amount,
+		Currency:      intent.Currency,
+		Status:        string(intent.Status),
+	}, nil
+}
+
+// giftCardPurchaseAdapter adapts payments.Service to giftcard.PurchaseGateway.
+type giftCardPurchaseAdapter struct {
+	svc *payments.Service
+}
+
+func (a giftCardPurchaseAdapter) CreateGiftCardPurchase(ctx context.Context, userID int64, amount float64) (*giftcard.PurchaseIntentView, error) {
+	intent, err := a.svc.CreateGiftCardPurchase(ctx, userID, amount)
+	if err != nil {
+		return nil, err
+	}
+	return &giftcard.PurchaseIntentView{
+		PaymentID:     intent.PaymentID,
+		TransactionID: intent.TransactionID,
+		Amount:        intent.Amount,
+		Currency:      intent.Currency,
+		Status:        string(intent.Status),
+	}, nil
 }

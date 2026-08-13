@@ -48,15 +48,24 @@ END $$;
 ALTER TABLE brands ALTER COLUMN slug SET NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_brands_slug_unique ON brands (slug);
 
-ALTER TABLE brands
-    ADD CONSTRAINT brands_slug_path_segment_check
-    CHECK (
-        slug = BTRIM(slug)
-        AND slug <> ''
-        AND slug = LOWER(slug)
-        AND CHAR_LENGTH(slug) <= 255
-        AND slug ~ '^[[:alnum:]]+(-[[:alnum:]]+)*$'
-    );
+-- Idempotent: Down is non-destructive (slugs stay in the public URL contract),
+-- so re-running Up after Down must not fail when the check already exists.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    ALTER TABLE brands
+        ADD CONSTRAINT brands_slug_path_segment_check
+        CHECK (
+            slug = BTRIM(slug)
+            AND slug <> ''
+            AND slug = LOWER(slug)
+            AND CHAR_LENGTH(slug) <= 255
+            AND slug ~ '^[[:alnum:]]+(-[[:alnum:]]+)*$'
+        );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+-- +goose StatementEnd
 
 -- +goose Down
 -- Non-destructive: brand slugs become part of the public URL contract.

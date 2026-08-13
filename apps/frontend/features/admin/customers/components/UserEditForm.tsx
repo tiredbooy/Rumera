@@ -99,10 +99,12 @@ export function UserEditForm({
         e.code === "INSUFFICIENT_PERMISSIONS" || e.status === 401
           ? "دسترسی مدیریتی این نشست لغو یا منقضی شده است. دوباره وارد شوید."
           : e.code === "ACCESS_DENIED"
-            ? "این تغییر برای حفاظت از دسترسی حساب مجاز نیست."
-            : e.status === 404 || e.code === "USER_NOT_FOUND"
-              ? "کاربر دیگر در دسترس نیست."
-              : e.message || "ویرایش کاربر ناموفق بود.";
+            ? "این تغییر برای حفاظت از دسترسی حساب مجاز نیست (مثلاً تنزل نقش خودتان)."
+            : e.code === "CONFLICT" || e.status === 409
+              ? "نمی‌توان آخرین مدیر فعال را تنزل یا غیرفعال کرد. ابتدا مدیر دیگری بسازید."
+              : e.status === 404 || e.code === "USER_NOT_FOUND"
+                ? "کاربر دیگر در دسترس نیست."
+                : e.message || "ویرایش کاربر ناموفق بود.";
       setError("root.server", { type: "server", message });
       toast.error(message);
       return;

@@ -24,6 +24,14 @@ tags: [brain, connect]
 - [[Journey Payment webhook settle]]
 - [[Journey Notification async]]
 - [[Journey Subscription renewal email]]
+- [[Journey Manage cellar box]]
+- [[Journey Idempotent retry checkout webhook]]
+- [[Journey Loyalty earn on review]]
+- [[Journey Loyalty birthday bonus]]
+- [[Journey Loyalty first purchase points]]
+- [[Journey Account wallet top-up]]
+- [[Journey Gift card purchase]]
+- [[Journey Buy as gift]]
 
 ## Role
 

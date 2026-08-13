@@ -59,7 +59,8 @@ apps/backend/docs/
 | [Inventory](./architecture/inventory.md) | on-hand / committed / available; reserve → release → deduct |
 | [Payments & webhooks](./architecture/payments-and-webhooks.md) | Order pay flow + HMAC settlement |
 | [Media pipeline](./architecture/media-pipeline.md) | Upload, ownership, transform, reconcile |
-| [Search](./architecture/search.md) | Product ILIKE + search analytics; Meili prepared |
+| [Search](./architecture/search.md) | Persian ILIKE (PH-030a) + Meili readiness/reindex (PH-030b, no cutover) + analytics |
+| [Loyalty](./architecture/loyalty.md) | Cellar Club earn/redeem rules (PH-040a) · [api](./api/loyalty.md) |
 | [Processes & jobs](./architecture/processes-and-jobs.md) | server, seed, notification-worker, cron |
 | [Notifications (Kafka)](./architecture/notifications-kafka.md) | Outbox, topics, worker modes |
 
@@ -105,5 +106,6 @@ service     ──►  business rules, validation, orchestration
 repository  ──►  SQL against PostgreSQL / TimescaleDB
 ```
 
-Handlers stay thin. Business logic lives in `internal/services`. See
-[Architecture](./architecture.md) for the full picture.
+Handlers stay thin. Business logic lives in feature services under
+`internal/features/<name>/`. See [Architecture](./architecture.md) for the
+full picture.

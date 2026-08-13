@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   parseAsInteger,
   parseAsString,
@@ -9,9 +10,13 @@ import {
   useQueryStates,
 } from "nuqs";
 
+import { GiftCardMine } from "@/features/gift-cards/gift-card-mine";
+import { GiftCardPurchase } from "@/features/gift-cards/gift-card-purchase";
+import { giftCardKeys } from "@/features/gift-cards/hooks";
 import { GiftCardRedeem } from "@/features/wallet/gift-card-redeem";
 import { useWallet, useWalletTransactions } from "@/features/wallet/hooks";
 import { isCreditTransaction } from "@/features/wallet/types";
+import { WalletTopUp } from "@/features/wallet/wallet-topup";
 import { WalletOverview } from "./wallet-overview";
 import {
   WalletTransactions,
@@ -32,6 +37,7 @@ function dayBound(value: string, end = false): number | null {
 }
 
 export function WalletView() {
+  const queryClient = useQueryClient();
   const wallet = useWallet();
   const txs = useWalletTransactions({ limit: FETCH_LIMIT });
 
@@ -146,9 +152,24 @@ export function WalletView() {
         onRetryBalance={refetchBalance}
       />
 
-      {/* Gift-card redeem — the active, legitimate way to credit the wallet. */}
-      <div className="mb-6">
+      {/* Gateway top-up + gift purchase — never free money; codes after paid. */}
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
+        <WalletTopUp
+          onSettledRefresh={() => {
+            void wallet.refetch();
+            void txs.refetch();
+          }}
+        />
+        <GiftCardPurchase
+          onSettledRefresh={() => {
+            void queryClient.invalidateQueries({ queryKey: giftCardKeys.mine });
+          }}
+        />
+      </div>
+
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
         <GiftCardRedeem />
+        <GiftCardMine />
       </div>
 
       <WalletTransactions

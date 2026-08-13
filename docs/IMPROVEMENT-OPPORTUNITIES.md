@@ -8,6 +8,34 @@
 
 ---
 
+## Status overlay — production-hardening program (PH-050a · 2026-08-12)
+
+The ordered program in
+[`BACKLOG-PRODUCTION-HARDENING.md`](./BACKLOG-PRODUCTION-HARDENING.md) closed
+many audit rows. **Do not re-implement** these without a new bug report:
+
+| Audit item (approx.) | Program task | Status |
+|----------------------|--------------|--------|
+| 1.3 blog/recipe fake txs | PH-010a | **Closed** |
+| 5.6 non-unique payment `transaction_id` | PH-011d | **Closed** (UNIQUE + terminal ACK) |
+| Idempotency on money routes | PH-011* | **Closed** (platform + mounts) |
+| 5.11 fire-and-forget panics | PH-013a | **Closed** (`pkg/async`) |
+| 5.12 business metrics / saga spans | PH-013b | **Code done**; compose scrape residual |
+| 5.21 JWT/RBAC residual tests | PH-013c | **Closed** (local pure-path tests) |
+| 5.1 checkout weight=0 | PH-020c | **Closed** (package weight sum) |
+| Inventory weight wire / missing-weight | PH-020a–b | **Closed** |
+| 6.7 title-only ILIKE | PH-030a | **Closed**; Meili readiness PH-030b (no cutover) |
+| User-clear errors | PH-012c–d | **Closed** |
+| Wallet free deposit / withdraw | PH-041 | Free deposit gone; withdraw **410** |
+| Gift card customer purchase | PH-042 | **Closed** (staff issue remains) |
+| Box subscription (not Netflix) | PH-043a–c | **Closed**; auto-charge declined (decision) |
+
+Still open examples from this file: **6.8** list LIMIT, personalization edge
+weights (**5.19**), admin polish residual, DevOps scrape/healthcheck (**5.12/5.13**),
+CI (**out of program scope**). Dual-doc map: [`PH-DUAL-DOC-MATRIX.md`](./PH-DUAL-DOC-MATRIX.md).
+
+---
+
 ## ✅ Resolved since the last sweep
 
 Solid, verified progress. Grouped by area.
@@ -58,10 +86,7 @@ The recommended first slice (below) shipped right after this sweep:
 - **Problem:** Every taste-profile read/write 403s before reaching the backend. The taste quiz can never load or save, the account taste card is permanently empty, and `ForYouRail` reads `taste.data?.categories` (always undefined) so users are stuck on the "take the quiz" CTA forever — the entire personalization surface is silently dead.
 - **Fix:** Add `"me"` to the `ALLOW` set (`/me/*` is already Auth-guarded backend-side). Add a test asserting every first-segment used by the hooks is allow-listed. · **S**
 
-**1.3 ⚑ blog & recipe service "transactions" are no-ops — relation writes are NOT atomic** · *BE quality + BE perf/DB* · **HIGH**
-- **Evidence:** `blog_svc.go:161-181,211-257` and `recipe_svc.go:146-167,206-247` do `tx := s.db.Begin(); … tx.Commit()`, but `s.repo.Create/AssignCategories/AssignProducts/AssignTags/CreateIngredients` all execute on the **pool** (`r.db`) — the repos never accept a `pgx.Tx`. The tx contains zero statements.
-- **Problem:** Each junction write commits independently as it executes; if a later assign fails, the already-written row/relations can't be rolled back → orphaned post/recipe with partial relations. The `1e2eb43` "atomic persistence" claim is true only for products (`product_repo.go:61` threads the tx through `insertVariantTx`).
-- **Fix:** Thread `pgx.Tx` through tx-aware repo methods (use `product_repo` as the template), or drop the misleading Begin/Commit. · **M**
+~~**1.3 ⚑ blog & recipe service "transactions" are no-ops**~~ — **done PH-010a** (real WithTx atomicity in feature packages).
 
 ### Epic 2 — Admin console is half-mock (operators act on fabricated data)
 
@@ -103,8 +128,7 @@ The recommended first slice (below) shipped right after this sweep:
 
 ## 🟡 Medium
 
-**5.1 ⚑ Checkout fetches shipping with hardcoded `weight=0` (and fixed region `"IR"`)** · *FE perf + contract-drift* · corroborated
-`checkout-flow.tsx:182` `useShippingMethods(SHIP_REGION, 0)`; products carry `weight` but cart weight is never summed; backend filters tiers/thresholds by both region+weight (`shipping.go:130-140`). Every shopper is quoted shipping as if the parcel weighs 0g, and the query key never invalidates on cart change. Sum variant weights and derive region from the chosen address. · **M**
+~~**5.1 ⚑ Checkout shipping weight=0**~~ — **done PH-020c** (packageWeightKg + cart weight contract; region from address).
 
 **5.2 IDOR: any user can attach arbitrary image URLs to ANY review** · *BE security* · the lone new security hole (top-of-medium)
 `review.go:164-180` AddReviewImage never calls `h.uid(c)`; `review_svc.go:206-229` AddImage only does an existence check (unlike Update/Delete which pass userID); `ReviewImageReq.ImageURL` (`models/review.go:99-104`) has no validation tag. A logged-in user can POST images onto any review by iterating numeric ids, and the unvalidated URL renders on the public PDP (stored-content/URL-injection). Pass the caller's userID, verify ownership, add `validate:"required,url,max=2048"`. · **S**
@@ -118,8 +142,7 @@ The recommended first slice (below) shipped right after this sweep:
 **5.5 Unordered stock-reservation loop → deadlock risk between concurrent orders** · *BE perf/DB*
 `order_svc.go:152-156` reserves in cart order; two checkouts with the same variants in opposite order acquire row locks in conflicting order → Postgres 40P01 mid-checkout. Sort the reservation slice by `VariantID` (and in Release/Deduct) for consistent global lock ordering. · **S**
 
-**5.6 `payment_transactions.transaction_id` index is non-unique** · *BE perf/DB*
-`20260616130000:11-12` creates a plain index; the gateway txid is the natural idempotency key, so a webhook replay/race can insert duplicates. Replace with `CREATE UNIQUE INDEX CONCURRENTLY` (after de-dup). · **S**
+~~**5.6 payment `transaction_id` non-unique**~~ — **done PH-011d** (UNIQUE index + terminal webhook ACK).
 
 **5.7 Three account hooks call backend endpoints that don't exist** · *contract-drift + FE quality*
 `account-hooks.ts:151` bare `recommendations`, `:190` `reviews/mine`, `:200` `reviews/pending` (all tagged `TODO(api): confirm`) → `NoRoute` 404. "My Reviews", "Reviews to write", and the account recommendation widget always error/empty. Add the routes or repoint at existing ones; also fix the `RecommendedProduct.id` vs backend `product_id` shape drift by adopting the already-correct `RecommendationItem` type. · **M**
@@ -133,11 +156,9 @@ The recommended first slice (below) shipped right after this sweep:
 **5.10 Cart mutations have no optimistic update, no remove toast/undo** · *FE UX*
 `hooks.ts:38-91` use only `onSuccess`; `cart-lines.tsx:22` a single shared `busy` flag dims **all** lines on any tap; remove (`:90`) shows no toast and no undo (prior Epic-B ask). The wishlist hooks already implement the gold-standard `onMutate`+rollback. Copy that pattern, scope disabled state per-item, add remove toast with undo. · **M**
 
-**5.11 Fire-and-forget goroutines run outside Gin Recovery** · *BE security + BE quality* · corroborated
-`auth_otp.go:76-82`, `recipe.go:77-83`, `blog.go:47` (the last with bare `context.Background()`, no timeout) spawn detached goroutines with no `recover()`; a panic crashes the process. Wrap in a defer-recover helper / bounded worker pool. · **S–M**
+~~**5.11 Fire-and-forget goroutines outside Recovery**~~ — **done PH-013a** (`pkg/async.Go` / `GoCtx`).
 
-**5.12 Observability infra authored but inert; no app/business metrics; no saga spans** · *DevOps*
-`/metrics` + Prometheus rules + Grafana dashboard exist but **nothing scrapes them** (no prometheus/grafana/otel-collector service in compose, no scrape config). No business counters (orders/payments/revenue/inventory) and no app-level tracing spans, so a payment-gateway outage returning 200 is invisible. Add an `observability` compose profile + scrape config; add `tracer.Start` spans + counters at the order/payment/inventory saga boundaries. · **M** (each)
+**5.12 Observability scrape / compose still residual** · *DevOps* — **PH-013b** shipped app business metrics + saga spans. Residual: Prometheus/Grafana **scrape profile** in compose (no CI/server program). · **M**
 
 **5.13 Prod backend has no compose healthcheck; frontend waits on `service_started`** · *DevOps*
 `docker-compose.prod.yml` backend has no `healthcheck`; frontend `depends_on: { condition: service_started }`, so it comes up before the backend can reach Postgres/Redis/Meili → 5xx flapping every deploy. The new deep `/health/ready` probe is wired into zero healthchecks. Add a `/health/ready` healthcheck + `service_healthy`. · **S**
@@ -172,11 +193,11 @@ FE records only `view` + `wishlist`; the engine ranks by a score dominated by th
 
 - **6.1 Product-card wishlist heart missing** · *feature-gaps* — wishlist CRUD only reachable from the PDP panel (`catalog/product-card.tsx` has no heart). Biggest place wishlisting drives return visits. Add a heart using `useHasWishlistItem`/`useAdd/Remove`. · **M**
 - **6.2 ⚑ Dead npm deps** · *FE perf + FE quality* — axios, qs, uploadthing, lodash-es, zustand, nanoid, @tanstack/react-virtual, react-day-picker, vaul, cmdk, react-resizable-panels (+ dead shadcn primitives) all have zero importers; posthog-js/@sentry installed-not-initialized. Remove after a final grep. · **M**
-- **6.3 `/wallet/withdraw` debits balance with no payout integration** · *BE security* — half-built money-destroying customer endpoint; remove until a real off-ramp exists or gate behind admin approval. · **S**
+- ~~**6.3 `/wallet/withdraw` free-ish debit**~~ — **done PH-041a** (withdraw **410**; gateway top-up is the fund path).
 - **6.4 `isBusinessError` uses `==` not `errors.Is`** (`inventory_svc.go:217-225`); **`search_summary_repo` compares `pgx.ErrNoRows` with `==`** — latent landmines on the money path; switch to `errors.Is`. · **S**
 - **6.5 ⚑ Inconsistent error path** — 122 `response.HandleError` vs 70 `h.handleError` call-sites, mixed within single files. Make `h.handleError` the only sanctioned path + a grep-based CI ban. · **M**
 - **6.6 Order-confirmation email is English, hardcoded HTML, IRR as `%.2f`** on a Persian/RTL Toman store (`order.go:60-65`). Replace with a Persian RTL template + Toman formatting + order lines. · **M**
-- **6.7 Product search is title-only ILIKE** — no pg_trgm, no Persian normalization (ك/ي→ک/ی), no ZWNJ handling, no brand/category/description match, no facets (`product_repo.go:192-195`). · **L**
+- ~~**6.7 Product search is title-only ILIKE**~~ — **done PH-030a** (Persian normalize + multi-field + pg_trgm). **PH-030b** Meili readiness done; **storefront cutover** still deferred.
 - **6.8 Per-user lists unbounded** — `subscription_repo`/`alert_repo` `ListByUser` have no LIMIT. Add `LIMIT 100`. · **S**
 - **6.9 Admin user list: no index on `role`/`created_at`, `SELECT *` + positional 18-col Scan** (`user_repo.go:156-247`) — column-order fragile + full scan on the new customers page. Add indexes, explicit column list. · **S**
 - **6.10 DB pool sizing hardcoded** (`db.go:28-29` maxConns 25); surface `DB_MAX_CONNS`/`DB_MIN_CONNS`. · **S**

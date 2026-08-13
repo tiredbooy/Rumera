@@ -1,40 +1,44 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Gift } from "lucide-react";
+import { Gift, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { newGiftCardIdempotencyKey } from "@/features/gift-cards/api/account";
 import { useRedeemGiftCard } from "@/features/gift-cards/hooks";
 import { formatPrice } from "@/lib/products";
-import { ApiClientError } from "@/lib/api/store-client";
+import { apiErrorToast } from "@/lib/api/user-facing-error";
 
-/** GiftCardRedeem — enter a gift-card code to top up the wallet. */
+/**
+ * Gift-card redeem (PH-042b polish): single-use code → full face amount to wallet.
+ * Sends Idempotency-Key; domain status remains ultimate truth against double-credit.
+ */
 export function GiftCardRedeem() {
   const redeem = useRedeemGiftCard();
   const [code, setCode] = React.useState("");
+  const idemRef = React.useRef(newGiftCardIdempotencyKey("gcr"));
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!code.trim()) return;
+    const trimmed = code.trim();
+    if (!trimmed) return;
     redeem.mutate(
-      { code: code.trim() },
+      { code: trimmed, idempotencyKey: idemRef.current },
       {
         onSuccess: (res) => {
           setCode("");
-          toast.success(
-            `${formatPrice(Number(res.amount))} به کیف پول شما افزوده شد`,
-          );
+          idemRef.current = newGiftCardIdempotencyKey("gcr");
+          toast.success("کارت هدیه اعمال شد", {
+            description: `${formatPrice(Number(res.amount))} به کیف پول شما افزوده شد.`,
+          });
         },
-        onError: (e) =>
-          toast.error(
-            e instanceof ApiClientError &&
-              (e.code === "NOT_FOUND" || e.status === 404)
-              ? "کد نامعتبر است یا قبلاً استفاده شده"
-              : "استفاده از کارت هدیه ناموفق بود",
-          ),
+        onError: (err) => {
+          const t = apiErrorToast(err, "استفاده از کارت هدیه ناموفق بود");
+          toast.error(t.title, { description: t.description });
+        },
       },
     );
   }
@@ -43,12 +47,15 @@ export function GiftCardRedeem() {
     <form
       onSubmit={submit}
       className="border-hairline rounded-3xl bg-card p-6 ring-1 ring-foreground/5"
+      data-testid="gift-card-redeem-form"
     >
       <h2 className="flex items-center gap-2 font-serif text-2xl">
-        <Gift className="size-5 text-primary" /> کارت هدیه
+        <Gift className="size-5 text-primary" /> استفاده از کارت
       </h2>
       <p className="mt-1.5 text-base leading-relaxed text-muted-foreground">
-        کد کارت هدیه را وارد کنید تا به موجودی کیف پول افزوده شود.
+        کد کارت هدیه را وارد کنید. هر کد{" "}
+        <strong className="font-medium text-foreground">یک‌بار</strong> کل مبلغ
+        روی کارت را به کیف پول می‌افزاید — موجودی جزئی قابل مشاهده نیست.
       </p>
       <div className="mt-4 flex flex-col gap-2">
         <Label htmlFor="gift-card-code">کد کارت هدیه</Label>
@@ -59,6 +66,8 @@ export function GiftCardRedeem() {
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="XXXX-XXXX-XXXX-XXXX"
             dir="ltr"
+            autoComplete="off"
+            spellCheck={false}
             className="h-11 min-w-0 flex-1 text-start tracking-widest"
           />
           <Button
@@ -71,9 +80,12 @@ export function GiftCardRedeem() {
             ) : (
               <Gift className="size-4" />
             )}
-            استفاده
+            اعمال
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          کد نامعتبر، قبلاً استفاده‌شده یا غیرفعال رد می‌شود.
+        </p>
       </div>
     </form>
   );

@@ -8,16 +8,15 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
-	models "github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/services"
+	featanalytics "github.com/tiredbooy/internal/features/analytics"
 )
 
 type RevenueCronJob struct {
 	db  *pgxpool.Pool
-	svc *services.DailyRevenueStatsService
+	svc *featanalytics.DailyRevenueStatsService
 }
 
-func NewRevenueCronJob(db *pgxpool.Pool, svc *services.DailyRevenueStatsService) *RevenueCronJob {
+func NewRevenueCronJob(db *pgxpool.Pool, svc *featanalytics.DailyRevenueStatsService) *RevenueCronJob {
 	return &RevenueCronJob{db: db, svc: svc}
 }
 
@@ -40,11 +39,11 @@ func (j *RevenueCronJob) Run(ctx context.Context) {
 	slog.Info("revenue stats job: done", "date", yesterday.Format("2006-01-02"))
 }
 
-func (j *RevenueCronJob) aggregate(ctx context.Context, date time.Time) (*models.DailyRevenueStatsUpsertReq, error) {
+func (j *RevenueCronJob) aggregate(ctx context.Context, date time.Time) (*featanalytics.DailyRevenueStatsUpsertReq, error) {
 	from := date
 	to := date.AddDate(0, 0, 1)
 
-	req := &models.DailyRevenueStatsUpsertReq{Date: date}
+	req := &featanalytics.DailyRevenueStatsUpsertReq{Date: date}
 
 	// ── order volume ─────────────────────────────────────────────────────────
 	err := j.db.QueryRow(ctx, `
@@ -187,7 +186,7 @@ func (j *RevenueCronJob) aggregate(ctx context.Context, date time.Time) (*models
 	return req, nil
 }
 
-func (j *RevenueCronJob) aggregateTopCategories(ctx context.Context, from, to time.Time) ([]models.TopCategoryEntry, error) {
+func (j *RevenueCronJob) aggregateTopCategories(ctx context.Context, from, to time.Time) ([]featanalytics.TopCategoryEntry, error) {
 	rows, err := j.db.Query(ctx, `
 		SELECT
 			payload->>'category_id'                             AS category_id,
@@ -207,9 +206,9 @@ func (j *RevenueCronJob) aggregateTopCategories(ctx context.Context, from, to ti
 	}
 	defer rows.Close()
 
-	var entries []models.TopCategoryEntry
+	var entries []featanalytics.TopCategoryEntry
 	for rows.Next() {
-		var e models.TopCategoryEntry
+		var e featanalytics.TopCategoryEntry
 		if err := rows.Scan(&e.CategoryID, &e.Revenue, &e.Units); err != nil {
 			return nil, err
 		}
@@ -218,7 +217,7 @@ func (j *RevenueCronJob) aggregateTopCategories(ctx context.Context, from, to ti
 	return entries, rows.Err()
 }
 
-func (j *RevenueCronJob) aggregateTopProducts(ctx context.Context, from, to time.Time) ([]models.TopProductRevenueEntry, error) {
+func (j *RevenueCronJob) aggregateTopProducts(ctx context.Context, from, to time.Time) ([]featanalytics.TopProductRevenueEntry, error) {
 	// Prefer per-line items when present; fall back to a single product_id on
 	// the root payload for older events. Product keys are catalog BIGINT
 	// values serialized as strings.
@@ -252,9 +251,9 @@ func (j *RevenueCronJob) aggregateTopProducts(ctx context.Context, from, to time
 	}
 	defer rows.Close()
 
-	var entries []models.TopProductRevenueEntry
+	var entries []featanalytics.TopProductRevenueEntry
 	for rows.Next() {
-		var e models.TopProductRevenueEntry
+		var e featanalytics.TopProductRevenueEntry
 		if err := rows.Scan(&e.ProductID, &e.Revenue, &e.Units); err != nil {
 			return nil, err
 		}

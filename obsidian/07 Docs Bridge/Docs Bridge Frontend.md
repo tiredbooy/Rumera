@@ -19,11 +19,16 @@ tags:
 | Domain map | [../apps/frontend/docs/features/domain-map.md](../apps/frontend/docs/features/domain-map.md) |
 | Commerce | [../apps/frontend/docs/features/storefront-commerce.md](../apps/frontend/docs/features/storefront-commerce.md) |
 | Account | [../apps/frontend/docs/features/account-tour.md](../apps/frontend/docs/features/account-tour.md) |
+| Loyalty | [../apps/frontend/docs/features/loyalty.md](../apps/frontend/docs/features/loyalty.md) |
+| Wallet | [../apps/frontend/docs/features/wallet.md](../apps/frontend/docs/features/wallet.md) |
+| Gift cards | [../apps/frontend/docs/features/gift-cards.md](../apps/frontend/docs/features/gift-cards.md) |
+| Subscriptions | [../apps/frontend/docs/features/subscriptions.md](../apps/frontend/docs/features/subscriptions.md) |
 | Inventory UI | [../apps/frontend/docs/features/inventory.md](../apps/frontend/docs/features/inventory.md) |
 | Search | [../apps/frontend/docs/features/search.md](../apps/frontend/docs/features/search.md) |
 | Media/cache | [../apps/frontend/docs/features/media-and-cache.md](../apps/frontend/docs/features/media-and-cache.md) |
 | Admin | [../apps/frontend/docs/features/admin-console.md](../apps/frontend/docs/features/admin-console.md) |
+| Dual-doc matrix | [../docs/PH-DUAL-DOC-MATRIX.md](../docs/PH-DUAL-DOC-MATRIX.md) |
 
-Vault: [[Frontend App]] · [[Frontend Domain Map]] · [[Documentation Bridge]]
+Vault: [[Frontend App]] · [[Frontend Domain Map]] · [[Account FE]] · [[Documentation Bridge]]
 
 #docs #frontend

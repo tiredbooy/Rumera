@@ -57,6 +57,8 @@ inventory ID as a deterministic secondary ordering key.
       "sku": "SKU-312",
       "category_title": "Whisky",
       "unit_price": "1250000.50",
+      "weight": 1.25,
+      "missing_weight": false,
       "stock_on_hand": 40,
       "committed_stock": 6,
       "available_stock": 34,
@@ -69,6 +71,16 @@ inventory ID as a deterministic secondary ordering key.
   "pagination": { "page": 1, "limit": 20, "total_items": 1, "total_pages": 1, "has_next": false, "has_prev": false }
 }
 ```
+
+### Weight fields (PH-020a — intentional contract extension)
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `weight` | number (kg), omitted when unset/invalid | From `products.weight` joined on the variant’s product |
+| `missing_weight` | bool (always present) | `true` when weight is null or ≤ 0 — admin signal to fix catalogue before shipping quotes are trustworthy |
+
+Same shape on low-stock list and per-variant get (all use `InventoryResponse`).  
+FE types: `apps/frontend/features/inventory/types.ts` (`InventoryItem`).
 
 **Errors:** `400 INVALID_QUERY`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`.
 

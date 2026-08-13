@@ -29,11 +29,14 @@ export async function CustomerDetailView({
   currentUserId,
   currentUserEmail,
   auditPage,
+  canCreditWallet = false,
 }: {
   id: string;
   currentUserId?: string;
   currentUserEmail?: string | null;
   auditPage: number;
+  /** customers:write — wallet top-up affordance */
+  canCreditWallet?: boolean;
 }) {
   let user: AdminUser;
   try {
@@ -195,9 +198,15 @@ export async function CustomerDetailView({
         </section>
       </div>
 
-      <div className="mt-6">
-        <WalletCreditForm userId={user.user_id} userLabel={displayName} />
-      </div>
+      {canCreditWallet ? (
+        <div className="mt-6">
+          <WalletCreditForm
+            userId={user.user_id}
+            userLabel={displayName}
+            canCredit
+          />
+        </div>
+      ) : null}
 
       {audit ? (
         <UserAuditHistory

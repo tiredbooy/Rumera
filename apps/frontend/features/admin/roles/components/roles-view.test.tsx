@@ -19,8 +19,8 @@ import { RolesView } from "./roles-view";
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getAdminRoles.mockResolvedValue({
-    authorization_mode: "single_role",
-    admin_roles: ["admin"],
+    authorization_mode: "role_capabilities",
+    admin_roles: ["admin", "staff"],
     roles: [
       {
         role: "customer",
@@ -43,20 +43,28 @@ beforeEach(() => {
         member_count: 2,
         active_member_count: 2,
       },
+      {
+        role: "staff",
+        admin_access: true,
+        assignable: true,
+        member_count: 3,
+        active_member_count: 2,
+      },
     ],
   });
 });
 
 describe("RolesView", () => {
-  it("renders the live single-role policy, member counts, and capability matrix", async () => {
+  it("renders the live role+capability policy, member counts, and capability matrix", async () => {
     const markup = renderToStaticMarkup(await RolesView());
 
     expect(mocks.getAdminRoles).toHaveBeenCalledOnce();
-    expect(markup).toContain("مدل تک‌نقشی فعال است");
+    expect(markup).toContain("مدل نقش + قابلیت فعال است");
     expect(markup).toContain("ماتریس دسترسی پویا");
     expect(markup).toContain("مشتری");
     expect(markup).toContain("فروشنده");
     expect(markup).toContain("مدیر کل");
+    expect(markup).toContain("اپراتور");
     expect(markup).toContain("۱۲");
     expect(markup).toContain("۱۰");
     expect(markup).toContain("بدون دسترسی به پنل");

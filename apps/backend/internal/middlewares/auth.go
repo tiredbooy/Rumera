@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/tiredbooy/internal/features/users"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/response"
 	"github.com/tiredbooy/pkg/token"
@@ -26,13 +27,13 @@ const (
 // The token proves possession; users.role and users.is_active remain the source
 // of authorization truth for every protected request.
 type AuthUserReader interface {
-	GetAuthUserByUID(ctx context.Context, uid int64) (*models.AuthUser, error)
+	GetAuthUserByUID(ctx context.Context, uid int64) (*users.AuthUser, error)
 }
 
 // Auth validates the bearer access token, rehydrates the account from the live
 // database, and injects that live identity into the request context. A stale
 // token cannot preserve access after role demotion or account deactivation.
-func Auth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
+func Auth(jwt token.Manager, accounts AuthUserReader) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw, ok := bearerToken(c)
 		if !ok {
@@ -51,11 +52,11 @@ func Auth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
 			abort(c, response.ErrInvalidToken)
 			return
 		}
-		if users == nil {
+		if accounts == nil {
 			abort(c, response.ErrInternalError)
 			return
 		}
-		live, err := users.GetAuthUserByUID(c.Request.Context(), claims.UID)
+		live, err := accounts.GetAuthUserByUID(c.Request.Context(), claims.UID)
 		if err != nil {
 			if errors.Is(err, models.ErrNotFound) {
 				abort(c, response.ErrInvalidToken)
@@ -65,7 +66,7 @@ func Auth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
 			return
 		}
 		if live == nil || !live.IsActive || live.IsBanned || live.ID != claims.UID ||
-			live.UserID != claimUserID || !models.IsAssignableUserRole(live.Role) {
+			live.UserID != claimUserID || !users.IsAssignableUserRole(live.Role) {
 			abort(c, response.ErrInvalidToken)
 			return
 		}
@@ -85,7 +86,7 @@ func Auth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
 // OptionalAuth populates identity when a valid token is present but never
 // rejects the request. Valid token claims are still rehydrated before they are
 // trusted; stale or inactive identities simply proceed as anonymous.
-func OptionalAuth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
+func OptionalAuth(jwt token.Manager, accounts AuthUserReader) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw, ok := bearerToken(c)
 		if !ok {
@@ -93,7 +94,7 @@ func OptionalAuth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
 			return
 		}
 		claims, err := jwt.ValidateAccessToken(raw)
-		if err != nil || users == nil || claims.UID <= 0 {
+		if err != nil || accounts == nil || claims.UID <= 0 {
 			c.Next()
 			return
 		}
@@ -102,9 +103,9 @@ func OptionalAuth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		live, err := users.GetAuthUserByUID(c.Request.Context(), claims.UID)
+		live, err := accounts.GetAuthUserByUID(c.Request.Context(), claims.UID)
 		if err == nil && live != nil && live.IsActive && !live.IsBanned && live.ID == claims.UID &&
-			live.UserID == claimUserID && models.IsAssignableUserRole(live.Role) &&
+			live.UserID == claimUserID && users.IsAssignableUserRole(live.Role) &&
 			!sessionInvalidated(live, claims) {
 			c.Set(ctxKeyUserID, live.UserID)
 			c.Set(ctxKeyUID, live.ID)
@@ -118,7 +119,7 @@ func OptionalAuth(jwt token.Manager, users AuthUserReader) gin.HandlerFunc {
 // hard logout (password reset). Tokens without IssuedAt are treated as invalid
 // when a cutover timestamp exists — fail closed. Equal timestamps are allowed
 // so a login in the same second as the cutover still works.
-func sessionInvalidated(live *models.AuthUser, claims *token.Claims) bool {
+func sessionInvalidated(live *users.AuthUser, claims *token.Claims) bool {
 	if live == nil || live.SessionsInvalidatedAt == nil {
 		return false
 	}

@@ -17,6 +17,13 @@ export interface InventoryItem {
   sku?: string;
   category_title?: string;
   unit_price: string;
+  /** Package weight in kg from products.weight (PH-020a). Omitted when unset. */
+  weight?: number;
+  /**
+   * True when catalogue weight is null or not positive — admin shipping
+   * remediation signal (085a / PH-020b). Always present from API.
+   */
+  missing_weight: boolean;
   stock_on_hand: number;
   committed_stock: number;
   available_stock: number;

@@ -36,6 +36,37 @@ export interface WithdrawWalletInput {
   description?: string | null;
 }
 
+/** POST /wallet/topup request (gateway-funded; not free deposit). */
+export interface WalletTopUpInput {
+  amount: number;
+}
+
+/** Pending gateway intent from POST /wallet/topup. */
+export interface WalletTopUpIntent {
+  payment_id: number;
+  transaction_id: string;
+  amount: string;
+  currency: string;
+  status: string;
+}
+
+/** Amount bounds aligned with backend Min/MaxWalletTopUpAmount (IRT). */
+export const WALLET_TOPUP_MIN = 10_000;
+export const WALLET_TOPUP_MAX = 50_000_000;
+
+/** Storefront presets (Toman). */
+export const WALLET_TOPUP_PRESETS = [
+  50_000, 100_000, 250_000, 500_000, 1_000_000,
+] as const;
+
+export function isValidTopUpAmount(amount: number): boolean {
+  return (
+    Number.isFinite(amount) &&
+    amount >= WALLET_TOPUP_MIN &&
+    amount <= WALLET_TOPUP_MAX
+  );
+}
+
 export type WalletTransactionSortField = "created_at" | "amount";
 
 export type WalletTransactionQuery = PaginationQuery & {

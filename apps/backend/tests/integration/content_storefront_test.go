@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/tiredbooy/internal/features/blog"
+	"github.com/tiredbooy/internal/features/recipes"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
 )
 
 func TestContentListsPreserveTotalsBeyondTheFinalPage(t *testing.T) {
@@ -27,15 +28,15 @@ func TestContentListsPreserveTotalsBeyondTheFinalPage(t *testing.T) {
 			}
 		}
 
-		published := models.RecipeStatusPublished
-		filter := models.RecipeFilter{
+		published := recipes.RecipeStatusPublished
+		filter := recipes.RecipeFilter{
 			BaseFilter: models.BaseFilter{
 				PaginationParams: models.PaginationParams{Page: 9, Limit: 2},
 			},
 			Status: &published,
 		}
 		filter.Defaults()
-		rows, total, err := repositories.NewRecipeRepository(testPool).List(ctx, filter)
+		rows, total, err := recipes.NewRepository(testPool).List(ctx, filter)
 		if err != nil {
 			t.Fatalf("list beyond final recipe page: %v", err)
 		}
@@ -57,15 +58,15 @@ func TestContentListsPreserveTotalsBeyondTheFinalPage(t *testing.T) {
 			}
 		}
 
-		published := models.BlogStatusPublished
-		filter := models.BlogFilter{
+		published := blog.BlogStatusPublished
+		filter := blog.BlogFilter{
 			BaseFilter: models.BaseFilter{
 				PaginationParams: models.PaginationParams{Page: 9, Limit: 2},
 			},
 			Status: &published,
 		}
 		filter.Defaults()
-		rows, total, err := repositories.NewBlogRepository(testPool).List(ctx, filter)
+		rows, total, err := blog.NewRepository(testPool).List(ctx, filter)
 		if err != nil {
 			t.Fatalf("list beyond final journal page: %v", err)
 		}
@@ -97,8 +98,8 @@ func TestRecipeListExcludesFeaturedLeadFromPagination(t *testing.T) {
 		}
 	}
 
-	published := models.RecipeStatusPublished
-	filter := models.RecipeFilter{
+	published := recipes.RecipeStatusPublished
+	filter := recipes.RecipeFilter{
 		BaseFilter: models.BaseFilter{
 			PaginationParams: models.PaginationParams{Page: 1, Limit: 1},
 		},
@@ -106,7 +107,7 @@ func TestRecipeListExcludesFeaturedLeadFromPagination(t *testing.T) {
 		ExcludeID: &featuredID,
 	}
 	filter.Defaults()
-	rows, total, err := repositories.NewRecipeRepository(testPool).List(ctx, filter)
+	rows, total, err := recipes.NewRepository(testPool).List(ctx, filter)
 	if err != nil {
 		t.Fatalf("list recipes without featured lead: %v", err)
 	}
@@ -147,7 +148,7 @@ func TestRecipeShoppableAvailabilityUsesUncommittedInventory(t *testing.T) {
 		t.Fatalf("link recipe product: %v", err)
 	}
 
-	repo := repositories.NewRecipeRepository(testPool)
+	repo := recipes.NewRepository(testPool)
 	products, err := repo.GetShoppableProducts(ctx, recipeID)
 	if err != nil {
 		t.Fatalf("get shoppable products: %v", err)

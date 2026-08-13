@@ -19,6 +19,8 @@ Gateway paid but order pending · 401/503 on webhook · stock not deducted.
 3. `transaction_id` matches pending row
 4. Status exactly `succeeded` / `failed`
 5. Logs around `PaymentWebhook` / Confirm errors
-6. Idempotent redelivery: already settled → not found path
+6. Idempotent redelivery: already settled → **200** `{replayed:true}` (not a hard error)
+7. HTTP auto-key + UNIQUE `transaction_id` — [[Playbook Debug Idempotency]]
 
-Related: [[Journey Payment webhook settle]] · [[Payments]] · [[Env and config]]
+Related: [[Journey Payment webhook settle]] · [[Journey Idempotent retry checkout webhook]] ·  
+[[Payments]] · [[Env and config]] · [[Playbook Debug Idempotency]]

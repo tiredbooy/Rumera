@@ -4,8 +4,9 @@ import { PERMISSIONS } from "./permissions";
 import { isStaff, permissionsForRole, ROLE_PERMISSIONS } from "./roles";
 
 describe("admin role semantics", () => {
-  it("admits only admin to the admin surface", () => {
+  it("admits admin and staff to the panel surface", () => {
     expect(isStaff("admin")).toBe(true);
+    expect(isStaff("staff")).toBe(true);
     expect(isStaff("customer")).toBe(false);
     expect(isStaff("vendor")).toBe(false);
     expect(isStaff("manager")).toBe(false);
@@ -14,12 +15,18 @@ describe("admin role semantics", () => {
     expect(isStaff(undefined)).toBe(false);
   });
 
-  it("gives every frontend capability to admin and none to other roles", () => {
+  it("gives every frontend capability to admin and a seeded package to staff", () => {
     expect(ROLE_PERMISSIONS.admin).toEqual(Object.values(PERMISSIONS));
     expect(permissionsForRole("customer")).toEqual([]);
     expect(permissionsForRole("vendor")).toEqual([]);
     expect(permissionsForRole("manager")).toEqual([]);
     expect(permissionsForRole("support")).toEqual([]);
     expect(permissionsForRole("operator")).toEqual([]);
+    expect(permissionsForRole("admin")).toEqual(Object.values(PERMISSIONS));
+    expect(permissionsForRole("staff")).toContain(PERMISSIONS.PRODUCTS_READ);
+    expect(permissionsForRole("staff")).not.toContain(PERMISSIONS.ROLES_MANAGE);
+    expect(permissionsForRole("staff")).not.toContain(
+      PERMISSIONS.SETTINGS_MANAGE,
+    );
   });
 });

@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"github.com/tiredbooy/internal/features/catalog/product"
 	"context"
 	"errors"
 	"os"
@@ -13,9 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
+	"github.com/tiredbooy/internal/features/media"
 	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/imaging"
 	"github.com/tiredbooy/pkg/storage"
@@ -35,7 +34,7 @@ func TestMediaKeyLocksReservePoolCapacity(t *testing.T) {
 		t.Fatalf("create bounded media-lock pool: %v", err)
 	}
 	defer pool.Close()
-	repo := repositories.NewMediaLifecycleRepository(pool)
+	repo := media.NewLifecycleRepository(pool)
 
 	first, err := repo.LockMediaKeys(context.Background(), []string{"uploads/first.webp"})
 	if err != nil {
@@ -101,7 +100,7 @@ func TestStandaloneReleaseAndAggregateAttachmentAreLinearizable(t *testing.T) {
 		if exists, err := fixture.store.Exists(ctx, upload.Key); err != nil || !exists {
 			t.Fatalf("attached upload exists = %v, %v; want true, nil", exists, err)
 		}
-		referenced, err := repositories.NewMediaLifecycleRepository(testPool).IsReferenced(ctx, upload.Key)
+		referenced, err := media.NewLifecycleRepository(testPool).IsReferenced(ctx, upload.Key)
 		if err != nil || !referenced {
 			t.Fatalf("attached upload referenced = %v, %v; want true, nil", referenced, err)
 		}
@@ -148,9 +147,9 @@ func TestStandaloneReleaseAndAggregateAttachmentAreLinearizable(t *testing.T) {
 
 type mediaLinearizationFixture struct {
 	gate      *gatedMediaLifecycleRepository
-	lifecycle *services.MediaLifecycleService
-	media     *services.MediaService
-	product   *services.ProductService
+	lifecycle *media.LifecycleService
+	media     *media.Service
+	product   *product.Service
 	store     *storage.LocalStorage
 }
 
@@ -164,18 +163,18 @@ func newMediaLinearizationFixture(t *testing.T) mediaLinearizationFixture {
 	if err != nil {
 		t.Fatalf("create media cache: %v", err)
 	}
-	productRepo := repositories.NewProductRepository(testPool)
-	gate := newGatedMediaLifecycleRepository(repositories.NewMediaLifecycleRepository(testPool))
-	lifecycle := services.NewMediaLifecycleService(store, cache, gate, zap.NewNop())
-	media := services.NewMediaService(
+	productRepo := product.NewRepository(testPool)
+	gate := newGatedMediaLifecycleRepository(media.NewLifecycleRepository(testPool))
+	lifecycle := media.NewLifecycleService(store, cache, gate, zap.NewNop())
+	media := media.NewService(
 		store,
 		cache,
-		repositories.NewProductImageRepository(testPool),
+		product.NewImageRepository(testPool),
 		productRepo,
-		repositories.NewContentMediaRepository(testPool),
+		media.NewContentRepository(testPool),
 		lifecycle,
 		imaging.New(),
-		services.MediaConfig{
+		media.Config{
 			MaxUploadBytes: 1 << 20, MaxDimension: 4000,
 			MaxSourceDimension: 12000, MaxSourcePixels: 40_000_000,
 		},
@@ -183,12 +182,12 @@ func newMediaLinearizationFixture(t *testing.T) mediaLinearizationFixture {
 	)
 	return mediaLinearizationFixture{
 		gate: gate, lifecycle: lifecycle, media: media,
-		product: services.NewProductService(productRepo, lifecycle, media), store: store,
+		product: product.NewService(productRepo, lifecycle, media), store: store,
 	}
 }
 
 type gatedMediaLifecycleRepository struct {
-	delegate         repositories.MediaLifecycleRepository
+	delegate         media.LifecycleRepository
 	calls            atomic.Int32
 	firstAcquired    chan struct{}
 	secondEntered    chan struct{}
@@ -196,7 +195,7 @@ type gatedMediaLifecycleRepository struct {
 	releaseFirstOnce sync.Once
 }
 
-func newGatedMediaLifecycleRepository(delegate repositories.MediaLifecycleRepository) *gatedMediaLifecycleRepository {
+func newGatedMediaLifecycleRepository(delegate media.LifecycleRepository) *gatedMediaLifecycleRepository {
 	return &gatedMediaLifecycleRepository{
 		delegate: delegate, firstAcquired: make(chan struct{}),
 		secondEntered: make(chan struct{}), releaseFirst: make(chan struct{}),
@@ -222,7 +221,7 @@ func (r *gatedMediaLifecycleRepository) VariantKeys(ctx context.Context, variant
 func (r *gatedMediaLifecycleRepository) LockMediaKeys(
 	ctx context.Context,
 	keys []string,
-) (repositories.MediaKeyLock, error) {
+) (media.KeyLock, error) {
 	call := r.calls.Add(1)
 	if call == 2 {
 		close(r.secondEntered)
@@ -246,7 +245,7 @@ func (r *gatedMediaLifecycleRepository) LockMediaKeys(
 
 func (r *gatedMediaLifecycleRepository) TryReconciliationLock(
 	ctx context.Context,
-) (repositories.MediaReconciliationLock, bool, error) {
+) (media.ReconciliationLock, bool, error) {
 	return r.delegate.TryReconciliationLock(ctx)
 }
 
@@ -255,15 +254,15 @@ func (r *gatedMediaLifecycleRepository) allowFirstToProceed() {
 }
 
 type aggregateSaveResult struct {
-	product *models.Product
+	product *product.Product
 	err     error
 }
 
-func preparedAggregateRequest(key, title string) models.SaveProductAggregateReq {
-	return models.SaveProductAggregateReq{
+func preparedAggregateRequest(key, title string) product.SaveProductAggregateReq {
+	return product.SaveProductAggregateReq{
 		OperationID: uuid.NewString(),
 		Title:       title,
-		Images: []models.SaveProductImageReq{{
+		Images: []product.SaveProductImageReq{{
 			StorageKey: &key,
 			IsPrimary:  true,
 		}},

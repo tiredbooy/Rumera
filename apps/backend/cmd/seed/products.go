@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tiredbooy/internal/features/catalog/product"
+	"github.com/tiredbooy/internal/features/catalog/variant"
 	"github.com/tiredbooy/internal/models"
 	"go.uber.org/zap"
 )
@@ -153,7 +155,7 @@ func (s *seeder) seedProducts(ctx context.Context, brands, cats, tags, options m
 		brandID := brands[spec.brandKey]
 		tagIDs := resolveKeys(tags, spec.tagKeys...)
 
-		req := models.CreateProductReq{
+		req := product.CreateProductReq{
 			Title:           spec.title,
 			Code:            sp(spec.code),
 			Slug:            sp(spec.slug),
@@ -184,7 +186,7 @@ func (s *seeder) seedProducts(ctx context.Context, brands, cats, tags, options m
 		if err != nil {
 			return nil, fmt.Errorf("product %q price: %w", spec.slug, err)
 		}
-		vReq := models.CreateVariantReq{
+		vReq := variant.CreateVariantReq{
 			SKU:            sp(spec.sku),
 			Price:          price,
 			OptionValueIDs: resolveKeys(options, spec.optionKeys...),

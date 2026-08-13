@@ -7,7 +7,7 @@ export default function AccountWalletPage() {
       <AccountPageHeader
         eyebrow="اعتبار"
         title="کیف پول"
-        description="موجودی و تراکنش‌های کیف پول رومرا."
+        description="موجودی، شارژ از درگاه (پس از پرداخت موفق) و کارت هدیه — بدون واریز رایگان."
       />
       <WalletView />
     </>

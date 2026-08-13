@@ -2,6 +2,10 @@
 
 A customer's saved shipping/billing addresses. Every endpoint is user-scoped — callers only ever see and mutate their **own** addresses; ownership is enforced server-side.
 
+**Implementation (feature slice):** `internal/features/addresses/`  
+(handler · service · repository · model · `routes.go` → `RegisterCustomer`).  
+Composed from `internal/routes/routes.go`. API contracts below are unchanged.
+
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.
 
 | Method | Path | Tier | Description |

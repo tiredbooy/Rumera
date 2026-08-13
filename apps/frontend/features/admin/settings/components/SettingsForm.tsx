@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Gift,
   Loader2,
   Phone,
   Search,
@@ -33,6 +34,7 @@ import {
 } from "@/features/settings/validations";
 import { faNum } from "@/lib/products";
 import { ContactSection } from "./settings-form/ContactSection";
+import { GiftSection } from "./settings-form/GiftSection";
 import { MaintenanceSection } from "./settings-form/MaintenanceSection";
 import { SeoSection } from "./settings-form/SeoSection";
 import { ShippingSection } from "./settings-form/ShippingSection";
@@ -44,6 +46,7 @@ const TABS = [
   { value: "contact", label: "تماس", icon: Phone },
   { value: "social", label: "شبکه‌ها", icon: Share2 },
   { value: "shipping", label: "ارسال", icon: Truck },
+  { value: "gift", label: "هدیه", icon: Gift },
   { value: "seo", label: "سئو", icon: Search },
   { value: "maintenance", label: "تعمیر", icon: Wrench },
 ] as const;
@@ -130,6 +133,7 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
           errors={errors}
           thresholdPreview={thresholdPreview}
         />
+        <GiftSection register={register} control={control} errors={errors} />
         <SeoSection register={register} errors={errors} />
         <MaintenanceSection
           control={control}

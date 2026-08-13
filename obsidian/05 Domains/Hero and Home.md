@@ -8,6 +8,8 @@ tags: [domain, content]
 
 # Hero and Home
 
+BE package: [[Hero Slides Backend]] (`internal/features/hero`).
+
 Homepage composition: hero carousel, perks, brands, categories, catalogue strip, recommendation rails, story, newsletter.
 
 - Soft-fail sections when API offline (SSG resilience)

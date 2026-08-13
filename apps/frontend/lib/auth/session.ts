@@ -4,15 +4,16 @@
  * a narrowed, non-null session on success.
  *
  * Defense-in-depth: the edge proxy does the coarse check and these repeat the
- * admin-role check on the server. `requirePermission` also keeps frontend
- * capability-gated pages consistent inside that admin-only boundary.
+ * panel-role check on the server. `requirePermission` also keeps frontend
+ * capability-gated pages consistent with the server matrix.
  */
 import "server-only";
 import { redirect } from "next/navigation";
 
 import { auth } from "./auth";
 import { getLiveAccount } from "./live-account";
-import { isStaff, permissionsForRole } from "@/lib/rbac/roles";
+import { isStaff, isRole, type Role } from "@/lib/rbac/roles";
+import { resolveLivePermissions } from "@/lib/rbac/live-permissions";
 import { can } from "@/lib/rbac/can";
 import type { Permission } from "@/lib/rbac/permissions";
 
@@ -65,14 +66,22 @@ export async function requireStaff(callbackUrl = "/admin") {
     redirect("/forbidden");
   }
 
+  const role: Role = isRole(live.profile.role)
+    ? live.profile.role
+    : "customer";
+  const permissions = await resolveLivePermissions(
+    role,
+    session.accessToken,
+  );
+
   const fullName = [live.profile.first_name, live.profile.last_name]
     .filter(Boolean)
     .join(" ")
     .trim();
   return {
     ...session,
-    role: "admin" as const,
-    permissions: permissionsForRole("admin"),
+    role,
+    permissions,
     user: {
       ...session.user,
       id: live.profile.user_id,

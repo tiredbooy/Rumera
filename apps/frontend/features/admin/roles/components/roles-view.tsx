@@ -17,7 +17,9 @@ import { cn } from "@/lib/utils";
 const ROLE_DESC: Record<Role, string> = {
   customer: "حساب خرید و خدمات شخصی؛ بدون دسترسی به پنل مدیریت.",
   vendor: "حساب فروشنده؛ در وضعیت فعلی بدون دسترسی به پنل مدیریت.",
-  admin: "تنها نقش مجاز برای ورود و استفاده از همهٔ بخش‌های پنل مدیریت.",
+  admin: "سوپریوزر پنل؛ همهٔ قابلیت‌ها و امکان مدیریت ماتریس دسترسی.",
+  staff:
+    "اپراتور پنل با گرنت‌های محدود؛ فقط سطوحی که در ماتریس اعطا شده‌اند.",
 };
 
 export async function RolesView() {
@@ -46,6 +48,8 @@ export async function RolesView() {
   }
 
   const adminRoles = new Set(summary.admin_roles);
+  const isCapabilityMode =
+    summary.authorization_mode === "role_capabilities";
 
   return (
     <>
@@ -64,12 +68,14 @@ export async function RolesView() {
           </span>
           <div>
             <h2 id="authorization-model-title" className="font-serif text-lg">
-              مدل تک‌نقشی فعال است
+              {isCapabilityMode
+                ? "مدل نقش + قابلیت فعال است"
+                : "مدل دسترسی پنل"}
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              هر کاربر یک نقش دارد و فقط نقش «مدیر کل» وارد پنل می‌شود. تغییر
-              نقش از صفحهٔ همان کاربر انجام می‌شود و در درخواست محافظت‌شدهٔ بعدی
-              از وضعیت زندهٔ بک‌اند خوانده می‌شود.
+              {isCapabilityMode
+                ? "نقش «مدیر کل» سوپریوزر است و نقش «اپراتور» فقط با گرنت‌های ماتریس وارد سطوح مجاز می‌شود. API و ناوبری هر دو از همین ماتریس پیروی می‌کنند."
+                : "هر کاربر یک نقش دارد؛ نقش‌های مجاز پنل در admin_roles فهرست شده‌اند."}
             </p>
           </div>
         </div>
@@ -87,7 +93,7 @@ export async function RolesView() {
         <h2 id="roles-summary-title" className="mb-3 font-serif text-lg">
           خلاصهٔ نقش‌ها
         </h2>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {summary.roles.map((item) => {
             const hasAdminAccess =
               item.admin_access && adminRoles.has(item.role);
@@ -95,6 +101,8 @@ export async function RolesView() {
               0,
               item.member_count - item.active_member_count,
             );
+            const label = ROLE_LABELS[item.role] ?? item.role;
+            const desc = ROLE_DESC[item.role] ?? "";
 
             return (
               <article
@@ -133,10 +141,10 @@ export async function RolesView() {
                   id={`role-${item.role}`}
                   className="mt-4 font-serif text-lg"
                 >
-                  {ROLE_LABELS[item.role]}
+                  {label}
                 </h3>
                 <p className="mt-1 min-h-10 text-xs leading-relaxed text-muted-foreground">
-                  {ROLE_DESC[item.role]}
+                  {desc}
                 </p>
 
                 <dl className="mt-5 grid grid-cols-3 gap-2 border-t border-border/50 pt-4 text-center">

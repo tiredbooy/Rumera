@@ -3,21 +3,24 @@
 package integration
 
 import (
+	"github.com/tiredbooy/internal/features/inventory"
+	"github.com/tiredbooy/internal/features/catalog/variant"
+	catproduct "github.com/tiredbooy/internal/features/catalog/product"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tiredbooy/internal/features/catalog/option"
+	"github.com/tiredbooy/internal/features/catalog/tag"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/tiredbooy/internal/handlers"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
 	"github.com/tiredbooy/pkg/apperr"
+	"github.com/tiredbooy/pkg/validator"
 	"go.uber.org/zap"
 )
 
@@ -25,19 +28,19 @@ func TestProductAdminCreateEditAndReadDraftWithTags(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "products", "tags")
 	ctx := context.Background()
-	productRepo := repositories.NewProductRepository(testPool)
-	tagRepo := repositories.NewTagRepository(testPool)
+	productRepo := catproduct.NewRepository(testPool)
+	tagRepo := tag.NewRepository(testPool)
 
-	firstTag, err := tagRepo.Create(ctx, models.CreateTagReq{Title: "First", Slug: "first"})
+	firstTag, err := tagRepo.Create(ctx, tag.CreateTagReq{Title: "First", Slug: "first"})
 	if err != nil {
 		t.Fatalf("create first tag: %v", err)
 	}
-	secondTag, err := tagRepo.Create(ctx, models.CreateTagReq{Title: "Second", Slug: "second"})
+	secondTag, err := tagRepo.Create(ctx, tag.CreateTagReq{Title: "Second", Slug: "second"})
 	if err != nil {
 		t.Fatalf("create second tag: %v", err)
 	}
 	slug, code := "admin-draft", "ADMIN-DRAFT"
-	created, err := productRepo.Create(ctx, models.CreateProductReq{
+	created, err := productRepo.Create(ctx, catproduct.CreateProductReq{
 		Title: "Admin Draft", Slug: &slug, Code: &code,
 		TagIDs: []int64{firstTag.ID, firstTag.ID},
 	})
@@ -49,10 +52,10 @@ func TestProductAdminCreateEditAndReadDraftWithTags(t *testing.T) {
 		t.Fatalf("created tags = %+v, %v; want first tag once", tags, err)
 	}
 
-	service := services.NewProductService(productRepo, nil, nil)
+	service := catproduct.NewService(productRepo, nil, nil)
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	handler := handlers.New(handlers.Deps{Product: service, Log: zap.NewNop()})
+	handler := catproduct.NewHandler(service, validator.New(), nil, zap.NewNop())
 	router.PATCH("/admin/products/:id", handler.UpdateProduct)
 	router.GET("/admin/products/:id", handler.GetAdminProduct)
 	router.GET("/products/:id/tags", handler.ProductTags)
@@ -134,25 +137,25 @@ func TestProductDetailHydratesVariantOptionsAndImages(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "products", "option_types")
 	ctx := context.Background()
-	optionService := services.NewOptionService(repositories.NewOptionRepository(testPool))
+	optionService := option.NewService(option.NewRepository(testPool))
 
-	volume, err := optionService.CreateType(ctx, models.CreateOptionTypeReq{
+	volume, err := optionService.CreateType(ctx, option.CreateOptionTypeReq{
 		Title: "volume", DisplayName: "حجم",
 	})
 	if err != nil {
 		t.Fatalf("create volume type: %v", err)
 	}
-	volume750, err := optionService.CreateValue(ctx, volume.ID, models.CreateOptionValueReq{
+	volume750, err := optionService.CreateValue(ctx, volume.ID, option.CreateOptionValueReq{
 		Value: "۷۵۰ میلی‌لیتر", SortOrder: 1,
 	})
 	if err != nil {
 		t.Fatalf("create volume value: %v", err)
 	}
 
-	productRepo := repositories.NewProductRepository(testPool)
-	product, err := productRepo.Create(ctx, models.CreateProductReq{
+	productRepo := catproduct.NewRepository(testPool)
+	product, err := productRepo.Create(ctx, catproduct.CreateProductReq{
 		Title: "Hydrated product",
-		Variants: []models.CreateVariantReq{{
+		Variants: []variant.CreateVariantReq{{
 			SKU: stringPointer("HYDRATED-750"), Price: 125,
 			OptionValueIDs: []int64{volume750.ID},
 		}},
@@ -175,10 +178,7 @@ func TestProductDetailHydratesVariantOptionsAndImages(t *testing.T) {
 		t.Fatalf("insert independently-primary product and variant images: %v", err)
 	}
 
-	handler := handlers.New(handlers.Deps{
-		Product: services.NewProductService(productRepo, nil, nil),
-		Log:     zap.NewNop(),
-	})
+	handler := catproduct.NewHandler(catproduct.NewService(productRepo, nil, nil), validator.New(), nil, zap.NewNop())
 	router := gin.New()
 	router.GET("/admin/products/:id", handler.GetAdminProduct)
 	recorder := httptest.NewRecorder()
@@ -219,13 +219,13 @@ func TestProductVariantImageOwnershipAndGalleryScope(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "products")
 	ctx := context.Background()
-	productRepo := repositories.NewProductRepository(testPool)
-	imageRepo := repositories.NewProductImageRepository(testPool)
+	productRepo := catproduct.NewRepository(testPool)
+	imageRepo := catproduct.NewImageRepository(testPool)
 
 	firstProductID := seedProduct(t)
 	secondProductID := seedProduct(t)
-	variantService := services.NewVariantService(repositories.NewVariantRepository(testPool), repositories.NewInventoryRepository(testPool), nil)
-	variant, err := variantService.Create(ctx, firstProductID, models.CreateVariantReq{
+	variantService := variant.NewService(variant.NewRepository(testPool), inventory.NewRepository(testPool), nil)
+	variant, err := variantService.Create(ctx, firstProductID, variant.CreateVariantReq{
 		SKU: stringPointer("IMAGE-SCOPE"), Price: 10,
 	})
 	if err != nil {
@@ -263,7 +263,7 @@ func TestProductVariantImageOwnershipAndGalleryScope(t *testing.T) {
 		t.Fatalf("mismatched variant image error = %v; want invalid state", err)
 	}
 
-	filter := models.ProductFilter{}
+	filter := catproduct.ProductFilter{}
 	filter.Defaults()
 	items, _, err := productRepo.GetAll(ctx, filter)
 	if err != nil {
@@ -285,8 +285,8 @@ func TestProductRepositoryTagPaginationIsTruthfulAndStable(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "products", "tags")
 	ctx := context.Background()
-	productRepo := repositories.NewProductRepository(testPool)
-	tagRepo := repositories.NewTagRepository(testPool)
+	productRepo := catproduct.NewRepository(testPool)
+	tagRepo := tag.NewRepository(testPool)
 
 	firstID := seedProduct(t)
 	secondID := seedProduct(t)
@@ -296,16 +296,16 @@ func TestProductRepositoryTagPaginationIsTruthfulAndStable(t *testing.T) {
 	); err != nil {
 		t.Fatalf("align product timestamps: %v", err)
 	}
-	tag, err := tagRepo.Create(ctx, models.CreateTagReq{Title: "Gift", Slug: "gift"})
+	createdTag, err := tagRepo.Create(ctx, tag.CreateTagReq{Title: "Gift", Slug: "gift"})
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
-	limitedTag, err := tagRepo.Create(ctx, models.CreateTagReq{Title: "Limited", Slug: "limited"})
+	limitedTag, err := tagRepo.Create(ctx, tag.CreateTagReq{Title: "Limited", Slug: "limited"})
 	if err != nil {
 		t.Fatalf("create second tag: %v", err)
 	}
 	for _, productID := range []int64{firstID, secondID} {
-		tagIDs := []int64{tag.ID}
+		tagIDs := []int64{createdTag.ID}
 		if productID == secondID {
 			tagIDs = append(tagIDs, limitedTag.ID)
 		}
@@ -313,18 +313,18 @@ func TestProductRepositoryTagPaginationIsTruthfulAndStable(t *testing.T) {
 			t.Fatalf("attach product %d tag: %v", productID, err)
 		}
 	}
-	if err := productRepo.AttachTags(ctx, secondID, []int64{tag.ID}); err != nil {
+	if err := productRepo.AttachTags(ctx, secondID, []int64{createdTag.ID}); err != nil {
 		t.Fatalf("reattach existing product tag: %v", err)
 	}
 
 	active := true
-	filter := models.ProductFilter{
+	filter := catproduct.ProductFilter{
 		BaseFilter: models.BaseFilter{
 			PaginationParams: models.PaginationParams{Page: 1, Limit: 1},
 			SortBy:           "created_at",
 			OrderBy:          "desc",
 		},
-		TagID:    &tag.ID,
+		TagID:    &createdTag.ID,
 		IsActive: &active,
 	}
 	items, total, err := productRepo.GetAll(ctx, filter)
@@ -355,7 +355,7 @@ func TestProductRepositoryCategoryDescendantsRetainFiltersAndPagination(t *testi
 	requireDB(t)
 	resetTables(t, "products", "categories")
 	ctx := context.Background()
-	repo := repositories.NewProductRepository(testPool)
+	repo := catproduct.NewRepository(testPool)
 
 	insertCategory := func(title string, parentID *int64) int64 {
 		t.Helper()
@@ -398,7 +398,7 @@ func TestProductRepositoryCategoryDescendantsRetainFiltersAndPagination(t *testi
 	insertProduct("Inactive Malt", childID, false)
 
 	active := true
-	filter := models.ProductFilter{
+	filter := catproduct.ProductFilter{
 		BaseFilter: models.BaseFilter{
 			PaginationParams: models.PaginationParams{Page: 1, Limit: 2},
 			SortBy:           "title",
@@ -436,7 +436,7 @@ func TestProductRepositoryListUsesSellableStockAndCompleteImageMetadata(t *testi
 	requireDB(t)
 	resetTables(t, "products")
 	ctx := context.Background()
-	repo := repositories.NewProductRepository(testPool)
+	repo := catproduct.NewRepository(testPool)
 
 	var productID int64
 	if err := testPool.QueryRow(ctx,
@@ -471,7 +471,7 @@ func TestProductRepositoryListUsesSellableStockAndCompleteImageMetadata(t *testi
 	}
 
 	active := true
-	filter := models.ProductFilter{
+	filter := catproduct.ProductFilter{
 		BaseFilter: models.BaseFilter{
 			PaginationParams: models.PaginationParams{Page: 1, Limit: 12},
 			SortBy:           "created_at",
@@ -536,7 +536,7 @@ func TestProductRepositorySearchTreatsSQLWildcardsLiterally(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "products")
 	ctx := context.Background()
-	repo := repositories.NewProductRepository(testPool)
+	repo := catproduct.NewRepository(testPool)
 
 	for _, title := range []string{"Percent % Reserve", "Under _ Reserve", `Back\slash Reserve`, "Plain Reserve"} {
 		if _, err := testPool.Exec(ctx,
@@ -552,7 +552,7 @@ func TestProductRepositorySearchTreatsSQLWildcardsLiterally(t *testing.T) {
 		"_": "Under _ Reserve",
 		`\`: `Back\slash Reserve`,
 	} {
-		items, total, err := repo.GetAll(ctx, models.ProductFilter{
+		items, total, err := repo.GetAll(ctx, catproduct.ProductFilter{
 			BaseFilter: models.BaseFilter{
 				PaginationParams: models.PaginationParams{Page: 1, Limit: 12},
 				SortBy:           "title",

@@ -1,5 +1,9 @@
 # Site settings
 
+**Implementation (feature slice):** `internal/features/site_settings/`  
+Composed from `internal/routes/routes.go`. Public GET is Redis-cached; admin writes invalidate. API contracts unchanged.
+
+
 The storefront's single, global configuration document — store identity, contact
 details, social handles, shipping copy, SEO defaults, and the maintenance toggle.
 There is exactly one settings document (a singleton row, `id = 1`); these routes
@@ -30,6 +34,7 @@ can grow without a schema migration. Each group is a flat object:
 | `shipping` | `freeThreshold` (int64, minor currency unit), `note` |
 | `seo` | `defaultTitle`, `defaultDescription`, `ogImage`, `keywords` |
 | `maintenance` | `enabled` (bool), `message` |
+| `gift` | modular checkout “buy as gift” (PH-060): `enabled`, `messageEnabled`, `messageMaxLength`, `hidePriceEnabled`, `options[]` |
 
 > JSON keys are **camelCase** here (e.g. `logoUrl`, `supportEmail`,
 > `freeThreshold`) — unlike most other resources in this API, which are
@@ -42,14 +47,30 @@ stable as admin-only groups are added later.
 
 ```
 ┌──────────────── SiteSettings (admin) ────────────────┐
-│ store · contact · social · shipping · seo · maintenance │  + updatedAt
+│ store · contact · social · shipping · seo · maintenance · gift │  + updatedAt
 └──────────────────────────────────────────────────────┘
-                  │  .Public()  (drops updatedAt; today exposes the same groups)
+                  │  .Public()  (drops updatedAt; gift normalized with defaults)
                   ▼
 ┌──────────── PublicSiteSettings (GET /settings) ──────┐
-│ store · contact · social · shipping · seo · maintenance │
+│ store · contact · social · shipping · seo · maintenance · gift │
 └──────────────────────────────────────────────────────┘
 ```
+
+### Gift group (PH-060)
+
+Admin-configurable modular gift packaging / add-ons. Checkout multi-selects
+`options[].id`; **orders re-price from the current document** (never trust client
+prices). Missing/zero document → defaults: gift enabled + one free `gift_wrap` option.
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `enabled` | bool | When false, create-order rejects `is_gift` |
+| `messageEnabled` | bool | Storefront shows gift message field |
+| `messageMaxLength` | int | 1–500 (default 500) |
+| `hidePriceEnabled` | bool | Storefront shows hide-price toggle |
+| `options[]` | array | `{ id, label, description, price, enabled, sortOrder }` |
+
+`id` is stable slug (max 64); `price` ≥ 0 (store currency major units, same as order amounts).
 
 ---
 
@@ -102,6 +123,22 @@ caps drift if an invalidation is ever missed.
     "maintenance": {
       "enabled": false,
       "message": ""
+    },
+    "gift": {
+      "enabled": true,
+      "messageEnabled": true,
+      "messageMaxLength": 500,
+      "hidePriceEnabled": true,
+      "options": [
+        {
+          "id": "gift_wrap",
+          "label": "بسته‌بندی هدیه",
+          "description": "بسته‌بندی شیک مناسب هدیه",
+          "price": 0,
+          "enabled": true,
+          "sortOrder": 0
+        }
+      ]
     }
   }
 }
@@ -175,6 +212,11 @@ On success the public settings cache is invalidated.
 | `seo.keywords` | | max 500 |
 | `maintenance.enabled` | | bool |
 | `maintenance.message` | | max 500 |
+| `gift.enabled` | | bool |
+| `gift.messageEnabled` | | bool |
+| `gift.messageMaxLength` | | 1–500 |
+| `gift.hidePriceEnabled` | | bool |
+| `gift.options[]` | | dive; each needs non-empty `id` + `label`; `price` ≥ 0 |
 
 Example — toggle maintenance mode and update the shipping note, leaving every
 other group untouched:
@@ -183,6 +225,37 @@ other group untouched:
 {
   "maintenance": { "enabled": true, "message": "Back at noon." },
   "shipping": { "freeThreshold": 6000000, "note": "Free shipping over ₮6,000,000." }
+}
+```
+
+Example — charge for gift packaging (replaces the whole `gift` group):
+
+```json
+{
+  "gift": {
+    "enabled": true,
+    "messageEnabled": true,
+    "messageMaxLength": 500,
+    "hidePriceEnabled": true,
+    "options": [
+      {
+        "id": "gift_wrap",
+        "label": "بسته‌بندی هدیه",
+        "description": "کاغذ و روبان",
+        "price": 85000,
+        "enabled": true,
+        "sortOrder": 0
+      },
+      {
+        "id": "gift_card",
+        "label": "کارت تبریک",
+        "description": "",
+        "price": 25000,
+        "enabled": true,
+        "sortOrder": 1
+      }
+    ]
+  }
 }
 ```
 

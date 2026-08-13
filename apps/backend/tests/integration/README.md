@@ -45,9 +45,9 @@ docker rm -f pg redis-test
 - `seed_test.go` holds minimal row factories (user, product, variant, inventory,
   order, order item, payment txn, coupon) so tests read as assertions, not setup.
 
-Tests build real repositories (`internal/repositories`) and services
-(`internal/services`) over the pool — they exercise production wiring, not a
-  re-implementation.
+Tests build real feature repositories and services under
+`internal/features/...` over the pool — they exercise production wiring, not a
+re-implementation.
 - Redis-backed tests are optional and skip when `TEST_REDIS_ADDR` is unset. They
   exercise the production Lua script used for atomic refresh-token replacement.
 

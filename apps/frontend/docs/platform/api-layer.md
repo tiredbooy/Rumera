@@ -145,9 +145,34 @@ the exact `{ data: { url, key, width, height } }` contract, and throws a typed
 ## `storeRequest` — the customer client core
 
 `lib/api/store-client.ts`. Thin, returns the body **verbatim**, throws
-`ApiClientError(status, code, message)` on `!res.ok`. It has **no** `fields`
-property — store/customer surfaces don't do per-field server validation mapping
-(forms validate with zod up front; server errors are surfaced as toasts).
+`ApiClientError(status, code, message, fields?)` on `!res.ok`. Field maps are
+forwarded when the backend sends `error.fields` (forms still zod-validate first;
+server 422 can still surface via the helper below).
+
+### User-facing errors (PH-012d)
+
+**Never** replace a useful API `code` / `message` with only a static
+“something went wrong” / generic Persian when the envelope already explains
+the failure.
+
+| Helper | File | Use |
+|--------|------|-----|
+| `describeApiError(err, { fallback })` | `lib/api/user-facing-error.ts` | `{ title, description?, fieldErrors?, code? }` |
+| `apiErrorToast(err, fallback)` | same | sonner `toast.error(title, { description })` |
+| `apiErrorMessage(err, fallback)` | same | single-line toast / inline alert |
+
+Rules:
+
+1. High-traffic **codes** map to clear Persian (`OUT_OF_STOCK`, coupon family,
+   `INSUFFICIENT_FUNDS` / `INSUFFICIENT_POINTS`, `GIFT_CARD_INVALID`,
+   auth/session, `FORBIDDEN` / `INSUFFICIENT_PERMISSIONS`, …).
+2. Prefer mapped title; attach non-generic server detail when helpful.
+3. Persian server `message` wins when the code is unknown.
+4. Generic fallback **only** when code is unmapped **and** message empty/generic.
+5. Wire money paths: checkout place-order + coupon, cart mutations, gift redeem,
+   loyalty redeem, admin wallet credit, admin account actions, recipe bulk-add.
+
+Backend catalogue: `apps/backend/docs/architecture/error-messages.md`.
 
 Almost nothing calls `storeRequest` directly — it is wrapped by the React Query
 hooks:

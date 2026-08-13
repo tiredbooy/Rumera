@@ -4,33 +4,78 @@ import * as React from "react";
 import { Loader2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiClientError } from "@/lib/api/store-client";
+import { apiErrorToast } from "@/lib/api/user-facing-error";
 import { faNum, formatPrice } from "@/lib/products";
+
+type CreditResponse = {
+  transaction?: { id?: number; amount?: string };
+  actor_user_id?: string;
+  idempotency_key?: string;
+  replayed?: boolean;
+  // legacy shape tolerance
+  id?: number;
+};
 
 /**
  * Admin wallet top-up for a customer (Task 083a).
- * Calls POST /api/admin/admin/users/:id/wallet/credit
+ *
+ * - Capability gate: only rendered when the operator has customers:write
+ * - Confirmation dialog before POST
+ * - Client-generated idempotency key (stable per pending credit)
+ * - Backend records actor + key; replays return 200 with replayed=true
  */
 export function WalletCreditForm({
   userId,
   userLabel,
+  canCredit = true,
 }: {
   userId: string;
   userLabel: string;
+  /** When false the form is not rendered (server capability gate). */
+  canCredit?: boolean;
 }) {
   const [amount, setAmount] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [pending, setPending] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  // Stable key for the current pending credit attempt; regenerated after success.
+  const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
+    newIdempotencyKey(),
+  );
 
-  async function onSubmit(event: React.FormEvent) {
+  if (!canCredit) {
+    return null;
+  }
+
+  function openConfirm(event: React.FormEvent) {
     event.preventDefault();
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0) {
       toast.error("مبلغ باید عددی بزرگ‌تر از صفر باشد");
+      return;
+    }
+    setConfirmOpen(true);
+  }
+
+  async function confirmCredit() {
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value <= 0) {
+      setConfirmOpen(false);
       return;
     }
     setPending(true);
@@ -39,10 +84,14 @@ export function WalletCreditForm({
         `/api/admin/admin/users/${encodeURIComponent(userId)}/wallet/credit`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": idempotencyKey,
+          },
           body: JSON.stringify({
             amount: value,
             description: description.trim() || undefined,
+            idempotency_key: idempotencyKey,
           }),
         },
       );
@@ -58,82 +107,162 @@ export function WalletCreditForm({
           message,
         );
       }
-      toast.success("موجودی کیف پول افزایش یافت", {
-        description: `${formatPrice(value)} برای ${userLabel}`,
-      });
+      const data = unwrapData<CreditResponse>(body);
+      const replayed = Boolean(data?.replayed);
+      toast.success(
+        replayed
+          ? "این واریز قبلاً ثبت شده بود"
+          : "موجودی کیف پول افزایش یافت",
+        {
+          description: `${formatPrice(value)} برای ${userLabel}`,
+        },
+      );
       setAmount("");
       setDescription("");
+      setIdempotencyKey(newIdempotencyKey());
+      setConfirmOpen(false);
     } catch (error) {
-      toast.error(
-        error instanceof ApiClientError
-          ? error.message || "افزایش موجودی ناموفق بود"
-          : "افزایش موجودی ناموفق بود",
-      );
+      const t = apiErrorToast(error, "افزایش موجودی ناموفق بود");
+      toast.error(t.title, { description: t.description });
     } finally {
       setPending(false);
     }
   }
 
+  const amountValue = Number(amount);
+  const amountValid = Number.isFinite(amountValue) && amountValue > 0;
+
   return (
-    <form
-      onSubmit={onSubmit}
-      className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]"
-      data-testid="wallet-credit-form"
-    >
-      <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
-          <Wallet className="size-5" aria-hidden />
-        </span>
-        <div className="min-w-0">
-          <h2 className="font-serif text-lg">افزایش موجودی کیف پول</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            مبلغ به‌صورت دستی به کیف پول {userLabel} واریز می‌شود.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="wallet-credit-amount">مبلغ (تومان)</Label>
-          <Input
-            id="wallet-credit-amount"
-            type="number"
-            min={1}
-            step={1}
-            dir="ltr"
-            inputMode="numeric"
-            placeholder="۵۰۰۰۰۰"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            disabled={pending}
-            required
-          />
-          {amount && Number(amount) > 0 ? (
-            <p className="text-xs text-muted-foreground">
-              معادل {faNum(Number(amount))} تومان
+    <>
+      <form
+        onSubmit={openConfirm}
+        className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]"
+        data-testid="wallet-credit-form"
+      >
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
+            <Wallet className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h2 className="font-serif text-lg">افزایش موجودی کیف پول</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              مبلغ پس از تأیید شما به کیف پول {userLabel} واریز می‌شود. از کلید
+              یکتای درخواست برای جلوگیری از واریز تکراری استفاده می‌شود.
             </p>
-          ) : null}
+          </div>
         </div>
-        <div className="flex flex-col gap-2 sm:col-span-2">
-          <Label htmlFor="wallet-credit-desc">توضیح (اختیاری)</Label>
-          <Textarea
-            id="wallet-credit-desc"
-            rows={2}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={pending}
-            placeholder="مثلاً جبران خطا یا هدیه"
-            maxLength={500}
-          />
-        </div>
-      </div>
 
-      <div className="mt-5 flex justify-end">
-        <Button type="submit" disabled={pending} className="h-11">
-          {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-          واریز به کیف پول
-        </Button>
-      </div>
-    </form>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="wallet-credit-amount">مبلغ (تومان)</Label>
+            <Input
+              id="wallet-credit-amount"
+              type="number"
+              min={1}
+              step={1}
+              dir="ltr"
+              inputMode="numeric"
+              placeholder="۵۰۰۰۰۰"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={pending}
+              required
+              data-testid="wallet-credit-amount"
+            />
+            {amountValid ? (
+              <p className="text-xs text-muted-foreground">
+                معادل {faNum(amountValue)} تومان
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <Label htmlFor="wallet-credit-desc">توضیح (اختیاری)</Label>
+            <Textarea
+              id="wallet-credit-desc"
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={pending}
+              placeholder="مثلاً جبران خطا یا هدیه"
+              maxLength={500}
+              data-testid="wallet-credit-desc"
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end">
+          <Button
+            type="submit"
+            disabled={pending || !amountValid}
+            className="h-11"
+            data-testid="wallet-credit-submit"
+          >
+            {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+            ادامه و تأیید
+          </Button>
+        </div>
+      </form>
+
+      <AlertDialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          if (!pending) setConfirmOpen(open);
+        }}
+      >
+        <AlertDialogContent data-testid="wallet-credit-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأیید افزایش موجودی</AlertDialogTitle>
+            <AlertDialogDescription>
+              {amountValid
+                ? `مبلغ ${formatPrice(amountValue)} به کیف پول «${userLabel}» واریز می‌شود. این عملیات پس از تأیید قابل برگشت خودکار نیست.`
+                : "مبلغ نامعتبر است."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="cursor-pointer"
+              disabled={pending}
+              data-testid="wallet-credit-cancel"
+            >
+              انصراف
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="cursor-pointer"
+              disabled={pending || !amountValid}
+              data-testid="wallet-credit-confirm-action"
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmCredit();
+              }}
+            >
+              {pending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                "بله، واریز شود"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
+}
+
+function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `wc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function unwrapData<T>(body: unknown): T {
+  if (
+    body &&
+    typeof body === "object" &&
+    "data" in body &&
+    (body as { data: unknown }).data !== undefined
+  ) {
+    return (body as { data: T }).data;
+  }
+  return body as T;
 }

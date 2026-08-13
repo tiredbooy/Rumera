@@ -1,5 +1,9 @@
 # Hero slides
 
+**Implementation (feature slice):** `internal/features/hero/`  
+Composed from `internal/routes/routes.go`. API contracts unchanged.
+
+
 Editorial slides for the storefront home carousel. Slides are admin-managed; the
 public route serves only **active** rows (ordered for display), while admins see
 and manage every slide.

@@ -1,4 +1,4 @@
-import { Boxes, PackageX, AlertTriangle, Wallet } from "lucide-react";
+import { Boxes, PackageX, AlertTriangle, Wallet, Scale } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
@@ -21,6 +21,7 @@ export default async function AdminInventoryPage() {
         row.available_stock > 0 &&
         row.available_stock <= row.reorder_point,
     ).length,
+    missingWeight: inventory.filter((row) => row.missing_weight).length,
     stockValue: inventory.reduce(
       (total, row) => total + row.stock_on_hand * Number(row.unit_price),
       0,
@@ -33,12 +34,12 @@ export default async function AdminInventoryPage() {
         title="موجودی"
         description={
           canWrite
-            ? "از آیکون تنظیم روی هر ردیف، موجودی را با چند کلیک تغییر دهید. ردیف‌های جدید با ساخت واریانت خودکار ساخته می‌شوند."
-            : "پایش موجودی انبار، رزرو، و هشدار کسری."
+            ? "از آیکون تنظیم روی هر ردیف، موجودی را با چند کلیک تغییر دهید. ردیف‌های جدید با ساخت واریانت خودکار ساخته می‌شوند. وزن ناقص را از فیلتر «وزن بسته‌بندی» پیدا و در محصول اصلاح کنید."
+            : "پایش موجودی انبار، رزرو، هشدار کسری، و وزن ناقص بسته‌بندی."
         }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="تعداد کالا" value={faNum(s.skuCount)} icon={Boxes} />
         <StatCard
           label="ناموجود"
@@ -51,6 +52,12 @@ export default async function AdminInventoryPage() {
           value={faNum(s.lowStock)}
           icon={AlertTriangle}
           hint="کمتر از آستانه"
+        />
+        <StatCard
+          label="وزن ناقص"
+          value={faNum(s.missingWeight)}
+          icon={Scale}
+          hint="برای ارسال ثبت کنید"
         />
         <StatCard
           label="ارزش موجودی"

@@ -37,6 +37,22 @@ const base: SiteSettings = {
     keywords: "",
   },
   maintenance: { enabled: false, message: "" },
+  gift: {
+    enabled: true,
+    messageEnabled: true,
+    messageMaxLength: 500,
+    hidePriceEnabled: true,
+    options: [
+      {
+        id: "gift_wrap",
+        label: "بسته‌بندی هدیه",
+        description: "",
+        price: 0,
+        enabled: true,
+        sortOrder: 0,
+      },
+    ],
+  },
   updatedAt: "2026-08-08T00:00:00Z",
 };
 
@@ -50,6 +66,46 @@ describe("toSettingsPayload", () => {
     expect(payload.contact?.address).toBe("آدرس جدید");
     expect(payload.store?.name).toBe("رومرا");
     expect(payload.shipping?.freeThreshold).toBe(500_000);
+  });
+
+  it("maps visual gift option rows to gift payload with sortOrder", () => {
+    const values = defaultsFromSettings(base);
+    values.giftEnabled = true;
+    values.giftOptions = [
+      {
+        id: "gift_wrap",
+        label: "بسته‌بندی",
+        description: "روبانی",
+        price: "85000",
+        enabled: true,
+      },
+      {
+        id: "gift_card",
+        label: "کارت",
+        description: "",
+        price: "0",
+        enabled: false,
+      },
+    ];
+    const payload = toSettingsPayload(values);
+    expect(payload.gift?.options).toEqual([
+      {
+        id: "gift_wrap",
+        label: "بسته‌بندی",
+        description: "روبانی",
+        price: 85000,
+        enabled: true,
+        sortOrder: 0,
+      },
+      {
+        id: "gift_card",
+        label: "کارت",
+        description: "",
+        price: 0,
+        enabled: false,
+        sortOrder: 1,
+      },
+    ]);
   });
 });
 

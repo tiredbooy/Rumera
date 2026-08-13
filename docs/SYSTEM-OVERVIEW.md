@@ -25,6 +25,18 @@ There is **no shared TypeScript/Go package workspace**. The frontend talks to
 the backend over HTTP (directly on the server for public RSC reads; through
 Next.js BFF proxies for authenticated browser traffic).
 
+### Backend shape (as-built)
+
+The Go API uses **feature vertical slices** under `apps/backend/internal/features/*`
+(catalogue umbrella + flat account domains). `internal/routes` only composes
+trust tiers and calls `Register*`. Composition root: `internal/handlers` (Deps)
++ `internal/bootstrap/container.go`. Depth:
+[`apps/backend/docs/architecture.md`](../apps/backend/docs/architecture.md) ·
+[`domain-map.md`](../apps/backend/docs/architecture/domain-map.md).
+
+**Docs process:** [DOCUMENTATION-DUAL-TRACK.md](./DOCUMENTATION-DUAL-TRACK.md)
+(project docs + Obsidian brain).
+
 ---
 
 ## Runtime topology

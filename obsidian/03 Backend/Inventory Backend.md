@@ -1,7 +1,5 @@
 ---
-tags:
-  - backend
-  - inventory
+tags: [backend, inventory, commerce]
 ---
 
 <!-- brain-hub -->
@@ -10,24 +8,32 @@ tags:
 
 # Inventory Backend
 
-Stock counters per **product variant**.
+Stock on hand, committed stock, reorder points, movement ledger, and order
+lifecycle reserve / release / deduct.
 
-| Field | Meaning |
-|-------|---------|
-| `stock_on_hand` | Physical units |
-| `committed_stock` | Held for open orders |
-| `available_stock` | **Derived** `on_hand - committed` |
+## Package (feature slice)
 
-## Lifecycle
+```text
+apps/backend/internal/features/inventory/
+  doc.go → routes.go → handler.go → service.go
+  → repository.go → movement_repository.go → model.go → mapper.go
+```
 
-1. **Reserve** on place order (same TX as order) → [[Orders]] · [[Cart and Checkout]]
-2. **Release** on cancel / payment fail → [[Payments Backend]]
-3. **Deduct** on payment confirm (same TX as paid)
+| Surface | Paths |
+|---------|--------|
+| Admin | `GET /admin/inventory`, low-stock, movements, variant stock adjust/reorder |
 
-Admin adjust / reorder / movements ledger → [[Inventory FE]].
+**List wire (PH-020a):** SQL joins `products.weight` → response `weight` +
+`missing_weight` (null/≤0). Documented in `api/inventory.md`.
 
-Related: [[Inventory]] · [[Payments]] · [[Catalogue]]
+Downward consumers (not HTTP):
 
-Bridge: `apps/backend/docs/architecture/inventory.md` · `api/inventory.md`
+- **Orders** — `ReserveForOrderTx` / `ReleaseForOrder`
+- **Payments** — `DeductForOrderTx` on confirm
+- **Cart / variant / alerts** — `Repository` for availability / EnsureForVariant
+
+## Related
+
+[[Inventory]] · [[Cart and Checkout]] · [[Orders]] · [[Payments Backend]] · [[ADR Backend feature packages]] · [[Backend package map]]
 
 #backend #inventory

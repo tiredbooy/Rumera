@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/internal/features/hero"
 	"go.uber.org/zap"
 )
 
 // ── hero slides ─────────────────────────────────────────────────────────────
 
 func (s *seeder) seedHeroSlides(ctx context.Context) error {
-	slides := []*models.HeroSlideReq{
+	slides := []*hero.HeroSlideReq{
 		{
 			Eyebrow:           sp("کلکسیون ویژه"),
 			Title:             "سلر رومرا، جایی برای انتخاب‌های بی‌نظیر",

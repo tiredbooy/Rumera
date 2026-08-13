@@ -74,7 +74,7 @@ Payment succeeded   −qty             −qty          unchanged*
 - **Error:** `ErrInsufficientStock` → client sees conflict / unprocessable
   (handler mapping).
 
-Code: `internal/services/inventory_svc.go` → `ReserveForOrderTx`  
+Code: `internal/features/inventory/service.go` → `ReserveForOrderTx`  
 Also used when tests call standalone `ReserveForOrder` (own short tx).
 
 ### 2. Release — unpaid cancel / payment failed
@@ -180,17 +180,20 @@ Admin list filters: variant, type, order id, pagination. See API doc for JSON.
 
 | Layer | Path |
 |-------|------|
-| Handler | `internal/handlers/inventory.go` |
-| Service | `internal/services/inventory_svc.go` |
-| Repository | `internal/repositories/inventory_repo.go` (+ movement repo) |
-| Models | `internal/models/inventory.go` |
-| Mappers | `internal/mappers/inventory_mappers.go` |
-| Unit tests | `internal/services/inventory_svc_test.go` |
+| Feature package | `internal/features/inventory/` |
+| Handler | `internal/features/inventory/handler.go` |
+| Service | `internal/features/inventory/service.go` |
+| Repository | `internal/features/inventory/repository.go` (+ `movement_repository.go`) |
+| Domain + wire types | `internal/features/inventory/model.go` (+ `mapper.go`) |
+| Shared sentinels | `internal/models/errors.go` (`ErrInsufficientStock`, `ErrInvalidInventoryAdjustment`, …) |
+| Unit tests | `internal/features/inventory/service_test.go` |
 | Integration | `tests/integration/inventory_test.go` |
 
-**Dependency direction:** Order and Payment services call **InventoryService**.
-Inventory does not import HTTP handlers. Repositories own the SQL that updates
-counters under row locks (preventing lost updates under concurrency).
+**Dependency direction:** Order and Payment feature services call inventory
+service APIs. Inventory does not import HTTP handlers. Repositories own the SQL
+that updates counters under row locks (preventing lost updates under concurrency).
+
+Domain entities live in the feature package — not in `internal/models` (PH-012a).
 
 ---
 

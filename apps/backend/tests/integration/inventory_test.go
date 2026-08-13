@@ -10,9 +10,11 @@ import (
 
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/tiredbooy/internal/features/cart"
+	"github.com/tiredbooy/internal/features/inventory"
+	"github.com/tiredbooy/internal/features/wishlist"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
+	"github.com/tiredbooy/pkg/apperr"
 )
 
 const preInventoryReservationNormalization = int64(20260801120000)
@@ -65,8 +67,8 @@ func TestCommittedInventoryIsUnavailableToCartAndWishlist(t *testing.T) {
 	variantID := seedVariant(t, productID)
 	seedInventory(t, variantID, 5, 5)
 
-	cartRepo := repositories.NewCartRepository(testPool)
-	request := models.AddCartItemReq{ProductVariantID: variantID, Quantity: 1}
+	cartRepo := cart.NewRepository(testPool)
+	request := cart.AddCartItemReq{ProductVariantID: variantID, Quantity: 1}
 	var cartID int64
 	if err := testPool.QueryRow(ctx,
 		`INSERT INTO carts (user_id) VALUES ($1) RETURNING id`, userID,
@@ -77,15 +79,15 @@ func TestCommittedInventoryIsUnavailableToCartAndWishlist(t *testing.T) {
 		t.Fatalf("cart repository error = %v, want ErrInsufficientStock", err)
 	}
 
-	wishlistRepo := repositories.NewWishlistRepository(testPool)
-	wishlist, err := wishlistRepo.GetOrCreate(ctx, userID)
+	wishlistRepo := wishlist.NewRepository(testPool)
+	list, err := wishlistRepo.GetOrCreate(ctx, userID)
 	if err != nil {
 		t.Fatalf("get wishlist: %v", err)
 	}
-	if err := wishlistRepo.AddItem(ctx, wishlist.ID, models.AddWishlistItemReq{ProductVariantID: variantID}); err != nil {
+	if err := wishlistRepo.AddItem(ctx, list.ID, wishlist.AddItemReq{ProductVariantID: variantID}); err != nil {
 		t.Fatalf("add wishlist item: %v", err)
 	}
-	items, err := wishlistRepo.GetItems(ctx, wishlist.ID)
+	items, err := wishlistRepo.GetItems(ctx, list.ID)
 	if err != nil || len(items) != 1 {
 		t.Fatalf("wishlist items = %+v, %v", items, err)
 	}
@@ -109,8 +111,8 @@ func TestInventoryPaginationKeepsNullableSKUsStableAndCountsEmptyPages(t *testin
 		}
 		seedInventory(t, variantID, 1, 0)
 	}
-	repo := repositories.NewInventoryRepository(testPool)
-	filter := models.InventoryFilter{BaseFilter: models.BaseFilter{
+	repo := inventory.NewRepository(testPool)
+	filter := inventory.InventoryFilter{BaseFilter: models.BaseFilter{
 		PaginationParams: models.PaginationParams{Page: 1, Limit: 2},
 		SortBy:           "sku",
 		OrderBy:          "desc",
@@ -144,13 +146,13 @@ func TestInventoryAdjustmentThresholdsAndVariantLedger(t *testing.T) {
 	seedInventory(t, variantID, 10, 2)
 	orderID := seedOrder(t, userID)
 
-	inventoryRepo := repositories.NewInventoryRepository(testPool)
-	movementRepo := repositories.NewMovementRepository(testPool)
-	service := services.NewInventoryService(inventoryRepo, movementRepo)
+	inventoryRepo := inventory.NewRepository(testPool)
+	movementRepo := inventory.NewMovementRepository(testPool)
+	service := inventory.NewService(inventoryRepo, movementRepo)
 	note := "cycle count"
-	if err := service.AdjustStock(ctx, variantID, models.AdjustStockReq{
+	if err := service.AdjustStock(ctx, variantID, inventory.AdjustStockReq{
 		Quantity: -3,
-		Type:     models.MovementTypeAdjustment,
+		Type:     inventory.MovementTypeAdjustment,
 		Note:     &note,
 	}, nil); err != nil {
 		t.Fatalf("adjust inventory: %v", err)
@@ -166,21 +168,21 @@ func TestInventoryAdjustmentThresholdsAndVariantLedger(t *testing.T) {
 	}
 
 	point, quantity := 0, 24
-	updated, err := service.UpdateReorder(ctx, variantID, models.UpdateReorderReq{
+	updated, err := service.UpdateReorder(ctx, variantID, inventory.UpdateReorderReq{
 		ReorderPoint: &point, ReorderQuantity: &quantity,
 	})
 	if err != nil || updated.ReorderPoint != 0 || updated.ReorderQuantity != 24 || updated.StockOnHand != 7 {
 		t.Fatalf("updated thresholds = %+v, %v", updated, err)
 	}
 	point = 9
-	updated, err = service.UpdateReorder(ctx, variantID, models.UpdateReorderReq{ReorderPoint: &point})
+	updated, err = service.UpdateReorder(ctx, variantID, inventory.UpdateReorderReq{ReorderPoint: &point})
 	if err != nil || updated.ReorderPoint != 9 || updated.ReorderQuantity != 24 {
 		t.Fatalf("partially updated thresholds = %+v, %v", updated, err)
 	}
 
-	if err := service.AdjustStock(ctx, variantID, models.AdjustStockReq{
+	if err := service.AdjustStock(ctx, variantID, inventory.AdjustStockReq{
 		Quantity: -6,
-		Type:     models.MovementTypeAdjustment,
+		Type:     inventory.MovementTypeAdjustment,
 	}, nil); !errors.Is(err, models.ErrInsufficientStock) {
 		t.Fatalf("underflow error = %v, want ErrInsufficientStock", err)
 	}
@@ -189,7 +191,7 @@ func TestInventoryAdjustmentThresholdsAndVariantLedger(t *testing.T) {
 		t.Fatalf("underflow movements = %+v, %v; want original ledger only", movements, err)
 	}
 
-	items := []models.OrderItemResponse{{VariantID: variantID, Quantity: 2}}
+	items := []inventory.StockLine{{VariantID: variantID, Quantity: 2}}
 	if err := service.ReserveForOrder(ctx, orderID, items); err != nil {
 		t.Fatalf("reserve inventory: %v", err)
 	}
@@ -222,9 +224,9 @@ func TestInventoryAdjustmentThresholdsAndVariantLedger(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs <- service.AdjustStock(ctx, variantID, models.AdjustStockReq{
+			errs <- service.AdjustStock(ctx, variantID, inventory.AdjustStockReq{
 				Quantity: 1,
-				Type:     models.MovementTypeAdjustment,
+				Type:     inventory.MovementTypeAdjustment,
 			}, nil)
 		}()
 	}
@@ -240,7 +242,7 @@ func TestInventoryAdjustmentThresholdsAndVariantLedger(t *testing.T) {
 		t.Fatalf("inventory after concurrent adjustments = %+v, %v", current, err)
 	}
 
-	filter := models.MovementFilter{ProductVariantID: &variantID}
+	filter := inventory.MovementFilter{ProductVariantID: &variantID}
 	filter.Defaults()
 	page, total, err := service.GetMovements(ctx, filter)
 	wantMovements := int64(5 + concurrentAdjustments)
@@ -254,7 +256,8 @@ func TestInventoryAdjustmentThresholdsAndVariantLedger(t *testing.T) {
 		}
 	}
 
-	if _, err := service.GetMovementsByVariant(ctx, variantID+999); !errors.Is(err, models.ErrNotFound) {
-		t.Fatalf("missing variant history error = %v, want ErrNotFound", err)
+	// Service maps missing inventory to apperr.ErrNotFound (unit-tested contract).
+	if _, err := service.GetMovementsByVariant(ctx, variantID+999); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("missing variant history error = %v, want apperr.ErrNotFound", err)
 	}
 }

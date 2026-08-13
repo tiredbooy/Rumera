@@ -1,5 +1,9 @@
 # Coupons
 
+**Implementation (feature slice):** `internal/features/coupons/`  
+Composed from `internal/routes/routes.go`. Order redemption uses `Repository`/`UsageRepository` under tx. API contracts unchanged.
+
+
 Customers preview a coupon against their basket at checkout; admins manage the coupon catalogue.
 
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope, pagination, and sorting.

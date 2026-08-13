@@ -3,10 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/tiredbooy/internal/features/blog"
+	"github.com/tiredbooy/internal/features/recipes"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
+	"github.com/tiredbooy/internal/features/catalog/brand"
+	"github.com/tiredbooy/internal/features/catalog/category"
+	"github.com/tiredbooy/internal/features/catalog/product"
+	"github.com/tiredbooy/internal/features/catalog/tag"
+	"github.com/tiredbooy/internal/features/catalog/variant"
+	"github.com/tiredbooy/internal/features/hero"
+	"github.com/tiredbooy/internal/features/inventory"
 	"go.uber.org/zap"
 )
 
@@ -18,15 +25,15 @@ type seeder struct {
 	log  *zap.Logger
 	c    *counts
 
-	brand    services.BrandService
-	category services.CategoryService
-	tag      *services.TagService
-	product  *services.ProductService
-	variant  *services.VariantService
-	image    repositories.ProductImageRepository
-	recipe   services.RecipeService
-	blog     services.BlogService
-	hero     services.HeroSlideService
+	brand    brand.Service
+	category category.Service
+	tag      *tag.Service
+	product  *product.Service
+	variant  *variant.Service
+	image    product.ImageRepository
+	recipe   recipes.Service
+	blog     blog.Service
+	hero     hero.Service
 }
 
 func newSeeder(pool *pgxpool.Pool, zlog *zap.Logger) *seeder {
@@ -34,15 +41,15 @@ func newSeeder(pool *pgxpool.Pool, zlog *zap.Logger) *seeder {
 		pool:     pool,
 		log:      zlog,
 		c:        newCounts(),
-		brand:    services.NewBrandService(repositories.NewBrandRepository(pool)),
-		category: services.NewCategoryService(repositories.NewCategoryRepository(pool), nil),
-		tag:      services.NewTagService(repositories.NewTagRepository(pool)),
-		product:  services.NewProductService(repositories.NewProductRepository(pool), nil, nil),
-		variant:  services.NewVariantService(repositories.NewVariantRepository(pool), repositories.NewInventoryRepository(pool), nil),
-		image:    repositories.NewProductImageRepository(pool),
-		recipe:   services.NewRecipeService(repositories.NewRecipeRepository(pool), pool, nil),
-		blog:     services.NewBlogService(repositories.NewBlogRepository(pool), pool, nil),
-		hero:     services.NewHeroSlideService(repositories.NewHeroSlideRepository(pool), nil),
+		brand:    brand.NewService(brand.NewRepository(pool)),
+		category: category.NewService(category.NewRepository(pool), nil),
+		tag:      tag.NewService(tag.NewRepository(pool)),
+		product:  product.NewService(product.NewRepository(pool), nil, nil),
+		variant:  variant.NewService(variant.NewRepository(pool), inventory.NewRepository(pool), nil),
+		image:    product.NewImageRepository(pool),
+		recipe:   recipes.NewService(recipes.NewRepository(pool), pool, nil),
+		blog:     blog.NewService(blog.NewRepository(pool), pool, nil),
+		hero:     hero.NewService(hero.NewRepository(pool), nil),
 	}
 }
 

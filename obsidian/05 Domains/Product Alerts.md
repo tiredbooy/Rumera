@@ -40,10 +40,9 @@ Each alert is meant to fire **once** (`notified_at` set by the checker job).
 
 | Layer | Path |
 |-------|------|
-| Service | `internal/services/alert_svc.go` |
-| Handler | `internal/handlers/alert.go` |
-| Cron | `internal/corn/alert_check_job.go` |
-| FE types/hooks | `features/product-alerts/` |
+| Feature slice | `apps/backend/internal/features/alerts/` |
+| Cron | `apps/backend/internal/corn/alert_check_job.go` |
+| FE types/hooks | `apps/frontend/features/product-alerts/` |
 
 ## Related
 

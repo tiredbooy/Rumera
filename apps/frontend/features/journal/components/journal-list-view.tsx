@@ -99,8 +99,8 @@ export async function JournalListView({
         ]}
       />
 
-      <section className="cellar-glow relative overflow-hidden border-b border-border/60">
-        <div className="container-px mx-auto max-w-7xl py-16 sm:py-20 lg:py-24">
+      <section className="content-header-glow relative overflow-hidden border-b border-border/50">
+        <div className="container-px mx-auto max-w-7xl py-14 sm:py-16 lg:py-20">
           <Reveal>
             <p className="eyebrow mb-4">
               <BookOpen className="size-3.5" aria-hidden="true" /> ژورنال رومرا

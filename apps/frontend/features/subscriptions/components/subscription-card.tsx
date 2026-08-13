@@ -21,41 +21,32 @@ import {
   cadenceLabel,
   faDate,
   formatAddress,
+  nextShipHint,
+  nextShipTitle,
   planName,
+  statusCopy,
 } from "./subscription-display-helpers";
 
-/** Plain-language status metadata, including a non-color-only icon. */
-const statusMeta: Record<
+const statusChrome: Record<
   Subscription["status"],
   {
-    label: string;
     icon: typeof CircleCheck;
-    explain: string;
     banner: string;
     iconClass: string;
   }
 > = {
   active: {
-    label: "فعال",
     icon: CircleCheck,
-    explain:
-      "این اشتراک فعال است؛ باکس بعدی در تاریخ تمدید برایتان ارسال می‌شود.",
     banner: "bg-emerald-500/10 ring-emerald-500/25",
     iconClass: "text-emerald-600 dark:text-emerald-400",
   },
   paused: {
-    label: "متوقف‌شده",
     icon: CirclePause,
-    explain:
-      "ارسال‌ها موقتاً متوقف شده‌اند. هیچ باکسی ارسال نمی‌شود تا زمانی که از سر بگیرید.",
     banner: "bg-amber-500/10 ring-amber-500/25",
     iconClass: "text-amber-600 dark:text-amber-400",
   },
   cancelled: {
-    label: "لغوشده",
     icon: CircleSlash,
-    explain:
-      "این اشتراک لغو شده و دیگر باکسی ارسال نمی‌شود. می‌توانید آن را دوباره فعال کنید.",
     banner: "bg-muted ring-foreground/10",
     iconClass: "text-muted-foreground",
   },
@@ -65,7 +56,7 @@ type SubscriptionCardProps = {
   sub: Subscription;
   address?: Address;
   busy: boolean;
-  onSkip: () => void;
+  onRequestSkip: () => void;
   onResume: () => void;
   onRequestPause: () => void;
   onRequestCancel: () => void;
@@ -75,19 +66,21 @@ export function SubscriptionCard({
   sub,
   address,
   busy,
-  onSkip,
+  onRequestSkip,
   onResume,
   onRequestPause,
   onRequestCancel,
 }: SubscriptionCardProps) {
-  const meta = statusMeta[sub.status];
-  const StatusIcon = meta.icon;
+  const chrome = statusChrome[sub.status];
+  const copy = statusCopy(sub.status);
+  const StatusIcon = chrome.icon;
   const cancelled = sub.status === "cancelled";
+  const paused = sub.status === "paused";
+  const missingAddress = sub.status === "active" && !address;
 
   return (
     <li className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 shadow-e1">
       <div className="p-5 sm:p-6">
-        {/* Header: plan + status pill */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="font-serif text-xl leading-tight">
@@ -101,47 +94,50 @@ export function SubscriptionCard({
           <span
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset",
-              meta.banner,
+              chrome.banner,
             )}
           >
             <StatusIcon
-              className={cn("size-3.5", meta.iconClass)}
+              className={cn("size-3.5", chrome.iconClass)}
               aria-hidden
             />
-            {meta.label}
+            {copy.label}
           </span>
         </div>
 
-        {/* Plain-language status banner */}
         <div
           className={cn(
             "mt-4 flex items-start gap-2.5 rounded-xl px-3.5 py-3 ring-1 ring-inset",
-            meta.banner,
+            chrome.banner,
           )}
         >
           <StatusIcon
-            className={cn("mt-0.5 size-4 shrink-0", meta.iconClass)}
+            className={cn("mt-0.5 size-4 shrink-0", chrome.iconClass)}
             aria-hidden
           />
           <p className="text-sm leading-relaxed text-foreground/80">
-            {meta.explain}
+            {copy.explain}
           </p>
         </div>
 
-        {/* Facts: next renewal + ship-to */}
         <dl className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="border-hairline rounded-xl bg-background/40 px-3.5 py-3">
             <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CalendarClock className="size-3.5" aria-hidden /> تمدید بعدی
+              <CalendarClock className="size-3.5" aria-hidden />{" "}
+              {nextShipTitle(sub.status)}
             </dt>
             <dd
               className={cn(
                 "mt-1 text-sm font-medium",
                 cancelled && "text-muted-foreground line-through",
+                paused && "text-muted-foreground",
               )}
             >
               {faDate(sub.next_renewal_at)}
             </dd>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              {nextShipHint(sub.status)}
+            </p>
           </div>
           {address ? (
             <div className="border-hairline rounded-xl bg-background/40 px-3.5 py-3">
@@ -159,19 +155,30 @@ export function SubscriptionCard({
                 </span>
               </dd>
             </div>
-          ) : null}
+          ) : (
+            <div className="border-hairline rounded-xl bg-amber-500/5 px-3.5 py-3 ring-1 ring-inset ring-amber-500/20">
+              <dt className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-200">
+                <MapPin className="size-3.5" aria-hidden /> آدرس ارسال
+              </dt>
+              <dd className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                {missingAddress
+                  ? "آدرسی به این باکس وصل نیست. از بخش آدرس‌ها یک آدرس اضافه کنید و در فعال‌سازی بعدی انتخاب کنید."
+                  : "آدرسی ثبت نشده است."}
+              </dd>
+            </div>
+          )}
         </dl>
 
-        {/* Actions */}
         <div className="mt-5 flex flex-wrap items-center gap-2">
           {sub.status === "active" ? (
             <>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={onSkip}
+                onClick={onRequestSkip}
                 disabled={busy}
                 className="cursor-pointer"
+                title="تاریخ ارسال باکس بعدی یک دوره جلو می‌رود"
               >
                 {busy ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -186,6 +193,7 @@ export function SubscriptionCard({
                 onClick={onRequestPause}
                 disabled={busy}
                 className="cursor-pointer"
+                title="ارسال موقتاً متوقف می‌شود"
               >
                 <Pause className="size-4" aria-hidden /> توقف موقت
               </Button>
@@ -195,6 +203,7 @@ export function SubscriptionCard({
                 onClick={onRequestCancel}
                 disabled={busy}
                 className="cursor-pointer text-destructive hover:text-destructive"
+                title="لغو کامل اشتراک باکس"
               >
                 <X className="size-4" aria-hidden /> لغو اشتراک
               </Button>
@@ -225,7 +234,6 @@ export function SubscriptionCard({
               </Button>
             </>
           ) : (
-            // cancelled → reactivate (the `resume` action restores it to active)
             <Button
               size="sm"
               onClick={onResume}

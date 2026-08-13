@@ -30,6 +30,10 @@ export const SETTINGS_FIELD_KEYS = new Set<keyof SiteSettingsFormValues>([
   "keywords",
   "enabled",
   "message",
+  "giftEnabled",
+  "giftMessageEnabled",
+  "giftHidePriceEnabled",
+  "giftOptions",
 ]);
 
 const EMPTY_SETTINGS: SiteSettings = {
@@ -56,6 +60,22 @@ const EMPTY_SETTINGS: SiteSettings = {
     keywords: "",
   },
   maintenance: { enabled: false, message: "" },
+  gift: {
+    enabled: true,
+    messageEnabled: true,
+    messageMaxLength: 500,
+    hidePriceEnabled: true,
+    options: [
+      {
+        id: "gift_wrap",
+        label: "بسته‌بندی هدیه",
+        description: "بسته‌بندی شیک مناسب هدیه",
+        price: 0,
+        enabled: true,
+        sortOrder: 0,
+      },
+    ],
+  },
   updatedAt: "",
 };
 
@@ -83,7 +103,41 @@ export function normalizeSiteSettings(
       enabled: Boolean(settings.maintenance?.enabled),
       message: settings.maintenance?.message ?? "",
     },
+    gift: normalizeGift(settings.gift),
     updatedAt: settings.updatedAt ?? "",
+  };
+}
+
+function normalizeGift(
+  gift: Partial<SiteSettings["gift"]> | null | undefined,
+): SiteSettings["gift"] {
+  const base = EMPTY_SETTINGS.gift;
+  if (!gift || typeof gift !== "object") return { ...base, options: [...base.options] };
+  const options = Array.isArray(gift.options)
+    ? gift.options.map((o, i) => ({
+        id: String(o?.id ?? "").trim() || `option_${i + 1}`,
+        label: String(o?.label ?? "").trim() || "گزینه",
+        description: String(o?.description ?? ""),
+        price:
+          typeof o?.price === "number" && Number.isFinite(o.price) && o.price >= 0
+            ? o.price
+            : 0,
+        enabled: o?.enabled !== false,
+        sortOrder:
+          typeof o?.sortOrder === "number" && Number.isFinite(o.sortOrder)
+            ? o.sortOrder
+            : i,
+      }))
+    : [...base.options];
+  return {
+    enabled: gift.enabled !== false,
+    messageEnabled: gift.messageEnabled !== false,
+    messageMaxLength:
+      typeof gift.messageMaxLength === "number" && gift.messageMaxLength > 0
+        ? Math.min(500, gift.messageMaxLength)
+        : 500,
+    hidePriceEnabled: gift.hidePriceEnabled !== false,
+    options,
   };
 }
 
@@ -119,6 +173,21 @@ export function defaultsFromSettings(
     keywords: n.seo.keywords ?? "",
     enabled: n.maintenance.enabled ?? false,
     message: n.maintenance.message ?? "",
+    giftEnabled: n.gift.enabled,
+    giftMessageEnabled: n.gift.messageEnabled,
+    giftHidePriceEnabled: n.gift.hidePriceEnabled,
+    giftOptions: (n.gift.options ?? []).map((o) => ({
+      id: o.id,
+      label: o.label,
+      description: o.description ?? "",
+      price:
+        typeof o.price === "number" && Number.isFinite(o.price) && o.price > 0
+          ? String(Math.trunc(o.price))
+          : o.price === 0
+            ? "0"
+            : "",
+      enabled: o.enabled !== false,
+    })),
   };
 }
 
@@ -169,6 +238,38 @@ export function toSettingsPayload(
       enabled: v.enabled,
       message: v.message,
     },
+    gift: parseGiftPayload(v),
+  };
+}
+
+function parseGiftPayload(v: SiteSettingsFormValues): SiteSettings["gift"] {
+  const seen = new Set<string>();
+  const options: SiteSettings["gift"]["options"] = [];
+  for (let i = 0; i < (v.giftOptions ?? []).length; i++) {
+    const row = v.giftOptions[i];
+    const id = row.id.trim().toLowerCase();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const priceRaw = row.price.trim();
+    const price =
+      priceRaw === "" || !/^\d+$/.test(priceRaw)
+        ? 0
+        : Math.max(0, Math.trunc(Number(priceRaw)));
+    options.push({
+      id,
+      label: row.label.trim() || "گزینه",
+      description: row.description ?? "",
+      price,
+      enabled: row.enabled !== false,
+      sortOrder: i,
+    });
+  }
+  return {
+    enabled: v.giftEnabled,
+    messageEnabled: v.giftMessageEnabled,
+    messageMaxLength: 500,
+    hidePriceEnabled: v.giftHidePriceEnabled,
+    options,
   };
 }
 

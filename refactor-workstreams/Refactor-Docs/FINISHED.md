@@ -5638,3 +5638,158 @@ npm run build
   320/375/768/1024/1440px, RTL direction, and no document overflow.
 - Keyboard Tab focuses the first brand link with a visible primary ring.
 - Reduced-motion computes `transition-property: none` for card and media.
+
+## Phase K–M Verification Pass (2026-08-10)
+
+**Status:** Complete (tracker reconciliation)
+**Date:** 2026-08-10
+**Agent:** grok-4.5
+
+### Method
+
+Re-read open backlog items in `TASKS.md`, compared implementation snapshots in
+this file, inspected live code under `apps/frontend` and `apps/backend`, and ran
+focused Vitest suites. Did **not** rubber-stamp tasks that still fail their
+original acceptance criteria (notably server-side RBAC).
+
+### Accepted as complete (moved off open backlog)
+
+| Task | Evidence |
+|------|----------|
+| **078a** Add to cart | `add-to-cart-button.tsx` + tests (3), `normalize.ts`/`errors.ts` tests; vitest green |
+| **078b** Shop settings persist | `form-utils.ts` payload/rehydrate/error mapping tests green |
+| **079a** Recipe shopping UX | summary/mobile bar/add-all; `add-all-button` + `recipe-detail-view` tests green |
+| **080a** PDP gallery | `product-gallery.tsx` + 5 tests green |
+| **080b** Variant matrix + price | `variant-matrix.ts` + purchase panel; 3 matrix tests green |
+| **080c** Non-buyer reviews | `ReviewService.Create` allows non-buyers + `verifiedPurchase`; FE badges |
+| **084a** Discount selects + Jalali | `JalaliDateTimeInput`, coupon form MultiTagPicker, jalali unit tests present |
+| **086a** K6 suite | `smoke`/`mixed`/`capacity`/`frontend-capacity`/`cart-write` + README; product journeys in capacity scripts |
+
+### Focused verification run
+
+```text
+apps/frontend:
+  vitest add-to-cart-button, normalize, form-utils, variant-matrix,
+         product-gallery, stock-display
+  → 6 files / 20 tests passed
+
+  vitest add-all-button, recipe-detail-view, InventoryTable
+  → 3 files / 9 tests passed
+
+apps/backend:
+  go build ./...  → success
+  go test ./internal/services -count=1
+  → FAIL TestUserServiceAdminRolesAreDeterministic (staff role drift; 082a)
+```
+
+### Still open (honest residual)
+
+- **082a** — Capability tables/service exist, but admin routes still
+  `RequireRole("admin")` only; FE matrix is still `localStorage`; no permission
+  middleware on routes; unit test drift on roles summary.
+- **083a** — Wallet credit API + form exist; missing confirmation, capability
+  gate, idempotency/audit, focused tests.
+- ~~**085a** (narrow)~~ — **Closed 2026-08-12** via production-hardening
+  PH-020a (inventory list wire: `weight` + `missing_weight`) and PH-020b
+  (admin UI: badge, filter, KPI «وزن ناقص», variant detail callout → product
+  edit). Critical stock filter was already shipped earlier.
+
+### Related
+
+Backend **feature-based package** reorganisation opened as a separate workstream:
+
+`refactor-workstreams/backend-feature-architecture/`
+
+Production hardening (PH-020*):  
+`refactor-workstreams/production-hardening-and-product/`
+
+
+## Task 082a - Dynamic admin roles and capability assignment
+
+**Status:** Complete (verified)
+**Date:** 2026-08-11
+**Agent:** auto-loop (Refactor-Docs)
+
+### What Changed
+
+- Backend panel admin tier admits `admin` (superuser) and `staff` (capability-gated).
+- Added `mw.RequirePermission` and applied it per admin surface in `routes.registerAdmin`.
+- Wired `features/rbac` into bootstrap + composition root; mounted
+  `GET/PUT /admin/capabilities`.
+- `PUT /admin/capabilities/:role` requires `roles:manage`; list is readable by
+  any panel role for live grant resolution.
+- `GetAdminRoles` now reports `authorization_mode=role_capabilities` and panel
+  roles `admin`+`staff` with `admin_access` for both.
+- Frontend: `staff` role, live permission resolution from server matrix,
+  CapabilityMatrix loads/saves via BFF API (localStorage cache only), roles UI
+  and customer role pickers include اپراتور.
+
+### Files Touched (primary)
+
+- `apps/backend/internal/middlewares/permission.go` (+ tests)
+- `apps/backend/internal/routes/routes.go`
+- `apps/backend/internal/handlers/handler.go`
+- `apps/backend/internal/bootstrap/container.go`
+- `apps/backend/internal/features/rbac/*`
+- `apps/backend/internal/features/users/service.go` (+ model oneofs, tests)
+- `apps/frontend/lib/rbac/roles.ts`, `capabilities-api.ts`, `live-permissions.ts`
+- `apps/frontend/lib/auth/session.ts`
+- `apps/frontend/features/admin/roles/components/capability-matrix.tsx`
+- `apps/frontend/features/admin/roles/components/roles-view.tsx` (+ tests)
+- Customer role pickers / validations for `staff`
+
+### Verification
+
+```text
+cd apps/backend
+go build ./...
+go test ./internal/middlewares/ ./internal/features/rbac/ \
+  ./internal/features/users/ ./internal/routes/ -count=1
+# all ok
+
+cd apps/frontend
+npm exec tsc -- --noEmit
+# clean
+npm exec vitest -- run lib/rbac features/admin/roles features/customers
+# 5 files / 10 tests passed
+```
+
+### Done-when check
+
+- [x] Server source of truth for capability matrix (`role_capabilities` + API)
+- [x] Staff with grants access only permitted admin surfaces (`RequirePermission`)
+- [x] Admin superuser full access
+- [x] FE matrix reads/writes API (not localStorage-only)
+- [x] Denied-route permission unit tests; build/tests green
+
+## Task 083a - Users wallet top-up safety
+
+**Status:** Complete (verified)
+**Date:** 2026-08-11
+**Agent:** auto-loop (Refactor-Docs)
+
+### What Changed
+
+- Backend `AdminCredit` requires `idempotency_key`, records `actor=<uuid>` and
+  `idem=<key>` on the ledger description, and replays safely on key reuse.
+- Response includes `transaction`, `actor_user_id`, `idempotency_key`, `replayed`.
+- Route remains capability-gated via `customers:write` (from 082a).
+- Frontend: confirmation AlertDialog, Idempotency-Key + body key, form hidden
+  without `customers:write`, focused vitest coverage.
+
+### Files Touched (primary)
+
+- `apps/backend/internal/features/wallet/{handler,service,model,repository,service_test}.go`
+- `apps/backend/internal/mocks/mocks.go`
+- `apps/frontend/features/admin/customers/components/wallet-credit-form.tsx` (+ test)
+- `apps/frontend/features/admin/customers/components/customer-detail-view.tsx`
+- `apps/frontend/app/admin/customers/[id]/page.tsx`
+
+### Verification
+
+```text
+go build ./...
+go test ./internal/features/wallet/ ... -count=1  # ok
+npm exec tsc -- --noEmit  # clean
+vitest wallet-credit-form.test.tsx  # 3 passed
+```

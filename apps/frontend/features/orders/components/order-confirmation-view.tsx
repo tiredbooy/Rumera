@@ -1,6 +1,14 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeft, CheckCircle2, Gift, Mail, Package, Truck } from "lucide-react"
+import {
+  ArrowLeft,
+  Award,
+  CheckCircle2,
+  Gift,
+  Mail,
+  Package,
+  Truck,
+} from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,6 +45,15 @@ export async function OrderConfirmationView({ id }: OrderConfirmationViewProps) 
         month: "long",
       })
     : null
+
+  // Points are granted after payment settles (not on order create alone) — PH-040c.
+  const isPaidLike =
+    order.status === "paid" ||
+    order.status === "processing" ||
+    order.status === "ready_to_ship" ||
+    order.status === "shipped" ||
+    order.status === "out_for_delivery" ||
+    order.status === "delivered"
 
   return (
     <section className="container-px mx-auto max-w-3xl py-14 lg:py-20">
@@ -84,6 +101,28 @@ export async function OrderConfirmationView({ id }: OrderConfirmationViewProps) 
         </div>
       </div>
 
+      {/* Loyalty transparency (earn after paid — PH-040c) */}
+      <div className="border-hairline mt-6 rounded-2xl bg-card px-6 py-5 ring-1 ring-foreground/5">
+        <p className="flex items-center gap-2 font-medium text-primary">
+          <Award className="size-4" /> باشگاه مشتریان
+        </p>
+        {isPaidLike ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            امتیاز این خرید (در صورت تعلق) به حساب باشگاه شما افزوده شده یا به‌زودی
+            ثبت می‌شود. جزئیات را در تاریخچهٔ امتیاز ببینید.
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">
+            امتیاز باشگاه پس از{" "}
+            <strong className="font-medium text-foreground">تأیید پرداخت</strong>{" "}
+            محاسبه می‌شود — ثبت سفارش به‌تنهایی امتیاز نمی‌دهد.
+          </p>
+        )}
+        <Button asChild variant="link" className="mt-2 h-auto px-0">
+          <Link href="/account/rewards">مشاهدهٔ باشگاه مشتریان</Link>
+        </Button>
+      </div>
+
       {order.is_gift ? (
         <div className="border-hairline mt-6 rounded-2xl bg-card px-6 py-5 ring-1 ring-foreground/5">
           <p className="flex items-center gap-2 font-medium text-primary">
@@ -92,8 +131,27 @@ export async function OrderConfirmationView({ id }: OrderConfirmationViewProps) 
           {order.gift_message ? (
             <p className="mt-2 text-sm text-muted-foreground">«{order.gift_message}»</p>
           ) : null}
+          {order.gift_addons && order.gift_addons.length > 0 ? (
+            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+              {order.gift_addons.map((addon) => (
+                <li key={addon.id} className="flex justify-between gap-3">
+                  <span>{addon.label}</span>
+                  <span className="tabular-nums">
+                    {addon.price > 0 ? formatPrice(addon.price) : "رایگان"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {order.gift_wrap ? <span>با بسته‌بندی هدیه</span> : null}
+            {!order.gift_addons?.length && order.gift_wrap ? (
+              <span>با بسته‌بندی هدیه</span>
+            ) : null}
+            {order.gift_addons_fee && order.gift_addons_fee > 0 ? (
+              <span>
+                هزینهٔ افزونه‌ها: {formatPrice(order.gift_addons_fee)}
+              </span>
+            ) : null}
             {order.hide_price ? <span>قیمت در رسید مخفی می‌شود</span> : null}
             {scheduled ? <span>تاریخ تحویل: {scheduled}</span> : null}
           </div>
@@ -124,6 +182,12 @@ export async function OrderConfirmationView({ id }: OrderConfirmationViewProps) 
           <Row label="جمع جزء" value={formatPrice(order.subtotal)} />
           {order.discount_amount > 0 ? <Row label="تخفیف" value={`− ${formatPrice(order.discount_amount)}`} /> : null}
           <Row label="ارسال" value={order.shipping_cost > 0 ? formatPrice(order.shipping_cost) : "رایگان"} />
+          {order.gift_addons_fee && order.gift_addons_fee > 0 ? (
+            <Row
+              label="بسته‌بندی و افزونهٔ هدیه"
+              value={formatPrice(order.gift_addons_fee)}
+            />
+          ) : null}
           <div className="flex items-center justify-between border-t border-border/60 pt-3">
             <dt className="font-medium">مبلغ کل</dt>
             <dd className="font-serif text-xl text-foil tabular-nums">{formatPrice(order.total_amount)}</dd>

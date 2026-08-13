@@ -31,7 +31,11 @@ export function useRedeemPoints() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: redeemLoyaltyPoints,
+    mutationFn: (input: { points: number; idempotencyKey?: string }) =>
+      redeemLoyaltyPoints(
+        { points: input.points },
+        input.idempotencyKey,
+      ),
     onSuccess: (account) => {
       queryClient.setQueryData(loyaltyKeys.account, account);
       queryClient.invalidateQueries({ queryKey: loyaltyKeys.transactions });

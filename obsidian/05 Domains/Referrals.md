@@ -36,8 +36,8 @@ Triggered from [[Payments Backend]] `Confirm` → `referral.OnPaidOrder` (best-e
 
 | Layer | Path |
 |-------|------|
-| Service | `internal/services/referral_svc.go` |
-| FE | `features/referral/` · often surfaced in rewards UI |
+| Feature slice | `apps/backend/internal/features/referral/` |
+| FE | `apps/frontend/features/referral/` · often surfaced in rewards UI |
 | Wire | `GET referrals/me` · `POST referrals/claim` |
 
 ## Related

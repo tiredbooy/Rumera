@@ -6,7 +6,12 @@ import type {
   UserStatusFilter,
 } from "./types";
 
-export const adminUserRoleSchema = z.enum(["customer", "vendor", "admin"]);
+export const adminUserRoleSchema = z.enum([
+  "customer",
+  "vendor",
+  "admin",
+  "staff",
+]);
 const adminUserIDSchema = z.string().uuid();
 
 export function parseAdminUserID(value: string): string | null {

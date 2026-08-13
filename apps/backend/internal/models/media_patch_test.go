@@ -13,30 +13,40 @@ func TestMediaURLPatchDistinguishesOmittedNullAndValue(t *testing.T) {
 		decode func([]byte) error
 	}{
 		{
-			name: "hero image",
+			// Hero slides live in features/hero; keep a local shape so models
+			// tests still cover NullablePatch JSON null vs omit for image_url.
+			name: "hero-like image patch",
 			body: `{"image_url":null}`,
-			read: func() NullablePatch[string] { return heroPatch.ImageURL },
+			read: func() NullablePatch[string] { return heroLikePatch.ImageURL },
 			decode: func(data []byte) error {
-				heroPatch = HeroSlideUpdateReq{}
-				return json.Unmarshal(data, &heroPatch)
+				heroLikePatch = struct {
+					ImageURL NullablePatch[string] `json:"image_url"`
+				}{}
+				return json.Unmarshal(data, &heroLikePatch)
 			},
 		},
 		{
-			name: "recipe image",
+			// Recipes live in features/recipes; keep a local shape for patch JSON.
+			name: "recipe-like image patch",
 			body: `{"image_url":null}`,
-			read: func() NullablePatch[string] { return recipePatch.ImageURL },
+			read: func() NullablePatch[string] { return recipeLikePatch.ImageURL },
 			decode: func(data []byte) error {
-				recipePatch = RecipeUpdateReq{}
-				return json.Unmarshal(data, &recipePatch)
+				recipeLikePatch = struct {
+					ImageURL NullablePatch[string] `json:"image_url"`
+				}{}
+				return json.Unmarshal(data, &recipeLikePatch)
 			},
 		},
 		{
-			name: "journal image",
+			// Journal posts live in features/blog; keep a local shape for patch JSON.
+			name: "journal-like image patch",
 			body: `{"image_url":null}`,
-			read: func() NullablePatch[string] { return blogPatch.ImageURL },
+			read: func() NullablePatch[string] { return journalLikePatch.ImageURL },
 			decode: func(data []byte) error {
-				blogPatch = BlogUpdateReq{}
-				return json.Unmarshal(data, &blogPatch)
+				journalLikePatch = struct {
+					ImageURL NullablePatch[string] `json:"image_url"`
+				}{}
+				return json.Unmarshal(data, &journalLikePatch)
 			},
 		},
 	}
@@ -86,9 +96,15 @@ func TestProductImageAltPatchDistinguishesOmittedNullAndValue(t *testing.T) {
 }
 
 var (
-	heroPatch   HeroSlideUpdateReq
-	recipePatch RecipeUpdateReq
-	blogPatch   BlogUpdateReq
+	heroLikePatch struct {
+		ImageURL NullablePatch[string] `json:"image_url"`
+	}
+	recipeLikePatch struct {
+		ImageURL NullablePatch[string] `json:"image_url"`
+	}
+	journalLikePatch struct {
+		ImageURL NullablePatch[string] `json:"image_url"`
+	}
 )
 
 func mediaPatchString(value string) *string { return &value }

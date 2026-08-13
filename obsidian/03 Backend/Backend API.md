@@ -14,7 +14,8 @@ Go e-commerce API (Gin + pgx). Base `/api/v1`.
 
 ## Owns
 
-- [[Layered Backend]] · [[Backend Domain Map]]
+- [[Layered Backend]] · [[Backend Domain Map]] · [[Backend package map]]
+- [[Addresses Backend]] · [[ADR Backend feature packages]]
 - [[Inventory Backend]] · [[Payments Backend]] · [[Media Pipeline]]
 - [[Search Backend]] · [[Notifications]] · [[Processes and Jobs]]
 - [[Data Stores]] · [[Observability]]

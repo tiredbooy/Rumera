@@ -4,26 +4,23 @@ Rumera has one runtime authorization source: the live `users.role` value in the
 Go backend. The frontend capability layer organizes the admin UI, but it is not
 an independent security boundary.
 
-> **Rule:** only a live, active, non-banned user with `role=admin` may enter or
-> call the admin surface. Never infer access from a stale JWT role or from a
-> passing frontend `can()` check.
+> **Rule:** only a live, active, non-banned user with panel role **`admin` or
+> `staff`** may enter the admin surface. Backend enforces capability IDs via
+> `RequirePermission`. Never trust a stale JWT role or a FE-only `can()` check.
 
 ## Supported roles
 
-`lib/rbac/roles.ts` mirrors the backend's constrained role set:
+Panel roles (backend + FE):
 
-```ts
-export type Role = "customer" | "vendor" | "admin";
-```
+| Role       | Persian label | Admin access | Notes |
+| ---------- | ------------- | :----------: | ----- |
+| `customer` | مشتری         |      no      | Default public registration |
+| `vendor`   | فروشنده       |      no      | Domain role; no vendor admin |
+| `admin`    | مدیر کل       |     yes      | Superuser — all capabilities |
+| `staff`    | همکار         |     yes      | Capability grants only (PH-021) |
 
-| Role       | Persian label | Admin access | Notes                                                   |
-| ---------- | ------------- | :----------: | ------------------------------------------------------- |
-| `customer` | مشتری         |      no      | Default for every public registration.                  |
-| `vendor`   | فروشنده       |      no      | Assignable domain role; no dedicated vendor routes yet. |
-| `admin`    | مدیر کل       |     yes      | The only role accepted by backend admin middleware.     |
-
-`isStaff(role)` is intentionally equivalent to `role === "admin"`. There are no
-frontend `support` or `manager` roles.
+Capability catalogue: `lib/rbac/permissions.ts` ⇔ `features/rbac` model.  
+Full BE matrix: `apps/backend/docs/architecture/rbac.md` (PH-021a).
 
 ## Capability catalogue
 
@@ -85,20 +82,21 @@ the next request even while the encrypted session cookie still exists.
 `app/api/admin/[...path]/route.ts` repeats the live `/auth/me` check before it
 forwards a bearer token. The path helper rejects encoded separators, dot
 segments, control characters, query/fragment injection, and origin changes. The
-Go backend then repeats `Auth + RequireRole("admin")`.
+Go backend then applies `Auth + RequireRole(admin|staff) + RequirePermission`.
 
 ### Backend
 
 The complete `/api/v1/admin` group is protected at the group level:
 
 ```go
-a := v1.Group("/admin")
-a.Use(mw.Auth(jwt, h.User), mw.RequireRole("admin"))
+admin := v1.Group("/admin")
+admin.Use(mw.Auth(jwt, h.User), mw.RequireRole("admin", "staff"))
+// per surface: with("inventory:write") — write routes do not accept read-only
 ```
 
 `Auth` verifies the JWT and rehydrates the numeric ID, public UUID, role, active
-state, and ban state from the database. `RequireRole` consumes that live role,
-not the role claim embedded when the token was issued.
+state, and ban state from the database. `RequireRole` / `RequirePermission`
+consume that live role and capability grants (see `architecture/rbac.md`).
 
 ## User and role administration
 
@@ -111,9 +109,14 @@ not the role claim embedded when the token was issued.
 - whether each supported role is assignable and whether it grants admin access.
 
 `POST/PATCH/DELETE /admin/users` operations are transactional and audited.
-Self-demotion, self-deactivation, and self-delete are rejected. Existing ban
-state is visible but read-only; the UI does not imply that reactivation clears a
-ban.
+Self-demotion, self-deactivation, and self-delete are rejected (**403**).
+Demoting or deactivating the **last active admin** is rejected (**409 CONFLICT**
+— PH-021b). FE surfaces a clear Persian message. Existing ban state is visible
+but read-only; the UI does not imply that reactivation clears a ban.
+
+**Mid-session capability revoke:** Auth rehydrates role/status every request;
+`RequirePermission` reads live grants. Staff whose grants were cleared get 403
+on the next API call; reload the roles matrix or refresh session for nav.
 
 The legacy `roles`, `permissions`, `user_roles`, and `role_permissions` tables
 remain in the schema to preserve deployed data. Runtime authorization does not

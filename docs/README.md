@@ -5,15 +5,37 @@ Start here if you are new to the monorepo. Docs are split by **audience** and
 
 ---
 
+## Read the system in one hour (founder)
+
+**Curated path (PH-050b):** [READ-THE-SYSTEM.md](./READ-THE-SYSTEM.md)
+
+Timed order (~60 min): **System Overview → Architecture → Money sagas → Orders/Payments/Inventory → Loyalty → Search → residuals.**  
+Obsidian twin: open `Brain/Project Brain.md` → section **Read the system in one hour**.
+
+| Min | Doc |
+|----:|-----|
+| 0–8 | [SYSTEM-OVERVIEW.md](./SYSTEM-OVERVIEW.md) |
+| 8–18 | [architecture.md](../apps/backend/docs/architecture.md) · [domain-map](../apps/backend/docs/architecture/domain-map.md) |
+| 18–32 | [money-and-stock-sagas](../apps/backend/docs/architecture/money-and-stock-sagas.md) · [idempotency](../apps/backend/docs/architecture/idempotency.md) (intro) |
+| 32–40 | [payments-and-webhooks](../apps/backend/docs/architecture/payments-and-webhooks.md) · [inventory](../apps/backend/docs/architecture/inventory.md) |
+| 40–48 | [loyalty](../apps/backend/docs/architecture/loyalty.md) |
+| 48–55 | [search](../apps/backend/docs/architecture/search.md) |
+| 55–60 | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) residuals · vault Known gaps |
+
+---
+
 ## Start here (everyone)
 
 | Order | Doc | Why |
 |------:|-----|-----|
 | 0 | [../obsidian/](../obsidian/) | **Obsidian vault** — visual Graph map of the whole project (`[[wikilinks]]`) |
-| 1 | [SYSTEM-OVERVIEW.md](./SYSTEM-OVERVIEW.md) | End-to-end: processes, request paths, data stores |
-| 2 | [DOCUMENTATION-MAP.md](./DOCUMENTATION-MAP.md) | Full inventory of docs, coverage matrix, residual gaps |
-| 3 | [TESTING.md](./TESTING.md) | How to run Go / Vitest / (future) Playwright |
-| 4 | [DOCKER.md](./DOCKER.md) | Compose stacks, nginx, local platform |
+| 1 | [READ-THE-SYSTEM.md](./READ-THE-SYSTEM.md) | **One-hour** curated mental model (founder) |
+| 2 | [SYSTEM-OVERVIEW.md](./SYSTEM-OVERVIEW.md) | End-to-end: processes, request paths, data stores |
+| 3 | [DOCUMENTATION-MAP.md](./DOCUMENTATION-MAP.md) | Full inventory of docs, coverage matrix, residual gaps |
+| 4 | [DOCUMENTATION-DUAL-TRACK.md](./DOCUMENTATION-DUAL-TRACK.md) | **How to document a change** — project docs ↔ brain (required) |
+| 5 | [PH-DUAL-DOC-MATRIX.md](./PH-DUAL-DOC-MATRIX.md) | PH epic ↔ project docs ↔ Obsidian (closure map) |
+| 6 | [TESTING.md](./TESTING.md) | How to run Go / Vitest / (future) Playwright |
+| 7 | [DOCKER.md](./DOCKER.md) | Compose stacks, nginx, local platform |
 
 Root product README: [`../README.md`](../README.md).
 

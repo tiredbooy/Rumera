@@ -6,15 +6,13 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
+	"github.com/tiredbooy/internal/features/catalog/option"
 )
 
 // seedOptionCatalog creates reusable option types (volume, …) once so product
 // variants can pick shared values without redefining them per product.
 func (s *seeder) seedOptionCatalog(ctx context.Context) (map[string]int64, error) {
-	optionSvc := services.NewOptionService(repositories.NewOptionRepository(s.pool))
+	optionSvc := option.NewService(option.NewRepository(s.pool))
 	result := make(map[string]int64)
 
 	type valueSpec struct {
@@ -61,7 +59,7 @@ func (s *seeder) seedOptionCatalog(ctx context.Context) (map[string]int64, error
 			typeID = existing
 			s.c.skipped1("option_type")
 		} else {
-			created, err := optionSvc.CreateType(ctx, models.CreateOptionTypeReq{
+			created, err := optionSvc.CreateType(ctx, option.CreateOptionTypeReq{
 				Title:       spec.title,
 				DisplayName: spec.displayName,
 			})
@@ -80,7 +78,7 @@ func (s *seeder) seedOptionCatalog(ctx context.Context) (map[string]int64, error
 			if has {
 				s.c.skipped1("option_value")
 			} else {
-				created, err := optionSvc.CreateValue(ctx, typeID, models.CreateOptionValueReq{
+				created, err := optionSvc.CreateValue(ctx, typeID, option.CreateOptionValueReq{
 					Value:     val.value,
 					SortOrder: val.order,
 				})

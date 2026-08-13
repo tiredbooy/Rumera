@@ -15,7 +15,8 @@ export interface AdminRoleSummaryItem {
 }
 
 export interface AdminAuthorizationSummary {
-  authorization_mode: "single_role";
+  /** `role_capabilities` once server RBAC is live; legacy `single_role` tolerated. */
+  authorization_mode: "single_role" | "role_capabilities";
   admin_roles: AdminUserRole[];
   roles: AdminRoleSummaryItem[];
 }

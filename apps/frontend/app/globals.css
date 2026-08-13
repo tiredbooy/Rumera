@@ -232,6 +232,21 @@
       );
   }
 
+  /* Quieter header wash for journal / recipes list & detail (less foil glare) */
+  .content-header-glow {
+    background:
+      radial-gradient(
+        70% 90% at 50% -20%,
+        color-mix(in oklch, var(--gold) 8%, transparent),
+        transparent 65%
+      ),
+      radial-gradient(
+        45% 55% at 90% 120%,
+        color-mix(in oklch, var(--wine) 10%, transparent),
+        transparent 70%
+      );
+  }
+
   /* Gold-foil gradient text for the wordmark and display numbers */
   .text-foil {
     background: linear-gradient(

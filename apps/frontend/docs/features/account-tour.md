@@ -111,25 +111,39 @@ in onboarding flows.
 |-----|------|
 | `GET /wallet` | Balance (get-or-create) |
 | `GET /wallet/transactions` | Ledger |
-| `POST /wallet/deposit` · `withdraw` | Server endpoints exist |
-| Gift-card redeem | Credits wallet via gift-card domain |
+| `POST /wallet/topup` | Gateway top-up intent (PH-041) |
+| Gift-card purchase / mine / redeem | Gift-card domain (PH-042) |
 
-**UI note:** top-up may show “coming soon” (`wallet-topup-comingsoon`) while
-gift-card redeem is the active credit path in the storefront wallet view.
-Checkout can still offer `wallet` as a **payment method** for orders when the
-backend accepts it.
+**UI note:** wallet view offers gateway top-up, gift-card **purchase** + **mine**
+list (self-delivery of codes after paid), and redeem. Withdraw is not offered
+(API 410). Checkout can still offer `wallet` as a **payment method** for orders.
 
 Gift cards:
 
-- Customer redeem: wallet UI + `features/wallet/gift-card-redeem.tsx`
+- Customer purchase: `features/gift-cards/gift-card-purchase.tsx` → pending `gbuy-…`
+- Self-delivery: `GET /gift-cards/mine` → `gift-card-mine.tsx`
+- Customer redeem: `features/wallet/gift-card-redeem.tsx` → wallet credit
 - Admin issue: `features/admin/gift-cards` + gift-card APIs
-- Backend: atomic batch create (integration-tested)
+- Docs: [gift-cards.md](./gift-cards.md)
 
-### Subscriptions
+### Subscriptions (cellar box)
 
-Recurring product subscriptions under `/account/subscriptions`. Backend renewal
-cron: `subscription_renewal_job`. Frontend list/manage via
-`features/subscriptions`.
+**Physical recurring box** (“باکس سرداب”), not streaming or unlimited-catalog
+access. Surface: `/account/subscriptions` · `features/subscriptions`.
+FE detail: [subscriptions.md](./subscriptions.md) (PH-043b polish).
+
+| Concept | Storefront meaning |
+|---------|-------------------|
+| Plan | Fixed cellar box |
+| Cadence | Monthly or quarterly |
+| Actions | Pause, skip one period, cancel, resume/reactivate (confirm for pause/skip/cancel) |
+| Next date | Labelled **ارسال باکس بعدی** — email reminder window, not an invoice |
+| Address | Optional on create; missing-address callout when active without ship-to |
+| Contents | Curated physical assortment — **not** a per-user SKU list in the API |
+
+Backend product model:
+[box-subscriptions.md](../../../backend/docs/architecture/box-subscriptions.md).
+Renewal cron: Persian **RTL** email when due + rolls the date; **does not auto-charge**.
 
 ### Reviews
 
@@ -172,6 +186,7 @@ Example: wallet **view** under `features/account/wallet`, wallet **API** under
 |-------------------|----------------|
 | Place order | Appears under orders; payment pending until webhook |
 | Pay successfully | Loyalty earn + possible referral complete |
+| Buy gift card (paid) | Code on mine list; optional gift share |
 | Redeem gift card | Wallet credit |
 | Add wishlist on PDP | Wishlist page |
 | Checkout address | Address book |

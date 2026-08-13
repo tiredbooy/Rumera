@@ -6,6 +6,7 @@ import {
   CalendarClock,
   PackageCheck,
   PackageOpen,
+  Scale,
   Settings2,
   ShoppingBasket,
 } from "lucide-react";
@@ -115,6 +116,32 @@ export function InventoryVariantView({
               <InventoryStockBadge status={status} />
             </div>
 
+            {inventory.missing_weight ? (
+              <div
+                role="status"
+                className="mb-4 flex flex-wrap items-start gap-3 rounded-xl bg-amber-500/10 px-3.5 py-3 text-sm text-amber-950 ring-1 ring-inset ring-amber-500/25 dark:text-amber-100"
+              >
+                <Scale className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="font-medium">وزن بسته‌بندی ثبت نشده است</p>
+                  <p className="text-xs leading-relaxed opacity-90">
+                    بدون وزن (کیلوگرم) روی محصول، محاسبهٔ هزینهٔ ارسال در تسویه
+                    قابل اعتماد نیست. وزن را در صفحهٔ محصول ویرایش کنید.
+                  </p>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-9 border-amber-600/30 bg-background/60"
+                  >
+                    <Link href={`/admin/products/${inventory.product_id}`}>
+                      ویرایش وزن محصول
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
             <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Metric
                 icon={Boxes}
@@ -136,6 +163,20 @@ export function InventoryVariantView({
                 label="پیشنهاد تأمین"
                 value={faNum(inventory.reorder_quantity)}
                 hint={`آستانه ${faNum(inventory.reorder_point)}`}
+              />
+              <Metric
+                icon={Scale}
+                label="وزن بسته"
+                value={
+                  inventory.missing_weight
+                    ? "—"
+                    : `${faNum(inventory.weight ?? 0)} kg`
+                }
+                hint={
+                  inventory.missing_weight
+                    ? "ناقص — در محصول ثبت کنید"
+                    : "از کاتالوگ محصول"
+                }
               />
             </dl>
 

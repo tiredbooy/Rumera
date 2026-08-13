@@ -12,6 +12,11 @@ export interface CartItem {
   line_total: number;
   image_url?: string;
   options?: ProductOptionValue[];
+  /**
+   * Unit package weight in kg from catalogue (products.weight).
+   * Omitted when unset — shipping quote sums only positive weights (PH-020c).
+   */
+  weight_kg?: number | null;
 }
 
 export interface CartSummary {

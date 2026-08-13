@@ -10,10 +10,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { SubscriptionAction } from "@/features/subscriptions/types";
 import { cn } from "@/lib/utils";
+import { actionConfirmDescription } from "./subscription-display-helpers";
 
 export type PendingSubscriptionAction = {
   id: number;
-  action: Extract<SubscriptionAction, "pause" | "cancel">;
+  action: Extract<SubscriptionAction, "pause" | "skip" | "cancel">;
 } | null;
 
 type SubscriptionActionDialogProps = {
@@ -27,17 +28,15 @@ export function SubscriptionActionDialog({
   onOpenChange,
   onConfirm,
 }: SubscriptionActionDialogProps) {
+  const copy = target ? actionConfirmDescription(target.action) : null;
+
   return (
     <AlertDialog open={target !== null} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent dir="rtl">
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {target?.action === "cancel" ? "لغو اشتراک" : "توقف اشتراک"}
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {target?.action === "cancel"
-              ? "با لغو اشتراک، دیگر هیچ باکسی برایتان ارسال نمی‌شود. هر زمان بخواهید می‌توانید آن را دوباره فعال کنید."
-              : "با توقف اشتراک، ارسال‌ها موقتاً متوقف می‌شوند و در این مدت باکسی فرستاده نمی‌شود. هر زمان آماده بودید می‌توانید آن را از سر بگیرید."}
+          <AlertDialogTitle>{copy?.title ?? "تأیید"}</AlertDialogTitle>
+          <AlertDialogDescription className="leading-relaxed">
+            {copy?.body}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -55,7 +54,7 @@ export function SubscriptionActionDialog({
               onConfirm(target);
             }}
           >
-            {target?.action === "cancel" ? "بله، لغو شود" : "بله، متوقف شود"}
+            {copy?.confirm ?? "تأیید"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

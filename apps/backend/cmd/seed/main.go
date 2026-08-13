@@ -8,11 +8,12 @@
 // applied) with:  make seed   (or)   go run ./cmd/seed
 //
 // Layout (same package main, split by responsibility):
-//   main.go       — process entrypoint
-//   seeder.go     — wiring + ordered orchestration
-//   helpers.go    — counts, pointers, idempotency lookups, parsePrice
-//   brands.go, categories.go, tags.go, products.go, recipes.go, blogs.go, hero.go
-//                 — domain seeders + fixtures
+//
+//	main.go       — process entrypoint
+//	seeder.go     — wiring + ordered orchestration
+//	helpers.go    — counts, pointers, idempotency lookups, parsePrice
+//	brands.go, categories.go, tags.go, products.go, recipes.go, blogs.go, hero.go
+//	              — domain seeders + fixtures
 package main
 
 import (

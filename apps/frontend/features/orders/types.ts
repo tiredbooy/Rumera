@@ -33,6 +33,12 @@ export interface OrderItem {
   total_price: number;
 }
 
+export interface GiftAddonSnapshot {
+  id: string;
+  label: string;
+  price: number;
+}
+
 export interface Order {
   id: number;
   status: OrderStatus;
@@ -47,6 +53,8 @@ export interface Order {
   gift_message?: string;
   gift_wrap?: boolean;
   hide_price?: boolean;
+  gift_addons_fee?: number;
+  gift_addons?: GiftAddonSnapshot[];
   scheduled_delivery_date?: string;
   paid_at?: string;
   shipped_at?: string;
@@ -73,7 +81,10 @@ export interface CreateOrderInput {
   notes?: string | null;
   is_gift?: boolean;
   gift_message?: string | null;
+  /** @deprecated Prefer gift_option_ids; kept for older clients. */
   gift_wrap?: boolean;
+  /** Admin-configured modular gift add-ons (server-priced). */
+  gift_option_ids?: string[];
   hide_price?: boolean;
   scheduled_delivery_date?: string | null;
 }

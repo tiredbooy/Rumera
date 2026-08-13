@@ -5,6 +5,7 @@ import {
   parseAdminUserID,
   parseUserAuditPage,
 } from "@/features/customers/validations";
+import { can } from "@/lib/rbac/can";
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 
@@ -26,6 +27,7 @@ export default async function AdminCustomerDetailPage({
       currentUserId={session.user?.id}
       currentUserEmail={session.user?.email}
       auditPage={auditPage}
+      canCreditWallet={can(session, PERMISSIONS.CUSTOMERS_WRITE)}
     />
   );
 }

@@ -38,6 +38,24 @@ export interface MaintenanceSettings {
   message: string;
 }
 
+/** Modular checkout gift packaging / add-on (admin-priced). */
+export interface GiftCheckoutOption {
+  id: string;
+  label: string;
+  description: string;
+  price: number;
+  enabled: boolean;
+  sortOrder: number;
+}
+
+export interface GiftCheckoutSettings {
+  enabled: boolean;
+  messageEnabled: boolean;
+  messageMaxLength: number;
+  hidePriceEnabled: boolean;
+  options: GiftCheckoutOption[];
+}
+
 /** Storefront-safe GET /settings response. The admin-only updatedAt is omitted. */
 export interface PublicSiteSettings {
   store: StoreSettings;
@@ -46,6 +64,7 @@ export interface PublicSiteSettings {
   shipping: SiteShippingSettings;
   seo: SeoSettings;
   maintenance: MaintenanceSettings;
+  gift: GiftCheckoutSettings;
 }
 
 /** Full admin GET/PUT response. */
@@ -61,4 +80,5 @@ export interface UpdateSiteSettingsInput {
   shipping?: SiteShippingSettings | null;
   seo?: SeoSettings | null;
   maintenance?: MaintenanceSettings | null;
+  gift?: GiftCheckoutSettings | null;
 }

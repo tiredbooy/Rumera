@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { History } from "lucide-react";
+import { History, Scale } from "lucide-react";
 
 import { faNum } from "@/lib/products";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import type {
   InventoryStatus,
 } from "@/features/inventory/types";
 import { getInventoryStatus } from "@/features/inventory/utils";
+import { cn } from "@/lib/utils";
 
 import { StockAdjustmentPopover } from "./stock-adjustment-popover";
 
@@ -96,6 +97,29 @@ export function InventoryTable({
           {r.sku ?? "—"}
         </span>
       ),
+    },
+    {
+      id: "weight",
+      header: "وزن",
+      className: "hidden md:table-cell",
+      sortValue: (r) => (r.missing_weight ? -1 : (r.weight ?? 0)),
+      cell: (r) =>
+        r.missing_weight ? (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5",
+              "text-xs font-medium text-amber-800 dark:text-amber-200",
+            )}
+            title="وزن بسته‌بندی روی محصول ثبت نشده — برای محاسبهٔ ارسال لازم است"
+          >
+            <Scale className="size-3.5 shrink-0" aria-hidden />
+            وزن ناقص
+          </span>
+        ) : (
+          <span className="tabular-nums text-muted-foreground" dir="ltr">
+            {faNum(r.weight ?? 0)} kg
+          </span>
+        ),
     },
     {
       id: "onHand",
@@ -182,6 +206,15 @@ export function InventoryTable({
       options: [
         { value: "critical", label: "کمتر از ۳ عدد" },
         { value: "ok", label: "۳ و بیشتر یا صفر" },
+      ],
+    },
+    {
+      id: "missing_weight",
+      label: "وزن بسته‌بندی",
+      getValue: (r) => (r.missing_weight ? "missing" : "ok"),
+      options: [
+        { value: "missing", label: "وزن ناقص (نیازمند اصلاح)" },
+        { value: "ok", label: "وزن ثبت‌شده" },
       ],
     },
   ];

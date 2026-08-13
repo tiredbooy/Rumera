@@ -24,7 +24,10 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | [Tags](./tags.md) | Tags |
 | [Orders](./orders.md) | Checkout, order history, admin fulfilment |
 | [Wishlist](./wishlist.md) | 🔒 Customer wishlist |
-| [Wallet](./wallet.md) | 🔒 Customer wallet & transactions |
+| [Wallet](./wallet.md) | 🔒 Customer wallet & 🛡️ admin credit |
+| [Gift cards](./gift-cards.md) | Redeem (+ admin issue) |
+| [Subscriptions](./subscriptions.md) | 🔒 Cellar box create/list/lifecycle (PH-043a) |
+| [Loyalty](./loyalty.md) | Points + redeem; earn rules [architecture/loyalty.md](../architecture/loyalty.md) (PH-040a) |
 | [Reviews](./reviews.md) | Product reviews, reactions, images, moderation |
 | [Shipping](./shipping.md) | Zones, methods, checkout rates |
 | [Payments](./payments.md) | 🛡️ Payment transaction records |
@@ -96,9 +99,12 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | DELETE | `/wishlist/items/:id` | 🔒 |
 | GET | `/wishlist/has/:variantID` | 🔒 |
 | GET | `/wallet` | 🔒 |
-| POST | `/wallet/withdraw` | 🔒 |
+| POST | `/wallet/withdraw` | 🔒 → **410 Gone** |
 | GET | `/wallet/transactions` | 🔒 |
-| POST·GET | `/orders` | 🔒 |
+| POST | `/gift-cards/redeem` | 🔒 (Idempotency-Key recommended) |
+| GET | `/loyalty` · `/loyalty/transactions` | 🔒 |
+| POST | `/loyalty/redeem` | 🔒 (Idempotency-Key recommended) |
+| POST·GET | `/orders` | 🔒 (`POST` Idempotency-Key recommended) |
 | GET | `/orders/:id` | 🔒 |
 | POST | `/orders/:id/cancel` | 🔒 |
 | POST | `/reviews` | 🔒 |
@@ -130,6 +136,8 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | POST·PATCH·DELETE | `/admin/brands` · `/admin/tags` … | 🛡️ |
 | GET | `/admin/orders` · `/admin/orders/:id` | 🛡️ |
 | PATCH | `/admin/orders/:id/status` | 🛡️ |
+| POST | `/admin/users/:userID/wallet/credit` | 🛡️ (Idempotency-Key + body key) |
+| POST | `/admin/gift-cards` | 🛡️ |
 | GET | `/admin/reviews` | 🛡️ |
 | PATCH | `/admin/reviews/:id/status` | 🛡️ |
 | POST·PATCH·DELETE | `/admin/shipping/...` | 🛡️ |

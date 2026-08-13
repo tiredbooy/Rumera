@@ -82,19 +82,27 @@ export interface ProductDetail {
   variants?: ProductVariant[];
 }
 
-// MeiliSearch document shape — flat, search-friendly
+// MeiliSearch document shape — flat, search-friendly (PH-030b readiness).
+// Storefront still uses Postgres listProducts({ search }); do not call Meili from the browser.
+// *_search fields are Persian-normalized (searchtext / rumera_search_normalize).
 export interface MeiliProduct {
   id: number;
   title: string;
-  code: string | null;
-  slug: string | null;
-  description: string | null;
-  brand_id: number | null;
-  category_id: number | null;
-  tags: string[] | null;
-  meta_tags: string[] | null;
+  code?: string | null;
+  slug?: string | null;
+  description?: string | null;
+  brand_id?: number | null;
+  brand_title?: string | null;
+  category_id?: number | null;
+  category_title?: string | null;
+  tags?: string[] | null;
+  meta_tags?: string[] | null;
   min_price: number;
   max_price: number;
   is_active: boolean;
-  country_of_origin: string | null;
+  country_of_origin?: string | null;
+  title_search: string;
+  description_search?: string;
+  brand_search?: string;
+  category_search?: string;
 }

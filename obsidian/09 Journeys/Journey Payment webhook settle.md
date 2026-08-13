@@ -14,7 +14,9 @@ tags: [journey, payments]
 4. Best-effort: loyalty, referral, (order email)
 5. `failed` → Fail + release stock
 
-Idempotent: only pending transitions.
+Idempotent layers (PH-011a–d): HTTP middleware + **UNIQUE** `transaction_id` +
+pending-only Confirm/Fail + terminal **200 ACK** on redelivery.  
+See [[Journey Idempotent retry checkout webhook]] · [[ADR Idempotency platform]].
 
 Related: [[Payments]] · [[Inventory]] · [[Playbook Debug Webhook]] · [[Money and stock rules]]
 

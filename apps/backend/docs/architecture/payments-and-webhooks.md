@@ -49,7 +49,7 @@ stock must not be **deducted** outside that same confirmation transaction.
 
 ## Order placement (backend)
 
-**Service:** `internal/services/order_svc.go` → `CreateOrder`
+**Service:** `internal/features/orders/service.go` → `CreateOrder`
 
 1. Resolve cart for `userID`; reject empty cart.
 2. Snapshot subtotal and package weight from cart lines.
@@ -84,7 +84,7 @@ Currency defaults are set server-side when creating the transaction (see
 
 ## Webhook settlement
 
-**Handler:** `internal/handlers/webhook.go` → `PaymentWebhook`  
+**Handler:** `internal/features/payments/webhook.go` → payment webhook handler  
 **Route:** `POST /webhooks/payment` (public tier, **not** JWT)
 
 ### Security
@@ -116,15 +116,17 @@ actually confirm.
 
 In **one** DB transaction:
 
-1. Mark `payment_transactions` succeeded (only from pending; already settled →
-   not found → handler maps error so gateway can stop retrying appropriately).
+1. Mark `payment_transactions` succeeded (only from pending). Already settled →
+   Confirm returns not-found; webhook **ACKs 200** if the row is terminal
+   (`replayed: true`) so the gateway stops without re-side-effecting.
 2. Mark order paid.
 3. **`inventory.DeductForOrderTx`** for order items (was previously a separate
    discarded step — now atomic to avoid paid-without-deduct drift).
 
 After commit (best-effort, must not undo payment):
 
-- Loyalty points for the order (`AwardForOrder`, idempotent by order id)
+- Loyalty points for the order (`AwardForOrder`, idempotent by order id) — full earn/clawback rules: [loyalty.md](./loyalty.md)
+- **Wallet top-up payments** (`order_id` null): Confirm credits wallet instead of order/stock — [wallet-topup.md](./wallet-topup.md) (PH-041a)
 - Referral completion on referee’s first paid order (`OnPaidOrder`)
 - Order confirmation email via notifications Dispatcher (when wired on order
   path — see notifications architecture)
@@ -134,13 +136,21 @@ After commit (best-effort, must not undo payment):
 1. Record failure + raw gateway payload.
 2. **Release** reserved inventory for the order so stock returns to sale.
 
-### Idempotency / duplicates
+### Idempotency / duplicates (PH-011 layers)
 
-- Confirm/Fail only transition **pending** rows; late duplicates do not double-
-  deduct.
-- Separate **idempotency** tables exist for payment gateway retries on some
-  paths; cron `idempotency_cleanup_job` prunes old records. Prefer gateway
-  `transaction_id` uniqueness as the business key.
+1. **HTTP middleware** on `POST /webhooks/payment` (`idempotency_keys`, auto
+   body-hash key when header omitted) — claim → store 2xx → replay.
+2. **UNIQUE** `payment_transactions.transaction_id`
+   (`uq_payment_transactions_transaction_id`, migration
+   `20260811180000_payment_transaction_id_unique.sql`) — gateway natural key;
+   duplicate insert → conflict.
+3. **Domain:** Confirm/Fail only transition **pending** rows; late duplicates
+   do not double-deduct. Webhook handler **ACKs 200** with `replayed: true`
+   when the row is already terminal (so the gateway stops).
+
+Full design: **[idempotency.md](./idempotency.md)**.  
+Cron `idempotency_cleanup_job` prunes HTTP keys older than
+`IDEMPOTENCY_KEY_RETENTION` (default 30 days).
 
 ---
 
@@ -191,9 +201,14 @@ methods auto-webhook vs manual follow-up.
 
 | Area | Path |
 |------|------|
-| Confirm / Fail | `internal/services/payment_svc.go` |
-| Webhook | `internal/handlers/webhook.go` |
-| Order + reserve | `internal/services/order_svc.go` |
-| Inventory reserve / deduct / release | [inventory.md](./inventory.md) · `internal/services/inventory_svc.go` |
-| Models | `internal/models/payment_transaction.go` |
+| Confirm / Fail | `internal/features/payments/service.go` |
+| Webhook | `internal/features/payments/webhook.go` |
+| Payment domain + wire types | `internal/features/payments/model.go` (+ `mapper.go`) |
+| Order + reserve | `internal/features/orders/service.go` |
+| Inventory reserve / deduct / release | [inventory.md](./inventory.md) · `internal/features/inventory/service.go` |
+| Shared payment rail enum | `internal/models/payment_method.go` (orders + payments; cycle avoidance) |
+| Shared money sentinels | `internal/models/errors.go` |
 | Integration tests | inventory + coupon concurrency under `tests/integration/` |
+
+Payment transaction entities are **feature-local** under `features/payments` —
+not `internal/models` (PH-012a).

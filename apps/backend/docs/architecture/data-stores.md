@@ -64,13 +64,18 @@ Not a source of truth. Flushing Redis must not lose orders or inventory.
 
 ## Meilisearch
 
-- Config: `MEILI_HOST`, `MEILI_API_KEY`.
-- Document shape: `models.MeiliProduct` via product mappers.
-- Index rebuild / sync: cron `search_job` in `internal/corn`.
-- Storefront `/search` depends on this index being populated.
+- Flag: `MEILI_ENABLED` (default **false**). Host/key/index: `MEILI_HOST`,
+  `MEILI_API_KEY`, `MEILI_INDEX_UID` (default `products`).
+- Client: `pkg/meili` — fail-soft at boot when enabled but unreachable.
+- Document shape: `models.MeiliProduct` (display + `*_search` normalized fields)
+  via `product.ToMeiliProduct` / full rebuild from `ListForSearchIndex`.
+- Cron: `meili_reindex` (`CRON_MEILI_REINDEX_SCHEDULE`) only when client connected.
+- Storefront `/search` uses **main Postgres** (`rumera_search_normalize` + ILIKE,
+  PH-030a) — it does **not** depend on Meili being up or warm.
+- Cron `search_summary` / `search_job` is **search analytics**, not a Meili indexer.
 
-If Meili is empty, search UX should degrade gracefully (empty results), not
-500 the whole site.
+Empty or down Meili must never 500 the storefront (ILIKE remains authority until
+an explicit dual-path cutover — see [search.md](./search.md)).
 
 ---
 
@@ -101,7 +106,7 @@ See [media-pipeline.md](./media-pipeline.md).
 | Order, stock, user, CMS content | Main Postgres |
 | Clickstream, funnels, daily KPI rollups | Analytics DB |
 | “Remember this product list for 60s” | Redis cache (optional) |
-| Full-text product search | Meilisearch index (derived) |
+| Full-text product search | Main Postgres ILIKE + normalize today; Meili later (derived) |
 | Binary image | Media storage + metadata row in main DB |
 | “Send OTP eventually” | Outbox row (main) → Kafka → worker |
 

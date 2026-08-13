@@ -1,5 +1,7 @@
 # Cart
 
+
+**Implementation (feature slice):** `internal/features/cart/`
 The authenticated user's shopping cart: read it, add and update line items, remove items, and clear it.
 
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.
@@ -45,6 +47,7 @@ Returns the caller's cart, creating an empty one on first access.
         "price_changed": true,
         "quantity": 2,
         "line_total": 99.80,
+        "weight_kg": 1.25,
         "image_url": "https://cdn.example.com/sm12.jpg",
         "options": [
           { "name": "Volume", "value": "700ml" }
@@ -62,6 +65,15 @@ Returns the caller's cart, creating an empty one on first access.
 ```
 
 `line_total` and `subtotal` use the snapshotted price. `price_changed` is `true` when `current_price` differs from `unit_price_snapshot`.
+
+### Line weight (PH-020c)
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `weight_kg` | number, omitempty | Unit package weight from `products.weight` (kg). Omitted when unset. |
+
+Checkout **sums** `weight_kg × quantity` for `GET /shipping/available?weight=…`.  
+Order placement **re-sums** server-side and authorizes the shipping method against that package weight; client cannot override region (from address country).
 
 **Errors:** `401 UNAUTHORIZED`.
 

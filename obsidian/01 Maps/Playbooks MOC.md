@@ -16,6 +16,7 @@ Runbooks for debugging and common changes.
 
 - [[Playbook Debug Oversell]]
 - [[Playbook Debug Webhook]]
+- [[Playbook Debug Idempotency]]
 - [[Playbook Debug Media broken image]]
 - [[Playbook Debug Session loop]]
 - [[Playbook Debug Stale storefront cache]]

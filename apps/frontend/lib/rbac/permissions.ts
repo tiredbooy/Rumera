@@ -1,7 +1,7 @@
 /**
  * Frontend capability catalogue used to organize admin navigation and actions.
- * The backend authorizes the whole admin API by role; these identifiers are UX
- * gates inside the already admin-only surface, not independent backend grants.
+ * Keep in sync with apps/backend/internal/features/rbac/model.go.
+ * Server enforces the same identifiers via RequirePermission middleware.
  */
 
 export const PERMISSIONS = {

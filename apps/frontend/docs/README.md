@@ -74,6 +74,8 @@ apps/frontend/docs/
 | [Storefront commerce](./features/storefront-commerce.md) | Catalogue, cards, cart, checkout |
 | [Search](./features/search.md) | Header + `/search` (engine details on backend) |
 | [Account tour](./features/account-tour.md) | Wallet, loyalty, gift cards, orders, taste, … |
+| [Gift cards](./features/gift-cards.md) | Purchase, mine list, redeem (PH-042b) |
+| [Wallet](./features/wallet.md) | Balance, top-up, ledger |
 | [Content & SEO](./features/content-and-seo.md) | Home, journal, recipes, sitemap, JSON-LD, OG |
 | [Recipe commerce](./features/recipe-commerce.md) | Ingredient → shoppable product |
 | [Admin console](./features/admin-console.md) | `/admin` shell and modules |

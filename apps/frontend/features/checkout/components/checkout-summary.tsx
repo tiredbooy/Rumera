@@ -11,6 +11,7 @@ export function CheckoutSummary({
   discount,
   shippingCost,
   hasSelectedShipping,
+  giftFee = 0,
   total,
   showSubmit,
   canPlace,
@@ -22,6 +23,8 @@ export function CheckoutSummary({
   discount: number;
   shippingCost: number;
   hasSelectedShipping: boolean;
+  /** Selected modular gift packaging / add-ons (preview; server re-prices). */
+  giftFee?: number;
   total: number;
   showSubmit: boolean;
   canPlace: boolean;
@@ -51,6 +54,9 @@ export function CheckoutSummary({
                 : "—"
             }
           />
+          {giftFee > 0 ? (
+            <Row label="بسته‌بندی و افزونهٔ هدیه" value={formatPrice(giftFee)} />
+          ) : null}
         </div>
         <Separator className="my-4" />
         <div className="flex items-baseline justify-between">

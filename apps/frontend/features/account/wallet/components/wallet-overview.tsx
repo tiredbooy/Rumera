@@ -1,15 +1,8 @@
-import {
-  Banknote,
-  Clock,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-} from "lucide-react";
+import { TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/products";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryStateRegion } from "@/components/query-state-region";
 
@@ -23,35 +16,6 @@ type WalletOverviewProps = {
   isSummaryError: boolean;
   onRetryBalance: () => void;
 };
-
-/**
- * The deliberate replacement for the old TopUpDialog. There is NO self-service
- * deposit endpoint (it was removed as a free-money exploit), so this component
- * never posts anywhere. Gift-card redemption remains the legitimate credit path.
- */
-function TopUpComingSoon() {
-  return (
-    <div
-      className="border-hairline flex items-center gap-2.5 rounded-2xl bg-card/60 px-4 py-2.5 ring-1 ring-foreground/5"
-      data-testid="wallet-topup-comingsoon"
-    >
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Banknote className="size-4" aria-hidden />
-      </span>
-      <div className="min-w-0">
-        <p className="text-sm font-medium leading-tight">
-          شارژ کیف پول از طریق درگاه
-        </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          به‌زودی فعال می‌شود
-        </p>
-      </div>
-      <Badge variant="outline" className="ms-1 shrink-0">
-        <Clock className="size-3" aria-hidden /> به‌زودی
-      </Badge>
-    </div>
-  );
-}
 
 function SummaryCard({
   label,
@@ -155,7 +119,9 @@ export function WalletOverview({
               </p>
             )}
           </div>
-          <TopUpComingSoon />
+          <p className="max-w-xs text-end text-xs text-muted-foreground">
+            شارژ از درگاه و کارت هدیه — بدون واریز رایگان
+          </p>
         </div>
       </div>
 

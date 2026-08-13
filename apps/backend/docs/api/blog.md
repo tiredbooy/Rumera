@@ -1,5 +1,9 @@
 # Blog
 
+**Implementation (feature slice):** `internal/features/blog/`  
+Composed from `internal/routes/routes.go`. Posts + categories. API contracts unchanged.
+
+
 Blog posts and blog categories — public storefront reads plus admin-only management.
 
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.

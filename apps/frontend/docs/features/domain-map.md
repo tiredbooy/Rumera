@@ -54,7 +54,7 @@ repo-wide [Documentation map](../../../../docs/DOCUMENTATION-MAP.md)
 | `wallet` | Customer wallet | account |
 | `loyalty` | Points earn/redeem UI | account |
 | `gift-cards` | Gift card purchase / admin issue | account, admin |
-| `subscriptions` | Subscription products (if enabled) | account / admin |
+| `subscriptions` | Cellar box (physical, pause/skip/cancel) — not Netflix | account |
 | `referral` | Referral codes | account |
 | `taste` | Taste profile | account |
 | `customers` | Admin customer CRM | `/admin/customers` |

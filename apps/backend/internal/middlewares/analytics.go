@@ -9,7 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/mileusna/useragent"
 	"github.com/tiredbooy/internal/analytics"
-	analyticsmodels "github.com/tiredbooy/internal/models"
+	featanalytics "github.com/tiredbooy/internal/features/analytics"
+	"github.com/tiredbooy/pkg/async"
 )
 
 const (
@@ -62,7 +63,7 @@ func Analytics(queue *analytics.Queue) gin.HandlerFunc {
 			}
 		}
 
-		go func() {
+		async.Go("analytics.capture", func() {
 			event := buildEvent(
 				method, path, rawURL, referrer,
 				userAgentStr, query,
@@ -70,7 +71,7 @@ func Analytics(queue *analytics.Queue) gin.HandlerFunc {
 				productID, extraPayload,
 			)
 			queue.Push(event)
-		}()
+		})
 	}
 }
 
@@ -82,7 +83,7 @@ func buildEvent(
 	rawUserID any,
 	productID int64,
 	extraPayload map[string]any,
-) *analyticsmodels.EventReq {
+) *featanalytics.EventReq {
 	ua := useragent.Parse(userAgentStr)
 	deviceType := resolveDeviceType(ua)
 	eventType := resolveEventType(method, path)
@@ -98,7 +99,7 @@ func buildEvent(
 		payload["query"] = *q
 	}
 
-	event := &analyticsmodels.EventReq{
+	event := &featanalytics.EventReq{
 		SessionID:   sessionID,
 		DeviceID:    &deviceID,
 		EventType:   eventType,
@@ -175,16 +176,16 @@ func pathEndsWithProductID(path string) bool {
 	return rest == ":id" || (!strings.Contains(rest, "/") && rest != "")
 }
 
-func resolveDeviceType(ua useragent.UserAgent) analyticsmodels.DeviceType {
+func resolveDeviceType(ua useragent.UserAgent) featanalytics.DeviceType {
 	switch {
 	case ua.Mobile:
-		return analyticsmodels.DeviceTypeMobile
+		return featanalytics.DeviceTypeMobile
 	case ua.Tablet:
-		return analyticsmodels.DeviceTypeTablet
+		return featanalytics.DeviceTypeTablet
 	case ua.Desktop:
-		return analyticsmodels.DeviceTypeDesktop
+		return featanalytics.DeviceTypeDesktop
 	default:
-		return analyticsmodels.DeviceTypeUnknown
+		return featanalytics.DeviceTypeUnknown
 	}
 }
 

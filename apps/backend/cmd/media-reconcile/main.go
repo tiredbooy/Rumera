@@ -11,8 +11,7 @@ import (
 	"time"
 
 	config "github.com/tiredbooy/configs"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
+	"github.com/tiredbooy/internal/features/media"
 	"github.com/tiredbooy/pkg/database"
 	"github.com/tiredbooy/pkg/storage"
 	"go.uber.org/zap"
@@ -66,13 +65,13 @@ func main() {
 		log.Fatal("open media cache", zap.Error(err))
 	}
 
-	lifecycle := services.NewMediaLifecycleService(
+	lifecycle := media.NewLifecycleService(
 		mediaStore,
 		mediaCache,
-		repositories.NewMediaLifecycleRepository(db),
+		media.NewLifecycleRepository(db),
 		log,
 	)
-	report, reconcileErr := lifecycle.Reconcile(ctx, services.MediaReconcileOptions{
+	report, reconcileErr := lifecycle.Reconcile(ctx, media.ReconcileOptions{
 		Apply:      *apply,
 		MinimumAge: *minimumAge,
 		Cutoff:     cutoff,

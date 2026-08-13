@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { CouponValidation } from "@/features/coupons/types";
 import type { PaymentMethod } from "@/features/orders/types";
+import type { GiftCheckoutSettings } from "@/features/settings/types";
 import { formatPrice } from "@/lib/products";
 import {
   CheckoutChoiceGroup,
@@ -39,8 +40,9 @@ export function CheckoutPaymentStep({
   onGiftChange,
   giftMessage,
   onGiftMessageChange,
-  giftWrap,
-  onGiftWrapChange,
+  giftOptionIds,
+  onToggleGiftOption,
+  giftSettings,
   hidePrice,
   onHidePriceChange,
   deliveryDate,
@@ -59,13 +61,17 @@ export function CheckoutPaymentStep({
   onGiftChange: (isGift: boolean) => void;
   giftMessage: string;
   onGiftMessageChange: (message: string) => void;
-  giftWrap: boolean;
-  onGiftWrapChange: (giftWrap: boolean) => void;
+  giftOptionIds: string[];
+  onToggleGiftOption: (id: string, selected: boolean) => void;
+  giftSettings: GiftCheckoutSettings | null;
   hidePrice: boolean;
   onHidePriceChange: (hidePrice: boolean) => void;
   deliveryDate: string;
   onDeliveryDateChange: (date: string) => void;
 }) {
+  const giftEnabled = giftSettings?.enabled !== false;
+  const enabledOptions = (giftSettings?.options ?? []).filter((o) => o.enabled);
+  const maxMsg = giftSettings?.messageMaxLength || 500;
   const couponDescriptionIds = [
     coupon?.is_valid ? "coupon-success" : undefined,
     couponError ? "coupon-error" : undefined,
@@ -140,6 +146,7 @@ export function CheckoutPaymentStep({
         ) : null}
       </CheckoutSection>
 
+      {giftEnabled ? (
       <CheckoutSection icon={Gift} title="ارسال به‌عنوان هدیه">
         <label className="flex cursor-pointer items-center justify-between gap-3">
           <span className="text-sm text-muted-foreground">
@@ -154,27 +161,63 @@ export function CheckoutPaymentStep({
 
         {isGift ? (
           <div className="mt-5 flex flex-col gap-5 border-t border-border/60 pt-5">
+            {giftSettings?.messageEnabled !== false ? (
             <div className="flex flex-col gap-2">
               <Label htmlFor="gift_message">پیام هدیه (اختیاری)</Label>
               <Textarea
                 id="gift_message"
                 value={giftMessage}
                 onChange={(e) =>
-                  onGiftMessageChange(e.target.value.slice(0, 500))
+                  onGiftMessageChange(e.target.value.slice(0, maxMsg))
                 }
                 placeholder="یادداشتی برای گیرنده بنویسید…"
                 rows={3}
               />
             </div>
+            ) : null}
 
-            <label className="flex cursor-pointer items-center gap-3">
-              <Checkbox
-                checked={giftWrap}
-                onCheckedChange={(v) => onGiftWrapChange(v === true)}
-              />
-              <span className="text-sm">بسته‌بندی هدیه</span>
-            </label>
+            {enabledOptions.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm font-medium">بسته‌بندی و افزونه‌ها</p>
+                <ul className="space-y-2">
+                  {enabledOptions.map((opt) => {
+                    const selected = giftOptionIds.includes(opt.id);
+                    return (
+                      <li key={opt.id}>
+                        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/60 px-3 py-2.5 transition-colors hover:bg-muted/40">
+                          <Checkbox
+                            checked={selected}
+                            onCheckedChange={(v) =>
+                              onToggleGiftOption(opt.id, v === true)
+                            }
+                            className="mt-0.5"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-baseline justify-between gap-2">
+                              <span className="text-sm font-medium">
+                                {opt.label}
+                              </span>
+                              <span className="text-sm tabular-nums text-primary">
+                                {opt.price > 0
+                                  ? formatPrice(opt.price)
+                                  : "رایگان"}
+                              </span>
+                            </span>
+                            {opt.description ? (
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {opt.description}
+                              </span>
+                            ) : null}
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
 
+            {giftSettings?.hidePriceEnabled !== false ? (
             <label className="flex cursor-pointer items-center gap-3">
               <Checkbox
                 checked={hidePrice}
@@ -182,6 +225,7 @@ export function CheckoutPaymentStep({
               />
               <span className="text-sm">مخفی‌کردن قیمت در رسید بسته</span>
             </label>
+            ) : null}
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="delivery_date">
@@ -199,6 +243,7 @@ export function CheckoutPaymentStep({
           </div>
         ) : null}
       </CheckoutSection>
+      ) : null}
     </>
   );
 }

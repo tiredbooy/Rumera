@@ -1,17 +1,31 @@
 # Wallet
 
-Every customer has exactly one wallet, created automatically on first access. View the balance, deposit and withdraw funds, and browse the transaction ledger.
+**Implementation (feature slice):** `internal/features/wallet/`  
+(handler · service · repository · model · mapper · `routes.go`).  
+Composed from `internal/routes/routes.go`.
 
-See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope, pagination, and sorting.
+Every customer has exactly one wallet, created automatically on first access.
+**Free customer deposit is not exposed.** Balance grows via admin credit, gift-card
+redeem, loyalty redeem, refunds, and **gateway top-up** (**PH-041a**).
+Self-service withdraw is **removed** (`410 Gone`).
+
+Architecture: [wallet-topup.md](../architecture/wallet-topup.md).
+
+See [Authentication](../authentication.md) for the token model and trust tiers, and
+[Conventions](../conventions.md) for the response/error envelope, pagination, and sorting.
+Money replay: [idempotency.md](../architecture/idempotency.md) ·
+[idempotency-runbook.md](../architecture/idempotency-runbook.md).
 
 | Method | Path | Tier | Description |
 |--------|------|------|-------------|
 | GET | `/wallet` | 🔒 customer | Get the caller's wallet |
-| POST | `/wallet/deposit` | 🔒 customer | Deposit funds |
-| POST | `/wallet/withdraw` | 🔒 customer | Withdraw funds |
 | GET | `/wallet/transactions` | 🔒 customer | List wallet transactions |
+| POST | `/wallet/topup` | 🔒 customer | Start gateway top-up (pending payment; not free credit) |
+| POST | `/wallet/withdraw` | 🔒 customer | **410 Gone** — self-service withdraw removed |
+| POST | `/admin/users/:userID/wallet/credit` | 🛡️ admin | Credit a customer wallet (idempotent) |
 
-> **Ownership:** all endpoints operate on the wallet belonging to the authenticated user (resolved from the token), created on demand via get-or-create. There is no way to read or modify another user's wallet.
+> **Ownership:** customer endpoints operate only on the caller's wallet (from JWT).
+> Admin credit targets `:userID` under RBAC (`customers:write`).
 
 ---
 
@@ -41,70 +55,60 @@ Returns the caller's wallet, creating it with a zero balance on first access.
 
 ---
 
-## Deposit
+## Gateway top-up (PH-041a)
 
 ```
-POST /wallet/deposit
+POST /wallet/topup
 Authorization: Bearer <access_token>
+Idempotency-Key: <uuid-once-per-topup-intent>   # strongly recommended
 ```
 
-Credits the caller's wallet and records a `deposit` transaction.
+Creates a **pending** `payment_transactions` row with `order_id = null` and a
+gateway `transaction_id` (`wtop-…`). **Does not** increase wallet balance.
+Balance is credited only when the payment webhook confirms success
+(`payments.Confirm` → `wallet.CreditGatewayTopUpTx` in the same DB TX).
 
-**Request body** — `DepositReq`
+**Request body**
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `amount` | number | ✓ | greater than `0` |
-| `description` | string | | optional |
+| `amount` | number | ✓ | `> 0`; must be in **10 000 … 50 000 000** IRT |
 
 ```json
-{ "amount": 50.00, "description": "Top-up" }
+{ "amount": 100000 }
 ```
 
-**Response** `201 Created` — `WalletTransactionResponse`:
+**Response** `201 Created` — `TopUpResponse`:
 
 ```json
 {
   "data": {
-    "id": 7781,
-    "amount": 50.00,
-    "type": "deposit",
-    "status": "completed",
-    "balance_before": 113.00,
-    "balance_after": 163.00,
-    "description": "Top-up",
-    "created_at": "2026-06-11T10:05:00Z"
+    "payment_id": 901,
+    "transaction_id": "wtop-a1b2c3…",
+    "amount": "100000.00",
+    "currency": "IRT",
+    "status": "pending"
   }
 }
 ```
 
-**Errors:** `422 VALIDATION_ERROR`, `404 WALLET_NOT_FOUND`, `401 UNAUTHORIZED`.
+Client pays the gateway using `transaction_id`. On webhook success, ledger shows
+a deposit with description containing `topup_txid=<transaction_id>`.
+
+**Errors:** `401`, `422` / invalid amount, `409` idempotency conflict, `503` if top-up gateway not wired.
+
+**Not free money:** there is no `POST /wallet/deposit`.
 
 ---
 
-## Withdraw
+## Withdraw (removed)
 
 ```
 POST /wallet/withdraw
 Authorization: Bearer <access_token>
 ```
 
-Debits the caller's wallet and records a `withdraw` transaction. Fails if the balance is insufficient.
-
-**Request body** — `WithdrawReq`
-
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| `amount` | number | ✓ | greater than `0` |
-| `description` | string | | optional |
-
-```json
-{ "amount": 20.00, "description": "Refund to card" }
-```
-
-**Response** `201 Created` — `WalletTransactionResponse` (same shape as deposit, with `"type": "withdraw"`).
-
-**Errors:** `422 VALIDATION_ERROR`, `409 INSUFFICIENT_FUNDS`, `404 WALLET_NOT_FOUND`, `401 UNAUTHORIZED`.
+**Response** `410 Gone` — free cash-out is not allowed. Do not re-open this path.
 
 ---
 
@@ -155,3 +159,76 @@ Returns a paginated ledger of the caller's wallet transactions.
 ```
 
 **Errors:** `400 INVALID_QUERY`, `404 WALLET_NOT_FOUND`, `401 UNAUTHORIZED`.
+
+---
+
+## Admin credit
+
+```
+POST /admin/users/:userID/wallet/credit
+Authorization: Bearer <admin access_token>
+Idempotency-Key: <same-as-body-key-recommended>
+```
+
+Credits the target user's wallet and writes a ledger row. Requires panel capability
+**`customers:write`**. The acting admin UUID is recorded on the ledger description
+as `actor=<uuid>` together with `idem=<key>`.
+
+**Two-layer idempotency (PH-011):**
+
+1. **Service truth:** body field `idempotency_key` is **required** (8–128 chars).
+   A prior credit with the same key on that wallet returns the existing
+   transaction with `"replayed": true` (no second deposit). Header
+   `Idempotency-Key` is used as fallback if the body field is empty.
+2. **HTTP platform:** money middleware also caches successful 2xx under a scoped
+   key when the header is present (`admin:{actorUid}:POST:…`).
+
+Admin UI should generate one UUID per confirm click, put it in **both** body and
+header (see storefront/admin wallet credit form).
+
+**Request body** — `AdminCreditReq`
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `amount` | number | ✓ | greater than `0` |
+| `description` | string | | max 500 |
+| `idempotency_key` | string | ✓ | min 8, max 128; no whitespace/`|` |
+
+```json
+{
+  "amount": 50000,
+  "description": "جبران سفارش",
+  "idempotency_key": "ops-credit-2026-08-11-001"
+}
+```
+
+**Response** `201 Created` (first success) or `200 OK` (service-level replay):
+
+```json
+{
+  "data": {
+    "transaction": {
+      "id": 9001,
+      "amount": 50000,
+      "type": "deposit",
+      "status": "completed",
+      "description": "… actor=… idem=ops-credit-2026-08-11-001",
+      "created_at": "2026-08-11T12:00:00Z"
+    },
+    "actor_user_id": "7f3e…",
+    "idempotency_key": "ops-credit-2026-08-11-001",
+    "replayed": false
+  }
+}
+```
+
+**Errors:** `400` / `422` (bad key or amount), `401`, `403`, `404` (user),
+`409` (HTTP idempotency body/inflight conflict).
+
+---
+
+## Related
+
+- Gift redeem → wallet: [gift-cards.md](./gift-cards.md)
+- Loyalty redeem → wallet: [loyalty.md](./loyalty.md)
+- Operator debug: [idempotency-runbook.md](../architecture/idempotency-runbook.md)

@@ -25,37 +25,63 @@ func TestSetupRegistersWithoutPanic(t *testing.T) {
 		}
 	}()
 
-	Setup(r, h, jwt, nil, func(c *gin.Context) { c.Next() })
+	nop := func(c *gin.Context) { c.Next() }
+	Setup(r, h, jwt, nil, nop, nop)
 
 	if len(r.Routes()) == 0 {
 		t.Fatal("expected routes to be registered")
 	}
+
+	// Spot-check representative paths across identity, catalogue, commerce,
+	// content, and analytics. Zero path changes is a BE-040 non-negotiable.
 	want := map[string]bool{
-		"GET /api/v1/admin/roles":                                   false,
-		"GET /api/v1/admin/users":                                   false,
-		"POST /api/v1/admin/users":                                  false,
-		"GET /api/v1/admin/users/:userID/audit":                     false,
-		"GET /api/v1/categories/slug/:slug":                         false,
-		"GET /api/v1/categories/:id":                                false,
-		"GET /api/v1/brands/slug/:slug":                             false,
-		"GET /api/v1/products/slug/:slug":                           false,
-		"GET /api/v1/admin/products/:id":                            false,
-		"POST /api/v1/admin/products/aggregate":                     false,
-		"PUT /api/v1/admin/products/:id/aggregate":                  false,
-		"GET /api/v1/admin/option-types":                            false,
-		"POST /api/v1/admin/option-types/:optionTypeID/values":      false,
-		"PUT /api/v1/admin/variants/:id/options":                    false,
-		"PUT /api/v1/admin/hero-slides/order":                       false,
-		"POST /api/v1/admin/uploads/:ownerType/:ownerID/:role":      false,
-		"POST /api/v1/admin/products/:id/images/url":                false,
-		"GET /api/v1/admin/blogs":                                   false,
-		"GET /api/v1/admin/blog-categories":                         false,
-		"GET /api/v1/admin/blog-categories/:id":                     false,
+		// Health / media transform
+		"GET /health":     false,
+		"GET /media/*key": false,
+
+		// Identity / RBAC
+		"GET /api/v1/admin/roles":               false,
+		"GET /api/v1/admin/capabilities":        false,
+		"PUT /api/v1/admin/capabilities/:role":  false,
+		"GET /api/v1/admin/users":               false,
+		"POST /api/v1/admin/users":              false,
+		"GET /api/v1/admin/users/:userID/audit": false,
+		"PATCH /api/v1/auth/me":                 false,
+
+		// Catalogue
+		"GET /api/v1/categories/slug/:slug":                    false,
+		"GET /api/v1/categories/:id":                           false,
+		"GET /api/v1/brands/slug/:slug":                        false,
+		"GET /api/v1/products/slug/:slug":                      false,
+		"GET /api/v1/admin/products/:id":                       false,
+		"POST /api/v1/admin/products/aggregate":                false,
+		"PUT /api/v1/admin/products/:id/aggregate":             false,
+		"GET /api/v1/admin/option-types":                       false,
+		"POST /api/v1/admin/option-types/:optionTypeID/values": false,
+		"PUT /api/v1/admin/variants/:id/options":               false,
+
+		// Content / media
+		"PUT /api/v1/admin/hero-slides/order":                  false,
+		"POST /api/v1/admin/uploads/:ownerType/:ownerID/:role": false,
+		"POST /api/v1/admin/products/:id/images/url":           false,
+		"GET /api/v1/admin/blogs":                              false,
+		"GET /api/v1/admin/blog-categories":                    false,
+		"GET /api/v1/admin/blog-categories/:id":                false,
+
+		// Commerce
 		"GET /api/v1/admin/inventory":                               false,
 		"GET /api/v1/admin/inventory/movements":                     false,
 		"GET /api/v1/admin/inventory/variants/:variantID":           false,
 		"POST /api/v1/admin/inventory/variants/:variantID/adjust":   false,
 		"PATCH /api/v1/admin/inventory/variants/:variantID/reorder": false,
+		"GET /api/v1/cart":                                          false,
+		"POST /api/v1/orders":                                       false,
+
+		// Analytics
+		"GET /api/v1/admin/analytics/revenue/summary":       false,
+		"GET /api/v1/admin/analytics/products/top-revenue":  false,
+		"GET /api/v1/admin/analytics/search/top-terms":      false,
+		"GET /api/v1/admin/analytics/events/breakdown":      false,
 	}
 	for _, route := range r.Routes() {
 		key := route.Method + " " + route.Path

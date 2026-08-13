@@ -52,6 +52,7 @@ const inventory = {
   product_title: "محصول آزمایشی",
   sku: "SKU-14",
   unit_price: "125000",
+  missing_weight: false,
   stock_on_hand: 10,
   committed_stock: 2,
   available_stock: 8,

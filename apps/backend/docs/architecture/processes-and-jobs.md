@@ -99,11 +99,13 @@ with the API process (schedules in config / bootstrap).
 |----------|----------------|
 | `stats_job.go` | Product stats rollups → analytics |
 | `revenue_job.go` | Revenue aggregates |
-| `search_job.go` | Meilisearch product index sync |
+| `search_job.go` | Search **analytics** summary (not Meili) |
+| `meili_reindex_job.go` | Full Meili products rebuild when `MEILI_ENABLED` + client up (PH-030b; not storefront path) |
+| `loyalty_birthday_job.go` | Cellar Club birthday awards (PH-040b; programme TZ, default Asia/Tehran) |
 | `recommendation_job.go` | Rebuild recommendation inputs |
 | `alert_check_job.go` | Back-in-stock / price-drop emails |
-| `subscription_renewal_job.go` | Subscription renewals |
-| `idempotency_cleanup_job.go` | Prune old payment/webhook idempotency rows |
+| `subscription_renewal_job.go` | Cellar-box due email + advance `next_renewal_at` (**no charge**; [box-subscriptions.md](./box-subscriptions.md)) |
+| `idempotency_cleanup_job.go` | Prune `idempotency_keys` older than `IDEMPOTENCY_KEY_RETENTION` (default 30d); see [idempotency-runbook.md](./idempotency-runbook.md) |
 | `runner.go` | Scheduler wiring |
 
 Jobs must be **safe to skip a tick** and **safe to overlap** where possible
@@ -120,6 +122,28 @@ files when they disagree).
 Separate from cron: request middleware pushes events to a buffered channel;
 worker goroutines batch-insert into the analytics DB. Drop-on-full, never block
 HTTP. Documented in [architecture.md](../architecture.md).
+
+---
+
+## Detached request-path work (PH-013a)
+
+Some handlers schedule **fire-and-forget** side effects after returning a
+response: OTP SMS, password-reset email, order confirmation email, blog read
+counters, recipe view counters, analytics event push.
+
+Those goroutines are **outside** Gin’s Recovery middleware. A panic there would
+crash the process. Rule:
+
+| Do | Don’t |
+|----|--------|
+| `pkg/async.Go` / `async.GoCtx` | Raw `go func()` for production side effects |
+| Named task (`"auth.otp_sms"`) for logs | Anonymous panics with no label |
+| Bound with `context.WithTimeout` via `GoCtx` | Inherit cancelled request context, or hang forever |
+| Blog: keep bounded slots + async | Unbounded goroutine per page view |
+
+`async.SetLogger` is wired once in `internal/bootstrap/app.go` so panics log
+with stack traces. Long-lived workers (analytics queue Start, cron, HTTP
+`ListenAndServe`) stay as structured process goroutines — not request fan-out.
 
 ---
 

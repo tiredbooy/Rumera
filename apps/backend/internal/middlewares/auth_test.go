@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	config "github.com/tiredbooy/configs"
+	"github.com/tiredbooy/internal/features/users"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/token"
 	"go.uber.org/zap"
@@ -19,11 +20,11 @@ import (
 func ptrTime(t time.Time) *time.Time { return &t }
 
 type authUserReaderStub struct {
-	user *models.AuthUser
+	user *users.AuthUser
 	err  error
 }
 
-func (s authUserReaderStub) GetAuthUserByUID(context.Context, int64) (*models.AuthUser, error) {
+func (s authUserReaderStub) GetAuthUserByUID(context.Context, int64) (*users.AuthUser, error) {
 	return s.user, s.err
 }
 
@@ -43,61 +44,61 @@ func TestAuthRehydratesLiveRoleAndStatus(t *testing.T) {
 	}{
 		{
 			name:      "live admin overrides stale customer claim",
-			claimRole: models.UserRoleCustomer,
-			reader: authUserReaderStub{user: &models.AuthUser{
-				ID: 7, UserID: userID, Role: models.UserRoleAdmin, IsActive: true,
+			claimRole: users.UserRoleCustomer,
+			reader: authUserReaderStub{user: &users.AuthUser{
+				ID: 7, UserID: userID, Role: users.UserRoleAdmin, IsActive: true,
 			}},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:      "live customer overrides stale admin claim",
-			claimRole: models.UserRoleAdmin,
-			reader: authUserReaderStub{user: &models.AuthUser{
-				ID: 7, UserID: userID, Role: models.UserRoleCustomer, IsActive: true,
+			claimRole: users.UserRoleAdmin,
+			reader: authUserReaderStub{user: &users.AuthUser{
+				ID: 7, UserID: userID, Role: users.UserRoleCustomer, IsActive: true,
 			}},
 			wantStatus: http.StatusForbidden,
 		},
 		{
 			name:      "inactive account invalidates token",
-			claimRole: models.UserRoleAdmin,
-			reader: authUserReaderStub{user: &models.AuthUser{
-				ID: 7, UserID: userID, Role: models.UserRoleAdmin, IsActive: false,
+			claimRole: users.UserRoleAdmin,
+			reader: authUserReaderStub{user: &users.AuthUser{
+				ID: 7, UserID: userID, Role: users.UserRoleAdmin, IsActive: false,
 			}},
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:      "banned account invalidates token",
-			claimRole: models.UserRoleAdmin,
-			reader: authUserReaderStub{user: &models.AuthUser{
-				ID: 7, UserID: userID, Role: models.UserRoleAdmin, IsActive: true, IsBanned: true,
+			claimRole: users.UserRoleAdmin,
+			reader: authUserReaderStub{user: &users.AuthUser{
+				ID: 7, UserID: userID, Role: users.UserRoleAdmin, IsActive: true, IsBanned: true,
 			}},
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:       "missing account invalidates token",
-			claimRole:  models.UserRoleAdmin,
+			claimRole:  users.UserRoleAdmin,
 			reader:     authUserReaderStub{err: models.ErrNotFound},
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:       "database failure fails closed without blaming permissions",
-			claimRole:  models.UserRoleAdmin,
+			claimRole:  users.UserRoleAdmin,
 			reader:     authUserReaderStub{err: errors.New("database unavailable")},
 			wantStatus: http.StatusInternalServerError,
 		},
 		{
 			name:      "claim and database identity must match",
-			claimRole: models.UserRoleAdmin,
-			reader: authUserReaderStub{user: &models.AuthUser{
-				ID: 7, UserID: uuid.New(), Role: models.UserRoleAdmin, IsActive: true,
+			claimRole: users.UserRoleAdmin,
+			reader: authUserReaderStub{user: &users.AuthUser{
+				ID: 7, UserID: uuid.New(), Role: users.UserRoleAdmin, IsActive: true,
 			}},
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:      "sessions invalidated after password reset",
-			claimRole: models.UserRoleAdmin,
-			reader: authUserReaderStub{user: &models.AuthUser{
-				ID: 7, UserID: userID, Role: models.UserRoleAdmin, IsActive: true,
+			claimRole: users.UserRoleAdmin,
+			reader: authUserReaderStub{user: &users.AuthUser{
+				ID: 7, UserID: userID, Role: users.UserRoleAdmin, IsActive: true,
 				// Cutover in the future → token iat (now) is strictly before it.
 				SessionsInvalidatedAt: ptrTime(time.Now().Add(time.Hour)),
 			}},
@@ -113,11 +114,11 @@ func TestAuthRehydratesLiveRoleAndStatus(t *testing.T) {
 			}
 
 			router := gin.New()
-			router.GET("/admin", Auth(manager, tt.reader), RequireRole(models.UserRoleAdmin), func(c *gin.Context) {
+			router.GET("/admin", Auth(manager, tt.reader), RequireRole(users.UserRoleAdmin), func(c *gin.Context) {
 				if got, ok := UserUUID(c); !ok || got != userID {
 					t.Fatalf("live user UUID = %s, %v; want %s, true", got, ok, userID)
 				}
-				if got := Role(c); got != models.UserRoleAdmin {
+				if got := Role(c); got != users.UserRoleAdmin {
 					t.Fatalf("live role = %q; want admin", got)
 				}
 				c.Status(http.StatusOK)
@@ -147,9 +148,9 @@ func TestAuthRejectsRefreshTokenBeforeLiveRoleHydration(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.GET("/admin", Auth(manager, authUserReaderStub{user: &models.AuthUser{
-		ID: 7, UserID: userID, Role: models.UserRoleAdmin, IsActive: true,
-	}}), RequireRole(models.UserRoleAdmin), func(c *gin.Context) {
+	router.GET("/admin", Auth(manager, authUserReaderStub{user: &users.AuthUser{
+		ID: 7, UserID: userID, Role: users.UserRoleAdmin, IsActive: true,
+	}}), RequireRole(users.UserRoleAdmin), func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)

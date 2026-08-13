@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tiredbooy/internal/models"
+	recipesfeat "github.com/tiredbooy/internal/features/recipes"
 	"go.uber.org/zap"
 )
 
@@ -15,7 +15,7 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 	now := time.Now().UTC()
 
 	recipes := []struct {
-		req      *models.RecipeReq
+		req      *recipesfeat.RecipeReq
 		products []struct {
 			slug      string
 			role      string
@@ -28,13 +28,13 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 		}
 	}{
 		{
-			req: &models.RecipeReq{
+			req: &recipesfeat.RecipeReq{
 				Title:             "مارگاریتای کلاسیک",
 				Slug:              "classic-margarita",
 				Excerpt:           sp("کوکتل افسانه‌ای مکزیکی با تکیلا، لیموترش و کوآنترو."),
 				Description:       sp("متعادل، ترش و سرحال‌کننده — مارگاریتا هرگز از مد نمی‌افتد."),
 				Content:           "<p>لبه لیوان را با نمک بپوشانید. تکیلا، آب لیموترش تازه و کوآنترو را با یخ شیک کنید و در لیوان سرو کنید.</p>",
-				Difficulty:        models.RecipeDifficultyEasy,
+				Difficulty:        recipesfeat.RecipeDifficultyEasy,
 				PrepTimeMinutes:   5,
 				CookTimeMinutes:   0,
 				Servings:          1,
@@ -43,7 +43,7 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 				GlassType:         sp("لیوان مارگاریتا"),
 				ServingSuggestion: sp("با لبه نمکی و یک قاچ لیموترش سرو شود."),
 				ImageURL:          sp("https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=1200&q=80"),
-				Status:            models.RecipeStatusPublished,
+				Status:            recipesfeat.RecipeStatusPublished,
 				IsFeatured:        true,
 				PublishedAt:       &now,
 				MetaTitle:         sp("طرز تهیه مارگاریتای کلاسیک | رومرا"),
@@ -68,13 +68,13 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 			},
 		},
 		{
-			req: &models.RecipeReq{
+			req: &recipesfeat.RecipeReq{
 				Title:             "اولد فشن",
 				Slug:              "old-fashioned",
 				Excerpt:           sp("سلطان کوکتل‌های ویسکی؛ ساده، قدرتمند و بی‌زمان."),
 				Description:       sp("ترکیب ویسکی، شکر و انگوستورا روی یخ درشت."),
 				Content:           "<p>یک حبه قند را با چند قطره انگوستورا خیس کنید، ویسکی بیفزایید و روی یخ درشت هم بزنید. با پوست پرتقال تزئین کنید.</p>",
-				Difficulty:        models.RecipeDifficultyMedium,
+				Difficulty:        recipesfeat.RecipeDifficultyMedium,
 				PrepTimeMinutes:   4,
 				CookTimeMinutes:   0,
 				Servings:          1,
@@ -83,7 +83,7 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 				GlassType:         sp("لیوان راکس"),
 				ServingSuggestion: sp("با یخ درشت و پوست پرتقال سرو شود."),
 				ImageURL:          sp("https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=1200&q=80"),
-				Status:            models.RecipeStatusPublished,
+				Status:            recipesfeat.RecipeStatusPublished,
 				IsFeatured:        true,
 				PublishedAt:       &now,
 				MetaTitle:         sp("طرز تهیه اولد فشن | رومرا"),
@@ -108,13 +108,13 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 			},
 		},
 		{
-			req: &models.RecipeReq{
+			req: &recipesfeat.RecipeReq{
 				Title:             "همراهی شراب قرمز و استیک",
 				Slug:              "red-wine-steak-pairing",
 				Excerpt:           sp("راهنمای جفت‌سازی شراب قرمز پرمایه با استیک آبدار."),
 				Description:       sp("چرا تانن و چربی بهترین دوست یکدیگرند."),
 				Content:           "<p>تانن‌های شراب قرمز پرمایه چربی استیک را می‌شکنند و طعم گوشت را برجسته می‌کنند. بارولو یا مارگو را در دمای اتاق سرو کنید.</p>",
-				Difficulty:        models.RecipeDifficultyEasy,
+				Difficulty:        recipesfeat.RecipeDifficultyEasy,
 				PrepTimeMinutes:   10,
 				CookTimeMinutes:   15,
 				Servings:          2,
@@ -122,7 +122,7 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 				GlassType:         sp("گیلاس بوردو"),
 				ServingSuggestion: sp("شراب را ۳۰ دقیقه پیش از سرو باز کنید تا تنفس کند."),
 				ImageURL:          sp("https://images.unsplash.com/photo-1432139555190-58524dae6a55?auto=format&fit=crop&w=1200&q=80"),
-				Status:            models.RecipeStatusPublished,
+				Status:            recipesfeat.RecipeStatusPublished,
 				IsFeatured:        false,
 				PublishedAt:       &now,
 				MetaTitle:         sp("جفت‌سازی شراب قرمز و استیک | رومرا"),
@@ -147,13 +147,13 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 			},
 		},
 		{
-			req: &models.RecipeReq{
+			req: &recipesfeat.RecipeReq{
 				Title:             "اسپریتز شراب سفید",
 				Slug:              "white-wine-spritz",
 				Excerpt:           sp("نوشیدنی خنک تابستانی با شراب سفید و سودا."),
 				Description:       sp("سبک، حباب‌دار و سرحال‌کننده برای عصرهای گرم."),
 				Content:           "<p>شراب سفید خنک را با آب گازدار و کمی شربت آبلیمو ترکیب کنید، یخ و نعنا بیفزایید.</p>",
-				Difficulty:        models.RecipeDifficultyEasy,
+				Difficulty:        recipesfeat.RecipeDifficultyEasy,
 				PrepTimeMinutes:   3,
 				CookTimeMinutes:   0,
 				Servings:          1,
@@ -162,7 +162,7 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 				GlassType:         sp("گیلاس شراب"),
 				ServingSuggestion: sp("با برگ نعنا و قاچ لیمو سرو شود."),
 				ImageURL:          sp("https://images.unsplash.com/photo-1541557435984-1c79685a082b?auto=format&fit=crop&w=1200&q=80"),
-				Status:            models.RecipeStatusPublished,
+				Status:            recipesfeat.RecipeStatusPublished,
 				IsFeatured:        false,
 				PublishedAt:       &now,
 				MetaTitle:         sp("اسپریتز شراب سفید | رومرا"),
@@ -204,7 +204,7 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 				continue // product wasn't seeded; skip the link
 			}
 			sortOrder := i
-			r.req.Products = append(r.req.Products, &models.RecipeProductReq{
+			r.req.Products = append(r.req.Products, &recipesfeat.RecipeProductReq{
 				ProductVariantID: vid,
 				Quantity:         dec(p.qty),
 				Unit:             sp(p.unit),
@@ -217,7 +217,7 @@ func (s *seeder) seedRecipes(ctx context.Context, variants, tags map[string]int6
 		// Ingredients — some linked to a real variant, some free-text.
 		for i, ing := range r.ingredients {
 			sortOrder := i
-			req := &models.RecipeIngredientReq{
+			req := &recipesfeat.RecipeIngredientReq{
 				IngredientName: ing.name,
 				Quantity:       dec(ing.qty),
 				Unit:           sp(ing.unit),

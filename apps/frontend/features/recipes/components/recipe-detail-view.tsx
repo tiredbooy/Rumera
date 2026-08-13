@@ -114,8 +114,8 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
       />
 
       {/* Hero */}
-      <section className="cellar-glow border-b border-border/60">
-        <div className="container-px mx-auto max-w-6xl py-12 sm:py-16">
+      <section className="content-header-glow border-b border-border/50">
+        <div className="container-px mx-auto max-w-6xl py-10 sm:py-14">
           <nav
             className="mb-8 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
             aria-label="مسیر صفحه"

@@ -9,17 +9,16 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
-	models "github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/services"
+	featanalytics "github.com/tiredbooy/internal/features/analytics"
 	"github.com/tiredbooy/pkg/database"
 )
 
 type ProductStatsCronJob struct {
 	db  *pgxpool.Pool
-	svc *services.DailyProductStatsService
+	svc *featanalytics.DailyProductStatsService
 }
 
-func NewProductStatsCronJob(db *pgxpool.Pool, svc *services.DailyProductStatsService) *ProductStatsCronJob {
+func NewProductStatsCronJob(db *pgxpool.Pool, svc *featanalytics.DailyProductStatsService) *ProductStatsCronJob {
 	return &ProductStatsCronJob{db: db, svc: svc}
 }
 
@@ -39,7 +38,7 @@ func (j *ProductStatsCronJob) Run(ctx context.Context) {
 		return
 	}
 
-	reqs := make([]*models.DailyProductStatsUpsertReq, 0, len(productIDs))
+	reqs := make([]*featanalytics.DailyProductStatsUpsertReq, 0, len(productIDs))
 	for _, productID := range productIDs {
 		req, err := j.aggregateForProduct(ctx, productID, yesterday)
 		if err != nil {
@@ -96,12 +95,12 @@ func (j *ProductStatsCronJob) fetchActiveProductIDs(ctx context.Context, date ti
 	return ids, nil
 }
 
-func (j *ProductStatsCronJob) aggregateForProduct(ctx context.Context, productID int64, date time.Time) (*models.DailyProductStatsUpsertReq, error) {
+func (j *ProductStatsCronJob) aggregateForProduct(ctx context.Context, productID int64, date time.Time) (*featanalytics.DailyProductStatsUpsertReq, error) {
 	from := date
 	to := date.AddDate(0, 0, 1)
 	productKey := strconv.FormatInt(productID, 10)
 
-	req := &models.DailyProductStatsUpsertReq{
+	req := &featanalytics.DailyProductStatsUpsertReq{
 		Date:      date,
 		ProductID: productID,
 	}

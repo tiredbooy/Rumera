@@ -10,6 +10,10 @@ tags:
 
 # Recipes and Journal
 
+Recipes BE: [[Recipes Backend]] (`internal/features/recipes`).  
+Journal BE: [[Blog Backend]] (`internal/features/blog`).  
+Hero: [[Hero Slides Backend]] (`internal/features/hero`).
+
 Editorial content + commerce hooks.
 
 - Recipes: ingredients can link variants → shoppable journey
@@ -17,7 +21,7 @@ Editorial content + commerce hooks.
 - Hero slides: homepage CMS
 
 FE: [[Content and SEO]] · recipe-commerce doc  
-BE: recipe · blog · hero services  
+BE: feature slices under `internal/features/{recipes,blog,hero}`  
 Media: [[Media Pipeline]]
 
 Related: [[Catalogue]] · [[Search]]

@@ -56,9 +56,11 @@ var (
 	// Wishlist
 	ErrWishlistNotFound = New("WISHLIST_NOT_FOUND", "wishlist not found")
 
-	// Wallet
-	ErrInsufficientFunds = New("INSUFFICIENT_FUNDS", "insufficient wallet balance")
-	ErrWalletNotFound    = New("WALLET_NOT_FOUND", "wallet not found")
+	// Wallet / loyalty / gift
+	ErrInsufficientFunds  = New("INSUFFICIENT_FUNDS", "insufficient wallet balance")
+	ErrInsufficientPoints = New("INSUFFICIENT_POINTS", "insufficient loyalty points")
+	ErrWalletNotFound     = New("WALLET_NOT_FOUND", "wallet not found")
+	ErrGiftCardInvalid    = New("GIFT_CARD_INVALID", "gift card code is invalid or already redeemed")
 
 	// Order
 	ErrOrderNotFound    = New("ORDER_NOT_FOUND", "order not found")
@@ -69,14 +71,17 @@ var (
 	ErrProductNotFound    = New("PRODUCT_NOT_FOUND", "product not found")
 	ErrProductUnavailable = New("PRODUCT_UNAVAILABLE", "product is not available")
 	ErrProductHasHistory  = New("PRODUCT_HAS_HISTORY", "product has inventory or order history and cannot be permanently deleted")
-	ErrOutOfStock         = New("OUT_OF_STOCK", "item is out of stock")
+	ErrOutOfStock         = New("OUT_OF_STOCK", "not enough stock available for one or more items")
 
 	// Cart
-	ErrCartEmpty = New("CART_EMPTY", "cart is empty")
+	ErrCartEmpty = New("CART_EMPTY", "cart is empty — add items before checkout")
 
 	// Coupon
-	ErrInvalidCoupon = New("INVALID_COUPON", "coupon code is invalid")
-	ErrCouponExpired = New("COUPON_EXPIRED", "coupon has expired")
+	ErrInvalidCoupon = New("INVALID_COUPON", "coupon code is invalid or does not exist")
+	ErrCouponExpired = New("COUPON_EXPIRED", "this coupon has expired")
+
+	// Auth account state
+	ErrAccountDisabled = New("ACCOUNT_DISABLED", "this account is disabled")
 )
 
 // As unwraps any error chain to an *AppError.

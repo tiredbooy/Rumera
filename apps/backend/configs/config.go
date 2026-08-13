@@ -111,6 +111,14 @@ type Config struct {
 	// LoyaltyReferralReward: points granted to BOTH referrer and referee when the
 	// referee's first order is paid.
 	LoyaltyReferralReward int `envconfig:"LOYALTY_REFERRAL_REWARD" default:"300"`
+	// LoyaltyReviewBonus: points for a verified-purchase review (0 = off). PH-040b.
+	LoyaltyReviewBonus int `envconfig:"LOYALTY_REVIEW_BONUS" default:"50"`
+	// LoyaltyBirthdayBonus: points once per calendar year (0 = off). PH-040b.
+	LoyaltyBirthdayBonus int `envconfig:"LOYALTY_BIRTHDAY_BONUS" default:"200"`
+	// LoyaltyBirthdayTZ: IANA timezone for birthday calendar day (default Asia/Tehran).
+	LoyaltyBirthdayTZ string `envconfig:"LOYALTY_BIRTHDAY_TZ" default:"Asia/Tehran"`
+	// CronLoyaltyBirthdaySchedule: daily birthday award job (6-field UTC cron).
+	CronLoyaltyBirthdaySchedule string `envconfig:"CRON_LOYALTY_BIRTHDAY_SCHEDULE" default:"0 15 1 * * *"`
 
 	// ── Storage ───────────────────────────────────────────────────────────────
 	StoragePath string `envconfig:"STORAGE_PATH" default:"./storage"`
@@ -129,9 +137,14 @@ type Config struct {
 	MediaMaxSourceDimension int      `envconfig:"MEDIA_MAX_SOURCE_DIMENSION" default:"12000"`
 	MediaMaxSourcePixels    int64    `envconfig:"MEDIA_MAX_SOURCE_PIXELS" default:"40000000"`
 
-	// ── Meilisearch ───────────────────────────────────────────────────────────
-	MeiliHost   string `envconfig:"MEILI_HOST" default:"http://localhost:7700"`
-	MeiliAPIKey string `envconfig:"MEILI_API_KEY"`
+	// ── Meilisearch (PH-030b readiness; storefront still uses Postgres ILIKE) ─
+	// MeiliEnabled gates client connect + reindex cron. Default false so local
+	// API boots without Meili. When true and Meili is down, boot continues with
+	// a warning and the reindex job is skipped (same fail-soft pattern as Redis).
+	MeiliEnabled  bool   `envconfig:"MEILI_ENABLED" default:"false"`
+	MeiliHost     string `envconfig:"MEILI_HOST" default:"http://localhost:7700"`
+	MeiliAPIKey   string `envconfig:"MEILI_API_KEY"`
+	MeiliIndexUID string `envconfig:"MEILI_INDEX_UID" default:"products"`
 
 	// ── Crypto Payment ────────────────────────────────────────────────────────
 	CryptoAPIKey     string `envconfig:"CRYPTO_API_KEY"`
@@ -192,6 +205,10 @@ type Config struct {
 	// Subscription renewal: emails customers whose cellar box is due and advances
 	// the next renewal date. Runs daily at 04:00 UTC by default.
 	CronSubscriptionSchedule string `envconfig:"CRON_SUBSCRIPTION_SCHEDULE" default:"0 0 4 * * *"`
+
+	// Meili full reindex — only registered when MEILI_ENABLED and client connected.
+	// Default 04:30 UTC (after subscription job). Storefront is NOT switched by this job.
+	CronMeiliReindexSchedule string `envconfig:"CRON_MEILI_REINDEX_SCHEDULE" default:"0 30 4 * * *"`
 }
 
 // ── DSN helpers ───────────────────────────────────────────────────────────────

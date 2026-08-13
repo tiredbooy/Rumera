@@ -10,57 +10,86 @@ import {
   type Permission,
 } from "@/lib/rbac/permissions";
 import {
+  fetchCapabilityMatrixBrowser,
+  replaceRoleCapabilitiesBrowser,
+} from "@/lib/rbac/capabilities-api";
+import {
   ROLE_LABELS,
   ROLE_PERMISSIONS,
-  type Role,
+  type PanelRole,
 } from "@/lib/rbac/roles";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "rumera:role-capability-matrix:v1";
 const ALL_PERMISSIONS = Object.values(PERMISSIONS) as Permission[];
-const EDITABLE_ROLES: Role[] = ["admin", "vendor", "customer"];
+/** Only panel roles are durable on the server capability matrix. */
+const EDITABLE_ROLES: PanelRole[] = ["admin", "staff"];
 
-type Matrix = Record<Role, Permission[]>;
+type Matrix = Record<PanelRole, Permission[]>;
 
-function loadMatrix(): Matrix {
-  if (typeof window === "undefined") {
-    return { ...ROLE_PERMISSIONS };
-  }
+function emptyMatrix(): Matrix {
+  return {
+    admin: [...ROLE_PERMISSIONS.admin],
+    staff: [...ROLE_PERMISSIONS.staff],
+  };
+}
+
+function cacheMatrix(matrix: Matrix) {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...ROLE_PERMISSIONS };
-    const parsed = JSON.parse(raw) as Partial<Matrix>;
-    return {
-      customer: parsed.customer ?? ROLE_PERMISSIONS.customer,
-      vendor: parsed.vendor ?? ROLE_PERMISSIONS.vendor,
-      admin: parsed.admin ?? ROLE_PERMISSIONS.admin,
-    };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(matrix));
+    window.dispatchEvent(
+      new CustomEvent("rumera:capabilities-updated", { detail: matrix }),
+    );
   } catch {
-    return { ...ROLE_PERMISSIONS };
+    // Cache is best-effort; server remains source of truth.
   }
 }
 
 /**
  * Dynamic capability matrix for admin operators (Task 082a).
  *
- * Backend still authorizes the admin API by live `role=admin` (single-role gate).
- * This matrix drives frontend nav/action affordances and is persisted locally so
- * operators can design lower-privilege admin packages before a full authz service
- * ships. Saving also broadcasts a `rumera:capabilities-updated` event so the
- * shell can refresh filterNav in the same tab.
+ * Loads and saves against `GET/PUT /admin/capabilities` (via BFF). localStorage
+ * is only a same-tab cache so nav can refresh without a full reload.
  */
 export function CapabilityMatrix() {
-  const [matrix, setMatrix] = React.useState<Matrix>(() => ({
-    ...ROLE_PERMISSIONS,
-  }));
+  const [matrix, setMatrix] = React.useState<Matrix>(() => emptyMatrix());
   const [dirty, setDirty] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    setMatrix(loadMatrix());
+  const loadFromServer = React.useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const payload = await fetchCapabilityMatrixBrowser();
+      const next = emptyMatrix();
+      for (const row of payload.capabilities) {
+        if (row.role === "admin" || row.role === "staff") {
+          next[row.role] = (row.permissions ?? []) as Permission[];
+        }
+      }
+      // Admin superuser: never present an empty catalogue in the editor.
+      if (next.admin.length === 0) {
+        next.admin = [...ROLE_PERMISSIONS.admin];
+      }
+      setMatrix(next);
+      cacheMatrix(next);
+      setDirty(false);
+    } catch (err) {
+      setLoadError(
+        err instanceof Error ? err.message : "بارگذاری ماتریس ناموفق بود",
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  function toggle(role: Role, permission: Permission) {
-    if (role === "customer") return;
+  React.useEffect(() => {
+    void loadFromServer();
+  }, [loadFromServer]);
+
+  function toggle(role: PanelRole, permission: Permission) {
     setMatrix((current) => {
       const set = new Set(current[role]);
       if (set.has(permission)) set.delete(permission);
@@ -70,24 +99,41 @@ export function CapabilityMatrix() {
     setDirty(true);
   }
 
-  function save() {
+  async function save() {
+    setSaving(true);
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(matrix));
-      window.dispatchEvent(
-        new CustomEvent("rumera:capabilities-updated", { detail: matrix }),
-      );
+      // Persist both panel roles; admin row is documentary + UI (enforcement
+      // still treats admin as superuser).
+      const [adminRow, staffRow] = await Promise.all([
+        replaceRoleCapabilitiesBrowser("admin", matrix.admin),
+        replaceRoleCapabilitiesBrowser("staff", matrix.staff),
+      ]);
+      const next: Matrix = {
+        admin: (adminRow.permissions ?? matrix.admin) as Permission[],
+        staff: (staffRow.permissions ?? matrix.staff) as Permission[],
+      };
+      if (next.admin.length === 0) {
+        next.admin = [...ROLE_PERMISSIONS.admin];
+      }
+      setMatrix(next);
+      cacheMatrix(next);
       setDirty(false);
       toast.success("ماتریس دسترسی ذخیره شد", {
         description:
-          "ناوبری پنل در این مرورگر بر اساس این ماتریس فیلتر می‌شود. دروازهٔ API همچنان نقش admin است.",
+          "سرور منبع حقیقت است. درخواست بعدی API با گرنت تازه enforce می‌شود؛ ناوبری پس از رفرش/بارگذاری ماتریس به‌روز می‌شود. لغو دسترسی میان‌نشست، درخواست‌های بعدی را 403 می‌کند (JWT نقش را هر بار از DB زنده می‌خواند).",
       });
-    } catch {
-      toast.error("ذخیرهٔ ماتریس در مرورگر ممکن نشد");
+    } catch (err) {
+      toast.error("ذخیرهٔ ماتریس ناموفق بود", {
+        description:
+          err instanceof Error ? err.message : "دسترسی یا اتصال را بررسی کنید.",
+      });
+    } finally {
+      setSaving(false);
     }
   }
 
   function resetDefaults() {
-    setMatrix({ ...ROLE_PERMISSIONS });
+    setMatrix(emptyMatrix());
     setDirty(true);
   }
 
@@ -102,23 +148,53 @@ export function CapabilityMatrix() {
             ماتریس دسترسی پویا
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            مشخص کنید هر نقش چه بخش‌هایی از پنل را ببیند. نقش «مدیر کل» برای ورود
-            به API لازم است؛ با کم‌کردن قابلیت‌ها می‌توانید ادمین‌های کم‌دسترسی
-            طراحی کنید (فیلتر ناوبری/دکمه‌ها در فرانت).
+            گرنت‌های نقش «اپراتور» و «مدیر کل» از سرور خوانده و ذخیره می‌شوند.
+            مدیر کل همیشه سوپریوزر است (حتی اگر ردیف ماتریس خالی شود، سرور
+            کاتالوگ کامل را نگه می‌دارد). اپراتور فقط قابلیت‌های اعطاشده را
+            می‌بیند و API همان را enforce می‌کند — خالی کردن همهٔ تیک‌های اپراتور
+            مجاز است.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={resetDefaults}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadFromServer()}
+            disabled={loading || saving}
+          >
+            بارگذاری مجدد
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={resetDefaults}
+            disabled={loading || saving}
+          >
             بازگشت به پیش‌فرض
           </Button>
-          <Button type="button" onClick={save} disabled={!dirty}>
-            ذخیرهٔ ماتریس
+          <Button
+            type="button"
+            onClick={() => void save()}
+            disabled={!dirty || loading || saving}
+          >
+            {saving ? "در حال ذخیره…" : "ذخیرهٔ ماتریس"}
           </Button>
         </div>
       </div>
 
+      {loadError ? (
+        <p className="mt-4 text-sm text-destructive" role="alert">
+          {loadError}
+        </p>
+      ) : null}
+      {loading ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          در حال بارگذاری ماتریس از سرور…
+        </p>
+      ) : null}
+
       <div className="mt-6 overflow-x-auto">
-        <table className="w-full min-w-[40rem] border-collapse text-sm">
+        <table className="w-full min-w-[32rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border/60 text-start">
               <th className="sticky start-0 bg-card py-2 pe-4 font-medium">
@@ -151,17 +227,13 @@ export function CapabilityMatrix() {
                 </th>
                 {EDITABLE_ROLES.map((role) => {
                   const checked = matrix[role]?.includes(permission) ?? false;
-                  const locked = role === "customer";
                   return (
                     <td key={role} className="px-2 py-2 text-center">
                       <input
                         type="checkbox"
-                        className={cn(
-                          "size-4 accent-primary",
-                          locked && "cursor-not-allowed opacity-40",
-                        )}
+                        className={cn("size-4 accent-primary")}
                         checked={checked}
-                        disabled={locked}
+                        disabled={loading || saving}
                         aria-label={`${PERMISSION_LABELS[permission]} — ${ROLE_LABELS[role]}`}
                         onChange={() => toggle(role, permission)}
                       />
@@ -177,7 +249,7 @@ export function CapabilityMatrix() {
   );
 }
 
-/** Read the operator-saved matrix (browser) for nav filtering. */
+/** Read the browser-cached matrix for same-tab nav filtering. */
 export function readStoredCapabilityMatrix(): Matrix | null {
   if (typeof window === "undefined") return null;
   try {

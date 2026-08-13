@@ -1,5 +1,9 @@
 # Recipes
 
+**Implementation (feature slice):** `internal/features/recipes/`  
+Composed from `internal/routes/routes.go`. Media cleanup via `MediaCleaner`.
+Public detail is Redis-cached with eager write invalidation. API contracts unchanged.
+
 Content-commerce recipes (cocktails & serves) with a publishing workflow, SEO
 metadata, schema.org/Recipe structured data, and **shoppable products** that turn
 a recipe page into a storefront. Public reads are published-only; writes are

@@ -21,7 +21,14 @@ tags:
 
 ## In-process cron (`internal/corn`)
 
-Stats, revenue, **search analytics** (not Meili indexer), recommendations, alerts, subscription renewal, idempotency cleanup.
+Stats, revenue, **search analytics** (not Meili indexer), recommendations, alerts,
+**cellar-box renewal email** (no charge — [[Subscriptions Backend]]), idempotency cleanup.
+
+## Detached request work (PH-013a)
+
+OTP SMS, password-reset / order emails, blog read + recipe view counters, analytics push: use **`pkg/async.Go` / `GoCtx`** (recover + timeout). Raw `go func()` after the handler is **outside** Gin Recovery — a panic kills the process.
+
+See [[Pitfalls and anti-patterns]].
 
 Related: [[Backend API]] · [[Runtime Topology]] · [[Analytics]] · [[Search Backend]]
 

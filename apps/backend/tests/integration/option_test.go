@@ -3,10 +3,14 @@
 package integration
 
 import (
+	"github.com/tiredbooy/internal/features/inventory"
+	"github.com/tiredbooy/internal/features/catalog/variant"
+	"github.com/tiredbooy/internal/features/catalog/product"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tiredbooy/internal/features/catalog/option"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,19 +19,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
-	"github.com/tiredbooy/internal/handlers"
-	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
 	"github.com/tiredbooy/pkg/apperr"
-	"go.uber.org/zap"
+	"github.com/tiredbooy/pkg/validator"
 )
 
 func TestOptionAdminCRUDHandlers(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "option_types")
-	service := services.NewOptionService(repositories.NewOptionRepository(testPool))
-	handler := handlers.New(handlers.Deps{Option: service, Log: zap.NewNop()})
+	service := option.NewService(option.NewRepository(testPool))
+	handler := option.NewHandler(service, validator.New())
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.GET("/admin/option-types", handler.ListOptionTypes)
@@ -47,7 +47,7 @@ func TestOptionAdminCRUDHandlers(t *testing.T) {
 		t.Fatalf("create type status/body = %d/%s", typeRecorder.Code, typeRecorder.Body.String())
 	}
 	var typeEnvelope struct {
-		Data models.OptionType `json:"data"`
+		Data option.OptionType `json:"data"`
 	}
 	if err := json.Unmarshal(typeRecorder.Body.Bytes(), &typeEnvelope); err != nil {
 		t.Fatalf("decode type: %v", err)
@@ -61,7 +61,7 @@ func TestOptionAdminCRUDHandlers(t *testing.T) {
 		t.Fatalf("create value status/body = %d/%s", valueRecorder.Code, valueRecorder.Body.String())
 	}
 	var valueEnvelope struct {
-		Data models.OptionValue `json:"data"`
+		Data option.OptionValue `json:"data"`
 	}
 	if err := json.Unmarshal(valueRecorder.Body.Bytes(), &valueEnvelope); err != nil {
 		t.Fatalf("decode value: %v", err)
@@ -109,60 +109,60 @@ func TestProductOptionCatalogAndVariantCombinationInvariants(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "products", "option_types")
 	ctx := context.Background()
-	optionRepo := repositories.NewOptionRepository(testPool)
-	optionService := services.NewOptionService(optionRepo)
+	optionRepo := option.NewRepository(testPool)
+	optionService := option.NewService(optionRepo)
 
-	volume, err := optionService.CreateType(ctx, models.CreateOptionTypeReq{
+	volume, err := optionService.CreateType(ctx, option.CreateOptionTypeReq{
 		Title: "  volume  ", DisplayName: "  Volume  ",
 	})
 	if err != nil || volume.Title != "volume" || volume.DisplayName != "Volume" {
 		t.Fatalf("create volume type = %+v, %v", volume, err)
 	}
-	color, err := optionService.CreateType(ctx, models.CreateOptionTypeReq{
+	color, err := optionService.CreateType(ctx, option.CreateOptionTypeReq{
 		Title: "color", DisplayName: "Color",
 	})
 	if err != nil {
 		t.Fatalf("create color type: %v", err)
 	}
-	if _, err := optionService.CreateType(ctx, models.CreateOptionTypeReq{
+	if _, err := optionService.CreateType(ctx, option.CreateOptionTypeReq{
 		Title: "VOLUME", DisplayName: "Duplicate",
 	}); !errors.Is(err, apperr.ErrConflict) {
 		t.Fatalf("case-insensitive type duplicate error = %v; want conflict", err)
 	}
 
-	volume750, err := optionService.CreateValue(ctx, volume.ID, models.CreateOptionValueReq{
+	volume750, err := optionService.CreateValue(ctx, volume.ID, option.CreateOptionValueReq{
 		Value: " 750 ml ", SortOrder: 1,
 	})
 	if err != nil || volume750.Value != "750 ml" {
 		t.Fatalf("create 750 ml = %+v, %v", volume750, err)
 	}
-	volume1L, err := optionService.CreateValue(ctx, volume.ID, models.CreateOptionValueReq{
+	volume1L, err := optionService.CreateValue(ctx, volume.ID, option.CreateOptionValueReq{
 		Value: "1 L", SortOrder: 2,
 	})
 	if err != nil {
 		t.Fatalf("create 1 L: %v", err)
 	}
-	red, err := optionService.CreateValue(ctx, color.ID, models.CreateOptionValueReq{Value: "Red"})
+	red, err := optionService.CreateValue(ctx, color.ID, option.CreateOptionValueReq{Value: "Red"})
 	if err != nil {
 		t.Fatalf("create red: %v", err)
 	}
 	// Values are unique within a type, not globally across unrelated dimensions.
-	color750, err := optionService.CreateValue(ctx, color.ID, models.CreateOptionValueReq{Value: "750 ml"})
+	color750, err := optionService.CreateValue(ctx, color.ID, option.CreateOptionValueReq{Value: "750 ml"})
 	if err != nil {
 		t.Fatalf("reuse display value under another type: %v", err)
 	}
-	if _, err := optionService.CreateValue(ctx, volume.ID, models.CreateOptionValueReq{
+	if _, err := optionService.CreateValue(ctx, volume.ID, option.CreateOptionValueReq{
 		Value: "750 ML",
 	}); !errors.Is(err, apperr.ErrConflict) {
 		t.Fatalf("case-insensitive value duplicate error = %v; want conflict", err)
 	}
 
 	displayName := "Bottle volume"
-	if updated, err := optionService.UpdateType(ctx, volume.ID, models.UpdateOptionTypeReq{DisplayName: &displayName}); err != nil || updated.DisplayName != displayName {
+	if updated, err := optionService.UpdateType(ctx, volume.ID, option.UpdateOptionTypeReq{DisplayName: &displayName}); err != nil || updated.DisplayName != displayName {
 		t.Fatalf("update option type = %+v, %v", updated, err)
 	}
 	valueLabel, sortOrder := "1 litre", 3
-	volume1L, err = optionService.UpdateValue(ctx, volume1L.ID, models.UpdateOptionValueReq{
+	volume1L, err = optionService.UpdateValue(ctx, volume1L.ID, option.UpdateOptionValueReq{
 		Value: &valueLabel, SortOrder: &sortOrder,
 	})
 	if err != nil || volume1L.Value != valueLabel || volume1L.SortOrder != sortOrder {
@@ -174,33 +174,33 @@ func TestProductOptionCatalogAndVariantCombinationInvariants(t *testing.T) {
 	}
 
 	productID := seedProduct(t)
-	variantRepo := repositories.NewVariantRepository(testPool)
-	inventoryRepo := repositories.NewInventoryRepository(testPool)
-	variantService := services.NewVariantService(variantRepo, inventoryRepo, nil)
-	first, err := variantService.Create(ctx, productID, models.CreateVariantReq{
+	variantRepo := variant.NewRepository(testPool)
+	inventoryRepo := inventory.NewRepository(testPool)
+	variantService := variant.NewService(variantRepo, inventoryRepo, nil)
+	first, err := variantService.Create(ctx, productID, variant.CreateVariantReq{
 		SKU: stringPointer("OPT-1"), Price: 10,
 		OptionValueIDs: []int64{volume750.ID, red.ID},
 	})
 	if err != nil {
 		t.Fatalf("create multi-dimension variant: %v", err)
 	}
-	if _, err := variantService.Create(ctx, productID, models.CreateVariantReq{
+	if _, err := variantService.Create(ctx, productID, variant.CreateVariantReq{
 		SKU: stringPointer("OPT-DUPLICATE"), Price: 11,
 		OptionValueIDs: []int64{red.ID, volume750.ID},
 	}); !errors.Is(err, apperr.ErrConflict) {
 		t.Fatalf("duplicate option combination error = %v; want conflict", err)
 	}
-	second, err := variantService.Create(ctx, productID, models.CreateVariantReq{
+	second, err := variantService.Create(ctx, productID, variant.CreateVariantReq{
 		SKU: stringPointer("OPT-2"), Price: 12,
 		OptionValueIDs: []int64{volume750.ID, color750.ID},
 	})
 	if err != nil {
 		t.Fatalf("reuse one option value in a distinct combination: %v", err)
 	}
-	productRepo := repositories.NewProductRepository(testPool)
-	inlineProduct, err := productRepo.Create(ctx, models.CreateProductReq{
+	productRepo := product.NewRepository(testPool)
+	inlineProduct, err := productRepo.Create(ctx, product.CreateProductReq{
 		Title: "Inline option product",
-		Variants: []models.CreateVariantReq{{
+		Variants: []variant.CreateVariantReq{{
 			SKU: stringPointer("OPT-INLINE"), Price: 14,
 			OptionValueIDs: []int64{volume1L.ID, red.ID},
 		}},
@@ -224,7 +224,7 @@ func TestProductOptionCatalogAndVariantCombinationInvariants(t *testing.T) {
 	if err != nil || len(options) != 2 {
 		t.Fatalf("failed replacement changed old combination = %+v, %v", options, err)
 	}
-	variantHandler := handlers.New(handlers.Deps{Variant: variantService, Log: zap.NewNop()})
+	variantHandler := variant.NewHandler(variantService, validator.New(), nil)
 	variantRouter := gin.New()
 	variantRouter.PUT("/admin/variants/:id/options", variantHandler.ReplaceVariantOptions)
 	missingFieldRecorder := performOptionRequest(
@@ -233,8 +233,9 @@ func TestProductOptionCatalogAndVariantCombinationInvariants(t *testing.T) {
 		fmt.Sprintf("/admin/variants/%d/options", first.ID),
 		`{}`,
 	)
-	if missingFieldRecorder.Code != http.StatusBadRequest {
-		t.Fatalf("missing replacement field status/body = %d/%s; want 400", missingFieldRecorder.Code, missingFieldRecorder.Body.String())
+	// Bind+validate returns 422 Unprocessable Entity for missing required JSON fields.
+	if missingFieldRecorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("missing replacement field status/body = %d/%s; want 422", missingFieldRecorder.Code, missingFieldRecorder.Body.String())
 	}
 	replaceRecorder := performOptionRequest(
 		variantRouter,

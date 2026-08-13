@@ -52,10 +52,17 @@ func newRouter(cfg *config.Config, logger *zap.Logger, c *container) *gin.Engine
 	// queue and dropped under back-pressure.
 	r.Use(middlewares.Analytics(c.queue))
 
-	// Idempotency guard for at-least-once callers (payment webhook): backed by a
-	// durable table on the main pool so replays are deduplicated across restarts.
-	idempotency := middleware.Idempotency(middleware.NewIdempotencyStore(c.dbs.DB), logger)
-	routes.Setup(r, c.handler, c.jwt, c.cache, idempotency)
+	// Idempotency platform (PH-011): durable store on the main pool.
+	// Webhook policy allows auto body-hash keys (gateways often omit headers).
+	// Money policy is explicit-key only (optional until FE always sends keys);
+	// no auto-key so two intentional places with the same body do not collapse.
+	idemStore := middleware.NewIdempotencyStore(c.dbs.DB)
+	webhookIdem := middleware.Idempotency(idemStore, logger)
+	moneyIdem := middleware.IdempotencyWithConfig(idemStore, logger, middleware.IdempotencyConfig{
+		AllowAutoKey: false,
+		RequireKey:   false, // flip true after FE/BFF always send Idempotency-Key
+	})
+	routes.Setup(r, c.handler, c.jwt, c.cache, webhookIdem, moneyIdem)
 
 	return r
 }

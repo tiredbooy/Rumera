@@ -15,11 +15,13 @@ import type {
 } from "@/features/subscriptions/types";
 import { useAddresses } from "@/features/addresses/api";
 import type { Address } from "@/features/addresses/types";
+import { apiErrorToast } from "@/lib/api/user-facing-error";
 import {
   SubscriptionActionDialog,
   type PendingSubscriptionAction,
 } from "./subscription-action-dialog";
 import { SubscriptionCreatePanel } from "./subscription-create-panel";
+import { actionSuccessMessage } from "./subscription-display-helpers";
 import { SubscriptionsPanel } from "./subscriptions-panel";
 
 export function SubscriptionsView() {
@@ -29,22 +31,42 @@ export function SubscriptionsView() {
   const update = useUpdateSubscription();
 
   const [cadence, setCadence] = React.useState<SubscriptionCadence>("monthly");
+  const [addressId, setAddressId] = React.useState<number | null>(null);
   const [confirm, setConfirm] = React.useState<PendingSubscriptionAction>(null);
   /** Tracks which subscription row is mid-mutation so we only spin its buttons. */
   const [busyId, setBusyId] = React.useState<number | null>(null);
 
+  const addressList = addresses ?? [];
+
   const addressById = React.useMemo(() => {
     const map = new Map<number, Address>();
-    for (const a of addresses ?? []) map.set(a.id, a);
+    for (const a of addressList) map.set(a.id, a);
     return map;
-  }, [addresses]);
+  }, [addressList]);
+
+  // Prefer default address once list loads (if user has not chosen yet).
+  React.useEffect(() => {
+    if (addressId != null) return;
+    const def = addressList.find((a) => a.is_default);
+    if (def) setAddressId(def.id);
+  }, [addressList, addressId]);
 
   function subscribe() {
     create.mutate(
-      { cadence },
       {
-        onSuccess: () => toast.success("اشتراک شما فعال شد"),
-        onError: () => toast.error("ایجاد اشتراک ناموفق بود"),
+        cadence,
+        address_id: addressId,
+      },
+      {
+        onSuccess: () =>
+          toast.success("باکس سرداب فعال شد", {
+            description:
+              "تاریخ ارسال بعدی روی کارت نمایش داده می‌شود. پرداخت خودکار انجام نشده است.",
+          }),
+        onError: (err) => {
+          const t = apiErrorToast(err, "فعال‌سازی باکس ناموفق بود");
+          toast.error(t.title, { description: t.description });
+        },
       },
     );
   }
@@ -54,17 +76,11 @@ export function SubscriptionsView() {
     update.mutate(
       { id, action },
       {
-        onSuccess: () =>
-          toast.success(
-            action === "cancel"
-              ? "اشتراک لغو شد"
-              : action === "skip"
-                ? "ارسال این دوره به دورهٔ بعد موکول شد"
-                : action === "pause"
-                  ? "اشتراک متوقف شد"
-                  : "اشتراک دوباره فعال شد",
-          ),
-        onError: () => toast.error("عملیات ناموفق بود"),
+        onSuccess: () => toast.success(actionSuccessMessage(action)),
+        onError: (err) => {
+          const t = apiErrorToast(err, "عملیات ناموفق بود");
+          toast.error(t.title, { description: t.description });
+        },
         onSettled: () => setBusyId(null),
       },
     );
@@ -82,11 +98,14 @@ export function SubscriptionsView() {
   }, [data]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6" dir="rtl">
       <SubscriptionCreatePanel
         cadence={cadence}
+        addressId={addressId}
+        addresses={addressList}
         isPending={create.isPending}
         onCadenceChange={setCadence}
+        onAddressChange={setAddressId}
         onSubscribe={subscribe}
       />
       <SubscriptionsPanel
@@ -96,7 +115,7 @@ export function SubscriptionsView() {
         isLoading={isLoading}
         isError={isError}
         onRetry={() => refetch()}
-        onSkip={(id) => run(id, "skip")}
+        onRequestSkip={(id) => setConfirm({ id, action: "skip" })}
         onResume={(id) => run(id, "resume")}
         onRequestPause={(id) => setConfirm({ id, action: "pause" })}
         onRequestCancel={(id) => setConfirm({ id, action: "cancel" })}

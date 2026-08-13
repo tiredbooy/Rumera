@@ -8,7 +8,11 @@ export type LoyaltyTransactionReason =
   | "redeem"
   | "redeem_reversal"
   | "referral"
-  | "referral_welcome";
+  | "referral_welcome"
+  | "review"
+  | "birthday"
+  | "admin_adjust"
+  | "order_clawback";
 
 /** Customer-facing projection returned by GET /api/v1/loyalty. */
 export interface LoyaltyAccount {

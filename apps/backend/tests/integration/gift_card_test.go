@@ -3,20 +3,20 @@
 package integration
 
 import (
+	"github.com/tiredbooy/internal/features/giftcard"
 	"context"
 	"errors"
 	"testing"
 
 	"github.com/shopspring/decimal"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
 )
 
 func TestGiftCardCreateBatchIsAtomic(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "gift_cards")
 	ctx := context.Background()
-	repo := repositories.NewGiftCardRepository(testPool)
+	repo := giftcard.NewRepository(testPool)
 	amount := decimal.RequireFromString("125000.50")
 
 	duplicate := "ABCD-EFGH-JKLM-NPQR"

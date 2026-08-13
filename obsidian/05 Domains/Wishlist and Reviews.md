@@ -13,14 +13,14 @@ tags: [domain]
 - Customer-scoped saved products/variants
 - Must not treat **committed** stock as free to buy → [[Term available_stock]]
 - FE: `features/wishlist` · account wishlist view
-- BE: wishlist handler/service; ownership by `uid`
+- BE: **`internal/features/wishlist`** · [[Wishlist Backend]]; ownership by `uid`
 - Edge cases: [[Playbook Wishlist stock honesty]]
 
 ## Reviews
 
 - Customer reviews on products; list on PDP
 - Account “my reviews”; admin moderation board
-- BE: review service; create rules may require purchase (see API)
+- BE: [[Reviews Backend]] (`internal/features/reviews`); verified-purchase badge for buyers
 - FE: `features/reviews` · account reviews · admin reviews
 
 ## Related

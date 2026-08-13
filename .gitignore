@@ -48,4 +48,7 @@ graphify-out
 /storage/
 /apps/backend/storage/
 
+# Local Go build artifact
+/apps/backend/seed
+
 apps/frontend/public/images

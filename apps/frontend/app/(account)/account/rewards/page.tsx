@@ -8,7 +8,7 @@ export default function AccountRewardsPage() {
       <AccountPageHeader
         eyebrow="باشگاه"
         title="باشگاه مشتریان"
-        description="با هر خرید امتیاز بگیرید و آن را به اعتبار کیف پول تبدیل کنید."
+        description="با پرداخت موفق، نظر خرید تأییدشده، تولد و معرفی دوستان امتیاز بگیرید و به اعتبار کیف پول تبدیل کنید."
       />
       <RewardsView />
       <div className="mt-6">

@@ -10,6 +10,8 @@ import {
   updateReviewAction,
   type ReviewActionResult,
 } from "./actions";
+import { loyaltyKeys } from "@/features/loyalty/query-keys";
+
 import {
   listAdminReviewsClient,
   listMyReviewsClient,
@@ -67,6 +69,9 @@ export function useCreateReview(productId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: reviewKeys.mine });
       queryClient.invalidateQueries({ queryKey: reviewKeys.pending });
+      // Verified-purchase reviews award loyalty points (PH-040b/c).
+      queryClient.invalidateQueries({ queryKey: loyaltyKeys.account });
+      queryClient.invalidateQueries({ queryKey: loyaltyKeys.transactions });
     },
     mutationKey: ["reviews", "create", productId],
   });

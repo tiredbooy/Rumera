@@ -1,5 +1,9 @@
 # Recommendations
 
+**Implementation (feature slice):** `internal/features/recommendations/`  
+Composed from `internal/routes/routes.go`. Cron refresh uses `Service.RefreshActiveProfiles`. API contracts unchanged.
+
+
 Personalized and contextual product recommendations, computed live against the
 catalogue so results always reflect real prices, availability, and
 relationships. Public surfaces work for guests; personalization requires an

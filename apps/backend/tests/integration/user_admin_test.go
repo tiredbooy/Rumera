@@ -11,9 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	usersfeat "github.com/tiredbooy/internal/features/users"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
 	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/crypto"
 )
@@ -56,7 +55,7 @@ func TestAdminAuthorizationMigrationPolicy(t *testing.T) {
 	if _, err := testPool.Exec(ctx, `
 		INSERT INTO users (user_id, email, role)
 		VALUES (gen_random_uuid(), 'unsupported-role@test.local', 'support')`); err == nil {
-		t.Fatal("unsupported users.role insert succeeded")
+		t.Fatal("unsupported usersfeat.role insert succeeded")
 	}
 }
 
@@ -64,14 +63,14 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "user_admin_audit_events", "users")
 	ctx := context.Background()
-	repo := repositories.NewUserRepository(testPool)
-	service := services.NewUserService(repo)
+	repo := usersfeat.NewRepository(testPool)
+	service := usersfeat.NewService(repo)
 	actorID := seedAdminActor(t, "actor@test.local")
 
 	firstName := "Sensitive Name"
 	phone := "09120000000"
 	nationalCode := "0012345678"
-	created, err := service.AdminCreate(ctx, actorID, models.AdminCreateUserReq{
+	created, err := service.AdminCreate(ctx, actorID, usersfeat.AdminCreateUserReq{
 		Email:        "created@test.local",
 		Password:     "password123",
 		FirstName:    &firstName,
@@ -81,7 +80,7 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("admin create: %v", err)
 	}
-	if created.Role != models.UserRoleCustomer || !created.IsActive {
+	if created.Role != usersfeat.UserRoleCustomer || !created.IsActive {
 		t.Fatalf("created role/status = %q/%v; want customer/true", created.Role, created.IsActive)
 	}
 	var passwordHash *string
@@ -100,7 +99,7 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 		t.Fatalf("loyalty accounts = %d, err = %v; want none", loyaltyCount, err)
 	}
 
-	for name, req := range map[string]models.AdminCreateUserReq{
+	for name, req := range map[string]usersfeat.AdminCreateUserReq{
 		"email": {
 			Email: "created@test.local", Password: "password123",
 		},
@@ -119,8 +118,8 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 	}
 
 	inactive := false
-	vendor := models.UserRoleVendor
-	update := models.AdminUpdateUserReq{
+	vendor := usersfeat.UserRoleVendor
+	update := usersfeat.AdminUpdateUserReq{
 		FirstName: models.NullablePatch[string]{Set: true},
 		Role:      models.NullablePatch[string]{Set: true, Value: &vendor},
 		IsActive:  models.NullablePatch[bool]{Set: true, Value: &inactive},
@@ -130,26 +129,26 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("admin update: %v", err)
 	}
-	if updated.FirstName != nil || updated.Role != models.UserRoleVendor || updated.IsActive {
+	if updated.FirstName != nil || updated.Role != usersfeat.UserRoleVendor || updated.IsActive {
 		t.Fatalf("updated user = %+v", updated)
 	}
 	if _, err := service.GetByIDIncludingInactive(ctx, created.UserID); err != nil {
 		t.Fatalf("inactive admin detail: %v", err)
 	}
 
-	filter := models.UserFilter{}
+	filter := usersfeat.UserFilter{}
 	filter.Defaults()
-	users, total, err := service.GetAll(ctx, filter)
+	listed, total, err := service.GetAll(ctx, filter)
 	if err != nil {
 		t.Fatalf("list all users: %v", err)
 	}
-	if int64(len(users)) != total || !containsUser(users, created.UserID, false) {
-		t.Fatalf("default list total/users = %d/%+v; inactive target missing", total, users)
+	if int64(len(listed)) != total || !containsUser(listed, created.UserID, false) {
+		t.Fatalf("default list total/listed = %d/%+v; inactive target missing", total, listed)
 	}
 
 	active := true
 	time.Sleep(2 * time.Millisecond)
-	if _, err := service.AdminUpdate(ctx, actorID, created.UserID, models.AdminUpdateUserReq{
+	if _, err := service.AdminUpdate(ctx, actorID, created.UserID, usersfeat.AdminUpdateUserReq{
 		IsActive: models.NullablePatch[bool]{Set: true, Value: &active},
 	}); err != nil {
 		t.Fatalf("reactivate: %v", err)
@@ -163,7 +162,7 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 		t.Fatalf("repeat deactivate: %v", err)
 	}
 
-	auditFilter := models.AdminUserAuditFilter{}
+	auditFilter := usersfeat.AdminUserAuditFilter{}
 	auditFilter.Defaults()
 	events, totalEvents, err := service.GetAdminAudit(ctx, created.UserID, auditFilter)
 	if err != nil {
@@ -172,17 +171,17 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 	if totalEvents != 4 || len(events) != 4 {
 		t.Fatalf("audit events = %d/%d; want 4", len(events), totalEvents)
 	}
-	if events[0].Action != models.AdminUserAuditDeactivated ||
-		events[len(events)-1].Action != models.AdminUserAuditCreated {
+	if events[0].Action != usersfeat.AdminUserAuditDeactivated ||
+		events[len(events)-1].Action != usersfeat.AdminUserAuditCreated {
 		t.Fatalf("audit order = %+v; want newest-first", events)
 	}
 	if events[0].ActorUserID != actorID || events[0].ActorEmail != "actor@test.local" {
 		t.Fatalf("audit actor = %s/%q", events[0].ActorUserID, events[0].ActorEmail)
 	}
 
-	var accessUpdate *models.AdminUserAuditEvent
+	var accessUpdate *usersfeat.AdminUserAuditEvent
 	for i := range events {
-		if events[i].Action == models.AdminUserAuditUpdated &&
+		if events[i].Action == usersfeat.AdminUserAuditUpdated &&
 			slices.Equal(events[i].ChangedFields, []string{"first_name", "role", "is_active"}) {
 			accessUpdate = &events[i]
 			break
@@ -191,8 +190,8 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 	if accessUpdate == nil {
 		t.Fatalf("profile/access update event missing: %+v", events)
 	}
-	if len(accessUpdate.Changes) != 2 || accessUpdate.Changes["role"].Before != models.UserRoleCustomer ||
-		accessUpdate.Changes["role"].After != models.UserRoleVendor ||
+	if len(accessUpdate.Changes) != 2 || accessUpdate.Changes["role"].Before != usersfeat.UserRoleCustomer ||
+		accessUpdate.Changes["role"].After != usersfeat.UserRoleVendor ||
 		accessUpdate.Changes["is_active"].Before != true || accessUpdate.Changes["is_active"].After != false {
 		t.Fatalf("redacted access changes = %#v", accessUpdate.Changes)
 	}
@@ -215,9 +214,9 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 		}
 	}
 
-	page := models.AdminUserAuditFilter{PaginationParams: models.PaginationParams{Page: 2, Limit: 2}}
+	page := usersfeat.AdminUserAuditFilter{PaginationParams: models.PaginationParams{Page: 2, Limit: 2}}
 	pageTwo, pageTotal, err := service.GetAdminAudit(ctx, created.UserID, page)
-	if err != nil || pageTotal != 4 || len(pageTwo) != 2 || pageTwo[1].Action != models.AdminUserAuditCreated {
+	if err != nil || pageTotal != 4 || len(pageTwo) != 2 || pageTwo[1].Action != usersfeat.AdminUserAuditCreated {
 		t.Fatalf("audit page two = %+v, total = %d, err = %v", pageTwo, pageTotal, err)
 	}
 
@@ -228,13 +227,13 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 		RETURNING user_id`).Scan(&bannedVendorID); err != nil {
 		t.Fatalf("seed banned vendor: %v", err)
 	}
-	inactiveFilter := models.UserFilter{IsActive: boolPointer(false)}
+	inactiveFilter := usersfeat.UserFilter{IsActive: boolPointer(false)}
 	inactiveFilter.Defaults()
 	inactiveUsers, _, err := service.GetAll(ctx, inactiveFilter)
 	if err != nil || !containsUserState(inactiveUsers, bannedVendorID, true, true) {
 		t.Fatalf("inactive filter omitted banned active row: users=%+v, err=%v", inactiveUsers, err)
 	}
-	activeFilter := models.UserFilter{IsActive: boolPointer(true)}
+	activeFilter := usersfeat.UserFilter{IsActive: boolPointer(true)}
 	activeFilter.Defaults()
 	activeUsers, _, err := service.GetAll(ctx, activeFilter)
 	if err != nil {
@@ -245,8 +244,8 @@ func TestAdminUserLifecycleIsTransactionalAuditedAndRedacted(t *testing.T) {
 	}
 
 	counts, err := repo.GetRoleCounts(ctx)
-	if err != nil || counts[models.UserRoleVendor].MemberCount != 2 ||
-		counts[models.UserRoleVendor].ActiveMemberCount != 0 {
+	if err != nil || counts[usersfeat.UserRoleVendor].MemberCount != 2 ||
+		counts[usersfeat.UserRoleVendor].ActiveMemberCount != 0 {
 		t.Fatalf("role counts = %+v, err = %v", counts, err)
 	}
 }
@@ -255,13 +254,13 @@ func TestAdminMutationRepositoryRevalidatesActorAndRejectsSelfLockout(t *testing
 	requireDB(t)
 	resetTables(t, "user_admin_audit_events", "users")
 	ctx := context.Background()
-	repo := repositories.NewUserRepository(testPool)
+	repo := usersfeat.NewRepository(testPool)
 	actorID := seedAdminActor(t, "actor-guard@test.local")
 	targetID := seedCustomer(t, "target-guard@test.local", true)
-	customer := models.UserRoleCustomer
+	customer := usersfeat.UserRoleCustomer
 	inactive := false
 
-	if _, err := repo.AdminUpdate(ctx, actorID, actorID, models.AdminUpdateUserReq{
+	if _, err := repo.AdminUpdate(ctx, actorID, actorID, usersfeat.AdminUpdateUserReq{
 		Role: models.NullablePatch[string]{Set: true, Value: &customer},
 	}); !errors.Is(err, models.ErrAccessDenied) {
 		t.Fatalf("repository self-demotion error = %v; want ErrAccessDenied", err)
@@ -273,12 +272,12 @@ func TestAdminMutationRepositoryRevalidatesActorAndRejectsSelfLockout(t *testing
 	if _, err := testPool.Exec(ctx, `UPDATE users SET role = 'customer' WHERE user_id = $1`, actorID); err != nil {
 		t.Fatalf("demote actor fixture: %v", err)
 	}
-	if _, err := repo.AdminCreate(ctx, actorID, models.AdminCreateUserParams{
-		Email: "blocked-create@test.local", Role: models.UserRoleCustomer, IsActive: true,
+	if _, err := repo.AdminCreate(ctx, actorID, usersfeat.AdminCreateUserParams{
+		Email: "blocked-create@test.local", Role: usersfeat.UserRoleCustomer, IsActive: true,
 	}, "server-hash"); !errors.Is(err, models.ErrAccessDenied) {
 		t.Fatalf("demoted actor create error = %v; want ErrAccessDenied", err)
 	}
-	if _, err := repo.AdminUpdate(ctx, actorID, targetID, models.AdminUpdateUserReq{
+	if _, err := repo.AdminUpdate(ctx, actorID, targetID, usersfeat.AdminUpdateUserReq{
 		IsActive: models.NullablePatch[bool]{Set: true, Value: &inactive},
 	}); !errors.Is(err, models.ErrAccessDenied) {
 		t.Fatalf("demoted actor error = %v; want ErrAccessDenied", err)
@@ -323,7 +322,7 @@ func seedCustomer(t *testing.T, email string, isActive bool) uuid.UUID {
 	return userID
 }
 
-func containsUser(users []*models.UserListItem, userID uuid.UUID, isActive bool) bool {
+func containsUser(users []*usersfeat.UserListItem, userID uuid.UUID, isActive bool) bool {
 	for _, user := range users {
 		if user.UserID == userID && user.IsActive == isActive {
 			return true
@@ -332,7 +331,7 @@ func containsUser(users []*models.UserListItem, userID uuid.UUID, isActive bool)
 	return false
 }
 
-func containsUserState(users []*models.UserListItem, userID uuid.UUID, isActive, isBanned bool) bool {
+func containsUserState(users []*usersfeat.UserListItem, userID uuid.UUID, isActive, isBanned bool) bool {
 	for _, user := range users {
 		if user.UserID == userID && user.IsActive == isActive && user.IsBanned == isBanned {
 			return true

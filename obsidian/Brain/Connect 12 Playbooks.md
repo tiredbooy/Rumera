@@ -12,6 +12,7 @@ tags: [brain, connect]
 - [[Playbooks MOC]]
 - [[Playbook Debug Oversell]]
 - [[Playbook Debug Webhook]]
+- [[Playbook Debug Idempotency]]
 - [[Playbook Debug Media broken image]]
 - [[Playbook Debug Session loop]]
 - [[Playbook Debug Stale storefront cache]]
@@ -21,6 +22,8 @@ tags: [brain, connect]
 - [[Playbook Add backend endpoint]]
 - [[Playbook Add admin module]]
 - [[Playbook Run seed and verify home]]
+- [[Playbook Document a change]]
+- [[Playbook Idempotency debug]]
 
 ## Role
 

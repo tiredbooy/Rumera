@@ -7,6 +7,35 @@ const emailish = z
     message: "ایمیل معتبر وارد کنید",
   });
 
+/** One modular gift packaging / add-on row in the admin editor. */
+export const giftOptionFormSchema = z.object({
+  id: z
+    .string()
+    .trim()
+    .min(1, "شناسه الزامی است")
+    .max(64, "حداکثر ۶۴ نویسه")
+    .regex(
+      /^[a-z][a-z0-9_]*$/,
+      "شناسه: حروف لاتین کوچک، عدد و _ (با حرف شروع شود)",
+    ),
+  label: z
+    .string()
+    .trim()
+    .min(1, "عنوان الزامی است")
+    .max(255, "حداکثر ۲۵۵ نویسه"),
+  description: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
+  /** Minor display unit as digit string (تومان). */
+  price: z.string().refine(
+    (value) =>
+      value.trim() === "" ||
+      (/^\d+$/.test(value.trim()) && Number(value.trim()) >= 0),
+    { message: "قیمت نامنفی و صحیح وارد کنید" },
+  ),
+  enabled: z.boolean(),
+});
+
+export type GiftOptionFormValues = z.infer<typeof giftOptionFormSchema>;
+
 export const siteSettingsFormSchema = z.object({
   name: z
     .string()
@@ -41,6 +70,29 @@ export const siteSettingsFormSchema = z.object({
   keywords: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
   enabled: z.boolean(),
   message: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
+  giftEnabled: z.boolean(),
+  giftMessageEnabled: z.boolean(),
+  giftHidePriceEnabled: z.boolean(),
+  giftOptions: z
+    .array(giftOptionFormSchema)
+    .max(30, "حداکثر ۳۰ گزینه")
+    .superRefine((options, ctx) => {
+      const seen = new Map<string, number>();
+      options.forEach((opt, index) => {
+        const id = opt.id.trim().toLowerCase();
+        if (!id) return;
+        const first = seen.get(id);
+        if (first !== undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: "شناسه تکراری است",
+            path: [index, "id"],
+          });
+        } else {
+          seen.set(id, index);
+        }
+      });
+    }),
 });
 
 export type SiteSettingsFormValues = z.infer<typeof siteSettingsFormSchema>;

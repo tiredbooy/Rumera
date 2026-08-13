@@ -36,12 +36,36 @@ radiating out like a synapse.
 
 | Need | Open |
 |------|------|
+| **One-hour system tour** | ↓ **Read the system in one hour** (PH-050b) · repo `docs/READ-THE-SYSTEM.md` |
 | How to use | [[How to use this vault]] |
 | How to add notes | [[How to add a note]] |
 | Full index | [[Map of Content]] |
 | System diagram | [[System Atlas]] |
 | What’s missing | [[Known gaps]] |
 | Long repo docs | [[Documentation Bridge]] |
+| How to document a change | [[Playbook Document a change]] · repo `docs/DOCUMENTATION-DUAL-TRACK.md` |
+| Program status | Repo: `docs/BACKLOG-PRODUCTION-HARDENING.md` · `docs/PH-DUAL-DOC-MATRIX.md` · lettered PH backlog **complete** (incl. PH-043c decision + PH-060) |
+| Journeys index | [[Journeys MOC]] · [[Connect 09 Journeys]] |
+
+---
+
+## Read the system in one hour (PH-050b)
+
+**Repo twin (full table + “what to absorb”):** [docs/READ-THE-SYSTEM.md](../../docs/READ-THE-SYSTEM.md)
+
+| Min | Absorb | Vault trail |
+|----:|--------|-------------|
+| 0–8 | Processes, BFF, data stores | [[System Atlas]] · [[Data Stores]] |
+| 8–18 | Feature packages, trust tiers | [[Layered Backend]] · [[Backend Domain Map]] · [[ADR Backend feature packages]] |
+| 18–32 | Reserve → pay → deduct; idempotency | [[Money and stock rules]] · [[Journey Payment webhook settle]] · [[Journey Idempotent retry checkout webhook]] |
+| 32–40 | Orders, payments, inventory truth | [[Orders]] · [[Payments]] · [[Inventory]] · [[Journey First purchase]] |
+| 40–48 | Cellar Club earn/redeem | [[Loyalty Wallet Gift Cards]] · [[Loyalty Backend]] · [[Journey Loyalty first purchase points]] |
+| 48–55 | Discovery (ILIKE now; Meili ready) | [[Search]] · [[Search Backend]] · [[Journey Search to PDP]] |
+| 55–60 | What’s next / not next | [[Known gaps]] · [[Journeys MOC]] · [[ADR Deferred product and platform]] |
+
+**Skip this hour:** CI, multi-currency, multi-warehouse, crypto, Netflix-style digital subs.
+
+**Optional +15 min growth:** [[Journey Account wallet top-up]] · [[Journey Gift card purchase]] · [[Subscriptions]] (box, not streaming).
 
 ---
 

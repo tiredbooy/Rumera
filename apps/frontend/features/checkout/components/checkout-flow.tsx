@@ -20,9 +20,11 @@ import { useCart } from "@/features/cart/api";
 import { useValidateCoupon } from "@/features/coupons/api";
 import { usePlaceOrder } from "@/features/orders/hooks";
 import { useShippingMethods } from "@/features/shipping/api";
+import { usePublicGiftSettings } from "@/features/settings/hooks";
 import type { CouponValidation } from "@/features/coupons/types";
 import type { PaymentMethod } from "@/features/orders/types";
-import { ApiClientError } from "@/lib/api/store-client";
+import { apiErrorMessage, apiErrorToast } from "@/lib/api/user-facing-error";
+import { packageWeightKg } from "../package-weight";
 import {
   CHECKOUT_STEPS,
   CheckoutStepper,
@@ -40,20 +42,6 @@ type CouponAttempt = {
   result?: CouponValidation;
   error?: string;
 };
-
-/** Package weight for quotes — sum of unit weights when known, else 0 (backend
- *  re-computes authoritatively from catalog weights at order creation). */
-function packageWeightKg(
-  items: Array<{ quantity: number; weight_kg?: number | null }> | undefined,
-): number {
-  if (!items?.length) return 0;
-  return items.reduce((sum, item) => {
-    const unit = typeof item.weight_kg === "number" && item.weight_kg > 0
-      ? item.weight_kg
-      : 0;
-    return sum + unit * item.quantity;
-  }, 0);
-}
 
 export function CheckoutFlow() {
   const router = useRouter();
@@ -82,12 +70,47 @@ export function CheckoutFlow() {
     setMaxReached((m) => Math.max(m, clamped));
   }, []);
 
-  // Gift mode
+  // Gift mode — modular options priced from public site settings.
+  const giftSettingsQuery = usePublicGiftSettings();
+  const giftSettings = giftSettingsQuery.data ?? null;
   const [isGift, setIsGift] = React.useState(false);
   const [giftMessage, setGiftMessage] = React.useState("");
-  const [giftWrap, setGiftWrap] = React.useState(false);
+  const [giftOptionIds, setGiftOptionIds] = React.useState<string[]>([]);
   const [hidePrice, setHidePrice] = React.useState(true);
   const [deliveryDate, setDeliveryDate] = React.useState("");
+
+  const toggleGiftOption = React.useCallback((id: string, selected: boolean) => {
+    setGiftOptionIds((prev) => {
+      if (selected) {
+        return prev.includes(id) ? prev : [...prev, id];
+      }
+      return prev.filter((x) => x !== id);
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!isGift) {
+      setGiftOptionIds([]);
+    }
+  }, [isGift]);
+
+  // Drop selections that are no longer enabled after settings refresh.
+  React.useEffect(() => {
+    if (!giftSettings?.options?.length) return;
+    const enabled = new Set(
+      giftSettings.options.filter((o) => o.enabled).map((o) => o.id),
+    );
+    setGiftOptionIds((prev) => {
+      const next = prev.filter((id) => enabled.has(id));
+      if (
+        next.length === prev.length &&
+        next.every((id, i) => id === prev[i])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [giftSettings]);
 
   const subtotal = cart?.summary.subtotal ?? 0;
   React.useEffect(() => {
@@ -101,10 +124,10 @@ export function CheckoutFlow() {
   const selectedAddress = addresses?.find((a) => a.id === addressId);
   // Region is authoritative from the selected address country — never a
   // checkout constant. Quotes stay disabled until an address is chosen.
+  // Region from address country only; package weight = Σ(unit weight_kg × qty).
+  // Backend CreateOrder re-sums from catalogue and authorizes the method again.
   const shipRegion = (selectedAddress?.country ?? "").trim().toUpperCase();
-  const shipWeight = packageWeightKg(
-    cart?.items as Array<{ quantity: number; weight_kg?: number | null }> | undefined,
-  );
+  const shipWeight = packageWeightKg(cart?.items);
   const shipping = useShippingMethods(
     shipRegion,
     shipWeight,
@@ -141,7 +164,19 @@ export function CheckoutFlow() {
   const shippingCost = coupon?.is_valid && coupon.free_shipping
     ? 0
     : (selectedShipping?.estimated_cost ?? 0);
-  const total = Math.max(0, subtotal - discount + shippingCost);
+  const giftFee =
+    isGift && giftSettings
+      ? giftSettings.options
+          .filter((o) => o.enabled && giftOptionIds.includes(o.id))
+          .reduce((sum, o) => sum + (o.price > 0 ? o.price : 0), 0)
+      : 0;
+  const giftOptionLabels =
+    isGift && giftSettings
+      ? giftSettings.options
+          .filter((o) => o.enabled && giftOptionIds.includes(o.id))
+          .map((o) => o.label)
+      : [];
+  const total = Math.max(0, subtotal - discount + shippingCost + giftFee);
   const canPlace = !!addressId && !!selectedShipping && !!cart?.items.length;
 
   const currentKey: CheckoutStepKey = CHECKOUT_STEPS[step].key;
@@ -179,15 +214,22 @@ export function CheckoutFlow() {
           if (!res.is_valid) toast.error("کد تخفیف معتبر نیست");
           else toast.success("کد تخفیف اعمال شد");
         },
-        onError: () => {
+        onError: (err) => {
           if (couponAttemptVersion.current !== attemptVersion) return;
-          const message = "بررسی کد تخفیف انجام نشد. دوباره تلاش کنید.";
+          const message = apiErrorMessage(
+            err,
+            "بررسی کد تخفیف انجام نشد. دوباره تلاش کنید.",
+          );
           setCouponAttempt((current) =>
             current?.code === code && current.subtotal === subtotal
               ? { code, subtotal, error: message }
               : current,
           );
-          toast.error(message);
+          const t = apiErrorToast(
+            err,
+            "بررسی کد تخفیف انجام نشد. دوباره تلاش کنید.",
+          );
+          toast.error(t.title, { description: t.description });
         },
       },
     );
@@ -206,7 +248,8 @@ export function CheckoutFlow() {
           ? {
               is_gift: true,
               gift_message: giftMessage.trim() || undefined,
-              gift_wrap: giftWrap,
+              gift_option_ids:
+                giftOptionIds.length > 0 ? giftOptionIds : undefined,
               hide_price: hidePrice,
               scheduled_delivery_date: deliveryDate
                 ? new Date(deliveryDate).toISOString()
@@ -240,9 +283,10 @@ export function CheckoutFlow() {
           router.push(`/checkout/confirmation/${order.id}`);
         },
         onError: (e) => {
-          const message = orderErrorMessage(e);
+          const message = apiErrorMessage(e, "ثبت سفارش ناموفق بود. دوباره تلاش کنید.");
           setSubmitError(message);
-          toast.error(message);
+          const t = apiErrorToast(e, "ثبت سفارش ناموفق بود. دوباره تلاش کنید.");
+          toast.error(t.title, { description: t.description });
         },
       },
     );
@@ -389,8 +433,9 @@ export function CheckoutFlow() {
             onGiftChange={setIsGift}
             giftMessage={giftMessage}
             onGiftMessageChange={setGiftMessage}
-            giftWrap={giftWrap}
-            onGiftWrapChange={setGiftWrap}
+            giftOptionIds={giftOptionIds}
+            onToggleGiftOption={toggleGiftOption}
+            giftSettings={giftSettings}
             hidePrice={hidePrice}
             onHidePriceChange={setHidePrice}
             deliveryDate={deliveryDate}
@@ -415,6 +460,7 @@ export function CheckoutFlow() {
             payment={payment}
             isGift={isGift}
             giftMessage={giftMessage}
+            giftOptionLabels={giftOptionLabels}
             items={cart.items}
             onEditAddress={() => goTo(0)}
             onEditShipping={() => goTo(1)}
@@ -475,6 +521,7 @@ export function CheckoutFlow() {
         discount={discount}
         shippingCost={shippingCost}
         hasSelectedShipping={!!selectedShipping}
+        giftFee={giftFee}
         total={total}
         showSubmit={currentKey === "review"}
         canPlace={canPlace}
@@ -485,21 +532,4 @@ export function CheckoutFlow() {
   );
 }
 
-function orderErrorMessage(error: unknown) {
-  if (!(error instanceof ApiClientError)) return "ثبت سفارش ناموفق بود. دوباره تلاش کنید.";
 
-  switch (error.code) {
-    case "OUT_OF_STOCK":
-      return "موجودی برخی اقلام کافی نیست. سبد خرید را دوباره بررسی کنید.";
-    case "CART_EMPTY":
-      return "سبد خرید خالی است. پیش از ثبت سفارش یک کالا اضافه کنید.";
-    case "INVALID_SHIPPING_METHOD":
-      return "روش ارسال انتخاب‌شده دیگر در دسترس نیست. روش دیگری انتخاب کنید.";
-    case "INSUFFICIENT_FUNDS":
-      return "موجودی کیف پول برای پرداخت این سفارش کافی نیست.";
-    default:
-      return error.code.includes("COUPON") || error.code === "INVALID_COUPON"
-        ? "کد تخفیف دیگر معتبر نیست. آن را دوباره بررسی کنید."
-        : "ثبت سفارش ناموفق بود. دوباره تلاش کنید.";
-  }
-}

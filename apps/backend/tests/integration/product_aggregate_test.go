@@ -3,11 +3,16 @@
 package integration
 
 import (
+	"github.com/tiredbooy/internal/features/inventory"
+	"github.com/tiredbooy/internal/features/catalog/variant"
+	"github.com/tiredbooy/internal/features/catalog/product"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tiredbooy/internal/features/catalog/option"
+	"github.com/tiredbooy/internal/features/catalog/tag"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,13 +20,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/tiredbooy/internal/handlers"
+	"github.com/tiredbooy/internal/features/media"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
-	"github.com/tiredbooy/internal/services"
 	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/imaging"
 	"github.com/tiredbooy/pkg/storage"
+	"github.com/tiredbooy/pkg/validator"
 	"go.uber.org/zap"
 )
 
@@ -29,26 +33,26 @@ func TestProductAggregateIsAtomicRecoverableAndReplayable(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "product_aggregate_operations", "products", "tags")
 	ctx := context.Background()
-	productRepo := repositories.NewProductRepository(testPool)
-	service := services.NewProductService(productRepo, nil, nil)
-	tagRepo := repositories.NewTagRepository(testPool)
-	tag, err := tagRepo.Create(ctx, models.CreateTagReq{Title: "Featured", Slug: "featured"})
+	productRepo := product.NewRepository(testPool)
+	service := product.NewService(productRepo, nil, nil)
+	tagRepo := tag.NewRepository(testPool)
+	createdTag, err := tagRepo.Create(ctx, tag.CreateTagReq{Title: "Featured", Slug: "featured"})
 	if err != nil {
 		t.Fatalf("create aggregate tag: %v", err)
 	}
 
 	code := "AGG-1"
 	imageURL := "https://images.example/aggregate.webp"
-	createReq := models.SaveProductAggregateReq{
+	createReq := product.SaveProductAggregateReq{
 		OperationID: uuid.NewString(),
 		Title:       "Aggregate product",
 		Code:        &code,
 		IsActive:    false,
-		TagIDs:      []int64{tag.ID},
-		Variants: []models.SaveProductVariantReq{{
+		TagIDs:      []int64{createdTag.ID},
+		Variants: []product.SaveProductVariantReq{{
 			SKU: stringPointer("AGG-ONE"), Price: 125, IsActive: true,
 		}},
-		Images: []models.SaveProductImageReq{{
+		Images: []product.SaveProductImageReq{{
 			ImageURL: &imageURL, IsPrimary: true,
 		}},
 	}
@@ -66,13 +70,13 @@ func TestProductAggregateIsAtomicRecoverableAndReplayable(t *testing.T) {
 	assertRowCount(t, "product_aggregate_operations", 1)
 
 	failedOperationID := uuid.NewString()
-	failedReq := models.SaveProductAggregateReq{
+	failedReq := product.SaveProductAggregateReq{
 		OperationID:       failedOperationID,
 		ExpectedUpdatedAt: &created.UpdatedAt,
 		Title:             "Must roll back",
 		IsActive:          true,
-		TagIDs:            []int64{tag.ID + 1000},
-		Variants: []models.SaveProductVariantReq{{
+		TagIDs:            []int64{createdTag.ID + 1000},
+		Variants: []product.SaveProductVariantReq{{
 			ID:  aggregateInt64Pointer(singleVariantID(t, productRepo, created.ID)),
 			SKU: stringPointer("CHANGED-IN-FAILED-TX"), Price: 250, IsActive: true,
 		}},
@@ -95,7 +99,7 @@ func TestProductAggregateIsAtomicRecoverableAndReplayable(t *testing.T) {
 	assertRowCount(t, "product_aggregate_operations", 1)
 
 	failedReq.Title = "Recovered product"
-	failedReq.TagIDs = []int64{tag.ID}
+	failedReq.TagIDs = []int64{createdTag.ID}
 	failedReq.Variants[0].SKU = stringPointer("RECOVERED-SKU")
 	recovered, err := service.SaveAggregate(ctx, created.ID, failedReq)
 	if err != nil || recovered.Title != "Recovered product" {
@@ -120,28 +124,28 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "product_aggregate_operations", "products", "tags", "option_types")
 	ctx := context.Background()
-	productRepo := repositories.NewProductRepository(testPool)
-	service := services.NewProductService(productRepo, nil, nil)
-	optionService := services.NewOptionService(repositories.NewOptionRepository(testPool))
-	tagRepo := repositories.NewTagRepository(testPool)
+	productRepo := product.NewRepository(testPool)
+	service := product.NewService(productRepo, nil, nil)
+	optionService := option.NewService(option.NewRepository(testPool))
+	tagRepo := tag.NewRepository(testPool)
 
-	firstTag, err := tagRepo.Create(ctx, models.CreateTagReq{Title: "Old", Slug: "old"})
+	firstTag, err := tagRepo.Create(ctx, tag.CreateTagReq{Title: "Old", Slug: "old"})
 	if err != nil {
 		t.Fatalf("create first tag: %v", err)
 	}
-	secondTag, err := tagRepo.Create(ctx, models.CreateTagReq{Title: "New", Slug: "new"})
+	secondTag, err := tagRepo.Create(ctx, tag.CreateTagReq{Title: "New", Slug: "new"})
 	if err != nil {
 		t.Fatalf("create second tag: %v", err)
 	}
-	color, err := optionService.CreateType(ctx, models.CreateOptionTypeReq{Title: "color", DisplayName: "Color"})
+	color, err := optionService.CreateType(ctx, option.CreateOptionTypeReq{Title: "color", DisplayName: "Color"})
 	if err != nil {
 		t.Fatalf("create color type: %v", err)
 	}
-	red, err := optionService.CreateValue(ctx, color.ID, models.CreateOptionValueReq{Value: "Red"})
+	red, err := optionService.CreateValue(ctx, color.ID, option.CreateOptionValueReq{Value: "Red"})
 	if err != nil {
 		t.Fatalf("create red value: %v", err)
 	}
-	blue, err := optionService.CreateValue(ctx, color.ID, models.CreateOptionValueReq{Value: "Blue"})
+	blue, err := optionService.CreateValue(ctx, color.ID, option.CreateOptionValueReq{Value: "Blue"})
 	if err != nil {
 		t.Fatalf("create blue value: %v", err)
 	}
@@ -151,7 +155,7 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 	metaTitle, metaDescription := "Meta", "Meta description"
 	abv, weight := 40.0, 750.0
 	oldImageURL := "https://images.example/old.webp"
-	created, err := service.SaveAggregate(ctx, 0, models.SaveProductAggregateReq{
+	created, err := service.SaveAggregate(ctx, 0, product.SaveProductAggregateReq{
 		OperationID:     uuid.NewString(),
 		Title:           "Swap product",
 		Code:            &code,
@@ -165,11 +169,11 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 		MetaDescription: &metaDescription,
 		MetaTags:        []string{"old"},
 		TagIDs:          []int64{firstTag.ID},
-		Variants: []models.SaveProductVariantReq{
+		Variants: []product.SaveProductVariantReq{
 			{SKU: stringPointer("SWAP-RED"), Price: 100, IsActive: true, OptionValueIDs: []int64{red.ID}},
 			{SKU: stringPointer("SWAP-BLUE"), Price: 110, IsActive: true, OptionValueIDs: []int64{blue.ID}},
 		},
-		Images: []models.SaveProductImageReq{{ImageURL: &oldImageURL, IsPrimary: true}},
+		Images: []product.SaveProductImageReq{{ImageURL: &oldImageURL, IsPrimary: true}},
 	})
 	if err != nil {
 		t.Fatalf("create swappable aggregate: %v", err)
@@ -180,8 +184,8 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 	}
 	redVariant, blueVariant := variants[0], variants[1]
 	seedInventory(t, redVariant.ID, 23, 4)
-	if err := services.NewVariantService(
-		repositories.NewVariantRepository(testPool), repositories.NewInventoryRepository(testPool), nil,
+	if err := variant.NewService(
+		variant.NewRepository(testPool), inventory.NewRepository(testPool), nil,
 	).Delete(ctx, redVariant.ID); !errors.Is(err, apperr.ErrConflict) {
 		t.Fatalf("standalone stocked variant deletion error = %v; want conflict", err)
 	}
@@ -195,17 +199,17 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 	}
 
 	newImageURL := "https://images.example/new.webp"
-	updated, err := service.SaveAggregate(ctx, created.ID, models.SaveProductAggregateReq{
+	updated, err := service.SaveAggregate(ctx, created.ID, product.SaveProductAggregateReq{
 		OperationID:       uuid.NewString(),
 		ExpectedUpdatedAt: &created.UpdatedAt,
 		Title:             "Swapped and cleared",
 		IsActive:          false,
 		TagIDs:            []int64{secondTag.ID},
-		Variants: []models.SaveProductVariantReq{
+		Variants: []product.SaveProductVariantReq{
 			{ID: &redVariant.ID, SKU: stringPointer("SWAP-BLUE"), Price: 120, IsActive: false, OptionValueIDs: []int64{blue.ID}},
 			{ID: &blueVariant.ID, SKU: stringPointer("SWAP-RED"), Price: 130, IsActive: true, OptionValueIDs: []int64{red.ID}},
 		},
-		Images: []models.SaveProductImageReq{{ImageURL: &newImageURL, IsPrimary: true}},
+		Images: []product.SaveProductImageReq{{ImageURL: &newImageURL, IsPrimary: true}},
 	})
 	if err != nil {
 		t.Fatalf("swap aggregate graph: %v", err)
@@ -220,7 +224,7 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 	if err != nil || len(variants) != 2 {
 		t.Fatalf("updated variants = %+v, %v", variants, err)
 	}
-	byID := map[int64]*models.ProductVariant{variants[0].ID: variants[0], variants[1].ID: variants[1]}
+	byID := map[int64]*variant.ProductVariant{variants[0].ID: variants[0], variants[1].ID: variants[1]}
 	if byID[redVariant.ID].SKU == nil || *byID[redVariant.ID].SKU != "SWAP-BLUE" || byID[redVariant.ID].IsActive {
 		t.Fatalf("first retained variant = %+v", byID[redVariant.ID])
 	}
@@ -254,12 +258,12 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 		t.Fatalf("replaced tags = %+v, %v", tags, err)
 	}
 
-	staleReq := models.SaveProductAggregateReq{
+	staleReq := product.SaveProductAggregateReq{
 		OperationID:       uuid.NewString(),
 		ExpectedUpdatedAt: &created.UpdatedAt,
 		Title:             "Stale overwrite",
 		IsActive:          true,
-		Variants: []models.SaveProductVariantReq{
+		Variants: []product.SaveProductVariantReq{
 			{ID: &redVariant.ID, SKU: stringPointer("SWAP-BLUE"), Price: 120, IsActive: false, OptionValueIDs: []int64{blue.ID}},
 			{ID: &blueVariant.ID, SKU: stringPointer("SWAP-RED"), Price: 130, IsActive: true, OptionValueIDs: []int64{red.ID}},
 		},
@@ -271,12 +275,12 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 	}
 	assertAppField(t, err, "expected_updated_at")
 
-	deleteStockedReq := models.SaveProductAggregateReq{
+	deleteStockedReq := product.SaveProductAggregateReq{
 		OperationID:       uuid.NewString(),
 		ExpectedUpdatedAt: &updated.UpdatedAt,
 		Title:             "Must retain stocked variant",
 		IsActive:          false,
-		Variants: []models.SaveProductVariantReq{{
+		Variants: []product.SaveProductVariantReq{{
 			ID: &blueVariant.ID, SKU: stringPointer("SWAP-RED"), Price: 130, IsActive: true, OptionValueIDs: []int64{red.ID},
 		}},
 		Images: existingAggregateImages(t, productRepo, created.ID),
@@ -288,12 +292,12 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 	assertAppField(t, err, "variants")
 	assertRowCount(t, "product_variants", 2)
 
-	deleteUnusedReq := models.SaveProductAggregateReq{
+	deleteUnusedReq := product.SaveProductAggregateReq{
 		OperationID:       uuid.NewString(),
 		ExpectedUpdatedAt: &updated.UpdatedAt,
 		Title:             "Unused variant removed",
 		IsActive:          false,
-		Variants: []models.SaveProductVariantReq{{
+		Variants: []product.SaveProductVariantReq{{
 			ID: &redVariant.ID, SKU: stringPointer("SWAP-BLUE"), Price: 120, IsActive: false, OptionValueIDs: []int64{blue.ID},
 		}},
 		Images: existingAggregateImages(t, productRepo, created.ID),
@@ -314,7 +318,7 @@ func TestProductAggregatePreparedMediaCleanupDoesNotBreakReplay(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "product_aggregate_operations", "products")
 	ctx := context.Background()
-	productRepo := repositories.NewProductRepository(testPool)
+	productRepo := product.NewRepository(testPool)
 	store, err := storage.NewLocalStorage(t.TempDir())
 	if err != nil {
 		t.Fatalf("create aggregate media store: %v", err)
@@ -323,18 +327,18 @@ func TestProductAggregatePreparedMediaCleanupDoesNotBreakReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create aggregate media cache: %v", err)
 	}
-	lifecycle := services.NewMediaLifecycleService(
-		store, cache, repositories.NewMediaLifecycleRepository(testPool), zap.NewNop(),
+	lifecycle := media.NewLifecycleService(
+		store, cache, media.NewLifecycleRepository(testPool), zap.NewNop(),
 	)
-	media := services.NewMediaService(
+	media := media.NewService(
 		store,
 		cache,
-		repositories.NewProductImageRepository(testPool),
+		product.NewImageRepository(testPool),
 		productRepo,
-		repositories.NewContentMediaRepository(testPool),
+		media.NewContentRepository(testPool),
 		lifecycle,
 		imaging.New(),
-		services.MediaConfig{
+		media.Config{
 			MaxUploadBytes: 1 << 20, MaxDimension: 4000,
 			MaxSourceDimension: 12000, MaxSourcePixels: 40_000_000,
 		},
@@ -344,12 +348,12 @@ func TestProductAggregatePreparedMediaCleanupDoesNotBreakReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stage aggregate media: %v", err)
 	}
-	service := services.NewProductService(productRepo, lifecycle, media)
-	createReq := models.SaveProductAggregateReq{
+	service := product.NewService(productRepo, lifecycle, media)
+	createReq := product.SaveProductAggregateReq{
 		OperationID: uuid.NewString(),
 		Title:       "Prepared media product",
 		IsActive:    true,
-		Images: []models.SaveProductImageReq{{
+		Images: []product.SaveProductImageReq{{
 			StorageKey: &upload.Key,
 			IsPrimary:  true,
 		}},
@@ -364,7 +368,7 @@ func TestProductAggregatePreparedMediaCleanupDoesNotBreakReplay(t *testing.T) {
 		t.Fatalf("prepared aggregate image = %+v, %v", images, err)
 	}
 
-	withoutImage, err := service.SaveAggregate(ctx, created.ID, models.SaveProductAggregateReq{
+	withoutImage, err := service.SaveAggregate(ctx, created.ID, product.SaveProductAggregateReq{
 		OperationID:       uuid.NewString(),
 		ExpectedUpdatedAt: &created.UpdatedAt,
 		Title:             "Prepared media removed",
@@ -386,17 +390,14 @@ func TestProductAggregatePreparedMediaCleanupDoesNotBreakReplay(t *testing.T) {
 func TestProductAggregateEndpointReturnsStructuredFieldErrors(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "product_aggregate_operations", "products", "tags")
-	productRepo := repositories.NewProductRepository(testPool)
-	handler := handlers.New(handlers.Deps{
-		Product: services.NewProductService(productRepo, nil, nil),
-		Log:     zap.NewNop(),
-	})
+	productRepo := product.NewRepository(testPool)
+	handler := product.NewHandler(product.NewService(productRepo, nil, nil), validator.New(), nil, zap.NewNop())
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.POST("/admin/products/aggregate", handler.CreateProductAggregate)
 	router.PUT("/admin/products/:id/aggregate", handler.UpdateProductAggregate)
 
-	createBody, err := json.Marshal(models.SaveProductAggregateReq{
+	createBody, err := json.Marshal(product.SaveProductAggregateReq{
 		OperationID: uuid.NewString(),
 		Title:       "Endpoint aggregate",
 		IsActive:    false,
@@ -420,7 +421,7 @@ func TestProductAggregateEndpointReturnsStructuredFieldErrors(t *testing.T) {
 		t.Fatalf("decode aggregate create: %v", err)
 	}
 
-	invalidBody, err := json.Marshal(models.SaveProductAggregateReq{
+	invalidBody, err := json.Marshal(product.SaveProductAggregateReq{
 		OperationID:       uuid.NewString(),
 		ExpectedUpdatedAt: &createdEnvelope.Data.UpdatedAt,
 		Title:             "Must roll back",
@@ -462,17 +463,17 @@ func TestGranularGraphWritesInvalidateAggregateRevision(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "product_aggregate_operations", "products")
 	ctx := context.Background()
-	productRepo := repositories.NewProductRepository(testPool)
-	aggregateService := services.NewProductService(productRepo, nil, nil)
+	productRepo := product.NewRepository(testPool)
+	aggregateService := product.NewService(productRepo, nil, nil)
 	imageURL := "https://images.example/revision.webp"
-	created, err := aggregateService.SaveAggregate(ctx, 0, models.SaveProductAggregateReq{
+	created, err := aggregateService.SaveAggregate(ctx, 0, product.SaveProductAggregateReq{
 		OperationID: uuid.NewString(),
 		Title:       "Revision product",
 		IsActive:    true,
-		Variants: []models.SaveProductVariantReq{{
+		Variants: []product.SaveProductVariantReq{{
 			SKU: stringPointer("REVISION-SKU"), Price: 100, IsActive: true,
 		}},
-		Images: []models.SaveProductImageReq{{ImageURL: &imageURL, IsPrimary: true}},
+		Images: []product.SaveProductImageReq{{ImageURL: &imageURL, IsPrimary: true}},
 	})
 	if err != nil {
 		t.Fatalf("create revision aggregate: %v", err)
@@ -480,12 +481,12 @@ func TestGranularGraphWritesInvalidateAggregateRevision(t *testing.T) {
 	variantID := singleVariantID(t, productRepo, created.ID)
 	time.Sleep(2 * time.Millisecond)
 	price := 125.0
-	if _, err := services.NewVariantService(
-		repositories.NewVariantRepository(testPool), repositories.NewInventoryRepository(testPool), nil,
-	).Update(ctx, variantID, models.UpdateVariantReq{Price: &price}); err != nil {
+	if _, err := variant.NewService(
+		variant.NewRepository(testPool), inventory.NewRepository(testPool), nil,
+	).Update(ctx, variantID, variant.UpdateVariantReq{Price: &price}); err != nil {
 		t.Fatalf("granular variant update: %v", err)
 	}
-	_, err = aggregateService.SaveAggregate(ctx, created.ID, models.SaveProductAggregateReq{
+	_, err = aggregateService.SaveAggregate(ctx, created.ID, product.SaveProductAggregateReq{
 		OperationID:       uuid.NewString(),
 		ExpectedUpdatedAt: &created.UpdatedAt,
 		Title:             "Stale after variant",
@@ -505,10 +506,10 @@ func TestGranularGraphWritesInvalidateAggregateRevision(t *testing.T) {
 	}
 	time.Sleep(2 * time.Millisecond)
 	alt := "Updated outside aggregate"
-	if _, err := repositories.NewProductImageRepository(testPool).UpdateAlt(ctx, images[0].ID, &alt); err != nil {
+	if _, err := product.NewImageRepository(testPool).UpdateAlt(ctx, images[0].ID, &alt); err != nil {
 		t.Fatalf("granular image update: %v", err)
 	}
-	_, err = aggregateService.SaveAggregate(ctx, created.ID, models.SaveProductAggregateReq{
+	_, err = aggregateService.SaveAggregate(ctx, created.ID, product.SaveProductAggregateReq{
 		OperationID:       uuid.NewString(),
 		ExpectedUpdatedAt: &current.UpdatedAt,
 		Title:             "Stale after image",
@@ -521,17 +522,17 @@ func TestGranularGraphWritesInvalidateAggregateRevision(t *testing.T) {
 
 func existingAggregateImages(
 	t *testing.T,
-	repo repositories.ProductRepository,
+	repo product.Repository,
 	productID int64,
-) []models.SaveProductImageReq {
+) []product.SaveProductImageReq {
 	t.Helper()
 	images, err := repo.GetImages(context.Background(), productID)
 	if err != nil {
 		t.Fatalf("read aggregate images: %v", err)
 	}
-	result := make([]models.SaveProductImageReq, len(images))
+	result := make([]product.SaveProductImageReq, len(images))
 	for i, image := range images {
-		result[i] = models.SaveProductImageReq{
+		result[i] = product.SaveProductImageReq{
 			ID:        &image.ID,
 			AltText:   image.AltText,
 			IsPrimary: image.IsPrimary,
@@ -540,7 +541,7 @@ func existingAggregateImages(
 	return result
 }
 
-func singleVariantID(t *testing.T, repo repositories.ProductRepository, productID int64) int64 {
+func singleVariantID(t *testing.T, repo product.Repository, productID int64) int64 {
 	t.Helper()
 	variants, err := repo.GetVariants(context.Background(), productID)
 	if err != nil || len(variants) != 1 {

@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tiredbooy/internal/features/hero"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
 )
 
 func TestHeroSlideRepositoryPersistsNullPatchesAndAtomicOrder(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "hero_slides")
 	ctx := context.Background()
-	repo := repositories.NewHeroSlideRepository(testPool)
+	repo := hero.NewRepository(testPool)
 
 	copyValue := "Existing"
 	primaryHref := "/products"
@@ -26,7 +26,7 @@ func TestHeroSlideRepositoryPersistsNullPatchesAndAtomicOrder(t *testing.T) {
 	mobileImageURL := "/images/hero/first-mobile.webp"
 	start := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour)
-	first, err := repo.Create(ctx, &models.HeroSlideReq{
+	first, err := repo.Create(ctx, &hero.HeroSlideReq{
 		Eyebrow:           &copyValue,
 		Title:             "First",
 		Subtitle:          &copyValue,
@@ -61,7 +61,7 @@ func TestHeroSlideRepositoryPersistsNullPatchesAndAtomicOrder(t *testing.T) {
 
 	staleURL := "/media/hero-slides/stale/desktop/test.webp"
 	newAlt := "New alt"
-	if _, err := repo.Update(ctx, first.ID, &models.HeroSlideUpdateReq{
+	if _, err := repo.Update(ctx, first.ID, &hero.HeroSlideUpdateReq{
 		ImageAlt:         models.NullablePatch[string]{Set: true, Value: &newAlt},
 		ExpectedImageURL: models.NullablePatch[string]{Set: true, Value: &staleURL},
 	}); !errors.Is(err, models.ErrConflict) {
@@ -71,7 +71,7 @@ func TestHeroSlideRepositoryPersistsNullPatchesAndAtomicOrder(t *testing.T) {
 	inactive := false
 	clearString := models.NullablePatch[string]{Set: true}
 	clearTime := models.NullablePatch[time.Time]{Set: true}
-	updated, err := repo.Update(ctx, first.ID, &models.HeroSlideUpdateReq{
+	updated, err := repo.Update(ctx, first.ID, &hero.HeroSlideUpdateReq{
 		Eyebrow:           clearString,
 		Subtitle:          clearString,
 		ImageURL:          clearString,
@@ -128,12 +128,12 @@ func TestHeroSlidePublicationConstraintsRejectInvalidRows(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "hero_slides")
 	ctx := context.Background()
-	repo := repositories.NewHeroSlideRepository(testPool)
+	repo := hero.NewRepository(testPool)
 	start := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 	end := start.Add(-time.Minute)
 	inactive := false
 
-	if _, err := repo.Create(ctx, &models.HeroSlideReq{
+	if _, err := repo.Create(ctx, &hero.HeroSlideReq{
 		Title:    "Invalid schedule",
 		IsActive: &inactive,
 		StartsAt: &start,
@@ -168,13 +168,13 @@ func TestHeroSlidePublicationConstraintsRejectInvalidRows(t *testing.T) {
 
 func createIntegrationHeroSlide(
 	t *testing.T,
-	repo repositories.HeroSlideRepository,
+	repo hero.Repository,
 	title string,
 	imageURL string,
 	sortOrder int,
-) *models.HeroSlide {
+) *hero.HeroSlide {
 	t.Helper()
-	slide, err := repo.Create(context.Background(), &models.HeroSlideReq{
+	slide, err := repo.Create(context.Background(), &hero.HeroSlideReq{
 		Title:     title,
 		ImageURL:  &imageURL,
 		SortOrder: &sortOrder,

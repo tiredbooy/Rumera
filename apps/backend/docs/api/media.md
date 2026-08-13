@@ -1,5 +1,7 @@
 # Media
 
+
+**Implementation (feature slice):** `internal/features/media/`
 Rumera stores uploaded image originals behind stable storage keys and serves
 them through canonical, environment-independent `/media/...` paths. Admin upload
 routes use the versioned API base; public media delivery is mounted directly on

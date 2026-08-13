@@ -15,7 +15,7 @@ import {
 import type { UserListFilters } from "@/features/customers/types";
 import { ROLE_LABELS } from "@/lib/rbac/roles";
 
-const ROLE_OPTIONS = ["customer", "vendor", "admin"] as const;
+const ROLE_OPTIONS = ["customer", "vendor", "admin", "staff"] as const;
 
 export function UsersFilters({ filters }: { filters: UserListFilters }) {
   const hasFilters =

@@ -7,8 +7,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/tiredbooy/internal/features/shipping"
 	"github.com/tiredbooy/internal/models"
-	"github.com/tiredbooy/internal/repositories"
 )
 
 func integrationBool(value bool) *bool        { return &value }
@@ -19,11 +19,11 @@ func TestShippingRepositories_CRUDPaginationAndNullableRules(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "shipping_zones")
 	ctx := context.Background()
-	zoneRepo := repositories.NewShippingZoneRepository(testPool)
-	methodRepo := repositories.NewShippingMethodRepository(testPool)
+	zoneRepo := shipping.NewZoneRepository(testPool)
+	methodRepo := shipping.NewMethodRepository(testPool)
 
 	description := "Tehran deliveries"
-	zone, err := zoneRepo.Create(ctx, models.CreateShippingZoneReq{
+	zone, err := zoneRepo.Create(ctx, shipping.CreateShippingZoneReq{
 		Name:        "Tehran",
 		Description: &description,
 		RegionCodes: []string{"IR-TEH"},
@@ -32,13 +32,13 @@ func TestShippingRepositories_CRUDPaginationAndNullableRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create zone: %v", err)
 	}
-	if _, err := zoneRepo.Create(ctx, models.CreateShippingZoneReq{
+	if _, err := zoneRepo.Create(ctx, shipping.CreateShippingZoneReq{
 		Name: "Europe", RegionCodes: []string{"DE"}, IsActive: integrationBool(false),
 	}); err != nil {
 		t.Fatalf("create second zone: %v", err)
 	}
 
-	zones, total, err := zoneRepo.GetAll(ctx, models.ShippingZoneFilter{BaseFilter: models.BaseFilter{
+	zones, total, err := zoneRepo.GetAll(ctx, shipping.ShippingZoneFilter{BaseFilter: models.BaseFilter{
 		PaginationParams: models.PaginationParams{Page: 99, Limit: 1},
 		SortBy:           "name",
 		OrderBy:          "asc",
@@ -56,7 +56,7 @@ func TestShippingRepositories_CRUDPaginationAndNullableRules(t *testing.T) {
 	}
 
 	regions := []string{"IR-TEH", "IR-ALB"}
-	updatedZone, err := zoneRepo.Update(ctx, zone.ID, models.UpdateShippingZoneReq{
+	updatedZone, err := zoneRepo.Update(ctx, zone.ID, shipping.UpdateShippingZoneReq{
 		Description: models.NullablePatch[string]{Set: true},
 		RegionCodes: models.NullablePatch[[]string]{Set: true, Value: &regions},
 	})
@@ -69,11 +69,11 @@ func TestShippingRepositories_CRUDPaginationAndNullableRules(t *testing.T) {
 
 	carrier := "Post"
 	methodDescription := "Ground"
-	method, err := methodRepo.Create(ctx, zone.ID, models.CreateShippingMethodReq{
+	method, err := methodRepo.Create(ctx, zone.ID, shipping.CreateShippingMethodReq{
 		Name:            "Standard",
 		Carrier:         &carrier,
 		Description:     &methodDescription,
-		RateType:        models.ShippingRatePerKg,
+		RateType:        shipping.ShippingRatePerKg,
 		BaseRate:        2.5,
 		FreeAboveAmount: integrationFloat(100),
 		MinDeliveryDays: integrationInt16(2),
@@ -84,7 +84,7 @@ func TestShippingRepositories_CRUDPaginationAndNullableRules(t *testing.T) {
 		t.Fatalf("create method: %v", err)
 	}
 
-	methods, methodTotal, err := methodRepo.GetByZoneID(ctx, zone.ID, models.ShippingMethodFilter{BaseFilter: models.BaseFilter{
+	methods, methodTotal, err := methodRepo.GetByZoneID(ctx, zone.ID, shipping.ShippingMethodFilter{BaseFilter: models.BaseFilter{
 		PaginationParams: models.PaginationParams{Page: 2, Limit: 1},
 		SortBy:           "base_rate",
 		OrderBy:          "asc",
@@ -96,7 +96,7 @@ func TestShippingRepositories_CRUDPaginationAndNullableRules(t *testing.T) {
 		t.Fatalf("out-of-range methods = %d, total = %d; want 0, 1", len(methods), methodTotal)
 	}
 
-	updatedMethod, err := methodRepo.Update(ctx, method.ID, models.UpdateShippingMethodReq{
+	updatedMethod, err := methodRepo.Update(ctx, method.ID, shipping.UpdateShippingMethodReq{
 		Carrier:         models.NullablePatch[string]{Set: true},
 		Description:     models.NullablePatch[string]{Set: true},
 		FreeAboveAmount: models.NullablePatch[float64]{Set: true},
@@ -118,8 +118,8 @@ func TestShippingRepositories_CRUDPaginationAndNullableRules(t *testing.T) {
 		t.Fatalf("available methods = %+v, %v", available, err)
 	}
 
-	if _, err := methodRepo.Create(ctx, 999_999, models.CreateShippingMethodReq{
-		Name: "Missing zone", RateType: models.ShippingRateFlat,
+	if _, err := methodRepo.Create(ctx, 999_999, shipping.CreateShippingMethodReq{
+		Name: "Missing zone", RateType: shipping.ShippingRateFlat,
 	}); !errors.Is(err, models.ErrNotFound) {
 		t.Fatalf("missing-zone create error = %v; want ErrNotFound", err)
 	}

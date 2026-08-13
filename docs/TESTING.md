@@ -85,6 +85,26 @@ Documented fully in [`apps/backend/tests/integration/README.md`](../apps/backend
 | Handler binding with mocked services | Media ownership + locks |
 | Cron aggregate SQL can be unit-tested with care | Full migration round-trips |
 
+### Critical pure paths (PH-013c) — local, no CI
+
+These packages have focused unit coverage for money/auth safety. Run anytime:
+
+```bash
+cd apps/backend
+go test ./pkg/token/ ./internal/middlewares/ ./pkg/middleware/ ./internal/features/payments/ -count=1
+```
+
+| Area | Package / file | What it guards |
+|------|----------------|----------------|
+| JWT purpose + expiry + wrong secret | `pkg/token` (`jwt_test.go`) | Access vs refresh, expired, tampered, empty |
+| Auth rehydrate ban/inactive/role | `internal/middlewares` (`auth_test.go`) | Live role beats stale claim |
+| RequirePermission residual | `internal/middlewares` (`permission_test.go`) | Admin superuser, staff grant/deny, checker error → 500, empty perms |
+| Idempotency store | `pkg/middleware` (`idempotency_test.go`) | Replay once, body conflict, inflight, stale reclaim, concurrent winner |
+| Webhook fail → release | `internal/features/payments` (`webhook_test.go`) | Failed payment releases reserved stock once; terminal replay no double-release |
+| Webhook HMAC + terminal ACK | same | Signature reject; succeeded/failed replay ACK |
+
+Still **no CI** — local `go test` only (founder decision). Integration money paths stay under `//go:build integration`.
+
 ### Notifications / Kafka
 
 Package tests under `internal/notifications` use in-memory fakes. They do **not**
