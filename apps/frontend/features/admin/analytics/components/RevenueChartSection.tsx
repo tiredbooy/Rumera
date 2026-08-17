@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ChartCard, RevenueAreaChart } from "./Charts";
+import { ChartCard } from "./Charts";
+import { RevenueAreaChart } from "./dynamic-charts";
 import { fetchRevenueTimeSeries } from "@/features/analytics/api";
 import { windowFor } from "@/features/analytics/range";
 import {
@@ -10,9 +11,18 @@ import {
 } from "@/features/analytics/utils";
 import type { DailyRevenueStats } from "@/features/analytics/types";
 
+import { can } from "@/lib/rbac/can";
+import { PERMISSIONS, type Permission } from "@/lib/rbac/permissions";
+
 import { AnalyticsErrorState } from "./AnalyticsErrorState";
 
-export async function RevenueChartSection() {
+export async function RevenueChartSection({
+  permissions,
+}: {
+  permissions: Permission[];
+}) {
+  if (!can({ permissions }, PERMISSIONS.ANALYTICS_READ)) return null;
+
   let series: DailyRevenueStats[] = [];
   let failed = false;
   try {

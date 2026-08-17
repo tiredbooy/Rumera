@@ -16,11 +16,11 @@ Customers manage a **recurring physical box** (باکس سرداب). This is **n
 
 | Component | Role |
 |-----------|------|
-| `SubscriptionsView` | Compose create + list + confirm; `apiErrorToast`; optional address on create |
+| `SubscriptionsView` | Compose create + list + confirm; `apiErrorToast`; optional address on create; address-only PATCH |
 | `SubscriptionCreatePanel` | Cadence + optional ship-to; no-charge honesty bullets |
-| `SubscriptionCard` | Status, **ارسال باکس بعدی** + hint, missing-address callout, actions |
+| `SubscriptionCard` | Status, **ارسال باکس بعدی** + hint, missing-address callout, ship-to picker, actions |
 | `SubscriptionActionDialog` | Confirm **pause / skip / cancel** with effect copy |
-| Helpers | `nextShipTitle/Hint`, `statusCopy`, `actionSuccessMessage`, `actionConfirmDescription` |
+| Helpers | `nextShipTitle/Hint`, `statusCopy`, `canChangeShipTo`, `missingShipToMessage`, `addressChangeSuccessMessage` |
 
 ## Copy rules
 
@@ -30,6 +30,7 @@ Customers manage a **recurring physical box** (باکس سرداب). This is **n
 | Skip | Moves next ship by one cadence; no auto charge |
 | Pause | Holds; no due emails until resume |
 | Cancel | No more boxes; reactivate via resume |
+| Ship-to | «تغییر آدرس ارسال» / «انتخاب آدرس ارسال» — active or paused only |
 
 ## API hooks
 
@@ -37,6 +38,12 @@ Customers manage a **recurring physical box** (باکس سرداب). This is **n
 - Types: cadence `monthly|quarterly`; status `active|paused|cancelled`
 - Actions: `pause` · `resume` · `cancel` · `skip`
 - Create may send `address_id` when user selects one (default address preferred)
+- Second create while an **active** cellar-box exists is `409 CONFLICT` (PR-057b); `apiErrorToast` surfaces it. Pause / cancel first. Resume of another row while one is active is the same 409.
+- `UpdateSubscriptionInput`: `action` optional; `address_id?: number | null`
+- Active / paused cards PATCH `{ address_id }` only (no pause/resume). Cancelled is read-only.
+- Address list is the same `useAddresses()` map already loaded for create (`addressById`)
+- Failures use `apiErrorToast` — success toast is not shown on error
+- BE does not clear ship-to on JSON `null`; the picker never sends a clear
 
 ## Honesty constraints
 

@@ -12,7 +12,9 @@ tags:
 - Prometheus metrics on backend (`GET /metrics`)
 - OpenTelemetry tracing hooks (`OTEL_ENABLED`, default off → no-op spans)
 - Admin monitoring board (PromQL) → [[Admin Console]]
+- Board time-series (req/s, 5xx %, p95) are TanStack `areaY`/`lineY` (PR-100e)
 - Grafana compose under backend deploy/observability
+- Frontend does **not** ship Sentry — unused `@sentry/nextjs` removed (PR-090d); no `SENTRY_DSN`
 
 ## Money / stock saga (PH-013b)
 

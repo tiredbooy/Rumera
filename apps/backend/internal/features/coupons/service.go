@@ -16,6 +16,7 @@ import (
 // operation used at checkout to preview the discount for a given basket.
 type Service struct {
 	couponRepo Repository
+	cart       CartBasketLookup
 }
 
 const (
@@ -25,6 +26,26 @@ const (
 
 func NewService(couponRepo Repository) *Service {
 	return &Service{couponRepo: couponRepo}
+}
+
+// CartBasketItem is one cart line used to fill omitted Validate fields.
+type CartBasketItem struct {
+	ProductID  int64
+	CategoryID *int64
+	LineTotal  float64
+}
+
+// CartBasketLookup loads the caller's cart lines for Validate when the
+// client omitted product_ids / category_ids and/or sent a zero subtotal.
+type CartBasketLookup interface {
+	BasketForUser(ctx context.Context, userID int64) ([]CartBasketItem, error)
+}
+
+// WithCart attaches an optional cart lookup. Nil is safe (client IDs only).
+// Production New() wires cart.Repository; tests use a stub.
+func (s *Service) WithCart(lookup CartBasketLookup) *Service {
+	s.cart = lookup
+	return s
 }
 
 func (s *Service) Create(ctx context.Context, req CreateCouponReq) (*Coupon, error) {
@@ -338,12 +359,21 @@ func (s *Service) TotalUses(ctx context.Context, couponID int64) (int, error) {
 // discount would be. It never mutates usage — that happens atomically at order
 // creation. An unknown code yields an "invalid" result, not an error, so the
 // checkout UI can render a friendly message.
+//
+// When product_ids and category_ids are both empty, and/or order_subtotal is
+// 0, the caller's cart is loaded (if a CartBasketLookup is attached) so scoped
+// coupons preview the same basket CreateOrder will redeem against. An empty
+// cart is validated as an empty basket — not a 500.
 func (s *Service) Validate(ctx context.Context, req ValidateCouponReq) (*CouponValidationResult, error) {
 	code := NormalizeCouponCode(req.Code)
 	if code == "" {
 		return nil, apperr.ErrInvalidRequest
 	}
 	req.Code = code
+
+	if err := s.fillBasketFromCart(ctx, &req); err != nil {
+		return nil, err
+	}
 
 	coupon, err := s.couponRepo.GetByCode(ctx, code)
 	if err != nil {
@@ -365,4 +395,56 @@ func (s *Service) Validate(ctx context.Context, req ValidateCouponReq) (*CouponV
 
 	result := ValidateCouponBusiness(coupon, req, totalUses, userUses)
 	return &result, nil
+}
+
+func (s *Service) fillBasketFromCart(ctx context.Context, req *ValidateCouponReq) error {
+	if s.cart == nil || req.UserID <= 0 {
+		return nil
+	}
+	idsOmitted := len(req.ProductIDs) == 0 && len(req.CategoryIDs) == 0
+	subtotalOmitted := req.OrderSubtotal == 0
+	if !idsOmitted && !subtotalOmitted {
+		return nil
+	}
+
+	items, err := s.cart.BasketForUser(ctx, req.UserID)
+	if err != nil {
+		return apperr.ErrInternal
+	}
+	if idsOmitted {
+		req.ProductIDs, req.CategoryIDs = deriveBasketIDs(items)
+	}
+	if subtotalOmitted {
+		req.OrderSubtotal = deriveBasketSubtotal(items)
+	}
+	return nil
+}
+
+func deriveBasketIDs(items []CartBasketItem) (productIDs, categoryIDs []int64) {
+	seenP := make(map[int64]struct{}, len(items))
+	seenC := make(map[int64]struct{}, len(items))
+	for _, it := range items {
+		if it.ProductID > 0 {
+			if _, ok := seenP[it.ProductID]; !ok {
+				seenP[it.ProductID] = struct{}{}
+				productIDs = append(productIDs, it.ProductID)
+			}
+		}
+		if it.CategoryID != nil && *it.CategoryID > 0 {
+			cid := *it.CategoryID
+			if _, ok := seenC[cid]; !ok {
+				seenC[cid] = struct{}{}
+				categoryIDs = append(categoryIDs, cid)
+			}
+		}
+	}
+	return productIDs, categoryIDs
+}
+
+func deriveBasketSubtotal(items []CartBasketItem) float64 {
+	var sum float64
+	for _, it := range items {
+		sum += it.LineTotal
+	}
+	return sum
 }

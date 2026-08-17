@@ -61,7 +61,8 @@ func (h *Handler) GetAdmin(c *gin.Context) {
 	response.OK(c, ToResponse(settings))
 }
 
-// Update — PUT /admin/settings (partial update; invalidates public cache).
+// Update — PUT /admin/settings (partial update; requires expected_updated_at;
+// stale revision is 409; invalidates public cache).
 func (h *Handler) Update(c *gin.Context) {
 	var req UpdateSiteSettingsReq
 	if !httpx.BindJSON(c, h.Validator, &req) {

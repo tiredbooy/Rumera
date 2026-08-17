@@ -145,7 +145,7 @@ export async function RecipeDetailView({ params }: RecipeDetailViewProps) {
                 {recipe.cocktail_type ? (
                   <p className="eyebrow mb-4">{recipe.cocktail_type}</p>
                 ) : null}
-                <h1 className="text-balance font-serif text-4xl leading-[1.05] sm:text-5xl lg:text-6xl">
+                <h1 className="text-balance font-serif text-4xl leading-[1.3] sm:text-5xl lg:text-6xl">
                   {recipe.title}
                 </h1>
                 {recipe.description || recipe.excerpt ? (

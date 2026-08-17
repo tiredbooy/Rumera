@@ -37,6 +37,12 @@ vi.mock("@/features/coupons/api", () => {
   };
 });
 
+// The picker queries the server as you type; these tests are about what an
+// existing scope RENDERS, not about search, so the list query is stubbed.
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: () => ({ data: undefined, isPending: false, isError: false }),
+}));
+
 import { CouponForm } from "./coupon-form";
 
 afterEach(() => {
@@ -97,5 +103,94 @@ describe("CouponForm", () => {
       is_active: true,
     });
     expect(mocks.push).toHaveBeenCalledWith("/admin/coupons");
+  });
+
+  it("translates a duplicate-code server conflict into Persian", async () => {
+    mocks.create.mockRejectedValue(
+      Object.assign(new Error("coupon code is already used by another coupon"), {
+        status: 409,
+        code: "CONFLICT",
+      }),
+    );
+    render(<CouponForm mode="create" />);
+    fireEvent.change(screen.getByLabelText("کد تخفیف"), {
+      target: { value: "SUMMER" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ساخت کد تخفیف" }));
+
+    expect(
+      await screen.findByText(/این کد تخفیف قبلاً ثبت شده است/),
+    ).toBeInTheDocument();
+  });
+
+  it("labels money in Tomans and previews the offer in plain language", () => {
+    render(<CouponForm mode="create" />);
+
+    fireEvent.change(screen.getByLabelText("درصد تخفیف"), {
+      target: { value: "10" },
+    });
+    fireEvent.change(screen.getByLabelText("سقف مبلغ تخفیف (تومان)"), {
+      target: { value: "50000" },
+    });
+    fireEvent.change(screen.getByLabelText("حداقل مبلغ سفارش (تومان)"), {
+      target: { value: "500000" },
+    });
+
+    expect(
+      screen.getByRole("status"),
+    ).toHaveTextContent(
+      "۱۰٪ تخفیف تا سقف ۵۰٬۰۰۰ تومان برای سفارش‌های بالای ۵۰۰٬۰۰۰ تومان",
+    );
+    expect(screen.getAllByText("۵۰٬۰۰۰ تومان").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("۵۰۰٬۰۰۰ تومان").length).toBeGreaterThan(0);
+  });
+});
+
+// CF-2. A coupon scoped to a product outside the loaded window used to render
+// as an EMPTY picker — no chip, no id, no warning — over a discount that was
+// really applied. An operator reading that would re-scope and over-discount.
+describe("coupon product scope visibility", () => {
+  const scopedCoupon = {
+    id: 5,
+    code: "SAVE",
+    description: "",
+    discount_type: "percentage" as const,
+    discount_value: 10,
+    max_discount_amount: null,
+    min_order_amount: null,
+    max_uses: null,
+    max_uses_per_user: null,
+    used_count: 0,
+    is_active: true,
+    starts_at: null,
+    expires_at: null,
+    applicable_to: { product_ids: [500], category_ids: [] },
+    created_at: "2026-08-01T00:00:00Z",
+    updated_at: "2026-08-01T00:00:00Z",
+  };
+
+  it("shows a scoped product that the label lookup could not resolve", () => {
+    // Seeding failed or the product was deleted: the id must still be visible.
+    render(
+      <CouponForm
+        mode="edit"
+        coupon={scopedCoupon as never}
+        productOptions={[]}
+      />,
+    );
+
+    expect(screen.getByText(/۵۰۰/)).toBeInTheDocument();
+  });
+
+  it("shows the real title once the by-ids lookup has seeded it", () => {
+    render(
+      <CouponForm
+        mode="edit"
+        coupon={scopedCoupon as never}
+        productOptions={[{ id: 500, title: "ویسکی تک‌مالت" }]}
+      />,
+    );
+
+    expect(screen.getByText("ویسکی تک‌مالت")).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { Loader2, MessageSquare } from "lucide-react";
 
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { ReviewCard } from "@/features/catalog/products/components/reviews-section/review-card";
 import type { Review, ReviewRating } from "@/features/reviews/types";
@@ -29,21 +30,19 @@ export function ReviewsList({
   return (
     <div aria-busy={loading || isPending}>
       {reviews.length === 0 ? (
-        <div className="border-hairline flex flex-col items-center rounded-3xl bg-card/40 px-6 py-16 text-center ring-1 ring-foreground/5">
-          <span className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-            <MessageSquare className="size-6" />
-          </span>
-          <p className="font-medium">
-            {filter
+        <EmptyState
+          icon={MessageSquare}
+          title={
+            filter
               ? `نظری با ${faNum(filter)} ستاره یافت نشد`
-              : "هنوز نظری ثبت نشده"}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {filter
+              : "هنوز نظری ثبت نشده"
+          }
+          description={
+            filter
               ? "پالایش را بردارید تا همهٔ نظرها را ببینید."
-              : "تجربه‌تان را بنویسید — خریداران با نشان ویژه مشخص می‌شوند."}
-          </p>
-        </div>
+              : "تجربه‌تان را بنویسید — خریداران با نشان ویژه مشخص می‌شوند."
+          }
+        />
       ) : (
         <ul className="space-y-5">
           {reviews.map((review, index) => {

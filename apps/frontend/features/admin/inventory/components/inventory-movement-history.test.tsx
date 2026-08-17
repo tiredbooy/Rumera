@@ -52,10 +52,10 @@ describe("InventoryMovementHistory", () => {
       "/admin/orders/91",
     );
     expect(
-      screen.getByRole("link", { name: "رویدادهای جدیدتر" }),
+      screen.getByRole("link", { name: "صفحهٔ قبلی" }),
     ).toHaveAttribute("href", "/admin/inventory/14");
     expect(
-      screen.getByRole("link", { name: "رویدادهای قدیمی‌تر" }),
+      screen.getByRole("link", { name: "صفحهٔ بعدی" }),
     ).toHaveAttribute("href", "/admin/inventory/14?movement_page=3");
   });
 

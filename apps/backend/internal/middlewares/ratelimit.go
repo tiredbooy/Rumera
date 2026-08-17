@@ -11,10 +11,11 @@ import (
 )
 
 // LoginRateLimit throttles sensitive auth endpoints (login, register, password
-// reset request, OTP) per client IP. It prefers a Redis fixed-window counter
-// (shared across instances), but no longer fails fully open when Redis is
-// unavailable: if the cache is absent or errors, it falls back to a per-instance
-// in-memory limiter so credential-stuffing protection survives a cache outage.
+// forgot/validate/reset, OTP, refresh, logout) per client IP. It prefers a
+// Redis fixed-window counter (shared across instances), but no longer fails
+// fully open when Redis is unavailable: if the cache is absent or errors, it
+// falls back to a per-instance in-memory limiter so credential-stuffing
+// protection survives a cache outage.
 func LoginRateLimit(store cache.Store, max int64, window time.Duration) gin.HandlerFunc {
 	fallback := newMemLimiter()
 

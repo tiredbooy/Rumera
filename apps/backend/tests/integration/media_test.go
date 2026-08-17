@@ -3,18 +3,18 @@
 package integration
 
 import (
-	"github.com/tiredbooy/internal/features/catalog/product"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/tiredbooy/internal/features/catalog/product"
 	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/tiredbooy/internal/features/blog"
 	"github.com/tiredbooy/internal/features/hero"
 	"github.com/tiredbooy/internal/features/media"
-	"github.com/tiredbooy/internal/features/blog"
 	"github.com/tiredbooy/internal/features/recipes"
 	"github.com/tiredbooy/internal/models"
 )

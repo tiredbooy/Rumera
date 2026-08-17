@@ -25,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ListPagination } from "@/components/list-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -589,41 +590,28 @@ export function ShippingMethodsPanel({ zoneID }: { zoneID: number }) {
       ) : null}
 
       {methods.data && methods.data.pagination.total_items > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
-            {faNum(methods.data.pagination.total_items)} روش · صفحهٔ{" "}
-            {faNum(methods.data.pagination.page)} از{" "}
-            {faNum(methods.data.pagination.total_pages)}
-            {methods.isFetching ? (
-              <Loader2
-                className="ms-1 inline size-3 animate-spin"
-                aria-hidden
-              />
-            ) : null}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!methods.data.pagination.has_prev || methods.isFetching}
-              onClick={() =>
-                updateURL({
-                  methods_page: page > 2 ? String(page - 1) : undefined,
-                })
-              }
-            >
-              قبلی
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!methods.data.pagination.has_next || methods.isFetching}
-              onClick={() => updateURL({ methods_page: String(page + 1) })}
-            >
-              بعدی
-            </Button>
-          </div>
-        </div>
+        <ListPagination
+          page={methods.data.pagination.page}
+          totalPages={methods.data.pagination.total_pages}
+          hasPrev={methods.data.pagination.has_prev}
+          hasNext={methods.data.pagination.has_next}
+          onPrev={() =>
+            updateURL({
+              methods_page: page > 2 ? String(page - 1) : undefined,
+            })
+          }
+          onNext={() => updateURL({ methods_page: String(page + 1) })}
+          disabled={methods.isFetching}
+          ariaLabel="صفحه‌بندی روش‌های ارسال"
+          className="mt-4"
+          label={
+            <>
+              {faNum(methods.data.pagination.total_items)} روش · صفحهٔ{" "}
+              {faNum(methods.data.pagination.page)} از{" "}
+              {faNum(methods.data.pagination.total_pages)}
+            </>
+          }
+        />
       ) : null}
 
       <AlertDialog

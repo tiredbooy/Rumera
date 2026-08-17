@@ -33,6 +33,9 @@ GET /brands
 
 Default sort is `created_at` `desc`.
 
+There is no `GET /admin/brands`. Operator typeahead (admin product/recipe
+editors) uses this public list.
+
 **Response** `200 OK` — paginated list of `Brand`:
 
 ```json
@@ -153,16 +156,20 @@ All fields optional; only supplied fields are updated.
 
 | Field | Type | Validation |
 |-------|------|------------|
-| `title` | string | max 255 |
+| `title` | string | max 255; unique excluding the current brand id |
 | `slug` | string | max 255; canonicalized and unique |
 | `country` | string | max 80 |
 | `founded_year` | int | min 1000 |
 | `image_url` | string | valid url |
 | `description` | string | |
 
+Title uniqueness **excludes the current brand id** (same pattern as tags).
+PATCH with the same title is not a conflict; PATCH to another brand's title
+is `409 CONFLICT`.
+
 **Response** `200 OK` — the updated `Brand`.
 
-**Errors:** `400 INVALID_PARAMS`, `422 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `404 NOT_FOUND`.
+**Errors:** `400 INVALID_PARAMS`, `422 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `404 NOT_FOUND`, `409 CONFLICT`.
 
 ---
 

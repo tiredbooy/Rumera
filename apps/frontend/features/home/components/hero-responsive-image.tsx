@@ -50,7 +50,9 @@ export function HeroResponsiveImage({
   const common = {
     alt,
     sizes: "100vw",
-    ...(priority ? { fetchPriority: "high" as const } : {}),
+    ...(priority
+      ? { priority: true, fetchPriority: "high" as const }
+      : { loading: "lazy" as const }),
   };
   const {
     props: { srcSet: desktopSrcSet },

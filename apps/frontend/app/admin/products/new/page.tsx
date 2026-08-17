@@ -2,7 +2,12 @@ import { ProductCreateView } from "@/features/admin/products/components/product-
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 
-export default async function AdminNewProductPage() {
+export default async function AdminNewProductPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string }>;
+}) {
   await requirePermission(PERMISSIONS.PRODUCTS_WRITE);
-  return <ProductCreateView />;
+  const { from } = await searchParams;
+  return <ProductCreateView fromId={from} />;
 }

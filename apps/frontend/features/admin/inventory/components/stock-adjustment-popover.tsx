@@ -14,6 +14,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
+import {
   Popover,
   PopoverContent,
   PopoverTitle,
@@ -34,6 +38,13 @@ import {
 } from "../validations";
 
 const DEFAULT_QUICK_RESTOCK = [5, 10, 24, 50] as const;
+
+type DecreaseReason = Extract<MovementType, "adjustment" | "damage">;
+
+const DECREASE_REASON_NOTE: Record<DecreaseReason, string> = {
+  adjustment: "کاهش موجودی از پنل مدیریت",
+  damage: "ضایعات / شکستگی از پنل مدیریت",
+};
 
 function quickRestockUnits(reorderQuantity: number): number[] {
   const units = new Set<number>(DEFAULT_QUICK_RESTOCK);
@@ -70,9 +81,11 @@ export function StockAdjustmentPopover({
   const adjustment = useAdjustVariantStock();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [quantity, setQuantity] = React.useState("0");
+  const [reason, setReason] = React.useState<DecreaseReason>("adjustment");
   const [error, setError] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState(false);
   const inputID = `stock-adjustment-${inventory.product_variant_id}`;
+  const reasonID = `${inputID}-reason`;
   const titleID = `stock-adjustment-title-${inventory.product_variant_id}`;
 
   const restockChips = React.useMemo(
@@ -95,6 +108,7 @@ export function StockAdjustmentPopover({
     setOpen(nextOpen);
     if (nextOpen) {
       setQuantity("0");
+      setReason("adjustment");
       setError(null);
     }
   }
@@ -140,7 +154,7 @@ export function StockAdjustmentPopover({
     }
 
     const movementType: MovementType =
-      parsedQuantity > 0 ? "restock" : "adjustment";
+      parsedQuantity > 0 ? "restock" : reason;
 
     try {
       await adjustment.mutateAsync({
@@ -151,7 +165,7 @@ export function StockAdjustmentPopover({
           note:
             parsedQuantity > 0
               ? "تأمین / افزایش موجودی از پنل مدیریت"
-              : "کاهش موجودی از پنل مدیریت",
+              : DECREASE_REASON_NOTE[reason],
         },
       });
       const signedQuantity = `${parsedQuantity > 0 ? "+" : "−"}${faNum(Math.abs(parsedQuantity))}`;
@@ -321,6 +335,28 @@ export function StockAdjustmentPopover({
               </p>
             )}
           </div>
+
+          {parsedDelta !== null && parsedDelta < 0 ? (
+            <div className="mt-3 flex min-w-0 flex-col gap-1.5">
+              <Label htmlFor={reasonID}>دلیل کاهش</Label>
+              <NativeSelect
+                id={reasonID}
+                value={reason}
+                disabled={adjustment.isPending}
+                onChange={(event) =>
+                  setReason(event.target.value as DecreaseReason)
+                }
+                className="w-full [&_[data-slot=native-select]]:h-11"
+              >
+                <NativeSelectOption value="adjustment">
+                  اصلاح دستی
+                </NativeSelectOption>
+                <NativeSelectOption value="damage">
+                  ضایعات / شکستگی
+                </NativeSelectOption>
+              </NativeSelect>
+            </div>
+          ) : null}
 
           <Button
             type="submit"

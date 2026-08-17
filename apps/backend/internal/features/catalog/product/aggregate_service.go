@@ -107,7 +107,6 @@ func normalizeAndValidateProductAggregate(
 		add("title", "must be at most 255 characters")
 	}
 	normalizeNullableAggregateString(&req.Code)
-	normalizeNullableAggregateString(&req.Slug)
 	normalizeNullableAggregateString(&req.Description)
 	normalizeNullableAggregateString(&req.CountryOfOrigin)
 	normalizeNullableAggregateString(&req.MetaTitle)
@@ -115,8 +114,19 @@ func normalizeAndValidateProductAggregate(
 	if req.Code != nil && utf8.RuneCountInString(*req.Code) > 80 {
 		add("code", "must be at most 80 characters")
 	}
-	if req.Slug != nil && utf8.RuneCountInString(*req.Slug) > 255 {
-		add("slug", "must be at most 255 characters")
+	slug, slugErr := normalizeProductSlug(req.Slug)
+	if slugErr != nil {
+		if messages, ok := apperr.Fields(slugErr); ok {
+			for _, message := range messages["slug"] {
+				add("slug", message)
+			}
+		} else {
+			add("slug", errMsgInvalidPublicSlug)
+		}
+	}
+	req.Slug = slug
+	if req.IsActive && req.Slug == nil {
+		add("slug", errMsgActiveProductNeedsSlug)
 	}
 	if req.CountryOfOrigin != nil && utf8.RuneCountInString(*req.CountryOfOrigin) > 100 {
 		add("country_of_origin", "must be at most 100 characters")
@@ -162,7 +172,7 @@ func normalizeAndValidateProductAggregate(
 			key := strings.ToLower(*variant.SKU)
 			skuRows[key] = append(skuRows[key], i)
 		}
-		if variant.Price <= 0 {
+		if variant.Price < 0 || (req.IsActive && variant.Price <= 0) {
 			add(prefix+".price", "must be greater than zero")
 		}
 		if variant.CompareAtPrice != nil && *variant.CompareAtPrice <= variant.Price {

@@ -24,5 +24,7 @@ func RegisterAdmin(a *gin.RouterGroup, h *Handler) {
 	if h == nil {
 		h = &Handler{}
 	}
+	a.GET("/gift-cards", h.ListAdmin)
 	a.POST("/gift-cards", h.Issue)
+	a.POST("/gift-cards/:id/void", h.Void)
 }

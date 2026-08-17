@@ -174,16 +174,33 @@ func registerAdmin(admin *gin.RouterGroup, h *handlers.Handler, moneyIdem gin.Ha
 		return g
 	}
 
-	// Identity / ops
+	// Identity / ops. customers:write is profile create/update (PR-040c).
+	// Role/status writes still require live role=admin inside users.Service.
+	// Ban/unban is a dedicated grant — not OR'd onto write (PR-040e).
 	users.RegisterAdmin(
 		with(rbac.PermCustomersRead, rbac.PermCustomersWrite, rbac.PermRolesManage),
-		with(rbac.PermCustomersWrite, rbac.PermCustomersBan),
+		with(rbac.PermCustomersWrite),
+		with(rbac.PermCustomersBan),
 		h.Users,
 	)
-	wallet.RegisterAdmin(with(rbac.PermCustomersWrite), h.Wallets, moneyIdem)
+	// Wallet credit mints ledger money — dedicated grant, not customers:write.
+	// The ledger READ is support work, so it rides the customers-read group
+	// (A-10): a wallet-paid order has no payment_transactions row, making this
+	// the only admin trail for it.
+	wallet.RegisterAdmin(
+		with(rbac.PermCustomersRead, rbac.PermCustomersWrite),
+		with(rbac.PermWalletCredit),
+		h.Wallets,
+		moneyIdem,
+	)
 	giftcard.RegisterAdmin(with(rbac.PermGiftCardsIssue), h.GiftCards)
-	// Cellar Club rates (env snapshot, read-only) — PH-040d
-	loyalty.RegisterAdmin(with(rbac.PermCustomersRead, rbac.PermCustomersWrite), h.Loyalties)
+	// Cellar Club: reads (PR-003d) + signed adjust (PR-003e, customers:write).
+	loyalty.RegisterAdmin(
+		with(rbac.PermCustomersRead, rbac.PermCustomersWrite),
+		with(rbac.PermCustomersWrite),
+		h.Loyalties,
+		moneyIdem,
+	)
 
 	// Capability matrix (GET readable by any panel user for live grants;
 	// mutations require roles:manage — enforced in the handler).

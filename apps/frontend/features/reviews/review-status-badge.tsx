@@ -1,41 +1,19 @@
-import { cn } from "@/lib/utils";
+import { Badge, type BadgeSemantic } from "@/components/ui/badge";
 
+import { REVIEW_STATUS_FA } from "./labels";
 import type { ReviewStatus } from "./types";
 
-const STATUS = {
-  pending: {
-    label: "در انتظار بازبینی",
-    className:
-      "bg-amber-500/10 text-amber-600 ring-amber-500/20 dark:text-amber-400",
-    dot: "bg-amber-500",
-  },
-  approved: {
-    label: "تأییدشده",
-    className:
-      "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400",
-    dot: "bg-emerald-500",
-  },
-  rejected: {
-    label: "ردشده",
-    className: "bg-destructive/10 text-destructive ring-destructive/20",
-    dot: "bg-destructive",
-  },
-} satisfies Record<
-  ReviewStatus,
-  { label: string; className: string; dot: string }
->;
+const STATUS: Record<ReviewStatus, BadgeSemantic> = {
+  pending: { tone: "warning" },
+  approved: { tone: "success" },
+  rejected: { variant: "destructive" },
+};
 
 export function ReviewStatusBadge({ status }: { status: ReviewStatus }) {
-  const config = STATUS[status];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
-        config.className,
-      )}
-    >
-      <span className={cn("size-1.5 rounded-full", config.dot)} aria-hidden />
-      {config.label}
-    </span>
+    <Badge {...STATUS[status]} className="gap-1.5 rounded-full">
+      <span className="size-1.5 rounded-full bg-current" aria-hidden />
+      {REVIEW_STATUS_FA[status]}
+    </Badge>
   );
 }

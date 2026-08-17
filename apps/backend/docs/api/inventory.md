@@ -11,12 +11,12 @@ See [Authentication](../authentication.md) for the token model and trust tiers, 
 | Method | Path | Tier | Description |
 |--------|------|------|-------------|
 | GET | `/admin/inventory` | 🛡️ admin | List inventory records |
-| GET | `/admin/inventory/low-stock` | 🛡️ admin | Records at/below reorder point |
+| GET | `/admin/inventory/low-stock` | 🛡️ admin | Records at/below reorder point (paginated) |
 | GET | `/admin/inventory/movements` | 🛡️ admin | List the movement ledger |
 | GET | `/admin/inventory/variants/:variantID` | 🛡️ admin | Get a variant's inventory |
 | POST | `/admin/inventory/variants/:variantID/adjust` | 🛡️ admin | Adjust stock (record a movement) |
 | PATCH | `/admin/inventory/variants/:variantID/reorder` | 🛡️ admin | Update reorder thresholds |
-| GET | `/admin/inventory/variants/:variantID/movements` | 🛡️ admin | A variant's movement history |
+| GET | `/admin/inventory/variants/:variantID/movements` | 🛡️ admin | A variant's movement history (paginated) |
 
 `stock_on_hand` is physical stock and `available_stock` is always derived as
 `stock_on_hand - committed_stock`. Reserving an order changes only
@@ -93,9 +93,31 @@ GET /admin/inventory/low-stock
 Authorization: Bearer <admin access_token>
 ```
 
-Convenience read for everything at or below its reorder point. Not paginated.
+Convenience read for everything at or below its reorder point. Accepts the same
+standard pagination/sorting as [list inventory](#list-inventory) (default
+`limit` 20, max 100). Default sort is `available_stock asc` so the most urgent
+rows come first.
 
-**Response** `200 OK` — `data` array of `InventoryResponse`. **Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`.
+**Response** `200 OK` — paginated `results` of `InventoryResponse`:
+
+```json
+{
+  "results": [
+    {
+      "id": 7,
+      "product_variant_id": 312,
+      "product_id": 31,
+      "product_title": "Test Bottle",
+      "sku": "SKU-312",
+      "available_stock": 4,
+      "reorder_point": 10
+    }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total_items": 1, "total_pages": 1, "has_next": false, "has_prev": false }
+}
+```
+
+**Errors:** `400 INVALID_QUERY`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`.
 
 ---
 
@@ -227,8 +249,11 @@ GET /admin/inventory/variants/:variantID/movements
 Authorization: Bearer <admin access_token>
 ```
 
-Returns the full movement ledger for one variant. Not paginated.
+Returns the movement ledger for one variant. Accepts the same standard
+pagination/sorting as [list movements](#list-movements) (default `limit` 20,
+max 100). Default sort is `created_at desc`. A missing variant is `404`.
 
-**Response** `200 OK` — `data` array of `InventoryMovementResponse` (same shape as the movements list above).
+**Response** `200 OK` — paginated `results` of `InventoryMovementResponse` (same
+shape as the movements list above).
 
-**Errors:** `400 INVALID_PARAMS`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `404 NOT_FOUND`.
+**Errors:** `400 INVALID_PARAMS`, `400 INVALID_QUERY`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `404 NOT_FOUND`.

@@ -91,11 +91,14 @@ type TopUpReq struct {
 
 // TopUpResponse is the pending gateway intent for the customer (PH-041a).
 type TopUpResponse struct {
-	PaymentID     int64   `json:"payment_id"`
-	TransactionID string  `json:"transaction_id"`
-	Amount        string  `json:"amount"`
-	Currency      string  `json:"currency"`
-	Status        string  `json:"status"`
+	PaymentID     int64  `json:"payment_id"`
+	TransactionID string `json:"transaction_id"`
+	Amount        string `json:"amount"`
+	Currency      string `json:"currency"`
+	Status        string `json:"status"`
+	// PaymentURL is {PAYMENT_START_BASE_URL}?transaction_id={id}. Empty when
+	// the base is unset (dev only).
+	PaymentURL string `json:"payment_url"`
 }
 
 // AdminCreditReq is the body for POST /admin/users/:userID/wallet/credit.

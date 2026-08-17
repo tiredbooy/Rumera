@@ -12,7 +12,7 @@ import (
 
 type Cart struct {
 	ID        int64     `db:"id"`
-	UserID    *int64    `db:"user_id"` // nullable — guest carts have no user
+	UserID    *int64    `db:"user_id"` // UNIQUE NOT NULL — one cart per authenticated user (no guests)
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
 }

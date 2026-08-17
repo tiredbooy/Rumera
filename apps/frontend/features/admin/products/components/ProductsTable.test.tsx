@@ -52,42 +52,24 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuSeparator: () => null,
 }));
 
-vi.mock("@/features/admin/analytics/components/DataTable", () => ({
-  DataTable: ({
-    rows,
-    columns,
-  }: {
-    rows: Array<{ id: number; title: string }>;
-    columns: Array<{
-      id: string;
-      cell: (row: { id: number; title: string }) => unknown;
-    }>;
-  }) => {
-    const actions = columns.find((c) => c.id === "actions");
-    return (
-      <ul>
-        {rows.map((row) => (
-          <li key={row.id}>
-            <span>{row.title}</span>
-            {actions?.cell(row) as never}
-          </li>
-        ))}
-      </ul>
-    );
-  },
-}));
+import type { ProductListItem } from "@/features/catalog/products/types";
 
 import { ProductsTable } from "./ProductsTable";
 
-const product = {
+const product: ProductListItem = {
   id: 12,
   title: "ویسکی تست",
   brand: "Test",
-  min_price: "1000",
-  max_price: "1000",
+  min_price: 1000,
+  max_price: 1000,
   is_active: true,
   slug: "test-whisky",
-} as never;
+  weight: 1,
+  image_response: null,
+  active_variant_count: 1,
+  available_variant_count: 1,
+  available_stock: 0,
+};
 
 afterEach(cleanup);
 
@@ -97,15 +79,77 @@ beforeEach(() => {
 });
 
 describe("ProductsTable", () => {
-  it("does not offer a sample duplicate control", () => {
+  it("offers a duplicate control that seeds the create form", () => {
     render(<ProductsTable products={[product]} canWrite />);
+    const duplicates = screen.getAllByRole("link", { name: /تکثیر/ });
+    expect(duplicates.length).toBeGreaterThan(0);
+    expect(duplicates[0]).toHaveAttribute(
+      "href",
+      "/admin/products/new?from=12",
+    );
+  });
+
+  it("renders the thumbnail, stock and variant count already on the payload", () => {
+    render(
+      <ProductsTable
+        products={[
+          {
+            ...product,
+            available_stock: 24,
+            active_variant_count: 3,
+            image_response: {
+              id: 1,
+              image_url: "/media/whisky.jpg",
+              sort_order: 0,
+              is_primary: true,
+            },
+          },
+        ]}
+        canWrite
+      />,
+    );
+
+    expect(
+      document.querySelectorAll('img[src="/media/whisky.jpg"]').length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("۲۴").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("۳ تنوع").length).toBeGreaterThan(0);
+  });
+
+  it("does not present client search as the catalogue", () => {
+    render(<ProductsTable products={[product]} canWrite />);
+    expect(
+      screen.queryByPlaceholderText("جستجوی محصول یا برند…"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("وزن ارسال")).not.toBeInTheDocument();
+  });
+
+  it("scopes the missing-weight banner to the current page", () => {
+    render(
+      <ProductsTable
+        products={[{ ...product, weight: undefined }]}
+        canWrite
+      />,
+    );
+    expect(
+      screen.getByRole("status"),
+    ).toHaveTextContent("در این صفحه");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "فقط ردیف‌های همین صفحه",
+    );
+  });
+
+  it("hides delete and duplicate without PRODUCTS_WRITE", () => {
+    render(<ProductsTable products={[product]} canWrite={false} />);
+    expect(screen.queryByText("حذف")).not.toBeInTheDocument();
     expect(screen.queryByText("تکثیر")).not.toBeInTheDocument();
-    expect(screen.getByText("حذف")).toBeInTheDocument();
+    expect(screen.getAllByText("ویرایش").length).toBeGreaterThan(0);
   });
 
   it("requires confirmation and calls the real delete action", async () => {
     render(<ProductsTable products={[product]} canWrite />);
-    fireEvent.click(screen.getByText("حذف"));
+    fireEvent.click(screen.getAllByText("حذف")[0]!);
 
     expect(mocks.deleteProduct).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "حذف محصول" }));
@@ -124,7 +168,7 @@ describe("ProductsTable", () => {
     });
 
     render(<ProductsTable products={[product]} canWrite />);
-    fireEvent.click(screen.getByText("حذف"));
+    fireEvent.click(screen.getAllByText("حذف")[0]!);
     fireEvent.click(screen.getByRole("button", { name: "حذف محصول" }));
 
     await waitFor(() =>

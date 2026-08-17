@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/tiredbooy/internal/models"
-		"github.com/tiredbooy/pkg/apperr"
+	"github.com/tiredbooy/pkg/apperr"
 )
 
 type Service struct {

@@ -16,7 +16,7 @@ Shopper product discovery + admin search analytics.
 - Engine today: [[Search Backend]] — Persian-aware Postgres ILIKE (PH-030a)
   - Matches title / description / brand / category after normalize
   - Confusables: `ك/ي` → `ک/ی`; ZWNJ + whitespace stripped
-- Analytics rollups for merchandising
+- Analytics rollups for merchandising (`search_performed` on `GET /products?search=`, PR-070d)
 - Meili: **PH-030b readiness** (`MEILI_ENABLED` + reindex cron); not live query authority
 
 Related: [[Catalogue]] · [[Analytics]] · [[ADR Search ILIKE until Meili]] · [[Journey Search to PDP]]

@@ -53,6 +53,15 @@ components/optimized-image.tsx    # legacy/optimized wrapper if still referenced
 | `NEXT_PUBLIC_API_URL` | Fallback origin in local split setups |
 | _(empty)_ | Same-origin `/media/...` behind nginx/proxy |
 
+Those two origins also become `images.remotePatterns` in
+[`next.config.ts`](../../next.config.ts) (hostname + protocol + port; no `**`).
+Empty env → empty allow-list (same-origin `/media` via nginx). The list is
+evaluated when Next loads the config (`next build` / `next dev`); a split-origin
+CDN must be present as a build-time env, not only at container runtime.
+
+Storefront `SmartImage` / `OptimizedImage` already use a raw `<img>` for
+`/media` and absolute `http(s)` URLs, so they do not depend on the optimizer.
+
 **Production:** a *configured* media/API origin must be `https://` (or empty for
 same-origin). Absolute content URLs already in the DB are not rewritten.
 

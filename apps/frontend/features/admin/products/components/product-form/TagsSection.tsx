@@ -3,7 +3,7 @@
 import { Tags } from "lucide-react";
 import { useWatch, type Control, type FieldErrors } from "react-hook-form";
 
-import type { ProductTag } from "@/features/catalog/tags/types";
+import type { ProductTag, Tag } from "@/features/catalog/tags/types";
 import type { ProductFormValues } from "../../validations";
 import { FormSection } from "./FormLayout";
 import { TagSelector } from "./TagSelector";
@@ -11,11 +11,13 @@ import { TagSelector } from "./TagSelector";
 export function TagsSection({
   control,
   errors,
+  tags,
   initialTags,
   disabled,
 }: {
   control: Control<ProductFormValues>;
   errors: FieldErrors<ProductFormValues>;
+  tags?: Tag[];
   initialTags?: ProductTag[];
   disabled?: boolean;
 }) {
@@ -39,6 +41,7 @@ export function TagsSection({
     >
       <TagSelector
         control={control}
+        availableTags={tags}
         initialTags={initialTags}
         disabled={disabled}
         error={typeof error === "string" ? error : undefined}

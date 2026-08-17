@@ -46,6 +46,7 @@ vi.mock("@/features/customers/client", () => {
 });
 
 import { AdminCustomerApiError } from "@/features/customers/client";
+import { toJalali } from "@/lib/datetime/jalali";
 import { UserCreateForm } from "./UserCreateForm";
 
 afterEach(() => {
@@ -96,9 +97,13 @@ describe("UserCreateForm", () => {
     fireEvent.change(screen.getByLabelText("تلفن"), {
       target: { value: "۰۹۱۲۳۴۵۶۷۸۹" },
     });
+    const born = toJalali(1995, 2, 3);
     fireEvent.change(screen.getByLabelText("تاریخ تولد"), {
-      target: { value: "1995-02-03" },
+      target: {
+        value: `${born.jy}/${String(born.jm).padStart(2, "0")}/${String(born.jd).padStart(2, "0")}`,
+      },
     });
+    fireEvent.blur(screen.getByLabelText("تاریخ تولد"));
     fireEvent.change(screen.getByLabelText("جنسیت"), {
       target: { value: "female" },
     });

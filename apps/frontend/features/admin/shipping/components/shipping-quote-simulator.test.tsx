@@ -45,6 +45,13 @@ describe("ShippingQuoteSimulator", () => {
     );
   });
 
+  it("does not name an HTTP endpoint or the word API", () => {
+    render(<ShippingQuoteSimulator defaultRegion="IR-TEH" />);
+    expect(screen.getByText(/نرخ‌های زندهٔ تسویه حساب/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("/shipping/available");
+    expect(document.body.textContent).not.toMatch(/\bAPI\b/);
+  });
+
   it("submits region, weight, and subtotal to the available-methods hook", () => {
     mocks.useShippingMethods.mockReturnValue({
       isLoading: false,
@@ -80,5 +87,25 @@ describe("ShippingQuoteSimulator", () => {
       true,
     );
     expect(screen.getByText("پست")).toBeInTheDocument();
+  });
+
+  it("explains a quote failure without naming the API", () => {
+    mocks.useShippingMethods.mockReturnValue({
+      isLoading: false,
+      isError: true,
+      isSuccess: false,
+      isFetching: false,
+      data: undefined,
+      refetch: vi.fn(),
+    });
+
+    render(<ShippingQuoteSimulator defaultRegion="IR-TEH" />);
+    fireEvent.click(screen.getByRole("button", { name: "محاسبه از سرور" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "دریافت نرخ ارسال ناموفق بود",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("اتصال برقرار نشد");
+    expect(screen.getByRole("alert").textContent).not.toMatch(/\bAPI\b/);
   });
 });

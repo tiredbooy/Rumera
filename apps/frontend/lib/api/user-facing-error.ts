@@ -161,8 +161,12 @@ const CODE_COPY: Record<string, { title: string; description?: string }> = {
   INVALID_JSON: { title: "درخواست نامعتبر است" },
   INVALID_REQUEST: { title: "درخواست نامعتبر است" },
   CONFLICT: {
-    title: "تداخل در ثبت اطلاعات",
-    description: "صفحه را تازه کنید و دوباره تلاش کنید.",
+    title: "این مقدار قبلاً ثبت شده است",
+    description: "کد، نامک یا شناسه را عوض کنید و دوباره ذخیره کنید.",
+  },
+  DUPLICATE_ENTRY: {
+    title: "این مقدار قبلاً ثبت شده است",
+    description: "کد، نامک یا شناسه را عوض کنید و دوباره ذخیره کنید.",
   },
   IDEMPOTENCY_CONFLICT: {
     title: "درخواست تکراری با محتوای متفاوت",
@@ -188,6 +192,80 @@ const CODE_COPY: Record<string, { title: string; description?: string }> = {
 
 function isPersian(text: string): boolean {
   return /[\u0600-\u06FF]/.test(text);
+}
+
+const MESSAGE_COPY: Record<string, string> = {
+  "resource already exists":
+    "این مقدار قبلاً ثبت شده است. کد، نامک یا شناسه را عوض کنید.",
+  "a record with this value already exists":
+    "این مقدار قبلاً ثبت شده است. مقدار دیگری انتخاب کنید.",
+  "coupon code is already used by another coupon":
+    "این کد تخفیف قبلاً ثبت شده است. کد دیگری انتخاب کنید.",
+  "slug is already used by another journal post":
+    "این نامک قبلاً برای نوشتهٔ دیگری استفاده شده است.",
+  "slug is already used by another product":
+    "این نامک برای محصول دیگری استفاده شده است.",
+  "code is already used by another product":
+    "این کد برای محصول دیگری استفاده شده است.",
+  "sku is already used by another variant": "این SKU قبلاً استفاده شده است.",
+  "sku must be unique": "SKU هر تنوع باید یکتا باشد.",
+  "option combination is already used by another variant":
+    "این ترکیب ویژگی قبلاً برای تنوع دیگری استفاده شده است.",
+  "option combination must be unique": "ترکیب ویژگی هر تنوع باید یکتا باشد.",
+  "must be greater than price":
+    "قیمت پیش از تخفیف باید بیشتر از قیمت فروش باشد",
+  "staged upload is missing or invalid":
+    "فایل آماده‌شده در دسترس نیست؛ تصویر در تلاش بعدی دوباره بارگذاری می‌شود.",
+  "external image url is invalid": "نشانی تصویر خارجی معتبر نیست.",
+  "exactly one product image must be primary":
+    "دقیقاً یک تصویر باید به‌عنوان تصویر اصلی انتخاب شود.",
+  "image does not belong to this product": "این تصویر متعلق به محصول نیست.",
+  "image is already attached": "این تصویر قبلاً به محصول متصل شده است.",
+  "one or more removed variants are still in use":
+    "یک یا چند تنوع حذف‌شده دارای موجودی یا سابقهٔ عملیاتی هستند.",
+  "variant does not belong to this product": "این تنوع متعلق به محصول نیست.",
+  "only one value from each option type may be selected":
+    "از هر نوع ویژگی فقط یک مقدار انتخاب کنید.",
+  "one or more option values do not exist":
+    "یک یا چند مقدار ویژگی دیگر در دسترس نیست.",
+  "one or more tags do not exist": "یک یا چند برچسب دیگر در دسترس نیست.",
+  "category does not exist": "دسته‌بندی انتخاب‌شده در دسترس نیست.",
+  "brand does not exist": "برند انتخاب‌شده در دسترس نیست.",
+  "product changed after this editor was loaded":
+    "محصول پس از باز شدن این فرم تغییر کرده است؛ صفحه را تازه‌سازی کنید.",
+  "validation failed": "اطلاعات واردشده نامعتبر است",
+  "must be valid": "این مقدار معتبر نیست",
+};
+
+function normalizeMessageKey(message: string): string {
+  return message.trim().replace(/\.+$/, "").toLowerCase();
+}
+
+/** Translate a server message (envelope or field) into Persian when known. */
+export function localizeApiText(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) return "";
+  if (isPersian(trimmed)) return trimmed;
+  const exact = MESSAGE_COPY[normalizeMessageKey(trimmed)];
+  if (exact) return exact;
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("already used") && lower.includes("coupon")) {
+    return "این کد تخفیف قبلاً ثبت شده است. کد دیگری انتخاب کنید.";
+  }
+  if (lower.includes("already used") && lower.includes("slug")) {
+    return "این نامک قبلاً استفاده شده است. نامک دیگری انتخاب کنید.";
+  }
+  if (lower.includes("already used") && lower.includes("sku")) {
+    return "این SKU قبلاً استفاده شده است.";
+  }
+  if (lower.includes("already used") && lower.includes("code")) {
+    return "این کد قبلاً ثبت شده است. کد دیگری انتخاب کنید.";
+  }
+  if (lower.includes("already used") || lower.includes("already exists")) {
+    return "این مقدار قبلاً ثبت شده است. مقدار دیگری انتخاب کنید.";
+  }
+  if (isGenericEnglishMessage(trimmed)) return "";
+  return "";
 }
 
 function isGenericEnglishMessage(message: string): boolean {
@@ -250,33 +328,38 @@ export function describeApiError(
       : undefined;
 
   const copy = mapped ?? couponFamily;
+  const localizedMessage = localizeApiText(rawMessage);
 
   let title = fallback;
   let description: string | undefined;
 
   if (preferCodeMap && copy) {
-    title = copy.title;
-    description = copy.description;
-    // Enrich with safe server detail when useful and not redundant.
+    title = localizedMessage || copy.title;
+    description =
+      localizedMessage && localizedMessage !== copy.title
+        ? copy.description
+        : copy.description;
     if (
-      rawMessage &&
-      !isGenericEnglishMessage(rawMessage) &&
-      rawMessage !== title &&
-      rawMessage !== description
+      localizedMessage &&
+      localizedMessage !== copy.title &&
+      (code === "CONFLICT" ||
+        code === "DUPLICATE_ENTRY" ||
+        code === "VALIDATION_ERROR")
     ) {
-      if (isPersian(rawMessage)) {
-        description = rawMessage;
-      } else if (!description && rawMessage.length <= 160) {
-        description = rawMessage;
-      }
+      title = localizedMessage;
     }
-  } else if (rawMessage && !isGenericEnglishMessage(rawMessage)) {
-    if (isPersian(rawMessage) || !copy) {
-      title = rawMessage;
-    } else {
-      title = copy.title;
-      description = copy.description;
+    if (
+      !localizedMessage &&
+      rawMessage &&
+      isPersian(rawMessage) &&
+      rawMessage !== title
+    ) {
+      description = rawMessage;
     }
+  } else if (localizedMessage) {
+    title = localizedMessage;
+  } else if (rawMessage && isPersian(rawMessage)) {
+    title = rawMessage;
   } else if (copy) {
     title = copy.title;
     description = copy.description;
@@ -291,10 +374,19 @@ export function describeApiError(
     description = "فیلدهای مشخص‌شده را اصلاح کنید.";
   }
 
+  const fieldErrors = extracted.fields
+    ? Object.fromEntries(
+        Object.entries(extracted.fields).map(([field, messages]) => [
+          field,
+          messages.map((message) => localizeApiText(message) || message),
+        ]),
+      )
+    : undefined;
+
   return {
     title,
     description,
-    fieldErrors: extracted.fields,
+    fieldErrors,
     code,
     status: extracted.status,
   };

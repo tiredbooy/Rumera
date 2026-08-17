@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -249,7 +250,27 @@ func (s *Service) Withdraw(ctx context.Context, userID int64, amount float64, or
 	return wtx, nil
 }
 
+// Purchase debits the wallet for an order in its own transaction.
+// Prefer PurchaseTx when the caller already holds the order TX.
 func (s *Service) Purchase(ctx context.Context, userID int64, amount float64, orderID int64) (wtx *Transaction, err error) {
+	tx, err := s.repo.BeginTx(ctx)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	defer utils.RollbackOnErr(ctx, tx, &err)
+
+	if err = s.PurchaseTx(ctx, tx, userID, amount, orderID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, apperr.ErrInternal
+	}
+	return &Transaction{Type: TransactionTypePurchase, Amount: amount}, nil
+}
+
+// PurchaseTx debits the wallet on a caller-owned transaction (order checkout).
+// Does not begin or commit. Insufficient funds → apperr.ErrInsufficientFunds.
+func (s *Service) PurchaseTx(ctx context.Context, tx pgx.Tx, userID int64, amount float64, orderID int64) (err error) {
 	ctx, endSpan := tracing.Start(ctx, "wallet.Purchase", tracing.Int64("wallet.user_id", userID))
 	defer func() {
 		if err != nil {
@@ -261,39 +282,42 @@ func (s *Service) Purchase(ctx context.Context, userID int64, amount float64, or
 	}()
 
 	if userID <= 0 {
-		return nil, apperr.ErrAccessDenied
+		return apperr.ErrAccessDenied
 	}
 	if amount <= 0 || orderID <= 0 {
-		return nil, apperr.ErrInvalidRequest
+		return apperr.ErrInvalidRequest
+	}
+	if tx == nil {
+		return apperr.ErrInternal
 	}
 
 	wallet, err := s.repo.GetByUserID(ctx, userID)
 	if err != nil {
 		if utils.IsNotFound(err) {
-			return nil, apperr.ErrNotFound
+			return apperr.ErrNotFound
 		}
-		return nil, apperr.ErrInternal
+		return apperr.ErrInternal
 	}
 
-	tx, err := s.repo.BeginTx(ctx)
-	if err != nil {
-		return nil, apperr.ErrInternal
-	}
-	defer utils.RollbackOnErr(ctx, tx, &err)
-
-	wtx, err = s.repo.Purchase(ctx, tx, wallet.ID, amount, orderID)
-	if err != nil {
+	if _, err = s.repo.Purchase(ctx, tx, wallet.ID, amount, orderID); err != nil {
 		if utils.IsInsufficientFunds(err) {
-			return nil, apperr.ErrInsufficientFunds
+			return apperr.ErrInsufficientFunds
 		}
-		return nil, apperr.ErrInternal
+		return apperr.ErrInternal
 	}
+	return nil
+}
 
-	if err = tx.Commit(ctx); err != nil {
-		return nil, apperr.ErrInternal
+// AvailableBalance is a cheap pre-debit peek for checkout. No wallet → 0.
+func (s *Service) AvailableBalance(ctx context.Context, userID int64) (float64, error) {
+	wallet, err := s.GetByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, apperr.ErrNotFound) {
+			return 0, nil
+		}
+		return 0, err
 	}
-
-	return wtx, nil
+	return wallet.Balance, nil
 }
 
 func (s *Service) Refund(ctx context.Context, userID int64, amount float64, orderID int64) (*Transaction, error) {

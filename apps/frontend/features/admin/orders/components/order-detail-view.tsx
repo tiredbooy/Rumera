@@ -2,7 +2,17 @@ import "server-only";
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Receipt } from "lucide-react";
+import type { ReactNode } from "react";
+import {
+  ArrowRight,
+  CreditCard,
+  Gift,
+  MapPin,
+  Receipt,
+  Truck,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,12 +27,23 @@ import { PageHeader } from "@/features/dashboard/components/page-header";
 import { getAdminOrder } from "@/features/orders/api/admin";
 import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
 import { PAYMENT_FA } from "@/features/orders/labels";
-import type { Order } from "@/features/orders/types";
+import { PAYMENT_STATUS_FA } from "@/features/payments/presentation";
+import type { PaymentStatus } from "@/features/payments/types";
 import { ApiError } from "@/lib/api/client";
 import { faNum, formatPrice } from "@/lib/products";
 import { faDate } from "@/lib/utils/date";
 
+import { buildOrderTimeline } from "../order-timeline";
+import type {
+  AdminOrder,
+  AdminOrderPaymentSummary,
+  AdminOrderShipTo,
+  AdminOrderShippingMethod,
+  AdminOrderUser,
+} from "../types";
 import { OrderActions } from "./OrderActions";
+
+const MISSING = "ثبت نشده";
 
 export async function OrderDetailView({
   orderId,
@@ -31,13 +52,16 @@ export async function OrderDetailView({
   orderId: number;
   canWrite: boolean;
 }) {
-  let order: Order;
+  let order: AdminOrder;
   try {
-    order = await getAdminOrder(orderId);
+    order = (await getAdminOrder(orderId)) as AdminOrder;
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) notFound();
     throw error;
   }
+
+  const shipTo = order.ship_to ?? order.address ?? null;
+  const payment = paymentSummary(order);
 
   return (
     <>
@@ -71,8 +95,11 @@ export async function OrderDetailView({
       />
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <OrderStatusBadge status={order.status} />
+          <span className="font-serif text-2xl text-foil tabular-nums">
+            {formatPrice(order.total_amount)}
+          </span>
           <span className="text-sm text-muted-foreground">
             {PAYMENT_FA[order.payment_method]}
           </span>
@@ -84,7 +111,11 @@ export async function OrderDetailView({
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="mb-6">
+        <OrderTimelineCard order={order} />
+      </div>
+
+      <div className="mb-6 grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
             <Table>
@@ -143,7 +174,7 @@ export async function OrderDetailView({
                 </div>
               ) : null}
               {order.discount_amount ? (
-                <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                <div className="flex justify-between text-success">
                   <dt>تخفیف</dt>
                   <dd>−{formatPrice(order.discount_amount)}</dd>
                 </div>
@@ -157,33 +188,410 @@ export async function OrderDetailView({
         </div>
 
         <div className="flex flex-col gap-6">
-          <div className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-              <Receipt className="size-4 text-muted-foreground" /> خلاصهٔ سفارش
-            </div>
+          <SideCard title="خلاصهٔ سفارش" icon={Receipt}>
             <dl className="space-y-2.5 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <dt className="text-muted-foreground">وضعیت</dt>
-                <dd>
-                  <OrderStatusBadge status={order.status} />
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <dt className="text-muted-foreground">روش پرداخت</dt>
-                <dd>{PAYMENT_FA[order.payment_method]}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <dt className="text-muted-foreground">تاریخ ثبت</dt>
-                <dd dir="ltr">{faDate(order.created_at)}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <dt className="text-muted-foreground">تعداد اقلام</dt>
-                <dd className="tabular-nums">{faNum(order.items.length)}</dd>
-              </div>
+              <DetailRow label="وضعیت">
+                <OrderStatusBadge status={order.status} />
+              </DetailRow>
+              <DetailRow label="روش پرداخت">
+                {PAYMENT_FA[order.payment_method]}
+              </DetailRow>
+              <DetailRow label="روش ارسال">
+                <ShippingMethodValue
+                  method={order.shipping_method}
+                  fallbackId={order.shipping_method_id}
+                />
+              </DetailRow>
+              <DetailRow label="کوپن">
+                <TextValue
+                  value={order.coupon?.code ?? order.coupon_code}
+                  dir="ltr"
+                />
+              </DetailRow>
+              <DetailRow label="تاریخ ثبت">
+                <span dir="ltr">{faDate(order.created_at)}</span>
+              </DetailRow>
+              <DetailRow label="تعداد اقلام">
+                <span className="tabular-nums">{faNum(order.items.length)}</span>
+              </DetailRow>
             </dl>
-          </div>
+          </SideCard>
+
+          <PaymentSummaryCard
+            payment={payment}
+            amount={order.total_amount}
+            paidAt={order.paid_at}
+          />
         </div>
       </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <BuyerCard user={order.user} userId={order.user_id} />
+        <ShipToCard shipTo={shipTo} />
+      </div>
+
+      {hasFulfillmentExtras(order) ? (
+        <div className="mt-6">
+          <FulfillmentExtrasCard order={order} />
+        </div>
+      ) : null}
     </>
   );
+}
+
+function OrderTimelineCard({ order }: { order: AdminOrder }) {
+  const events = buildOrderTimeline(order);
+  return (
+    <SideCard title="روند سفارش" icon={Receipt}>
+      <ol className="space-y-3">
+        {events.map((event) => (
+          <li key={event.key} className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <span
+                className={
+                  event.current
+                    ? "mt-1 size-2 shrink-0 rounded-full bg-primary"
+                    : "mt-1 size-2 shrink-0 rounded-full bg-muted-foreground/40"
+                }
+                aria-hidden
+              />
+              <span className={event.current ? "font-medium" : undefined}>
+                {event.label}
+              </span>
+            </div>
+            {event.at ? (
+              <time
+                className="shrink-0 text-sm text-muted-foreground"
+                dateTime={event.at}
+                dir="ltr"
+              >
+                {faDate(event.at)}
+              </time>
+            ) : (
+              <span className="text-sm text-muted-foreground">اکنون</span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </SideCard>
+  );
+}
+
+function BuyerCard({
+  user,
+  userId,
+}: {
+  user?: AdminOrderUser | null;
+  userId?: number;
+}) {
+  const name = joinName(user?.first_name, user?.last_name);
+  const numericId = user?.id || userId;
+  const publicId = present(user?.user_id);
+
+  return (
+    <SideCard title="خریدار" icon={UserRound}>
+      <dl className="space-y-2.5 text-sm">
+        <DetailRow label="نام">
+          <TextValue value={name} />
+        </DetailRow>
+        <DetailRow label="تلفن">
+          <TextValue value={user?.phone} dir="ltr" />
+        </DetailRow>
+        <DetailRow label="شناسه کاربر">
+          {numericId ? (
+            <span className="tabular-nums" dir="ltr">
+              {faNum(numericId)}
+            </span>
+          ) : (
+            <Missing />
+          )}
+        </DetailRow>
+        <DetailRow label="شناسه عمومی">
+          {publicId ? (
+            <Link
+              href={`/admin/customers/${publicId}`}
+              className="break-all underline-offset-4 hover:underline"
+              dir="ltr"
+            >
+              {publicId}
+            </Link>
+          ) : (
+            <Missing />
+          )}
+        </DetailRow>
+        <DetailRow label="ایمیل">
+          <TextValue value={user?.email} dir="ltr" />
+        </DetailRow>
+      </dl>
+    </SideCard>
+  );
+}
+
+function ShipToCard({ shipTo }: { shipTo: AdminOrderShipTo | null }) {
+  return (
+    <SideCard title="نشانی ارسال" icon={MapPin}>
+      {/* Snapshot from place-order — live address book can change after. */}
+      <dl className="space-y-2.5 text-sm">
+        <DetailRow label="نام">
+          <TextValue value={shipTo?.full_name} />
+        </DetailRow>
+        <DetailRow label="تلفن">
+          <TextValue value={shipTo?.phone_number} dir="ltr" />
+        </DetailRow>
+        <DetailRow label="نشانی">
+          <TextValue value={streetLine(shipTo)} />
+        </DetailRow>
+        <DetailRow label="شهر">
+          <TextValue value={shipTo?.city} />
+        </DetailRow>
+        <DetailRow label="استان">
+          <TextValue value={shipTo?.state_province} />
+        </DetailRow>
+        <DetailRow label="کد پستی">
+          <TextValue value={shipTo?.postal_code} dir="ltr" />
+        </DetailRow>
+        <DetailRow label="کشور">
+          <TextValue value={shipTo?.country} dir="ltr" />
+        </DetailRow>
+      </dl>
+    </SideCard>
+  );
+}
+
+function FulfillmentExtrasCard({ order }: { order: AdminOrder }) {
+  const giftMessage = present(order.gift_message);
+  const notes = present(order.notes);
+  const scheduled = present(order.scheduled_delivery_date);
+  const addons = (order.gift_addons ?? []).filter((addon) =>
+    present(addon.label),
+  );
+
+  return (
+    <SideCard title="هدیه و یادداشت" icon={Gift}>
+      <dl className="space-y-3 text-sm">
+        {order.is_gift ? <DetailRow label="سفارش هدیه">بله</DetailRow> : null}
+        {giftMessage ? (
+          <StackedDetail label="پیام هدیه">«{giftMessage}»</StackedDetail>
+        ) : null}
+        {addons.length > 0 ? (
+          <div className="space-y-1">
+            <dt className="text-muted-foreground">بسته‌بندی و افزونه‌ها</dt>
+            <dd>
+              <ul className="space-y-1">
+                {addons.map((addon) => (
+                  <li
+                    key={addon.id}
+                    className="flex items-start justify-between gap-3"
+                  >
+                    <span>{addon.label}</span>
+                    <span className="tabular-nums">
+                      {addon.price > 0 ? formatPrice(addon.price) : "رایگان"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        ) : null}
+        {scheduled ? (
+          <DetailRow label="تاریخ ترجیحی تحویل">
+            <span dir="ltr">{faDate(scheduled)}</span>
+          </DetailRow>
+        ) : null}
+        {notes ? <StackedDetail label="یادداشت">{notes}</StackedDetail> : null}
+      </dl>
+    </SideCard>
+  );
+}
+
+function PaymentSummaryCard({
+  payment,
+  amount,
+  paidAt,
+}: {
+  payment: AdminOrderPaymentSummary | null;
+  amount: number;
+  paidAt?: string;
+}) {
+  return (
+    <SideCard title="خلاصهٔ پرداخت" icon={CreditCard}>
+      <dl className="space-y-2.5 text-sm">
+        <DetailRow label="مبلغ">{formatPrice(amount)}</DetailRow>
+        <DetailRow label="تاریخ پرداخت">
+          {paidAt ? (
+            <span dir="ltr">{faDate(paidAt)}</span>
+          ) : (
+            <Missing />
+          )}
+        </DetailRow>
+        {payment ? (
+          <>
+            <DetailRow label="شناسه تراکنش">
+              {payment.id ? (
+                <Link
+                  href={`/admin/payments/${payment.id}`}
+                  className="tabular-nums underline-offset-4 hover:underline"
+                >
+                  #{faNum(payment.id)}
+                </Link>
+              ) : (
+                <Missing />
+              )}
+            </DetailRow>
+            <DetailRow label="شناسه درگاه">
+              <TextValue value={payment.transaction_id} dir="ltr" />
+            </DetailRow>
+            <DetailRow label="وضعیت تراکنش">
+              <TextValue value={paymentStatusLabel(payment.status)} />
+            </DetailRow>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            تراکنش پرداختی ثبت نشده است
+          </p>
+        )}
+      </dl>
+    </SideCard>
+  );
+}
+
+function ShippingMethodValue({
+  method,
+  fallbackId,
+}: {
+  method?: AdminOrderShippingMethod | null;
+  fallbackId?: number | null;
+}) {
+  const name = present(method?.name);
+  const carrier = present(method?.carrier);
+  if (name || carrier) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <Truck className="size-3.5 text-muted-foreground" aria-hidden />
+        {[name, carrier].filter(Boolean).join(" · ")}
+      </span>
+    );
+  }
+  const id = method?.id || fallbackId;
+  if (id) {
+    return (
+      <span className="tabular-nums" dir="ltr">
+        #{faNum(id)}
+      </span>
+    );
+  }
+  return <Missing />;
+}
+
+function SideCard({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  children: ReactNode;
+}) {
+  return (
+    <section className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-medium">
+        <Icon className="size-4 text-muted-foreground" aria-hidden />
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-end">{children}</dd>
+    </div>
+  );
+}
+
+function StackedDetail({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="whitespace-pre-wrap break-words">{children}</dd>
+    </div>
+  );
+}
+
+function TextValue({
+  value,
+  dir,
+}: {
+  value?: string | null;
+  dir?: "ltr";
+}) {
+  const text = present(value);
+  if (!text) return <Missing />;
+  return dir ? <span dir={dir}>{text}</span> : text;
+}
+
+function Missing() {
+  return <span className="text-muted-foreground">{MISSING}</span>;
+}
+
+function present(value?: string | null): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function hasFulfillmentExtras(order: AdminOrder): boolean {
+  return (
+    order.is_gift === true ||
+    Boolean(present(order.gift_message)) ||
+    Boolean(order.gift_addons?.some((addon) => present(addon.label))) ||
+    Boolean(present(order.notes)) ||
+    Boolean(present(order.scheduled_delivery_date))
+  );
+}
+
+function joinName(
+  first?: string | null,
+  last?: string | null,
+): string | undefined {
+  const name = [first, last].map(present).filter(Boolean).join(" ").trim();
+  return name || undefined;
+}
+
+function streetLine(shipTo: AdminOrderShipTo | null): string | undefined {
+  if (!shipTo) return undefined;
+  const line = [shipTo.address_line1, shipTo.address_line2]
+    .map(present)
+    .filter(Boolean)
+    .join("، ");
+  return line || undefined;
+}
+
+function paymentSummary(order: AdminOrder): AdminOrderPaymentSummary | null {
+  if (order.payment) return order.payment;
+  if (!order.payment_id && !present(order.transaction_id)) return null;
+  return {
+    id: order.payment_id ?? 0,
+    transaction_id: order.transaction_id ?? "",
+    payment_url: order.payment_url,
+  };
+}
+
+function paymentStatusLabel(status?: string): string | undefined {
+  if (!present(status)) return undefined;
+  return PAYMENT_STATUS_FA[status as PaymentStatus] ?? status;
 }

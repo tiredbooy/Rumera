@@ -18,11 +18,16 @@ import type { ProductFormValues } from "../validations";
 const mocks = vi.hoisted(() => ({
   saveProductAggregate: vi.fn(),
   push: vi.fn(),
+  replace: vi.fn(),
   refresh: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }),
+  useRouter: () => ({
+    push: mocks.push,
+    replace: mocks.replace,
+    refresh: mocks.refresh,
+  }),
 }));
 
 vi.mock("sonner", () => ({

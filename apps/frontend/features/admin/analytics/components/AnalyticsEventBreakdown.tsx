@@ -1,7 +1,9 @@
 import { fetchEventBreakdown } from "@/features/analytics/api";
 import type { EventBreakdown } from "@/features/analytics/types";
+import { CHART_BLUE } from "@/lib/charts/theme";
 import { faNum } from "@/lib/products";
-import { ChartCard, HorizontalBars } from "./Charts";
+import { ChartCard } from "./Charts";
+import { HorizontalBars } from "./dynamic-charts";
 import { AnalyticsErrorState } from "./AnalyticsErrorState";
 
 const EVENT_LABELS: Record<string, string> = {
@@ -58,8 +60,9 @@ export async function AnalyticsEventBreakdown({
       ) : (
         <HorizontalBars
           data={entries}
-          color="oklch(0.62 0.16 250)"
+          color={CHART_BLUE}
           valueFormatter={(v) => faNum(v)}
+          ariaLabel="توزیع انواع رویداد"
         />
       )}
     </ChartCard>

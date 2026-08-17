@@ -5,6 +5,7 @@ import {
   GIFT_CARD_PURCHASE_MIN,
   GIFT_CARD_PURCHASE_PRESETS,
   isValidGiftCardPurchaseAmount,
+  usablePaymentUrl,
 } from "./types";
 
 describe("gift-card purchase amounts (PH-042b)", () => {
@@ -25,5 +26,20 @@ describe("gift-card purchase amounts (PH-042b)", () => {
       false,
     );
     expect(isValidGiftCardPurchaseAmount(Number.NaN)).toBe(false);
+  });
+});
+
+describe("usablePaymentUrl (PR-030c)", () => {
+  it("returns a non-empty API url as-is after trim", () => {
+    const href = "https://pay.example.com/start?transaction_id=gbuy-xyz";
+    expect(usablePaymentUrl(href)).toBe(href);
+    expect(usablePaymentUrl(`  ${href}  `)).toBe(href);
+  });
+
+  it("does not invent a url when the field is missing or blank", () => {
+    expect(usablePaymentUrl(undefined)).toBeUndefined();
+    expect(usablePaymentUrl(null)).toBeUndefined();
+    expect(usablePaymentUrl("")).toBeUndefined();
+    expect(usablePaymentUrl("   ")).toBeUndefined();
   });
 });

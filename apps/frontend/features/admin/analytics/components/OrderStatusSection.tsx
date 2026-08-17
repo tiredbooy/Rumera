@@ -1,11 +1,21 @@
 import { faNum } from "@/lib/products";
-import { ChartCard, DonutChart, DonutLegend } from "./Charts";
+import { ChartCard } from "./Charts";
+import { DonutChart, DonutLegend } from "./dynamic-charts";
 import { fetchRevenueToday } from "@/features/analytics/api";
 import type { DailyRevenueStats } from "@/features/analytics/types";
 
+import { can } from "@/lib/rbac/can";
+import { PERMISSIONS, type Permission } from "@/lib/rbac/permissions";
+
 import { AnalyticsErrorState } from "./AnalyticsErrorState";
 
-export async function OrderStatusSection() {
+export async function OrderStatusSection({
+  permissions,
+}: {
+  permissions: Permission[];
+}) {
+  if (!can({ permissions }, PERMISSIONS.ANALYTICS_READ)) return null;
+
   let today: DailyRevenueStats | null = null;
   let failed = false;
   try {

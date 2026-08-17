@@ -21,6 +21,7 @@ type Repository interface {
 	Delete(ctx context.Context, id int64, userID int64) error
 	GetRatingSummary(ctx context.Context, productID int64) (*ProductRatingSummary, error)
 	React(ctx context.Context, id int64, userID int64, like bool) error
+	Unlike(ctx context.Context, id int64, userID int64) error
 	HasReviewed(ctx context.Context, userID int64, productID int64) (bool, error)
 	HasPurchased(ctx context.Context, userID int64, productID int64) (bool, error)
 	GetMine(ctx context.Context, userID int64) ([]AccountReviewResponse, error)
@@ -141,9 +142,12 @@ func (r *repository) GetAll(ctx context.Context, f ReviewFilter) ([]*Review, int
 		SELECT
 			r.*,
 			COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '') AS user_full_name,
+			COALESCE(p.title, '') AS product_title,
+			p.slug AS product_slug,
 			COUNT(*) OVER() AS total_count
 		FROM reviews r
 		INNER JOIN users u ON u.id = r.user_id
+		LEFT JOIN products p ON p.id = r.product_id
 		WHERE %s
 		ORDER BY %s %s
 		LIMIT @limit OFFSET @offset`,
@@ -171,6 +175,8 @@ func (r *repository) GetAll(ctx context.Context, f ReviewFilter) ([]*Review, int
 			&rev.VerifiedPurchase, &rev.Status,
 			&rev.CreatedAt, &rev.UpdatedAt, &rev.DeletedAt,
 			&userFullName,
+			&rev.ProductTitle,
+			&rev.ProductSlug,
 			&total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("reviewRepository.GetAll scan: %w", err)
@@ -240,9 +246,12 @@ func (r *repository) UpdateStatus(ctx context.Context, id int64, req UpdateRevie
 			RETURNING *
 		)
 		SELECT updated.*,
-			TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS user_full_name
+			TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS user_full_name,
+			COALESCE(p.title, '') AS product_title,
+			p.slug AS product_slug
 		FROM updated
-		INNER JOIN users u ON u.id = updated.user_id`
+		INNER JOIN users u ON u.id = updated.user_id
+		LEFT JOIN products p ON p.id = updated.product_id`
 
 	args := pgx.NamedArgs{
 		"id":     id,
@@ -387,6 +396,60 @@ func (r *repository) React(ctx context.Context, id int64, userID int64, like boo
 	return nil
 }
 
+func (r *repository) Unlike(ctx context.Context, id int64, userID int64) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("reviewRepository.Unlike begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var reviewID int64
+	if err := tx.QueryRow(ctx, `
+		SELECT id FROM reviews
+		WHERE id = $1 AND status = 'approved' AND deleted_at IS NULL
+		FOR UPDATE`, id).Scan(&reviewID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.ErrNotFound
+		}
+		return fmt.Errorf("reviewRepository.Unlike lock: %w", err)
+	}
+
+	var previous string
+	err = tx.QueryRow(ctx,
+		`DELETE FROM review_votes WHERE review_id = $1 AND user_id = $2 RETURNING vote_type`,
+		id, userID,
+	).Scan(&previous)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// No vote: idempotent success, same as a repeated identical React.
+			return tx.Commit(ctx)
+		}
+		return fmt.Errorf("reviewRepository.Unlike vote: %w", err)
+	}
+
+	likeDelta, dislikeDelta := 0, 0
+	switch previous {
+	case "like":
+		likeDelta = -1
+	case "dislike":
+		dislikeDelta = -1
+	}
+	if likeDelta != 0 || dislikeDelta != 0 {
+		if _, err := tx.Exec(ctx, `
+			UPDATE reviews
+			SET like_count = GREATEST(0, like_count + $2),
+				dislike_count = GREATEST(0, dislike_count + $3)
+			WHERE id = $1`, id, likeDelta, dislikeDelta); err != nil {
+			return fmt.Errorf("reviewRepository.Unlike counters: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("reviewRepository.Unlike commit: %w", err)
+	}
+	return nil
+}
+
 func (r *repository) HasReviewed(ctx context.Context, userID int64, productID int64) (bool, error) {
 	const q = `
 		SELECT EXISTS(
@@ -435,7 +498,8 @@ func (r *repository) GetMine(ctx context.Context, userID int64) ([]AccountReview
 		FROM reviews r
 		INNER JOIN products p ON p.id = r.product_id
 		WHERE r.user_id = $1 AND r.deleted_at IS NULL
-		ORDER BY r.created_at DESC`
+		ORDER BY r.created_at DESC
+		LIMIT 100`
 
 	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {
@@ -472,7 +536,8 @@ func (r *repository) GetPending(ctx context.Context, userID int64) ([]PendingRev
 		WHERE o.user_id = $1
 		  AND o.status = 'delivered'
 		  AND r.id IS NULL
-		ORDER BY p.id, o.delivered_at DESC NULLS LAST, o.id DESC`
+		ORDER BY p.id, o.delivered_at DESC NULLS LAST, o.id DESC
+		LIMIT 100`
 
 	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {

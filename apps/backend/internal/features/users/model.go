@@ -73,7 +73,7 @@ type User struct {
 	EmailVerifiedAt *time.Time `db:"email_verified_at"`
 	LastLoginAt     *time.Time `db:"last_login_at"`
 
-	BannedAt  *time.Time `db:"banned_at"`
+	BannedAt *time.Time `db:"banned_at"`
 	// SessionsInvalidatedAt is bumped on password reset (and other hard
 	// logout events). Tokens issued at or before this time are rejected.
 	SessionsInvalidatedAt *time.Time `db:"sessions_invalidated_at"`
@@ -84,14 +84,14 @@ type User struct {
 // AuthUser is the minimal live account projection required by authentication
 // middleware after a token has been cryptographically validated.
 type AuthUser struct {
-	ID                     int64      `db:"id"`
-	UserID                 uuid.UUID  `db:"user_id"`
-	Role                   string     `db:"role"`
-	IsActive               bool       `db:"is_active"`
-	IsBanned               bool       `db:"is_banned"`
+	ID       int64     `db:"id"`
+	UserID   uuid.UUID `db:"user_id"`
+	Role     string    `db:"role"`
+	IsActive bool      `db:"is_active"`
+	IsBanned bool      `db:"is_banned"`
 	// SessionsInvalidatedAt, when set, rejects any JWT whose IssuedAt is not
 	// strictly after this timestamp (password reset / forced logout).
-	SessionsInvalidatedAt  *time.Time `db:"sessions_invalidated_at"`
+	SessionsInvalidatedAt *time.Time `db:"sessions_invalidated_at"`
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -178,6 +178,14 @@ type UpdateUserReq struct {
 	Gender       *string    `json:"gender"    validate:"omitempty,oneof=male female other"`
 }
 
+// ProfileUpdate is the self-service PATCH /auth/me result. A non-nil
+// PendingPhone means the new number was accepted but not written; the
+// caller must complete POST /auth/me/phone/otp then /verify (PR-040i).
+type ProfileUpdate struct {
+	User         *User
+	PendingPhone *string
+}
+
 // AdminUpdateUserReq is the body for PATCH /admin/users/:userID. models.NullablePatch
 // distinguishes an omitted profile field from an explicit JSON null clear.
 type AdminUpdateUserReq struct {
@@ -213,6 +221,13 @@ type UserResponse struct {
 	Gender    *string    `json:"gender,omitempty"`
 	Role      string     `json:"role"`
 	CreatedAt time.Time  `json:"created_at"`
+}
+
+// ProfileUpdateResponse is PATCH /auth/me when a phone change is staged.
+// The embedded profile still shows the current (unverified) number.
+type ProfileUpdateResponse struct {
+	UserResponse
+	PendingPhone *string `json:"pending_phone,omitempty"`
 }
 
 // AdminUser is the full user projection returned by the admin detail and update

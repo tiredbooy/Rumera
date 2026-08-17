@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/pkg/searchtext"
 )
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
@@ -127,11 +128,13 @@ func (r *repository) GetBySlug(ctx context.Context, slug string) (*Recipe, error
 	return rec, nil
 }
 
-// GetPublishedBySlug restricts to published recipes — the public storefront read.
+// GetPublishedBySlug restricts to published, already-live recipes — the public
+// storefront read. Future published_at is a schedule and 404s like a draft.
 func (r *repository) GetPublishedBySlug(ctx context.Context, slug string) (*Recipe, error) {
 	rec := &Recipe{}
 	err := scanRecipe(r.db.QueryRow(ctx,
-		`SELECT `+recipeColumns+` FROM recipes WHERE slug = $1 AND status = 'published'`, slug,
+		`SELECT `+recipeColumns+` FROM recipes WHERE slug = $1 AND status = 'published'
+		   AND `+publicLivePublishedAtSQL("published_at"), slug,
 	), rec)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -142,14 +145,22 @@ func (r *repository) GetPublishedBySlug(ctx context.Context, slug string) (*Reci
 	return rec, nil
 }
 
+// applyListSearch adds Persian-aware title/excerpt ILIKE (PR-070h). Query and
+// columns both pass rumera_search_normalize / searchtext.Normalize so Arabic
+// yeh/kaf match Persian titles. Empty after normalize omits the clause.
+func applyListSearch(where []string, args pgx.NamedArgs, search string) ([]string, pgx.NamedArgs) {
+	if pattern := searchtext.LikeContains(search); pattern != "" {
+		where = append(where, `(rumera_search_normalize(r.title) ILIKE @search ESCAPE E'\\' OR rumera_search_normalize(r.excerpt) ILIKE @search ESCAPE E'\\')`)
+		args["search"] = pattern
+	}
+	return where, args
+}
+
 func (r *repository) List(ctx context.Context, f RecipeFilter) ([]*Recipe, int64, error) {
 	where := []string{"1=1"}
 	args := pgx.NamedArgs{}
 
-	if f.Search != "" {
-		where = append(where, `(r.title ILIKE @search ESCAPE E'\\' OR r.excerpt ILIKE @search ESCAPE E'\\')`)
-		args["search"] = "%" + escapeLikePattern(f.Search) + "%"
-	}
+	where, args = applyListSearch(where, args, f.Search)
 	if f.Status != nil {
 		where = append(where, "r.status = @status")
 		args["status"] = string(*f.Status)
@@ -182,6 +193,9 @@ func (r *repository) List(ctx context.Context, f RecipeFilter) ([]*Recipe, int64
 	if f.ExcludeID != nil {
 		where = append(where, "r.id <> @exclude_id")
 		args["exclude_id"] = *f.ExcludeID
+	}
+	if f.LiveOnly {
+		where = append(where, publicLivePublishedAtSQL("r.published_at"))
 	}
 
 	allowed := map[string]string{
@@ -278,7 +292,7 @@ func (r *repository) Create(ctx context.Context, req *RecipeReq) (*Recipe, error
 		req.MetaTitle, req.MetaDescription, req.MetaKeywords, req.CanonicalURL, req.OGImageURL,
 		req.UserID,
 	), rec); err != nil {
-		return nil, fmt.Errorf("creating recipe: %w", err)
+		return nil, recipeConstraintError("creating recipe", err)
 	}
 	return rec, nil
 }
@@ -390,7 +404,7 @@ func (r *repository) Update(ctx context.Context, id int64, req *RecipeUpdateReq)
 			}
 			return nil, models.ErrNotFound
 		}
-		return nil, fmt.Errorf("updating recipe: %w", err)
+		return nil, recipeConstraintError("updating recipe", err)
 	}
 	return rec, nil
 }
@@ -427,7 +441,9 @@ func (r *repository) SlugExists(ctx context.Context, slug string) (bool, error) 
 func (r *repository) PublishedSitemap(ctx context.Context) ([]*RecipeSitemapItem, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT slug, updated_at, og_image_url
-		 FROM recipes WHERE status = 'published' ORDER BY updated_at DESC`,
+		 FROM recipes WHERE status = 'published'
+		   AND `+publicLivePublishedAtSQL("published_at")+`
+		 ORDER BY updated_at DESC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("querying recipe sitemap: %w", err)
@@ -709,10 +725,11 @@ func (r *repository) GetRecipeCardsByProductID(ctx context.Context, productID in
 	if limit <= 0 {
 		limit = 8
 	}
-	const q = `
+	q := `
 		SELECT DISTINCT ` + recipeColumns + `
 		FROM recipes r
 		WHERE r.status = 'published'
+		  AND ` + publicLivePublishedAtSQL("r.published_at") + `
 		  AND EXISTS (
 			SELECT 1 FROM recipe_products rp
 			JOIN product_variants pv ON pv.id = rp.product_variant_id
@@ -812,4 +829,14 @@ func (r *repository) AssignTags(ctx context.Context, recipeID int64, tagIDs []in
 func (r *repository) RemoveTags(ctx context.Context, recipeID int64) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM recipe_tags WHERE recipe_id = $1`, recipeID)
 	return err
+}
+
+// recipeConstraintError maps a unique_violation (23505) to models.ErrConflict
+// so a slug race is 409, not a 500 from a raw Postgres error.
+func recipeConstraintError(operation string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return fmt.Errorf("%s: %w", operation, models.ErrConflict)
+	}
+	return fmt.Errorf("%s: %w", operation, err)
 }

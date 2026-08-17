@@ -24,7 +24,7 @@ address; the customer can **pause**, **skip one period**, **cancel**, or **resum
 |---------|-------------------|
 | **Plan** | Fixed string `cellar-box` only (constant `PlanCellarBox`). No multi-plan catalogue of digital SKUs. |
 | **Cadence** | `monthly` (+1 calendar month) or `quarterly` (+3 calendar months) via `NextRenewal`. |
-| **Status** | `active` · `paused` · `cancelled` |
+| **Status** | `active` · `paused` · `cancelled`. **At most one `active` row per customer** (PR-057b). |
 | **Next renewal** | `next_renewal_at` — when the system considers the **next box window** due. |
 | **Address** | Optional `address_id` → customer address book. Omitted/null is allowed on create; ship-to may be incomplete until set. |
 | **Contents** | **Not a per-subscription SKU list today.** “Contents” means the **merchant-curated physical assortment** for that box cycle (ops/fulfilment concern). There is no `items[]`, preference JSON, or entitlement grant in the API model. |
@@ -34,7 +34,7 @@ address; the customer can **pause**, **skip one period**, **cancel**, or **resum
 | Action | Allowed from | Effect |
 |--------|----------------|--------|
 | `pause` | `active` | → `paused`; due job ignores the row |
-| `resume` | `paused` or `cancelled` | → `active` (reactivate) |
+| `resume` | `paused` or `cancelled` | → `active` (reactivate). Rejected with `CONFLICT` if another cellar-box is already active. |
 | `cancel` | `active` or `paused` | → `cancelled` |
 | `skip` | `active` | Push `next_renewal_at` by one cadence; **no payment** |
 
@@ -42,14 +42,20 @@ Invalid transitions return `INVALID_REQUEST` (`AllowedAction` in `model.go`).
 
 ### Renewal job (as-built · PH-043b email)
 
-1. Find rows: `status = active` AND `next_renewal_at <= now` (limit 500 per tick).
+1. Find rows: `status = active` AND `next_renewal_at <= now` (limit 500 per tick)
+   via `subscription.ProcessDueRenewals`.
 2. Email the customer a **Persian RTL** HTML message (subject «باکس سرداب شما آماده است»)
    built by `buildRenewalEmailHTML` in `internal/corn/subscription_renewal_email.go`:
    - `lang="fa"` · `dir="rtl"`
    - States this is a **reminder**, not an automatic charge
    - CTA → `/account/subscriptions` (pause / skip / cancel)
-3. Advance `next_renewal_at` by one cadence **even if the email fails** (email
-   failure is logged; date still rolls so the job does not hammer the same rows).
+3. Advance `next_renewal_at` by one cadence **only after dispatch/send succeeds**
+   (PR-057a / PR-055a — same honesty as alert `notified_at`). The job prefers
+   `notifications.Dispatcher.DispatchSubscriptionRenewal` (outbox when async;
+   period-scoped key `subscription:{id}:renewal:{YYYY-MM-DD}`) and falls back
+   to inline `mailer.Send`. Dispatcher and mailer both unset logs and leaves
+   the batch unadvanced. A send error skips that id only; successes in the
+   same tick still roll. The next tick retries unsent rows.
 
 **Charging is intentionally not implemented** in this job. There is no tokenized
 card on file, no order creation, and no wallet debit for box renewals today.
@@ -86,7 +92,7 @@ access”, it is **out of product scope** for this domain.
 
 | Concern | Today | Notes |
 |---------|--------|--------|
-| Subscribe create | Free row create | No charge at `POST /subscriptions` |
+| Subscribe create | Free row create | No charge at `POST /subscriptions`. Second active create is `409 CONFLICT` (PR-057b). |
 | Renewal | Email + date roll | No order, payment, or stock reservation |
 | Fulfilment | Ops-driven | Box contents are not automated from this table |
 | Idempotency | Create is P1 money-adjacent | Catalogue in [idempotency.md](./idempotency.md); lifecycle actions rely on domain guards |
@@ -136,4 +142,4 @@ Table `subscriptions` (migration `20260615190000_create_subscriptions.sql`):
 - **PH-043a–c done** — product model, UX, auto-charge **decision closed** (email-only)  
 - Optional contents preference model — only if product asks; do not invent fields  
 - Bound `ListByUser` with a LIMIT (improvement backlog)
-- Change ship-to address on an existing subscription (API has no PATCH address today)
+- Optional partial unique index on `(user_id)` where `status = 'active'` to close the create/resume race (service check is the live cap)

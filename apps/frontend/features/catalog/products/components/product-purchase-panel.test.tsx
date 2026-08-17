@@ -67,7 +67,7 @@ vi.mock("./alert-button", () => ({
       data-variant-id={productVariantId}
       data-available={String(isAvailable)}
     >
-      اعلان‌ها
+      {isAvailable ? "اعلان‌ها" : "اطلاع از موجود شدن"}
     </button>
   ),
 }));
@@ -208,18 +208,14 @@ describe("ProductPurchasePanel", () => {
     expect(
       screen.queryByRole("button", { name: "افزایش تعداد" }),
     ).not.toBeInTheDocument();
-    for (const button of screen.getAllByTestId("add-to-cart")) {
-      expect(button).toBeDisabled();
-      expect(button).toHaveTextContent("ناموجود");
+    expect(screen.queryByTestId("add-to-cart")).not.toBeInTheDocument();
+    const alerts = screen.getAllByTestId("alert-button");
+    expect(alerts.length).toBeGreaterThan(0);
+    for (const button of alerts) {
+      expect(button).toHaveTextContent("اطلاع از موجود شدن");
+      expect(button).toHaveAttribute("data-available", "false");
+      expect(button).toHaveAttribute("data-variant-id", "2");
     }
-    expect(screen.getByTestId("alert-button")).toHaveAttribute(
-      "data-available",
-      "false",
-    );
-    expect(screen.getByTestId("alert-button")).toHaveAttribute(
-      "data-variant-id",
-      "2",
-    );
   });
 
   it("provides nonblank fallback labels and selects the first active variant when all are sold out", () => {

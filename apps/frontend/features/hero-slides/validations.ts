@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { validateImageURL } from "@/features/image-uploader/constants";
+import { toAsciiDigits } from "@/lib/normalize-digits";
 
 const imageURL = z
   .string()
@@ -94,9 +95,13 @@ export const heroSlideFormSchema = z
     sort_order: z
       .string()
       .refine(
-        (value) =>
-          value.trim() === "" ||
-          (!Number.isNaN(Number(value)) && Number.isInteger(Number(value))),
+        (value) => {
+          const n = toAsciiDigits(value).trim();
+          return (
+            n === "" ||
+            (!Number.isNaN(Number(n)) && Number.isInteger(Number(n)))
+          );
+        },
         { message: "عدد صحیح وارد کنید" },
       ),
     is_active: z.boolean(),

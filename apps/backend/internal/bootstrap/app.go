@@ -28,6 +28,7 @@ type App struct {
 	cache  cache.Store
 	queue  *analytics.Queue
 	cron   *cron.Runner
+	events *eventSubsystem
 	router *gin.Engine
 	server *http.Server
 	// tracerShutdown flushes and stops the OpenTelemetry tracer provider. It is a
@@ -35,7 +36,20 @@ type App struct {
 	tracerShutdown tracing.ShutdownFunc
 }
 
-func New() (*App, error) {
+// process is the per-process setup every entrypoint needs: config, logger,
+// tracing, DB pools, cache, search and the fully wired dependency graph. New
+// (the API) and NewEventWorker (cmd/event-worker) both start from here so
+// neither duplicates build().
+type process struct {
+	cfg            *config.Config
+	log            *zap.Logger
+	dbs            *database.Connections
+	cache          cache.Store
+	container      *container
+	tracerShutdown tracing.ShutdownFunc
+}
+
+func boot() (*process, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("config: %w", err)
@@ -93,6 +107,23 @@ func New() (*App, error) {
 	// ── 6. Dependency graph (repos → services → handlers) ────────────────────
 	c := build(cfg, log, dbs, cacheStore, meiliClient)
 
+	return &process{
+		cfg:            cfg,
+		log:            log,
+		dbs:            dbs,
+		cache:          cacheStore,
+		container:      c,
+		tracerShutdown: tracerShutdown,
+	}, nil
+}
+
+func New() (*App, error) {
+	p, err := boot()
+	if err != nil {
+		return nil, err
+	}
+	cfg, log, dbs, c := p.cfg, p.log, p.dbs, p.container
+
 	// Expose live DB-pool and analytics-queue state to Prometheus. These are
 	// scrape-time gauges, so they must be registered once the pools and queue
 	// exist. The /metrics endpoint and request middleware are wired in newRouter.
@@ -129,12 +160,13 @@ func New() (*App, error) {
 		cfg:            cfg,
 		log:            log,
 		dbs:            dbs,
-		cache:          cacheStore,
+		cache:          p.cache,
 		queue:          c.queue,
 		cron:           c.cron,
+		events:         c.events,
 		router:         router,
 		server:         server,
-		tracerShutdown: tracerShutdown,
+		tracerShutdown: p.tracerShutdown,
 	}, nil
 }
 
@@ -150,6 +182,11 @@ func (a *App) Start(ctx context.Context) error {
 	if a.cron != nil {
 		a.cron.Start()
 	}
+
+	// Start the domain-event consumers. Not given ctx on purpose: the worker
+	// must finish an in-flight side effect on SIGTERM rather than have it
+	// cancelled mid-flight, so it stops through its own drain in shutdown.
+	a.events.start()
 
 	go func() {
 		a.log.Info("server starting", zap.String("addr", a.server.Addr))
@@ -183,6 +220,10 @@ func (a *App) shutdown() error {
 	if a.cron != nil {
 		a.cron.Stop()
 	}
+
+	// Drain in-flight event handlers before the pools they write through close.
+	// Must sit after cron.Stop and before dbs.Close.
+	a.events.stop()
 
 	// Drain buffered analytics events before tearing down the DB connections the
 	// workers write through.

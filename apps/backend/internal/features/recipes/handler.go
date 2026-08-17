@@ -46,9 +46,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 	filter.Defaults()
-
-	published := RecipeStatusPublished
-	filter.Status = &published // never expose drafts on the storefront
+	applyPublicListFilter(&filter) // published + live published_at only
 
 	recipes, total, err := h.Recipes.List(c.Request.Context(), filter)
 	if err != nil {
@@ -63,9 +61,8 @@ func (h *Handler) Featured(c *gin.Context) {
 	var filter RecipeFilter
 	filter.Defaults()
 	filter.Limit = 12
-	published := RecipeStatusPublished
+	applyPublicListFilter(&filter)
 	featured := true
-	filter.Status = &published
 	filter.IsFeatured = &featured
 	filter.SortBy = "published_at"
 

@@ -1,8 +1,8 @@
 package analytics
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"github.com/tiredbooy/internal/models"
 	"time"

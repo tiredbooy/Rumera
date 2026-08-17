@@ -27,15 +27,30 @@ func RegisterCustomer(c *gin.RouterGroup, h *Handler, moneyIdem gin.HandlerFunc)
 	c.POST("/wallet/withdraw", h.WithdrawGone)
 }
 
+// AdminCreditCapability is the panel grant required to POST
+// /admin/users/:userID/wallet/credit. Isolated from customers:write so the
+// default staff seed cannot mint ledger money (PR-040c).
+const AdminCreditCapability = "wallet:credit"
+
 // RegisterAdmin mounts admin wallet credit on the /admin group.
 //
 //	POST /admin/users/:userID/wallet/credit
 //
+// Parent group must already apply Auth + wallet:credit (not customers:write).
 // moneyIdem (optional) is the PH-011c HTTP platform. Service-level ledger
 // marker (idem=<key>) remains the authoritative deposit truth.
-func RegisterAdmin(a *gin.RouterGroup, h *Handler, moneyIdem gin.HandlerFunc) {
+// Two groups on purpose. Reading a customer's ledger is support work
+// (customers:read); crediting mints ledger money and keeps its dedicated
+// wallet:credit grant, so the default staff seed cannot mint by being able to
+// look (PR-040c). One group for both would silently widen that.
+func RegisterAdmin(read, a *gin.RouterGroup, h *Handler, moneyIdem gin.HandlerFunc) {
 	if h == nil {
 		h = &Handler{}
+	}
+	if read != nil {
+		// A-10: a wallet-paid order writes no payment_transactions row, so this
+		// ledger is the only admin trail it has.
+		read.GET("/users/:userID/wallet/transactions", h.AdminTransactions)
 	}
 	if moneyIdem != nil {
 		a.POST("/users/:userID/wallet/credit", moneyIdem, h.AdminCredit)

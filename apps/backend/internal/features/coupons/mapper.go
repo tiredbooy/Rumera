@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
 )
 
 func ToCouponResponse(c *Coupon, totalUses int) CouponResponse {

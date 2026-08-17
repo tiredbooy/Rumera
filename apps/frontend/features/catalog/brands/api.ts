@@ -11,25 +11,6 @@ const PUBLIC_CACHE_OPTIONS: ApiFetchOptions = {
   next: { revalidate: 3600, tags: [BRAND_CACHE_TAG, HOME_CACHE_TAG] },
 };
 
-const FALLBACK_BRANDS = [
-  "Johnnie Walker",
-  "Jack Daniel's",
-  "Absolut",
-  "Hennessy",
-  "Moët & Chandon",
-  "Grey Goose",
-  "Chivas Regal",
-  "Glenfiddich",
-  "Bombay Sapphire",
-  "Bacardí",
-  "Jameson",
-  "The Macallan",
-  "Belvedere",
-  "Martini",
-  "Campari",
-  "Tanqueray",
-];
-
 /**
  * Fetch paginated list of brands (public).
  * Optional filters: search, page, limit.
@@ -59,31 +40,20 @@ export type FeaturedBrand = {
 };
 
 /**
- * Featured brands for homepage discovery. Returns real ids when the API is
- * available so marquee items can deep-link to `/products?brand=…`.
- * On failure falls back to title-only chips (no inventing brand ids).
+ * Featured brands for homepage discovery. Real ids/slugs deep-link to
+ * `/products?brand=…`. A successful empty catalogue is `[]`. API/network
+ * failures propagate — do not invent Western liquor names.
  */
 export async function getFeaturedBrands(limit = 16): Promise<FeaturedBrand[]> {
-  try {
-    const page = await publicRequest<Paginated<Brand>>(
-      `/brands${buildQueryString({ limit, sortBy: "title", orderBy: "asc" })}`,
-      PUBLIC_CACHE_OPTIONS,
-    );
-    const brands = page.results
-      .map((brand) => ({
-        id: brand.id,
-        title: brand.title.trim(),
-        slug: brand.slug,
-      }))
-      .filter((brand) => brand.title.length > 0 && brand.id > 0);
-    if (brands.length > 0) return brands;
-  } catch {
-    // fall through to title-only fallback
-  }
-
-  return FALLBACK_BRANDS.map((title, index) => ({
-    // Negative sentinel: fallback labels have no backend slug and stay unlinked.
-    id: -(index + 1),
-    title,
-  }));
+  const page = await publicRequest<Paginated<Brand>>(
+    `/brands${buildQueryString({ limit, sortBy: "title", orderBy: "asc" })}`,
+    PUBLIC_CACHE_OPTIONS,
+  );
+  return (page.results ?? [])
+    .map((brand) => ({
+      id: brand.id,
+      title: brand.title.trim(),
+      slug: brand.slug,
+    }))
+    .filter((brand) => brand.title.length > 0 && brand.id > 0);
 }

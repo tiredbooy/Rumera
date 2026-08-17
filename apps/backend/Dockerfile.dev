@@ -6,7 +6,12 @@ FROM golang:1.25-alpine
 RUN apk add --no-cache git gcc musl-dev curl pkgconf vips-dev
 
 RUN go env -w GOSUMDB=off
-RUN go env -w GOPROXY=https://go.devneeds.ir,direct
+# RUN go env -w GOPROXY=https://go.devneeds.ir,direct
+# RUN go env -w GOPROXY=https://proxy.golang.org,direct
+# The default Go proxy and golang.org vanity endpoints are not reachable on
+# every development network. Use mirrors that are reachable here and `|`
+# separators so Go falls through on any HTTP or network error.
+RUN go env -w 'GOPROXY=https://goproxy.cn|https://proxy.golang.com.cn|direct'
 
 # Install Air — pinned for reproducibility
 RUN go install github.com/air-verse/air@v1.61.7

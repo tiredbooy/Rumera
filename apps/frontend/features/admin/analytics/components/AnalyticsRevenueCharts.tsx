@@ -5,7 +5,8 @@ import {
   shortAnalyticsDay,
 } from "@/features/analytics/utils";
 import type { DailyRevenueStats } from "@/features/analytics/types";
-import { ChartCard, RevenueAreaChart, OrdersBarChart } from "./Charts";
+import { ChartCard } from "./Charts";
+import { OrdersBarChart, RevenueAreaChart } from "./dynamic-charts";
 import { AnalyticsErrorState } from "./AnalyticsErrorState";
 
 export async function AnalyticsRevenueCharts({ range }: { range: RangeId }) {

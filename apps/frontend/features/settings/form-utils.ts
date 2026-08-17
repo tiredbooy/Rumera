@@ -1,4 +1,5 @@
 import type { ApiFieldErrors } from "@/lib/api/types";
+import { parseAsciiNumber, toAsciiDigits } from "@/lib/normalize-digits";
 
 import type {
   SiteSettings,
@@ -195,7 +196,7 @@ export function defaultsFromSettings(
 export function toSettingsPayload(
   v: SiteSettingsFormValues,
 ): UpdateSiteSettingsInput {
-  const thresholdRaw = v.freeThreshold.trim();
+  const thresholdRaw = toAsciiDigits(v.freeThreshold).trim();
   const freeThreshold =
     thresholdRaw === ""
       ? 0
@@ -212,7 +213,7 @@ export function toSettingsPayload(
     },
     contact: {
       supportEmail: v.supportEmail.trim(),
-      supportPhone: v.supportPhone.trim(),
+      supportPhone: toAsciiDigits(v.supportPhone).trim(),
       address: v.address,
       workingHours: v.workingHours.trim(),
     },
@@ -250,11 +251,11 @@ function parseGiftPayload(v: SiteSettingsFormValues): SiteSettings["gift"] {
     const id = row.id.trim().toLowerCase();
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    const priceRaw = row.price.trim();
+    const priceRaw = toAsciiDigits(row.price).trim();
     const price =
       priceRaw === "" || !/^\d+$/.test(priceRaw)
         ? 0
-        : Math.max(0, Math.trunc(Number(priceRaw)));
+        : Math.max(0, Math.trunc(parseAsciiNumber(priceRaw)));
     options.push({
       id,
       label: row.label.trim() || "گزینه",

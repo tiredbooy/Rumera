@@ -77,7 +77,7 @@ type BlogCategoryReq struct {
 }
 
 type BlogCategoryUpdateReq struct {
-	Name        *string               `json:"name"        validate:"omitempty,min=1,max=255"`
+	Name        *string                      `json:"name"        validate:"omitempty,min=1,max=255"`
 	Description models.NullablePatch[string] `json:"description"`
 	Slug        models.NullablePatch[string] `json:"slug"`
 	ParentID    models.NullablePatch[int64]  `json:"parent_id"`
@@ -103,22 +103,22 @@ type BlogReq struct {
 }
 
 type BlogUpdateReq struct {
-	Title            *string                  `json:"title"            validate:"omitempty,max=255"`
-	Slug             *string                  `json:"slug"             validate:"omitempty,max=255"`
-	Content          *string                  `json:"content"`
+	Title            *string                         `json:"title"            validate:"omitempty,max=255"`
+	Slug             *string                         `json:"slug"             validate:"omitempty,max=255"`
+	Content          *string                         `json:"content"`
 	Excerpt          models.NullablePatch[string]    `json:"excerpt"`
 	ImageURL         models.NullablePatch[string]    `json:"image_url"`
 	ImageAlt         models.NullablePatch[string]    `json:"image_alt"`
 	ExpectedImageURL models.NullablePatch[string]    `json:"-"`
-	TimeToRead       *int                     `json:"time_to_read"     validate:"omitempty,min=1"`
-	Status           *BlogStatus              `json:"status"           validate:"omitempty,oneof=draft published archived"`
-	IsFeatured       *bool                    `json:"is_featured"`
+	TimeToRead       *int                            `json:"time_to_read"     validate:"omitempty,min=1"`
+	Status           *BlogStatus                     `json:"status"           validate:"omitempty,oneof=draft published archived"`
+	IsFeatured       *bool                           `json:"is_featured"`
 	MetaTitle        models.NullablePatch[string]    `json:"meta_title"`
 	MetaDescription  models.NullablePatch[string]    `json:"meta_description"`
 	PublishedAt      models.NullablePatch[time.Time] `json:"published_at"`
-	CategoryIDs      []int64                  `json:"category_ids"`
-	ProductIDs       []int64                  `json:"product_ids"`
-	TagIDs           []int64                  `json:"tag_ids"`
+	CategoryIDs      []int64                         `json:"category_ids"`
+	ProductIDs       []int64                         `json:"product_ids"`
+	TagIDs           []int64                         `json:"tag_ids"`
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
@@ -131,6 +131,10 @@ type BlogFilter struct {
 	CategoryID *int64 `query:"category_id"`
 	// ExcludeID keeps a separately rendered editorial lead out of pagination.
 	ExcludeID *int64 `query:"exclude_id"`
+	// LiveOnly hides posts whose published_at is still in the future. Public
+	// list sets this after bind; admin list leaves it false so schedules stay
+	// visible in the CMS.
+	LiveOnly bool
 }
 
 func (f *BlogFilter) Defaults() {

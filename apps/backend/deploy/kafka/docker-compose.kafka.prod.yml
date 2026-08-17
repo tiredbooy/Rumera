@@ -1,0 +1,122 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Redpanda (Kafka-compatible) — PRODUCTION stack.
+#
+# Opt-in: the app stack runs fine without it (EVENTS_BUS=postgres, the default).
+# Bring it up only when you are actually cutting over to EVENTS_BUS=kafka (K-10).
+#
+#   # 1. app stack first — it owns the network
+#   docker compose -f docker-compose.prod.yml up -d
+#   # 2. then the broker (from this directory)
+#   docker compose -f docker-compose.kafka.prod.yml up -d
+#
+# Differences from docker-compose.kafka.yml (dev):
+#   • Named volume — the dev broker loses every unacked message on restart.
+#   • Joins the app stack's EXISTING rumera_network instead of its own.
+#   • NO published host ports: the broker is reachable only from inside the
+#     network, as `redpanda:9092`. Nothing on the host, nothing on the internet.
+#   • NO console service (it is an unauthenticated admin UI).
+#   • SASL/SCRAM required — see KAFKA_SASL_* below.
+#   • Startup self-checks left ON (dev passes --check=false). If the broker
+#     refuses to start, fix the host (`rpk redpanda tune all`, raise
+#     fs.aio-max-nr) rather than re-adding the flag.
+#
+# ── Network ───────────────────────────────────────────────────────────────────
+# docker-compose.prod.yml declares `rumera_network` under project name `rumera`,
+# so Docker's real name for it is `rumera_rumera_network`. This is a separate
+# compose project that ATTACHES to it as an external network; override
+# KAFKA_NETWORK if your project prefix differs.
+#
+# ── Still single-broker, RF=1 ─────────────────────────────────────────────────
+# Deliberate (Q1). What makes it safe is K-4: a fact the broker has not carried
+# within EVENTS_FALLBACK_AFTER is fanned out from Postgres instead, so a broker
+# outage costs minutes of latency, not lost side effects. Do not raise
+# EVENTS_FALLBACK_AFTER without re-reading that decision.
+# ──────────────────────────────────────────────────────────────────────────────
+name: rumera-kafka-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  redpanda:
+    restart: unless-stopped
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.4
+    container_name: rumera_redpanda_prod
+    logging: *default-logging
+    command:
+      - redpanda
+      - start
+      - --smp
+      - "1"
+      - --memory
+      - 1G
+      - --reserve-memory
+      - 0M
+      - --node-id
+      - "0"
+      # One internal listener only. No `external://` — there is no host port to
+      # advertise, and advertising one would be a lie to every client.
+      - --kafka-addr
+      - internal://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092
+      # SCRAM on the Kafka API. The admin API (9644) stays unauthenticated but
+      # is unpublished and internal-only; the healthcheck below uses it.
+      - --set
+      - redpanda.enable_sasl=true
+      - --set
+      - redpanda.superusers=["${KAFKA_SASL_USERNAME:?KAFKA_SASL_USERNAME is required}"]
+    environment:
+      # Creates the SCRAM superuser on FIRST boot of an empty data volume.
+      # Rotating the password later is `rpk security user alter`, not a redeploy.
+      RP_BOOTSTRAP_USER: "${KAFKA_SASL_USERNAME}:${KAFKA_SASL_PASSWORD:?KAFKA_SASL_PASSWORD is required}:${KAFKA_SASL_MECHANISM:-SCRAM-SHA-512}"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks: [rumera_network]
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy.*true'"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 2g }
+        reservations: { cpus: "0.5", memory: 1g }
+
+  # Runs once per `up`, creates the topics, then VERIFIES them and exits
+  # non-zero if any is missing. K-1 turned off client-side auto-creation, so a
+  # topic absent here is a silent outage of every fact routed to it.
+  init-topics:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.4
+    container_name: rumera_kafka_init_prod
+    restart: "no"
+    logging: *default-logging
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks: [rumera_network]
+    volumes:
+      - ./create-topics.sh:/create-topics.sh:ro
+    entrypoint: ["/bin/sh", "/create-topics.sh"]
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_SASL_USERNAME: ${KAFKA_SASL_USERNAME}
+      KAFKA_SASL_PASSWORD: ${KAFKA_SASL_PASSWORD}
+      KAFKA_SASL_MECHANISM: ${KAFKA_SASL_MECHANISM:-SCRAM-SHA-512}
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 128m }
+
+volumes:
+  redpanda_data:
+
+networks:
+  # Created by docker-compose.prod.yml. This file never creates it — if it is
+  # missing, the app stack is not up and there is nothing to talk to.
+  rumera_network:
+    external: true
+    name: ${KAFKA_NETWORK:-rumera_rumera_network}

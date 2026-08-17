@@ -1,5 +1,59 @@
 import type { NextConfig } from "next";
 
+type ImageRemotePattern = NonNullable<
+  NonNullable<NextConfig["images"]>["remotePatterns"]
+>[number];
+
+/**
+ * Build `images.remotePatterns` from the configured media/API origins.
+ * Same-origin `/media` (empty env, typical nginx prod) needs no entries.
+ * Never emit `*` / `**` — that turns the optimizer into an open HTTPS proxy.
+ */
+function imageRemotePatternsFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): ImageRemotePattern[] {
+  const seen = new Set<string>();
+  const patterns: ImageRemotePattern[] = [];
+
+  for (const raw of [
+    env.NEXT_PUBLIC_MEDIA_BASE_URL,
+    env.NEXT_PUBLIC_API_URL,
+  ]) {
+    const trimmed = raw?.trim();
+    if (!trimmed) continue;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      continue;
+    }
+
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      continue;
+    }
+
+    const hostname = parsed.hostname;
+    if (!hostname || hostname.includes("*")) {
+      continue;
+    }
+
+    const protocol = parsed.protocol === "https:" ? "https" : "http";
+    const port = parsed.port;
+    const key = `${protocol}://${hostname}${port ? `:${port}` : ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    patterns.push({
+      protocol,
+      hostname,
+      ...(port ? { port } : {}),
+    });
+  }
+
+  return patterns;
+}
+
 /**
  * Rumera storefront — Next.js configuration.
  *
@@ -37,16 +91,15 @@ const nextConfig: NextConfig = {
       "motion",
       "date-fns",
       "lodash-es",
-      "recharts",
+      "@tanstack/charts",
     ],
   },
 
   images: {
     // Modern formats first; Next negotiates per-browser.
     formats: ["image/avif", "image/webp"],
-    // Allow remote product imagery served from the API / object storage.
-    // Tighten these hosts when the real CDN/storage origin is known.
-    remotePatterns: [{ protocol: "https", hostname: "**" }],
+    // Optimizer may fetch only these hosts. Empty = same-origin only.
+    remotePatterns: imageRemotePatternsFromEnv(),
   },
 
   async headers() {

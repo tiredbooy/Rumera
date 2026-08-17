@@ -231,6 +231,10 @@ export function journalArticleLd(post: JournalDetail) {
       "@type": "Organization",
       name: siteConfig.name,
       url: siteConfig.url,
+      logo: {
+        "@type": "ImageObject",
+        url: absoluteUrl(siteConfig.logo),
+      },
     },
   };
 }

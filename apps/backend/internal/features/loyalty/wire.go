@@ -7,6 +7,7 @@ import (
 )
 
 // New wires repository → service → HTTP handler.
+// Env rates seed / last-resort fallback; live rates load from loyalty_programme (PR-003f).
 // Service is returned for payment awards, referral rewards, auth signup,
 // review earn, and birthday cron (PH-040b).
 func New(

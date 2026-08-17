@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("next/font/google", () => ({
   Vazirmatn: () => ({ variable: "font-sans" }),
   Markazi_Text: () => ({ variable: "font-serif" }),
-  Geist_Mono: () => ({ variable: "font-mono" }),
 }));
 
 vi.mock("@/app/providers", () => ({

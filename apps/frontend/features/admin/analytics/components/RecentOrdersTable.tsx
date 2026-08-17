@@ -14,9 +14,18 @@ import {
 import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
 import { listAdminOrders } from "@/features/orders/api/admin";
 
+import { can } from "@/lib/rbac/can";
+import { PERMISSIONS, type Permission } from "@/lib/rbac/permissions";
+
 import { AnalyticsErrorState } from "./AnalyticsErrorState";
 
-export async function RecentOrdersTable() {
+export async function RecentOrdersTable({
+  permissions,
+}: {
+  permissions: Permission[];
+}) {
+  if (!can({ permissions }, PERMISSIONS.ORDERS_READ)) return null;
+
   let result = null;
   let error = false;
 

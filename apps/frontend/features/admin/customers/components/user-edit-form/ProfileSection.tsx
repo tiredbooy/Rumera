@@ -3,6 +3,7 @@ import type { Control, FieldErrors, UseFormRegister } from "react-hook-form";
 
 import { fieldErrorId } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { JalaliDateTimeInput } from "@/components/ui/jalali-datetime-input";
 import {
   Select,
   SelectContent,
@@ -103,12 +104,20 @@ export function ProfileSection({
           label="تاریخ تولد"
           error={errors.birth_date?.message}
         >
-          <Input
-            id="birth_date"
-            type="date"
-            dir="ltr"
-            aria-invalid={!!errors.birth_date}
-            {...register("birth_date")}
+          <Controller
+            control={control}
+            name="birth_date"
+            render={({ field }) => (
+              <JalaliDateTimeInput
+                id="birth_date"
+                granularity="date"
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                disabled={disabled}
+                invalid={!!errors.birth_date}
+              />
+            )}
           />
         </Field>
 

@@ -6,12 +6,52 @@ import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select"
 import { focusFormControl } from "@/components/ui/field"
 import { useCreateAddress } from "@/features/addresses/api"
 import type {
   Address,
   CreateAddressInput,
 } from "@/features/addresses/types"
+import { toAsciiDigits } from "@/lib/normalize-digits"
+
+/** Iranian provinces — static list copied from the account address form. */
+const PROVINCES = [
+  "آذربایجان شرقی",
+  "آذربایجان غربی",
+  "اردبیل",
+  "اصفهان",
+  "البرز",
+  "ایلام",
+  "بوشهر",
+  "تهران",
+  "چهارمحال و بختیاری",
+  "خراسان جنوبی",
+  "خراسان رضوی",
+  "خراسان شمالی",
+  "خوزستان",
+  "زنجان",
+  "سمنان",
+  "سیستان و بلوچستان",
+  "فارس",
+  "قزوین",
+  "قم",
+  "کردستان",
+  "کرمان",
+  "کرمانشاه",
+  "کهگیلویه و بویراحمد",
+  "گلستان",
+  "گیلان",
+  "لرستان",
+  "مازندران",
+  "مرکزی",
+  "هرمزگان",
+  "همدان",
+  "یزد",
+] as const
 
 /** Inline new-address form used inside checkout. Calls back with the created address. */
 export function AddAddressForm({
@@ -34,10 +74,11 @@ export function AddAddressForm({
     const input: CreateAddressInput = {
       title: String(f.get("title") ?? "") || undefined,
       full_name: String(f.get("full_name") ?? ""),
-      phone_number: String(f.get("phone_number") ?? "") || undefined,
+      phone_number: toAsciiDigits(String(f.get("phone_number") ?? "")) || undefined,
       address_line1: String(f.get("address_line1") ?? ""),
       city: String(f.get("city") ?? ""),
-      postal_code: String(f.get("postal_code") ?? ""),
+      state_province: String(f.get("state_province") ?? "") || undefined,
+      postal_code: toAsciiDigits(String(f.get("postal_code") ?? "")),
       country: "IR",
       is_default: isDefault,
     }
@@ -63,6 +104,27 @@ export function AddAddressForm({
       <div className="flex flex-col gap-1.5 sm:col-span-2">
         <Label htmlFor="address_line1">نشانی</Label>
         <Input id="address_line1" name="address_line1" required aria-invalid={!!error} aria-describedby={error ? "checkout-address-error" : undefined} />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="state_province">استان</Label>
+        <NativeSelect
+          id="state_province"
+          name="state_province"
+          required
+          className="w-full"
+          defaultValue=""
+          aria-invalid={!!error}
+          aria-describedby={error ? "checkout-address-error" : undefined}
+        >
+          <NativeSelectOption value="" disabled>
+            انتخاب استان
+          </NativeSelectOption>
+          {PROVINCES.map((province) => (
+            <NativeSelectOption key={province} value={province}>
+              {province}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="city">شهر</Label>

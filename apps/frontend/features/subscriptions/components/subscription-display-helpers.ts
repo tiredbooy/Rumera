@@ -98,6 +98,23 @@ export function statusCopy(status: SubscriptionStatus): StatusMeta {
   }
 }
 
+/** Active and paused boxes can set/change ship-to; cancelled is read-only. */
+export function canChangeShipTo(status: SubscriptionStatus): boolean {
+  return status === "active" || status === "paused";
+}
+
+/** Amber callout when the box has no resolved address book row. */
+export function missingShipToMessage(hasAddressBook: boolean): string {
+  return hasAddressBook
+    ? "آدرسی به این باکس وصل نیست. یک آدرس از دفترچه انتخاب کنید."
+    : "آدرسی به این باکس وصل نیست. از بخش آدرس‌ها یک آدرس اضافه کنید.";
+}
+
+/** Toast after a successful address-only PATCH. */
+export function addressChangeSuccessMessage(): string {
+  return "آدرس ارسال به‌روز شد";
+}
+
 /** Toast / success line after a lifecycle action. */
 export function actionSuccessMessage(action: SubscriptionAction): string {
   switch (action) {

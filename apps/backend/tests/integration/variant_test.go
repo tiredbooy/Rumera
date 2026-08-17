@@ -3,12 +3,12 @@
 package integration
 
 import (
-	"github.com/tiredbooy/internal/features/inventory"
-	"github.com/tiredbooy/internal/features/catalog/variant"
-	"github.com/tiredbooy/internal/features/catalog/product"
 	"context"
 	"errors"
 	"github.com/tiredbooy/internal/features/catalog/option"
+	"github.com/tiredbooy/internal/features/catalog/product"
+	"github.com/tiredbooy/internal/features/catalog/variant"
+	"github.com/tiredbooy/internal/features/inventory"
 	"strings"
 	"testing"
 

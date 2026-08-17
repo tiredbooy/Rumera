@@ -40,13 +40,15 @@ func TestSetupRegistersWithoutPanic(t *testing.T) {
 		"GET /media/*key": false,
 
 		// Identity / RBAC
-		"GET /api/v1/admin/roles":               false,
-		"GET /api/v1/admin/capabilities":        false,
-		"PUT /api/v1/admin/capabilities/:role":  false,
-		"GET /api/v1/admin/users":               false,
-		"POST /api/v1/admin/users":              false,
-		"GET /api/v1/admin/users/:userID/audit": false,
-		"PATCH /api/v1/auth/me":                 false,
+		"GET /api/v1/admin/roles":                false,
+		"GET /api/v1/admin/capabilities":         false,
+		"PUT /api/v1/admin/capabilities/:role":   false,
+		"GET /api/v1/admin/users":                false,
+		"POST /api/v1/admin/users":               false,
+		"GET /api/v1/admin/users/:userID/audit":  false,
+		"POST /api/v1/admin/users/:userID/ban":   false,
+		"POST /api/v1/admin/users/:userID/unban": false,
+		"PATCH /api/v1/auth/me":                  false,
 
 		// Catalogue
 		"GET /api/v1/categories/slug/:slug":                    false,
@@ -74,14 +76,14 @@ func TestSetupRegistersWithoutPanic(t *testing.T) {
 		"GET /api/v1/admin/inventory/variants/:variantID":           false,
 		"POST /api/v1/admin/inventory/variants/:variantID/adjust":   false,
 		"PATCH /api/v1/admin/inventory/variants/:variantID/reorder": false,
-		"GET /api/v1/cart":                                          false,
-		"POST /api/v1/orders":                                       false,
+		"GET /api/v1/cart":    false,
+		"POST /api/v1/orders": false,
 
 		// Analytics
-		"GET /api/v1/admin/analytics/revenue/summary":       false,
-		"GET /api/v1/admin/analytics/products/top-revenue":  false,
-		"GET /api/v1/admin/analytics/search/top-terms":      false,
-		"GET /api/v1/admin/analytics/events/breakdown":      false,
+		"GET /api/v1/admin/analytics/revenue/summary":      false,
+		"GET /api/v1/admin/analytics/products/top-revenue": false,
+		"GET /api/v1/admin/analytics/search/top-terms":     false,
+		"GET /api/v1/admin/analytics/events/breakdown":     false,
 	}
 	for _, route := range r.Routes() {
 		key := route.Method + " " + route.Path

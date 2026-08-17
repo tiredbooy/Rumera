@@ -40,6 +40,12 @@ export interface ProductListQuery extends PaginationQuery {
   is_active?: boolean;
   min_price?: number;
   max_price?: number;
+  /**
+   * Comma-separated product ids (CF-2). Lets a picker label an existing
+   * selection in one request; without it a saved scope outside the first page
+   * cannot be resolved to titles at all. Max 100, matching the page ceiling.
+   */
+  ids?: string;
 }
 
 export type PublicProductListQuery = Omit<ProductListQuery, "is_active">;

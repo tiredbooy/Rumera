@@ -107,8 +107,8 @@ export function InventoryTable({
         r.missing_weight ? (
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5",
-              "text-xs font-medium text-amber-800 dark:text-amber-200",
+              "inline-flex items-center gap-1 rounded-full bg-warning/12 px-2 py-0.5",
+              "text-xs font-medium text-warning",
             )}
             title="وزن بسته‌بندی روی محصول ثبت نشده — برای محاسبهٔ ارسال لازم است"
           >
@@ -224,12 +224,8 @@ export function InventoryTable({
       <div className="border-hairline flex flex-col items-center rounded-2xl bg-card/50 px-6 py-14 text-center ring-1 ring-foreground/[0.04]">
         <p className="font-serif text-lg">هنوز ردیف موجودی ندارید</p>
         <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-          با ساخت محصول و واریانت، ردیف موجودی خودکار ساخته می‌شود. اگر دیتابیس
-          خالی است، از ریشهٔ پروژه{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 text-xs" dir="ltr">
-            make seed
-          </code>{" "}
-          را اجرا کنید یا در پنل محصولات، کالا اضافه کنید.
+          با ساخت محصول و واریانت، ردیف موجودی خودکار ساخته می‌شود. از پنل
+          محصولات یک کالا اضافه کنید.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <Button asChild className="h-11">
@@ -249,13 +245,13 @@ export function InventoryTable({
       columns={columns}
       getRowKey={(r) => String(r.id)}
       rowHref={(r) => `/admin/inventory/${r.product_variant_id}`}
-      searchText={(r) =>
-        `${r.product_title} ${r.category_title ?? ""} ${r.sku ?? ""}`
-      }
-      searchPlaceholder="جستجوی محصول یا کد کالا…"
       filters={filters}
-      pageSize={10}
-      emptyMessage="رکورد موجودی مطابق این جستجو پیدا نشد. فیلتر را پاک کنید."
+      pageSize={Math.max(rows.length, 1)}
+      toolbarHint="فیلتر جدول فقط روی ردیف‌های همین صفحه است، نه کل انبار."
+      resultCountLabel={(filtered, total) =>
+        `${faNum(filtered)} از ${faNum(total)} ردیف این صفحه`
+      }
+      emptyMessage="در این صفحه رکوردی مطابق فیلتر جدول پیدا نشد. فیلتر را پاک کنید یا صفحه را عوض کنید."
     />
   );
 }

@@ -1,4 +1,6 @@
 import { z } from "zod";
+
+import { toAsciiDigits } from "@/lib/normalize-digits";
 import type {
   UserDetailSearchParams,
   UserListFilters,
@@ -34,15 +36,17 @@ const profileFields = {
   phone: z
     .string()
     .trim()
-    .refine((value) => value === "" || /^[0-9۰-۹+\-\s]{7,20}$/.test(value), {
-      message: "شمارهٔ تلفن معتبر وارد کنید",
-    }),
+    .refine(
+      (value) => value === "" || /^[0-9+\-\s]{7,20}$/.test(toAsciiDigits(value)),
+      { message: "شمارهٔ تلفن معتبر وارد کنید" },
+    ),
   national_code: z
     .string()
     .trim()
-    .refine((value) => value === "" || /^[0-9۰-۹]{10}$/.test(value), {
-      message: "کد ملی باید ۱۰ رقم باشد",
-    }),
+    .refine(
+      (value) => value === "" || /^\d{10}$/.test(toAsciiDigits(value)),
+      { message: "کد ملی باید ۱۰ رقم باشد" },
+    ),
   birth_date: optionalDateSchema,
   gender: z.union([z.literal(""), z.enum(["male", "female", "other"])]),
 };
@@ -77,12 +81,7 @@ export type AdminUserCreateFormValues = z.infer<
   typeof adminUserCreateFormSchema
 >;
 
-/** Convert Persian digits to their ASCII equivalents for API payloads. */
-export function toAsciiDigits(value: string): string {
-  return value.replace(/[۰-۹]/g, (digit) =>
-    String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)),
-  );
-}
+export { toAsciiDigits } from "@/lib/normalize-digits";
 
 /** Convert an API timestamp to the value expected by a native date input. */
 export function apiDateToInputValue(value?: string | null): string {

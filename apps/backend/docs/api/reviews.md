@@ -18,6 +18,7 @@ See [Authentication](../authentication.md) for the token model and trust tiers, 
 | PATCH | `/reviews/:id` | 🔒 customer | Update own review |
 | DELETE | `/reviews/:id` | 🔒 customer | Delete own review |
 | POST | `/reviews/:id/react` | 🔒 customer | Like / dislike a review |
+| DELETE | `/reviews/:id/react` | 🔒 customer | Undo the caller's like / dislike |
 | GET | `/reviews/:id/images` | 🔒 customer | List a review's images |
 | POST | `/reviews/:id/images` | 🔒 customer | Add an image to a review |
 | GET | `/admin/reviews` | 🛡️ admin | List all reviews (any status) |
@@ -33,7 +34,7 @@ A review's `status` is one of `pending`, `approved`, `rejected`.
 GET /products/:id/reviews
 ```
 
-Lists reviews for product `:id`. **Only `approved` reviews are returned** — the status filter is forced server-side. Accepts the standard pagination/filter query params (see [Conventions](../conventions.md)), plus `rating` (1–5) and `verified`.
+Lists reviews for product `:id`. **Only `approved` reviews are returned** — the status filter is forced server-side. Accepts the standard pagination/filter query params (see [Conventions](../conventions.md)), plus `rating` (1–5) and `verified`. Each review's `images` is hydrated from `review_images` in one batch query.
 
 **Response** `200 OK` — paginated `ReviewResponse[]`:
 
@@ -102,7 +103,7 @@ GET /products/:id/reviews/summary
 GET /reviews/:id
 ```
 
-**Response** `200 OK` — approved `ReviewResponse` (see shape above, wrapped in `data`). Pending and rejected reviews are not publicly readable.
+**Response** `200 OK` — approved `ReviewResponse` (see shape above, wrapped in `data`), including hydrated `images`. Pending and rejected reviews are not publicly readable.
 
 **Errors:** `400 INVALID_PARAMS`, `404 NOT_FOUND`.
 
@@ -115,7 +116,7 @@ POST /reviews
 Authorization: Bearer <access_token>
 ```
 
-The author is taken from the access token. The caller must have a delivered order containing the product; `verified_purchase` is determined server-side. New reviews start in `pending` status.
+The author is taken from the access token. A delivered purchase is **not** required — non-buyers may create a review. `HasPurchased` still runs so the row is stamped `verified_purchase: true` only when the caller has a delivered order containing the product; otherwise it is `false`. Missing purchase is not `403`. New reviews start in `pending` status (table default).
 
 **Request body** — `CreateReviewReq`:
 
@@ -137,7 +138,7 @@ The author is taken from the access token. The caller must have a delivered orde
 
 **Response** `201 Created` — `ReviewResponse`.
 
-**Errors:** `401 UNAUTHORIZED`, `403 ACCESS_DENIED` (no delivered purchase), `409 CONFLICT` (already reviewed), `422 VALIDATION_ERROR`.
+**Errors:** `401 UNAUTHORIZED`, `400 INVALID_JSON`, `400 INVALID_REQUEST`, `409 CONFLICT` (already reviewed this product), `422 VALIDATION_ERROR`. No `403 ACCESS_DENIED` on create — a missing delivered purchase still returns `201` with `verified_purchase: false`.
 
 ---
 
@@ -148,7 +149,7 @@ GET /reviews/mine
 Authorization: Bearer <access_token>
 ```
 
-Returns `{ "data": [...] }` with the caller's non-deleted reviews and the related `product_id`, `product_slug`, `product_title`, optional `image_url`, `rating`, `content`, `status`, and `created_at`.
+Returns `{ "data": [...] }` with the caller's non-deleted reviews and the related `product_id`, `product_slug`, `product_title`, optional `image_url`, `rating`, `content`, `status`, and `created_at`. Capped at 100 rows (newest first).
 
 ## List products pending review
 
@@ -157,7 +158,7 @@ GET /reviews/pending
 Authorization: Bearer <access_token>
 ```
 
-Returns `{ "data": [...] }` with products from delivered orders for which the caller has no non-deleted review. Each item includes product details, `order_id`, and optional `delivered_at`.
+Returns `{ "data": [...] }` with products from delivered orders for which the caller has no non-deleted review. Each item includes product details, `order_id`, and optional `delivered_at`. Capped at 100 rows.
 
 ---
 
@@ -225,6 +226,21 @@ Repeated identical votes are idempotent.
 
 ---
 
+## Undo a review reaction
+
+```
+DELETE /reviews/:id/react
+Authorization: Bearer <access_token>
+```
+
+Removes the caller's like or dislike on an approved review. Unlike when the caller has no vote is idempotent (`204`). Missing or unapproved reviews are still `404`.
+
+**Response** `204 No Content`.
+
+**Errors:** `401 UNAUTHORIZED`, `400 INVALID_PARAMS`, `404 NOT_FOUND`.
+
+---
+
 ## List review images
 
 ```
@@ -267,13 +283,15 @@ Authorization: Bearer <access_token>
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `image_url` | string | ✓ | Image URL |
+| `image_url` | string | ✓ | `https://` URL or origin-independent `/media/...` path, max 2048 |
 | `alt_text` | string \| null | | Alt text, max 255 characters |
 | `sort_order` | int | | Display order |
 
+`image_url` must be an `https://` URL with a host, or an origin-independent `/media/...` (or existing `/images/...`) path. `javascript:`, `data:`, `http:`, and protocol-relative hosts are rejected.
+
 **Response** `201 Created` — `ReviewImage`.
 
-**Errors:** `401 UNAUTHORIZED`, `400 INVALID_PARAMS`, `404 NOT_FOUND`.
+**Errors:** `401 UNAUTHORIZED`, `400 INVALID_PARAMS`, `400 INVALID_REQUEST` (disallowed `image_url`), `404 NOT_FOUND`.
 
 ---
 
@@ -286,7 +304,9 @@ Authorization: Bearer <access_token>
 
 Lists reviews of **any** status. Accepts the standard pagination/filter params plus `product_id`, `user_id`, `status`, `rating` (1–5), `verified`.
 
-**Response** `200 OK` — paginated `ReviewAdminResponse[]` (all `ReviewResponse` fields plus `updated_at` and an optional `deleted_at`):
+**Response** `200 OK` — paginated `ReviewAdminResponse[]` (all `ReviewResponse` fields plus catalogue `product_title` / `product_slug`, `updated_at`, and an optional `deleted_at`):
+
+`product_title` and `product_slug` are list enrichment from `products` (PR-063d) so the admin queue does not need a second product hop. Title is `""` and slug is omitted when the parent row is missing.
 
 ```json
 {
@@ -305,6 +325,8 @@ Lists reviews of **any** status. Accepts the standard pagination/filter params p
       "verified_purchase": false,
       "status": "pending",
       "created_at": "2026-06-11T10:00:00Z",
+      "product_title": "بطری شیراز",
+      "product_slug": "shiraz-bottle",
       "updated_at": "2026-06-11T10:00:00Z"
     }
   ],
@@ -335,6 +357,6 @@ Moderates a review by setting its status.
 { "status": "approved" }
 ```
 
-**Response** `200 OK` — `ReviewAdminResponse`.
+**Response** `200 OK` — `ReviewAdminResponse` (same catalogue `product_title` / `product_slug` as the admin list).
 
 **Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `400 INVALID_PARAMS`, `422 VALIDATION_ERROR`, `404 NOT_FOUND`.

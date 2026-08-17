@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
@@ -20,6 +21,9 @@ type Repository interface {
 	Confirm(ctx context.Context, tx pgx.Tx, req ConfirmPaymentReq) (*PaymentTransaction, error)
 	Fail(ctx context.Context, req FailPaymentReq) (*PaymentTransaction, error)
 	BeginTx(ctx context.Context) (pgx.Tx, error)
+	InsertEarnIntent(ctx context.Context, tx pgx.Tx, intent OrderEarnIntent) error
+	ListPendingEarnIntents(ctx context.Context, limit int) ([]OrderEarnIntent, error)
+	MarkEarnAwarded(ctx context.Context, orderID int64) error
 }
 
 type paymentTransactionRepository struct {
@@ -88,6 +92,7 @@ func (r *paymentTransactionRepository) GetByID(ctx context.Context, id int64) (*
 		}
 		return nil, fmt.Errorf("paymentTransactionRepository.GetByID scan: %w", err)
 	}
+	r.attachUserUUIDs(ctx, &pt)
 	return &pt, nil
 }
 
@@ -106,6 +111,7 @@ func (r *paymentTransactionRepository) GetByTransactionID(ctx context.Context, t
 		}
 		return nil, fmt.Errorf("paymentTransactionRepository.GetByTransactionID scan: %w", err)
 	}
+	r.attachUserUUIDs(ctx, &pt)
 	return &pt, nil
 }
 
@@ -182,7 +188,60 @@ func (r *paymentTransactionRepository) GetAll(ctx context.Context, f PaymentTran
 		return nil, 0, fmt.Errorf("paymentTransactionRepository.GetAll rows: %w", err)
 	}
 
+	r.attachUserUUIDs(ctx, pts...)
 	return pts, total, nil
+}
+
+// attachUserUUIDs fills UserUUID from users.user_id so admin DTOs can jump
+// to /admin/customers/:id. Lookup failure omits the public id (never emit users.id).
+func (r *paymentTransactionRepository) attachUserUUIDs(ctx context.Context, pts ...*PaymentTransaction) {
+	ids := make([]int64, 0, len(pts))
+	seen := make(map[int64]struct{}, len(pts))
+	for _, pt := range pts {
+		if pt == nil || pt.UserID == nil || *pt.UserID <= 0 {
+			continue
+		}
+		id := *pt.UserID
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return
+	}
+
+	rows, err := r.db.Query(ctx, `SELECT id, user_id FROM users WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	byInternal := make(map[int64]uuid.UUID, len(ids))
+	for rows.Next() {
+		var id int64
+		var public uuid.UUID
+		if err := rows.Scan(&id, &public); err != nil {
+			return
+		}
+		if public != uuid.Nil {
+			byInternal[id] = public
+		}
+	}
+	if rows.Err() != nil {
+		return
+	}
+
+	for _, pt := range pts {
+		if pt == nil || pt.UserID == nil {
+			continue
+		}
+		if public, ok := byInternal[*pt.UserID]; ok {
+			uid := public
+			pt.UserUUID = &uid
+		}
+	}
 }
 
 // Confirm stamps paid_at and stores the gateway response.
@@ -252,3 +311,45 @@ func (r *paymentTransactionRepository) Fail(ctx context.Context, req FailPayment
 	return &pt, nil
 }
 
+func (r *paymentTransactionRepository) InsertEarnIntent(ctx context.Context, tx pgx.Tx, intent OrderEarnIntent) error {
+	const q = `
+		INSERT INTO payment_loyalty_awards (order_id, user_id, amount)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (order_id) DO NOTHING`
+	if _, err := tx.Exec(ctx, q, intent.OrderID, intent.UserID, intent.Amount); err != nil {
+		return fmt.Errorf("paymentTransactionRepository.InsertEarnIntent: %w", err)
+	}
+	return nil
+}
+
+func (r *paymentTransactionRepository) ListPendingEarnIntents(ctx context.Context, limit int) ([]OrderEarnIntent, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	const q = `
+		SELECT order_id, user_id, amount, created_at, awarded_at
+		FROM payment_loyalty_awards
+		WHERE awarded_at IS NULL
+		ORDER BY created_at ASC
+		LIMIT $1`
+	rows, err := r.db.Query(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("paymentTransactionRepository.ListPendingEarnIntents: %w", err)
+	}
+	intents, err := pgx.CollectRows(rows, pgx.RowToStructByName[OrderEarnIntent])
+	if err != nil {
+		return nil, fmt.Errorf("paymentTransactionRepository.ListPendingEarnIntents scan: %w", err)
+	}
+	return intents, nil
+}
+
+func (r *paymentTransactionRepository) MarkEarnAwarded(ctx context.Context, orderID int64) error {
+	const q = `
+		UPDATE payment_loyalty_awards
+		SET awarded_at = NOW()
+		WHERE order_id = $1 AND awarded_at IS NULL`
+	if _, err := r.db.Exec(ctx, q, orderID); err != nil {
+		return fmt.Errorf("paymentTransactionRepository.MarkEarnAwarded: %w", err)
+	}
+	return nil
+}

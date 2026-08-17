@@ -110,8 +110,8 @@ vi.mock("@/features/image-uploader/ImageInput", () => ({
   }),
 }));
 
-vi.mock("./journal-product-picker", () => ({
-  JournalProductPicker: () => null,
+vi.mock("@/features/admin/shared/product-picker", () => ({
+  ProductPicker: () => null,
 }));
 
 import { JournalForm } from "./journal-form";
@@ -145,6 +145,7 @@ beforeEach(() => {
       disconnect() {}
     },
   );
+  Element.prototype.scrollIntoView = vi.fn();
   vi.clearAllMocks();
   mediaState.staged = true;
   mediaState.validationError = null;
@@ -316,5 +317,105 @@ describe("JournalForm owner-aware media", () => {
       await screen.findByText("بارگذاری تصویر ناموفق بود"),
     ).toBeInTheDocument();
     expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("shows a Jalali schedule field and confirms unpublish of a live post", async () => {
+    mediaState.staged = false;
+    const post: JournalDetail = {
+      id: 18,
+      author_id: 4,
+      title: "نوشتهٔ موجود",
+      slug: "نوشته-موجود",
+      excerpt: null,
+      content: "<p>متن موجود</p>",
+      image_url: "/media/journal/18/old.webp",
+      image_alt: "تصویر قبلی",
+      time_to_read: 4,
+      total_reads: 3,
+      status: "published",
+      is_featured: false,
+      meta_title: null,
+      meta_description: null,
+      published_at: "2026-08-01T10:00:00Z",
+      created_at: "2026-08-01T09:00:00Z",
+      updated_at: "2026-08-01T10:00:00Z",
+      categories: [],
+      product_ids: [],
+      tag_ids: [],
+    };
+    renderForm({
+      mode: "edit",
+      post,
+      categories: [],
+      tags: [],
+      initialProducts: [],
+    });
+
+    expect(screen.getByLabelText("زمان انتشار (شمسی)")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("منتشرشده");
+
+    fireEvent.click(screen.getByLabelText("وضعیت انتشار"));
+    fireEvent.click(await screen.findByRole("option", { name: "پیش‌نویس" }));
+    fireEvent.click(screen.getByRole("button", { name: "ذخیرهٔ تغییرات" }));
+
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "برداشتن از انتشار",
+    );
+    expect(updateMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "تأیید برداشتن از انتشار" }));
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
+    expect(updateMock.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ status: "draft" }),
+    );
+  });
+
+  it("does not submit when canWrite is false", () => {
+    const post: JournalDetail = {
+      id: 18,
+      author_id: 4,
+      title: "نوشتهٔ موجود",
+      slug: "نوشته-موجود",
+      excerpt: null,
+      content: "<p>متن موجود</p>",
+      image_url: "/media/journal/18/old.webp",
+      image_alt: "تصویر قبلی",
+      time_to_read: 4,
+      total_reads: 3,
+      status: "published",
+      is_featured: false,
+      meta_title: null,
+      meta_description: null,
+      published_at: "2026-08-01T10:00:00Z",
+      created_at: "2026-08-01T09:00:00Z",
+      updated_at: "2026-08-01T10:00:00Z",
+      categories: [],
+      product_ids: [],
+      tag_ids: [],
+    };
+    renderForm({
+      mode: "edit",
+      post,
+      categories: [],
+      tags: [],
+      initialProducts: [],
+      canWrite: false,
+    });
+
+    expect(
+      screen.getByText(/فقط مشاهده — ذخیره و بارگذاری تصویر/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "ذخیرهٔ تغییرات" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("عنوان"), {
+      target: { value: "عنوان اصلاح‌شده" },
+    });
+    fireEvent.submit(document.querySelector("form")!);
+
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(createMock).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
   });
 });

@@ -21,12 +21,17 @@ export interface LoyaltyAccount {
   tier: LoyaltyTier;
   next_tier?: LoyaltyNextTier;
   points_to_next: number;
+  /** Toman of wallet credit per point (programme rate, PR-003l). */
+  redeem_value?: number;
 }
 
-/** Ledger projection returned by GET /api/v1/loyalty/transactions. */
+/** Ledger row from GET /api/v1/loyalty/transactions (PR-003j). */
 export interface LoyaltyTransaction {
+  id?: number;
   delta: number;
   reason: LoyaltyTransactionReason;
+  ref_type?: string;
+  ref_id?: string;
   created_at: string;
 }
 

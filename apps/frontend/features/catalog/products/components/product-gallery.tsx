@@ -142,7 +142,7 @@ export function ProductGallery({
             </button>
             <span
               aria-live="polite"
-              className="absolute bottom-3 start-1/2 z-10 -translate-x-1/2 rounded-full border border-border/50 bg-background/90 px-3 py-1 text-xs font-medium tabular-nums text-muted-foreground shadow-e1 backdrop-blur-sm sm:bottom-4"
+              className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border/50 bg-background/90 px-3 py-1 text-xs font-medium tabular-nums text-muted-foreground shadow-e1 backdrop-blur-sm sm:bottom-4"
             >
               {faNum(safeActive + 1)} / {faNum(count)}
             </span>

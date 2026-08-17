@@ -1,9 +1,7 @@
-export const API_URL =
-  process.env.API_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:8080";
-
-export const BASE_API_URL = `${API_URL.replace(/\/$/, "")}/api/v1`;
+// The API_URL / BASE_API_URL constants that used to live here were a third copy
+// of the origin-resolution chain and had no importers — every consumer of this
+// module only wants buildQueryString. Use `resolveApiOrigin` / `resolveApiBase`
+// from "@/lib/api/origin" (or the server-only re-export in "@/lib/api/base").
 
 /**
  * Build a URL query string from a flat object.

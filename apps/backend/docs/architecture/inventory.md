@@ -63,6 +63,24 @@ Payment succeeded   −qty             −qty          unchanged*
   (*available stays same because both sides drop by qty)
 ```
 
+### Per-order reservation identity (PR-020b)
+
+`committed_stock` is still the sellable counter. Identity lives in
+`inventory_reservations` (unique `(order_id, product_variant_id)`, status
+`active` / `released` / `deducted`).
+
+- **Reserve** inserts or reactivates **this** order’s row, then
+  `committed_stock += qty`. Already-active same qty is a no-op.
+- **Release** succeeds only while the row is **active**; then decrements
+  committed and marks `released`. Re-release is a no-op (does not steal
+  another order’s committed units).
+- **Deduct** succeeds only while the row is **active**; then decrements
+  on-hand + committed and marks `deducted`. Late success after fail/release
+  must not drain a foreign committed pool.
+
+Migration `20260816190000_inventory_order_reservations.sql` backfills
+active rows for in-flight `pending` orders.
+
 ### 1. Reserve — place order
 
 - **Caller:** `OrderService.CreateOrder` via `ReserveForOrderTx` on the **same
@@ -72,7 +90,7 @@ Payment succeeded   −qty             −qty          unchanged*
 - **Atomicity:** if any line is short, the **entire** order transaction rolls
   back. No dangling pending order without stock.
 - **Error:** `ErrInsufficientStock` → client sees conflict / unprocessable
-  (handler mapping).
+  (handler mapping). `isBusinessError` uses `errors.Is` (PR-020q) so a `%w`-wrapped sentinel stays business, not a 500.
 
 Code: `internal/features/inventory/service.go` → `ReserveForOrderTx`  
 Also used when tests call standalone `ReserveForOrder` (own short tx).
@@ -80,9 +98,9 @@ Also used when tests call standalone `ReserveForOrder` (own short tx).
 ### 2. Release — unpaid cancel / payment failed
 
 - **Caller:** order cancel path; payment webhook `failed` branch after
-  `PaymentService.Fail`.
+  `PaymentService.Fail` + pending→`payment_failed`.
 - **Effect:** `committed_stock −= qty` (available goes back up). Physical stock
-  unchanged.
+  unchanged. Only this order’s **active** reservation is released.
 - **Why:** the warehouse never shipped; the hold is lifted.
 
 ### 3. Deduct — payment confirmed
@@ -93,6 +111,8 @@ Also used when tests call standalone `ReserveForOrder` (own short tx).
   (units leave the building conceptually and leave the hold).
 - **Why atomic with Confirm:** a paid order must never leave stock still only
   “committed” forever (historical bug class).
+- **Fail-closed:** no active reservation → deduct refused. `MarkAsPaid` is
+  still pending-only, so `payment_failed` orders cannot be marked paid.
 
 See payments doc for webhook HMAC and idempotency of status transitions.
 
@@ -105,16 +125,22 @@ That is no longer acceptable.
 
 | Path | Behavior |
 |------|----------|
-| `VariantService.Create` | `EnsureForVariant` after insert |
+| `VariantService.Create` | `EnsureForVariant` after insert (own short TX) |
+| Editor `SaveAggregate` (`POST/PUT …/aggregate`) | `inventory.EnsureForVariantTx` in the **same TX** after every variant insert/update |
+| Legacy `POST /admin/products` inline variants (`insertVariantTx`) | `EnsureForVariantTx` in the **same TX** after each new variant |
 | `GetByVariantID` / `AdjustStock` / `UpdateReorder` | ensure (or ensure-in-tx) before use |
 | Migration `20260804170000_ensure_inventory_for_all_variants` | backfill zero-stock rows for existing variants |
 | Seed | inserts starting stock per product |
 
-`EnsureForVariant` is idempotent (`INSERT … ON CONFLICT DO NOTHING` style /
-exists-check). If the **variant** itself is missing → `apperr.ErrNotFound`.
+`EnsureForVariant` / `EnsureForVariantTx` are idempotent (`INSERT … ON CONFLICT
+DO NOTHING` style / exists-check). Zero on-hand is correct — do not invent
+stock. If ensure fails, the variant write must not commit (editor/legacy create
+share the product TX). If the **variant** itself is missing → `apperr.ErrNotFound`
+on the standalone path; in-TX callers surface the repo error and roll back.
 
 List (`GetAll`) still reads from the `inventory` table; after migration + create
-ensure, every sellable variant appears.
+ensure, every sellable variant appears. Missing row ⇒ not purchasable
+(`purchasable_variant_id` stays null) and admin stock tools miss the variant.
 
 ---
 
@@ -183,10 +209,10 @@ Admin list filters: variant, type, order id, pagination. See API doc for JSON.
 | Feature package | `internal/features/inventory/` |
 | Handler | `internal/features/inventory/handler.go` |
 | Service | `internal/features/inventory/service.go` |
-| Repository | `internal/features/inventory/repository.go` (+ `movement_repository.go`) |
+| Repository | `internal/features/inventory/repository.go` (+ `reservation.go`, `movement_repository.go`) |
 | Domain + wire types | `internal/features/inventory/model.go` (+ `mapper.go`) |
 | Shared sentinels | `internal/models/errors.go` (`ErrInsufficientStock`, `ErrInvalidInventoryAdjustment`, …) |
-| Unit tests | `internal/features/inventory/service_test.go` |
+| Unit tests | `internal/features/inventory/service_test.go`, `reservation_test.go` |
 | Integration | `tests/integration/inventory_test.go` |
 
 **Dependency direction:** Order and Payment feature services call inventory
@@ -205,6 +231,7 @@ Domain entities live in the feature package — not in `internal/models` (PH-012
 | Order committed without stock | Reserve is **in** CreateOrder TX |
 | Paid without physical drop | Deduct **in** Confirm TX |
 | Double webhook | Payment status transitions only from pending; confirm/fail not re-applied |
+| Fail then late succeed | Order → `payment_failed`; deduct requires **this** order’s active reservation (PR-020b) |
 
 Integration tests exercise reservation visibility to cart/wishlist and
 adjustment thresholds — run with `make test-integration` when

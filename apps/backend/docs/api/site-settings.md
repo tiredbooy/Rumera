@@ -1,7 +1,7 @@
 # Site settings
 
 **Implementation (feature slice):** `internal/features/site_settings/`  
-Composed from `internal/routes/routes.go`. Public GET is Redis-cached; admin writes invalidate. API contracts unchanged.
+Composed from `internal/routes/routes.go`. Public GET is Redis-cached; admin writes invalidate. Admin PUT requires `expected_updated_at`.
 
 
 The storefront's single, global configuration document — store identity, contact
@@ -17,7 +17,7 @@ Legend: 🌐 public · 🔒 customer · 🛡️ admin
 |--------|------|------|-------------|
 | GET | `/settings` | 🌐 public | Storefront-safe settings subset (read-through cached) |
 | GET | `/admin/settings` | 🛡️ admin | Full settings document (cache-bypassing) |
-| PUT | `/admin/settings` | 🛡️ admin | Partial update — replace only the groups you send |
+| PUT | `/admin/settings` | 🛡️ admin | Partial update — replace only the groups you send; requires `expected_updated_at` |
 
 ---
 
@@ -41,7 +41,8 @@ can grow without a schema migration. Each group is a flat object:
 > snake_case. The settings document mirrors the admin editor's field names.
 
 The admin `GET` also returns a top-level `updatedAt` (the row's `updated_at`
-timestamp, not part of the JSONB body). The public projection (`PublicSiteSettings`)
+timestamp, not part of the JSONB body). Copy that value into `expected_updated_at`
+on the next PUT. The public projection (`PublicSiteSettings`)
 exposes every group today but is a distinct type, so the public contract stays
 stable as admin-only groups are added later.
 
@@ -184,10 +185,17 @@ PUT /admin/settings
 Authorization: Bearer <access_token>
 ```
 
-**Partial update.** Every group is optional. A group that is **present** replaces
-the stored group **wholesale** (all of that group's fields are written from the
-body). A group that is **omitted** (or `null`) is left untouched. There is no
-per-field merge — to change one field of a group you must send the whole group.
+**Partial update** with an **optimistic revision check**. Every group is optional.
+A group that is **present** replaces the stored group **wholesale** (all of that
+group's fields are written from the body). A group that is **omitted** (or `null`)
+is left untouched. There is no per-field merge — to change one field of a group
+you must send the whole group.
+
+`expected_updated_at` is **required**. Copy it from the latest admin GET
+`updatedAt`. The write locks the singleton row (`SELECT … FOR UPDATE`) and
+succeeds only when that timestamp still matches. A stale value returns
+`409 CONFLICT` with an `expected_updated_at` field error instead of last-write-wins
+overwriting a newer save (including gift prices). Reload the document and retry.
 
 On success the public settings cache is invalidated.
 
@@ -195,6 +203,7 @@ On success the public settings cache is invalidated.
 
 | Group / field | Required | Validation |
 |---------------|----------|------------|
+| `expected_updated_at` | ✓ | RFC3339 timestamp from admin GET `updatedAt` |
 | `store.name` | ✓ (if `store` sent) | max 255 |
 | `store.tagline` | | max 255 |
 | `store.logoUrl` | | max 2048 |
@@ -223,6 +232,7 @@ other group untouched:
 
 ```json
 {
+  "expected_updated_at": "2026-06-20T08:00:00Z",
   "maintenance": { "enabled": true, "message": "Back at noon." },
   "shipping": { "freeThreshold": 6000000, "note": "Free shipping over ₮6,000,000." }
 }
@@ -232,6 +242,7 @@ Example — charge for gift packaging (replaces the whole `gift` group):
 
 ```json
 {
+  "expected_updated_at": "2026-06-20T08:00:00Z",
   "gift": {
     "enabled": true,
     "messageEnabled": true,
@@ -262,4 +273,4 @@ Example — charge for gift packaging (replaces the whole `gift` group):
 **Response** `200 OK` — the full updated `SiteSettings` (same shape as the admin
 GET, wrapped in `data`).
 
-**Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `400 INVALID_JSON`, `422 VALIDATION_ERROR`.
+**Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `400 INVALID_JSON`, `422 VALIDATION_ERROR` (missing `expected_updated_at`), `409 CONFLICT` (stale `expected_updated_at`).

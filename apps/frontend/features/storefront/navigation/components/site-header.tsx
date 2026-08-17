@@ -1,6 +1,8 @@
-import type { CategoryTree } from "@/features/catalog/categories/types";
 import { ProductsMegaMenu } from "@/features/catalog/categories/components/product-mega-menu";
+import type { CategoryTree } from "@/features/catalog/categories/types";
+import { getPublicSiteSettingsOrNull } from "@/features/settings/api/server";
 
+import { toStorefrontChromeSettings } from "../chrome-settings";
 import { productMenuPromotion } from "../config";
 import { HeaderActions } from "./header-actions";
 import { HeaderChrome } from "./header-chrome";
@@ -14,17 +16,24 @@ interface SiteHeaderProps {
   categoryTree: CategoryTree[];
 }
 
-export function SiteHeader({ categoryTree }: SiteHeaderProps) {
+export async function SiteHeader({ categoryTree }: SiteHeaderProps) {
+  const chrome = toStorefrontChromeSettings(
+    await getPublicSiteSettingsOrNull(),
+  );
+
   return (
     <>
-      <PromoBar />
+      <PromoBar announcement={chrome.announcement} />
       <HeaderChrome>
         <div className="container-px mx-auto flex h-16 max-w-7xl items-center gap-3 lg:gap-5">
           <div className="flex items-center md:hidden">
-            <MobileNavDrawer categoryTree={categoryTree} />
+            <MobileNavDrawer
+              categoryTree={categoryTree}
+              storeName={chrome.storeName}
+            />
           </div>
 
-          <HeaderLogo />
+          <HeaderLogo storeName={chrome.storeName} tagline={chrome.tagline} />
 
           <nav
             aria-label="ناوبری اصلی فروشگاه"

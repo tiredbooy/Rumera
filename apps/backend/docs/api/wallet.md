@@ -22,7 +22,8 @@ Money replay: [idempotency.md](../architecture/idempotency.md) ·
 | GET | `/wallet/transactions` | 🔒 customer | List wallet transactions |
 | POST | `/wallet/topup` | 🔒 customer | Start gateway top-up (pending payment; not free credit) |
 | POST | `/wallet/withdraw` | 🔒 customer | **410 Gone** — self-service withdraw removed |
-| POST | `/admin/users/:userID/wallet/credit` | 🛡️ admin | Credit a customer wallet (idempotent) |
+| GET | `/admin/users/:userID/wallet/transactions` | 🛡️ admin | A customer's wallet ledger — `customers:read` |
+| POST | `/admin/users/:userID/wallet/credit` | 🛡️ admin | Credit a customer wallet (idempotent) — `wallet:credit` |
 
 > **Ownership:** customer endpoints operate only on the caller's wallet (from JWT).
 > Admin credit targets `:userID` under RBAC (`customers:write`).
@@ -87,13 +88,20 @@ Balance is credited only when the payment webhook confirms success
     "transaction_id": "wtop-a1b2c3…",
     "amount": "100000.00",
     "currency": "IRT",
-    "status": "pending"
+    "status": "pending",
+    "payment_url": "https://pay.example.com/start?transaction_id=wtop-a1b2c3…"
   }
 }
 ```
 
-Client pays the gateway using `transaction_id`. On webhook success, ledger shows
-a deposit with description containing `topup_txid=<transaction_id>`.
+`payment_url` is `{PAYMENT_START_BASE_URL}?transaction_id={transaction_id}`
+(PR-005a). Redirect the customer there. The field is present but **empty** when
+the base is unset (development only). Production boot **requires**
+`PAYMENT_START_BASE_URL` — an empty URL is not a successful pay.
+
+Client may also pay the gateway using `transaction_id` directly. On webhook
+success, ledger shows a deposit with description containing
+`topup_txid=<transaction_id>`.
 
 **Errors:** `401`, `422` / invalid amount, `409` idempotency conflict, `503` if top-up gateway not wired.
 
@@ -161,6 +169,23 @@ Returns a paginated ledger of the caller's wallet transactions.
 **Errors:** `400 INVALID_QUERY`, `404 WALLET_NOT_FOUND`, `401 UNAUTHORIZED`.
 
 ---
+
+## Admin: read a customer's ledger
+
+```
+GET /admin/users/:userID/wallet/transactions
+```
+
+Capability **`customers:read`** (or `customers:write`) — deliberately *not* the
+`wallet:credit` grant, which mints money. Same paginated shape as the customer
+`GET /wallet/transactions`; `:userID` is the public UUID.
+
+**Why this exists (A-10).** The wallet rail settles inside the order transaction
+and writes **no `payment_transactions` row** — that is intentional, see
+[payments-and-webhooks.md](../architecture/payments-and-webhooks.md). So for a
+wallet-paid order the admin payments board is empty and the order detail carries
+no `payment` block. This ledger, keyed by `reference_order_id`, is the only
+admin trail that purchase has.
 
 ## Admin credit
 

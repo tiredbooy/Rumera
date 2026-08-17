@@ -79,6 +79,8 @@ hiding is not security.
 | Query keys | `features/inventory/query-keys.ts` |
 | Server actions / mutations helpers | `features/inventory/actions.ts` |
 | Display helpers | `features/inventory/utils.ts` |
+| List URL parse / href | `features/admin/inventory/inventory-list-params.ts` |
+| List board | `features/admin/inventory/components/inventory-list-view.tsx` |
 | Table UI | `features/admin/inventory/components/InventoryTable.tsx` |
 | Variant detail UI | `features/admin/inventory/components/…` |
 | Zod / form validations | `features/admin/inventory/validations.ts` |
@@ -90,28 +92,47 @@ Pattern: **domain API** under `features/inventory`, **admin board chrome** under
 
 ## List page behavior
 
-`AdminInventoryPage` (RSC):
+`AdminInventoryPage` (RSC) forwards `searchParams` to `InventoryListView`.
 
 1. Requires inventory read.
-2. Loads inventory via `listAllInventory()` (or paginated list — see `api.ts`).
-3. Computes KPI cards from the payload:
-   - SKU count
-   - Out of stock: `available_stock <= 0`
-   - Low stock: `0 < available_stock <= reorder_point`
-   - Rough stock value: sum of `stock_on_hand * unit_price` (display only;
-     money still comes as decimal **strings** from API — be careful with JS
-     number coercion for large catalogs).
-4. Renders `InventoryTable` with write capability flag.
+2. Parses `q` / `search`, `page`, and `low_stock` (`true` / `1`).
+3. Loads **one** `GET /admin/inventory` page via `listInventory()`:
+   `page`, `limit=20`, `search`, `low_stock`, `sortBy=updated_at`, `orderBy=desc`.
+   Do **not** call `listAllInventory()` — that walks every page of 100.
+4. KPI cards:
+   - SKU count = unfiltered `pagination.total_items` (cheap `limit=1` when the
+     list itself is filtered).
+   - Low stock = `low_stock=true` `pagination.total_items` (BE:
+     `available_stock <= reorder_point`, includes out of stock).
+   - Out of stock / missing weight / stock value are **this page only**
+     (no catalog-wide filter). Money is still a decimal **string** — JS
+     `Number` is display-only.
+5. Search and low-stock are GET filters on `/admin/inventory` (whole catalog).
+   DataTable facets (category / status / critical / weight) still apply to the
+   current page only.
+6. Out-of-range `page` redirects to the last page, preserving `q` + `low_stock`.
+7. A failed `listInventory()` is **not** an empty warehouse. `InventoryListResults`
+   renders `AdminDataErrorState` («دریافت موجودی ناموفق بود») with the shared
+   `router.refresh` retry — header and GET filters stay on the page. Auth
+   `401`/`403` still throw to `app/admin/error.tsx`. Zero results stay a
+   distinct empty state («هنوز ردیف موجودی ندارید» / «رکورد موجودی مطابق این
+   جستجو پیدا نشد»).
 
 ### Columns / sort (API-backed)
 
-Sort fields aligned with backend: `id`, `updated_at`, `stock_on_hand`,
-`available_stock`, `reorder_point`, `product_title`, `sku`.  
-Search: product title or SKU.  
+List request sort is `updated_at desc` (BE default; inventory `id` is the
+secondary key). Supported `sortBy` values remain `id`, `updated_at`,
+`stock_on_hand`, `available_stock`, `reorder_point`, `product_title`, `sku`.  
+Search: product title or SKU (`q` on the admin URL → API `search`).  
 Filter: `low_stock=true`.
 
 Always show **available** prominently; showing only on-hand misleads buyers of
 reserved stock.
+
+The admin-home `LowStockList` widget uses the same `InventoryItem` fields.
+It prints `product_title` (then `sku`, then variant id) — never a fabricated
+name. `GET /admin/inventory/low-stock` is paginated; the widget unwraps
+`results`. This is not the inventory list page (that board is separate).
 
 ---
 
@@ -159,6 +180,7 @@ from available vs reorder point. Keep derivation consistent with list KPIs.
 |----|--------|
 | Use BFF `/api/admin/…` inventory paths | Call Go host from the browser |
 | Trust server errors for insufficient stock | “Clamp” stock in the UI and pretend success |
+| Show a retry card when the list GET fails | Swallow `listInventory()` into `[]` / empty copy |
 | Label available vs committed clearly in Persian | Invent a third stock field |
 | Test validations with vitest | Skip tests when changing sign rules for movement types |
 
@@ -168,6 +190,9 @@ from available vs reorder point. Keep derivation consistent with list KPIs.
 
 - `features/inventory/api.test.ts`, `actions.test.ts`
 - `features/admin/inventory/validations.test.ts`
+- `features/admin/inventory/inventory-list-params.test.ts`
+- `features/admin/inventory/components/inventory-list-view.test.ts`
+- `app/admin/inventory/page.test.ts`
 - `app/admin/inventory/[variantID]/page.test.ts`
 - Backend unit: `inventory_svc_test.go`
 - Backend integration: `tests/integration/inventory_test.go`

@@ -25,6 +25,7 @@ type TopUpIntentView struct {
 	Amount        float64
 	Currency      string
 	Status        string
+	PaymentURL    string
 }
 
 // Handler is the HTTP surface for customer wallet and admin credit.
@@ -94,6 +95,7 @@ func (h *Handler) TopUp(c *gin.Context) {
 		Amount:        formatMoney(intent.Amount),
 		Currency:      intent.Currency,
 		Status:        intent.Status,
+		PaymentURL:    intent.PaymentURL,
 	})
 }
 
@@ -125,8 +127,52 @@ func (h *Handler) Transactions(c *gin.Context) {
 	response.Paginated(c, out, httpx.Paginate(filter.Page, filter.Limit, total))
 }
 
+// AdminTransactions — GET /admin/users/:userID/wallet/transactions
+//
+// A-10. The wallet rail settles inside the order transaction and writes no
+// payment_transactions row on purpose (see payments/doc.go), so an operator
+// investigating a wallet purchase found nothing: the admin payments board is
+// empty for that order and the order detail carries no payment block. The debit
+// has always been recorded here, keyed by reference_order_id — it simply had no
+// admin read route. This is that route, and it is deliberately NOT a fabricated
+// gateway record.
+//
+// Read-only, so it is gated on customers:read rather than the wallet:credit
+// grant that mints money.
+func (h *Handler) AdminTransactions(c *gin.Context) {
+	userID, ok := httpx.ParamUUID(c, "userID")
+	if !ok {
+		return
+	}
+	if h.Users == nil {
+		response.Error(c, response.ErrInternalError)
+		return
+	}
+	target, err := h.Users.GetByIDIncludingInactive(c.Request.Context(), userID)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	var filter TransactionFilter
+	if !httpx.BindQuery(c, h.Validator, &filter) {
+		return
+	}
+	filter.Defaults()
+
+	txs, total, err := h.Service.GetTransactions(c.Request.Context(), target.ID, filter)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	out := make([]TransactionResponse, len(txs))
+	for i, t := range txs {
+		out[i] = ToTransactionResponse(t)
+	}
+	response.Paginated(c, out, httpx.Paginate(filter.Page, filter.Limit, total))
+}
+
 // AdminCredit — POST /admin/users/:userID/wallet/credit
-// Requires panel capability customers:write (group middleware) and records the
+// Requires panel capability wallet:credit (group middleware) and records the
 // acting admin UUID + client idempotency key on the ledger description.
 func (h *Handler) AdminCredit(c *gin.Context) {
 	userID, ok := httpx.ParamUUID(c, "userID")

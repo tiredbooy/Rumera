@@ -19,6 +19,7 @@ server-priced fees.
 4. Summary shows **بسته‌بندی و افزونهٔ هدیه** when fee &gt; 0.
 5. `POST /orders` with `is_gift` + `gift_option_ids[]`.
 6. [[Orders Backend]] resolves ids → snapshot + fee; total includes fee; rejects unknown/disabled options.
+7. Admin `/admin/orders/:id` prints `is_gift` / message / add-on snapshot / notes / preferred delivery when present on GET (PR-062d · [[Admin Console]]).
 
 ## Non-goals
 

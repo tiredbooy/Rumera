@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import type { ProductDetail } from "@/features/catalog/products/types";
-import { getDefaultFormValues, productFormSchema } from "./validations";
+import {
+  getDefaultFormValues,
+  productFormSchema,
+  toDuplicateSeed,
+} from "./validations";
 
 function formValues() {
   return {
     title: "محصول",
-    slug: "",
+    slug: "product",
     code: "",
     description: "",
     category_id: "",
@@ -108,6 +112,29 @@ describe("product variant validation", () => {
     );
   });
 
+  it("lets a draft park without price or slug", () => {
+    const values = formValues();
+    values.is_active = false;
+    values.slug = "";
+    values.variants[0].price = "";
+    values.variants[1].price = "";
+
+    expect(productFormSchema.safeParse(values).success).toBe(true);
+  });
+
+  it("requires slug and variant prices before publish", () => {
+    const values = formValues();
+    values.slug = "";
+    values.variants[0].price = "";
+
+    const result = productFormSchema.safeParse(values);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues.map((issue) => issue.path.join("."))).toEqual(
+      expect.arrayContaining(["slug", "variants.0.price"]),
+    );
+  });
+
   it("starts new products as drafts", () => {
     expect(getDefaultFormValues().is_active).toBe(false);
   });
@@ -139,5 +166,49 @@ describe("product variant validation", () => {
     expect(getDefaultFormValues(product).variants[0]).toEqual(
       expect.objectContaining({ _id: 12, option_value_ids: [7] }),
     );
+  });
+
+  it("seeds a duplicate without name, slug, SKU, or variant ids", () => {
+    const seed = toDuplicateSeed({
+      id: 9,
+      title: "محصول",
+      slug: "product",
+      code: "P-9",
+      is_active: true,
+      brand_id: 4,
+      category_id: 3,
+      variants: [
+        {
+          id: 12,
+          sku: "BOTTLE-RED",
+          price: 100,
+          is_active: true,
+          options: [
+            {
+              id: 7,
+              option_type_id: 3,
+              option_type_title: "color",
+              option_type: "رنگ",
+              value: "قرمز",
+            },
+          ],
+        },
+      ],
+    });
+    const values = getDefaultFormValues(seed);
+
+    expect(values.title).toBe("");
+    expect(values.slug).toBe("");
+    expect(values.code).toBe("");
+    expect(values.brand_id).toBe("4");
+    expect(values.category_id).toBe("3");
+    expect(values.variants[0]).toEqual(
+      expect.objectContaining({
+        sku: "",
+        price: "100",
+        option_value_ids: [7],
+      }),
+    );
+    expect(values.variants[0]?._id).toBeFalsy();
   });
 });

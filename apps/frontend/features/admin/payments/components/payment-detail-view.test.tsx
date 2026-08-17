@@ -62,7 +62,7 @@ describe("PaymentDetailView", () => {
       data: {
         id: 51,
         order_id: 9,
-        user_id: 7,
+        user_id: "11111111-1111-1111-1111-111111111111",
         amount: "123456789012345678.90",
         currency: "IRT",
         status: "succeeded",
@@ -84,8 +84,17 @@ describe("PaymentDetailView", () => {
     expect(
       screen.getByText("۱۲۳٬۴۵۶٬۷۸۹٬۰۱۲٬۳۴۵٬۶۷۸٫۹۰ تومان"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "11111111-1111-1111-1111-111111111111",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/admin/customers/11111111-1111-1111-1111-111111111111",
+    );
     fireEvent.click(screen.getByText("پاسخ خام درگاه"));
     expect(screen.getByText(/"approved": true/)).toBeInTheDocument();
+    expect(screen.queryByText("#7")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "کپی شناسهٔ تراکنش" }));
     await waitFor(() =>
       expect(mocks.clipboard.writeText).toHaveBeenCalledWith("gateway-51"),

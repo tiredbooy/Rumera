@@ -15,6 +15,13 @@ type OrderItemsLookup interface {
 	GetOrderStockLines(ctx context.Context, orderID int64) ([]inventory.StockLine, error)
 }
 
+// OrderPaymentFailer flips a pending order to payment_failed (webhook fail).
+// Implemented by *orders.orderService as an extra method — not on orders.Service,
+// so the container can still pass the interface value (dynamic type assert).
+type OrderPaymentFailer interface {
+	MarkOrderPaymentFailed(ctx context.Context, orderID int64) error
+}
+
 // StockReleaser frees reserved stock when a payment fails (webhook path).
 // Implemented by inventory.Service; narrowed for pure unit tests (PH-013c).
 type StockReleaser interface {

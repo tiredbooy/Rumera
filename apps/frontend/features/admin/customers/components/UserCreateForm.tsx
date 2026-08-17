@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { fieldErrorId } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { JalaliDateTimeInput } from "@/components/ui/jalali-datetime-input";
 import { Label } from "@/components/ui/label";
 import {
   NativeSelect,
@@ -276,13 +277,21 @@ export function UserCreateForm() {
               label="تاریخ تولد"
               error={errors.birth_date?.message}
             >
-              <Input
-                id="birth_date"
-                type="date"
-                dir="ltr"
-                className="h-11"
-                disabled={isSubmitting}
-                {...register("birth_date")}
+              <Controller
+                control={control}
+                name="birth_date"
+                render={({ field }) => (
+                  <JalaliDateTimeInput
+                    id="birth_date"
+                    granularity="date"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    disabled={isSubmitting}
+                    invalid={!!errors.birth_date}
+                    className="h-11"
+                  />
+                )}
               />
             </Field>
             <div className="flex flex-col gap-2">

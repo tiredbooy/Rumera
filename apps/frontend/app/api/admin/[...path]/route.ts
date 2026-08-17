@@ -1,9 +1,10 @@
 /**
  * Authenticated BFF proxy for the admin dashboard. Client hooks call
  * `/api/admin/<backend-path>`; this forwards to `${API}/api/v1/<backend-path>`
- * with the caller's bearer token from the Auth.js session — so the access token
- * never reaches the browser. `auth()` owns token rotation; this route never
- * consumes refresh tokens independently.
+ * with the caller's bearer token from the encrypted Auth.js JWT (`getToken`) —
+ * so the access token never reaches the browser or `GET /api/auth/session`.
+ * `auth()` owns token rotation; this route never consumes refresh tokens
+ * independently.
  *
  * `<backend-path>` is the path *after* `/api/v1`, so admin-namespaced endpoints
  * include the `admin/` segment, e.g. the create-product call hits
@@ -15,16 +16,20 @@
  * backend repeats the panel-role check and enforces per-surface capabilities.
  *
  * Unlike `/api/store`, this preserves `multipart/form-data` bodies verbatim so
- * image uploads pass through with their boundary intact.
+ * image uploads pass through with their boundary intact. Incoming
+ * `Idempotency-Key` is forwarded when present (admin wallet credit and any
+ * other money POST); this route never invents a key.
  */
 import { NextResponse } from "next/server";
 import type { NextAuthRequest } from "next-auth";
 
+import { getAccessTokenFromJwt } from "@/lib/auth/auth.config";
 import { routeAuth } from "@/lib/auth/auth";
 import { getLiveAccount } from "@/lib/auth/live-account";
 import { isStaff } from "@/lib/rbac/roles";
 import { API_BASE } from "@/lib/api/client";
 import { buildAdminProxyTarget } from "@/lib/api/admin-proxy-path";
+import { pickIdempotencyKeyHeader } from "@/lib/api/forward-headers";
 import { revalidateAfterAdminMutation } from "@/lib/apply-admin-revalidation";
 
 const ALLOW = new Set([
@@ -59,7 +64,8 @@ async function handle(req: NextAuthRequest, segments: string[]) {
     );
   }
 
-  const live = await getLiveAccount(session.accessToken);
+  const accessToken = await getAccessTokenFromJwt(req);
+  const live = await getLiveAccount(accessToken);
   if (live.status === "unavailable") {
     return NextResponse.json(
       {
@@ -90,9 +96,8 @@ async function handle(req: NextAuthRequest, segments: string[]) {
 
   let body: BodyInit | undefined;
   const forwardHeaders: Record<string, string> = {
-    ...(session.accessToken
-      ? { Authorization: `Bearer ${session.accessToken}` }
-      : {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...pickIdempotencyKeyHeader(req.headers),
   };
 
   if (hasBody) {

@@ -19,8 +19,10 @@ import type { Subscription } from "@/features/subscriptions/types";
 import { cn } from "@/lib/utils";
 import {
   cadenceLabel,
+  canChangeShipTo,
   faDate,
   formatAddress,
+  missingShipToMessage,
   nextShipHint,
   nextShipTitle,
   planName,
@@ -37,13 +39,13 @@ const statusChrome: Record<
 > = {
   active: {
     icon: CircleCheck,
-    banner: "bg-emerald-500/10 ring-emerald-500/25",
-    iconClass: "text-emerald-600 dark:text-emerald-400",
+    banner: "bg-success/12 ring-success/25",
+    iconClass: "text-success",
   },
   paused: {
     icon: CirclePause,
-    banner: "bg-amber-500/10 ring-amber-500/25",
-    iconClass: "text-amber-600 dark:text-amber-400",
+    banner: "bg-warning/12 ring-warning/25",
+    iconClass: "text-warning",
   },
   cancelled: {
     icon: CircleSlash,
@@ -55,28 +57,38 @@ const statusChrome: Record<
 type SubscriptionCardProps = {
   sub: Subscription;
   address?: Address;
+  addresses: Address[];
   busy: boolean;
   onRequestSkip: () => void;
   onResume: () => void;
   onRequestPause: () => void;
   onRequestCancel: () => void;
+  onChangeAddress: (addressId: number) => void;
 };
 
 export function SubscriptionCard({
   sub,
   address,
+  addresses,
   busy,
   onRequestSkip,
   onResume,
   onRequestPause,
   onRequestCancel,
+  onChangeAddress,
 }: SubscriptionCardProps) {
   const chrome = statusChrome[sub.status];
   const copy = statusCopy(sub.status);
   const StatusIcon = chrome.icon;
   const cancelled = sub.status === "cancelled";
   const paused = sub.status === "paused";
-  const missingAddress = sub.status === "active" && !address;
+  const editable = canChangeShipTo(sub.status);
+  const missingAddress = !address;
+  const pickerLabel = address ? "تغییر آدرس ارسال" : "انتخاب آدرس ارسال";
+  const selectId = `sub-ship-address-${sub.id}`;
+  const currentIdMissingFromBook =
+    sub.address_id != null &&
+    !addresses.some((item) => item.id === sub.address_id);
 
   return (
     <li className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 shadow-e1">
@@ -139,34 +151,85 @@ export function SubscriptionCard({
               {nextShipHint(sub.status)}
             </p>
           </div>
-          {address ? (
-            <div className="border-hairline rounded-xl bg-background/40 px-3.5 py-3">
-              <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <MapPin className="size-3.5" aria-hidden /> ارسال به
-              </dt>
-              <dd
-                className="mt-1 truncate text-sm font-medium"
-                title={formatAddress(address)}
-              >
-                {address.title || address.full_name}
-                <span className="font-normal text-muted-foreground">
-                  {" "}
-                  — {formatAddress(address)}
-                </span>
-              </dd>
-            </div>
-          ) : (
-            <div className="border-hairline rounded-xl bg-amber-500/5 px-3.5 py-3 ring-1 ring-inset ring-amber-500/20">
-              <dt className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-200">
-                <MapPin className="size-3.5" aria-hidden /> آدرس ارسال
-              </dt>
-              <dd className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                {missingAddress
-                  ? "آدرسی به این باکس وصل نیست. از بخش آدرس‌ها یک آدرس اضافه کنید و در فعال‌سازی بعدی انتخاب کنید."
-                  : "آدرسی ثبت نشده است."}
-              </dd>
-            </div>
-          )}
+          <div
+            className={cn(
+              "border-hairline rounded-xl px-3.5 py-3",
+              missingAddress
+                ? "bg-warning/10 ring-1 ring-inset ring-warning/25"
+                : "bg-background/40",
+            )}
+          >
+            <dt
+              className={cn(
+                "flex items-center gap-1.5 text-xs",
+                missingAddress
+                  ? "text-warning"
+                  : "text-muted-foreground",
+              )}
+            >
+              <MapPin className="size-3.5" aria-hidden />{" "}
+              {address ? "ارسال به" : "آدرس ارسال"}
+            </dt>
+            <dd
+              className={cn(
+                "mt-1 text-sm leading-relaxed",
+                address ? "truncate font-medium" : "text-muted-foreground",
+              )}
+              title={address ? formatAddress(address) : undefined}
+            >
+              {address ? (
+                <>
+                  {address.title || address.full_name}
+                  <span className="font-normal text-muted-foreground">
+                    {" "}
+                    — {formatAddress(address)}
+                  </span>
+                </>
+              ) : editable ? (
+                missingShipToMessage(addresses.length > 0)
+              ) : (
+                "آدرسی ثبت نشده است."
+              )}
+            </dd>
+            {editable && addresses.length > 0 ? (
+              <div className="mt-2">
+                <label
+                  className="mb-1 block text-xs text-muted-foreground"
+                  htmlFor={selectId}
+                >
+                  {pickerLabel}
+                </label>
+                <select
+                  id={selectId}
+                  value={sub.address_id ?? ""}
+                  disabled={busy}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    if (!Number.isFinite(next) || next < 1) return;
+                    if (next === sub.address_id) return;
+                    onChangeAddress(next);
+                  }}
+                  className="border-hairline h-10 w-full cursor-pointer rounded-xl bg-background px-3 text-sm ring-1 ring-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {sub.address_id == null && (
+                    <option value="">انتخاب آدرس ارسال</option>
+                  )}
+                  {currentIdMissingFromBook && sub.address_id != null && (
+                    <option value={sub.address_id}>
+                      آدرس فعلی (دیگر در دفترچه نیست)
+                    </option>
+                  )}
+                  {addresses.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {(item.title || item.full_name) +
+                        " — " +
+                        formatAddress(item)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+          </div>
         </dl>
 
         <div className="mt-5 flex flex-wrap items-center gap-2">

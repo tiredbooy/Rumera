@@ -111,7 +111,7 @@ export function JournalCard({
     <article data-journal-card="default" className="h-full">
       <Link
         href={href}
-        className="group/post press border-hairline shadow-e1 hover:shadow-e3 relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 ease-cellar hover:-translate-y-1 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-4 sm:rounded-3xl"
+        className="group/post press hover-lift border-hairline shadow-e1 relative flex h-full flex-col overflow-hidden rounded-2xl bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-4 sm:rounded-3xl"
       >
         <div className="relative aspect-[16/10] overflow-hidden">
           <StorefrontMedia

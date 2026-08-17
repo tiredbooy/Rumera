@@ -34,7 +34,7 @@ export function RecipeShopSummary({
           <CheckCircle2
             className={cn(
               "size-3.5 shrink-0",
-              availableCount > 0 ? "text-emerald-600" : "text-muted-foreground",
+              availableCount > 0 ? "text-success" : "text-muted-foreground",
             )}
             aria-hidden
           />

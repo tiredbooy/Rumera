@@ -39,7 +39,7 @@ overlaps the active hero_slide WIP in `container.go`/`handler.go`, so best done 
 
 **Environment note for picking up:** several remaining items want a live DB (C1's EXPLAIN check, B-series, D3). The Rumera stack is **not** currently running — bring it up with `apps/backend/docker-compose.yml` (Postgres+TimescaleDB+Redis), then `make migrate-up` + `make analytics-up`. The only Postgres container currently up is an unrelated `tracker_db` — don't point migrations at it.
 
-**Deferred (single instance):** B1 (Redis-distributed rate limiting) and B5 (outbox saga) — see bottom of this doc.
+**Deferred (single instance):** B1 (Redis-distributed rate limiting). B5 (outbox saga) is **superseded** — shipped as the domain event outbox, see `docs/architecture/domain-events.md`.
 
 ## Themes
 
@@ -209,15 +209,23 @@ collector-dependent (point `OTEL_EXPORTER_OTLP_ENDPOINT` at a collector + flip `
 
 **Acceptance:** ✅ replaying the webhook processes once; the replay returns the stored response (no double order-paid).
 
-### B5 — Outbox pattern (saga durability) · `DEFERRED` (stretch)
-**Problem:** order creation commits the order tx, then runs inventory reserve / cart clear
-outside it with manual compensation (`order_svc.go:152-162`).
-- [ ] New migration `..._create_outbox.sql`: `outbox(id, aggregate, event_type, payload, status, created_at)`.
-- [ ] In `order_svc.go`, insert the "reserve inventory" intent into `outbox` **within** the order tx.
-- [ ] New `internal/corn/outbox_job.go` relay (registered in `buildCron`, `container.go:181`),
-      at-least-once + B4 idempotency guard.
+### B5 — Outbox pattern (saga durability) · `SUPERSEDED` (shipped 2026-08-17)
+**Superseded by the domain event outbox** — see
+`docs/architecture/domain-events.md` and
+`obsidian/11 Decisions/ADR Domain event outbox.md`.
 
-> Ship B2/B3/B4 first. B5 is highest-effort, touches checkout core, and depends on B4.
+The durable-fact-plus-relay idea was right; the framing was not. Inventory
+reserve is a **command** and belongs in the checkout transaction (it already is,
+since PR-020b) — driving it from an outbox would have made stock eventually
+consistent for no benefit. What actually needed durability were the
+**post-commit side effects**: the receipt email, the loyalty award, the referral
+completion and the recommendation signal, all of which were lost on a crash and
+none of which ran at all on the wallet rail.
+
+Shipped instead: `domain_events` written inside the money transaction,
+`domain_event_consumptions` as a per-consumer ledger with retry and
+dead-lettering, and a worker that runs the consumers. Kafka is a config flip
+(`EVENTS_BUS`), not a dependency.
 
 ### B1 — Redis-distributed rate limiting · `DEFERRED`
 Not needed for single instance — in-memory token bucket (`setupMiddlewares.go:24`) is correct.

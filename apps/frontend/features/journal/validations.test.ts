@@ -19,6 +19,7 @@ const postValues = {
   image_alt: "  بطری روی میز  ",
   time_to_read: "7",
   status: "draft" as const,
+  published_at: "",
   is_featured: false,
   meta_title: "",
   meta_description: "",
@@ -49,6 +50,23 @@ describe("journal validations", () => {
       product_ids: [8],
       tag_ids: [5, 4],
     });
+  });
+
+  it("includes published_at only when publishing with a schedule", () => {
+    const scheduled = journalPostFormSchema.parse({
+      ...postValues,
+      status: "published",
+      published_at: "2026-12-01T18:00",
+    });
+    expect(toCreateJournalPostInput(scheduled).published_at).toBe(
+      new Date("2026-12-01T18:00").toISOString(),
+    );
+    const immediate = journalPostFormSchema.parse({
+      ...postValues,
+      status: "published",
+      published_at: "",
+    });
+    expect(toCreateJournalPostInput(immediate).published_at).toBeUndefined();
   });
 
   it("rejects visually empty rich text and images without alt text", () => {

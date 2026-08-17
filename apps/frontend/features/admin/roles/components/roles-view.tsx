@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { getAdminRoles } from "@/features/customers/api";
 import type { AdminAuthorizationSummary } from "@/features/customers/types";
 import { AdminDataErrorState } from "@/features/dashboard/components/admin-data-error-state";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import { AdminPage } from "@/features/dashboard/components/admin-page";
 import { ApiError } from "@/lib/api/errors";
 import { CapabilityMatrix } from "@/features/admin/roles/components/capability-matrix";
 import { faNum } from "@/lib/products";
@@ -34,16 +34,15 @@ export async function RolesView() {
       throw error;
     }
     return (
-      <>
-        <PageHeader
-          title="نقش‌ها و دسترسی پنل"
-          description="نمای زندهٔ مدل دسترسی و تعداد اعضای هر نقش"
-        />
+      <AdminPage
+        title="نقش‌ها و دسترسی پنل"
+        description="نمای زندهٔ مدل دسترسی و تعداد اعضای هر نقش"
+      >
         <AdminDataErrorState
           title="دریافت نقش‌ها ناموفق بود"
           description="هیچ شمارش یا نقش جایگزینی نمایش داده نشده است. اتصال را بررسی کنید و دوباره تلاش کنید."
         />
-      </>
+      </AdminPage>
     );
   }
 
@@ -52,12 +51,10 @@ export async function RolesView() {
     summary.authorization_mode === "role_capabilities";
 
   return (
-    <>
-      <PageHeader
-        title="نقش‌ها و دسترسی پنل"
-        description="نمای زندهٔ مدل دسترسی و تعداد اعضای هر نقش"
-      />
-
+    <AdminPage
+      title="نقش‌ها و دسترسی پنل"
+      description="نمای زندهٔ مدل دسترسی و تعداد اعضای هر نقش"
+    >
       <section
         className="border-hairline mb-6 flex flex-col gap-4 rounded-2xl bg-primary/[0.06] p-5 ring-1 ring-primary/10 sm:flex-row sm:items-center sm:justify-between sm:p-6"
         aria-labelledby="authorization-model-title"
@@ -129,7 +126,7 @@ export async function RolesView() {
                     className={cn(
                       "inline-flex min-h-7 items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
                       hasAdminAccess
-                        ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-400"
+                        ? "bg-success/12 text-success ring-success/25"
                         : "bg-muted text-muted-foreground ring-border/60",
                     )}
                   >
@@ -160,7 +157,7 @@ export async function RolesView() {
                     <dt className="text-[0.6875rem] text-muted-foreground">
                       فعال
                     </dt>
-                    <dd className="mt-1 font-medium text-emerald-700 tabular-nums dark:text-emerald-400">
+                    <dd className="mt-1 font-medium text-success tabular-nums">
                       {faNum(item.active_member_count)}
                     </dd>
                   </div>
@@ -178,6 +175,6 @@ export async function RolesView() {
           })}
         </div>
       </section>
-    </>
+    </AdminPage>
   );
 }

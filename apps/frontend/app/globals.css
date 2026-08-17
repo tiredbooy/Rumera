@@ -47,6 +47,18 @@
   --color-wine: var(--wine);
   --color-wine-foreground: var(--wine-foreground);
 
+  /* Semantic status tokens — cellar-tuned, not stock Tailwind ramps.
+     Use as text-success, bg-warning/12, border-info/25, … and pair with
+     *-foreground when filling a solid surface. See the Badge `tone` variant. */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-neutral: var(--neutral);
+  --color-neutral-foreground: var(--neutral-foreground);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -55,10 +67,15 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  /* Motion vocabulary — premium, calm easing. Consume via ease-cellar /
-     duration-cellar in markup, or reference the vars directly. */
+  /* Motion vocabulary — premium, calm easing.
+     `--ease-*` is a real Tailwind v4 theme namespace, so `ease-cellar` is a
+     generated utility. There is NO `--duration-*` namespace: `duration-*` only
+     accepts a number or an arbitrary value, so write
+     `duration-[var(--duration-cellar)]`. Writing `duration-cellar` compiles in
+     dev and fails `next build` with "Cannot apply unknown utility class". */
   --ease-cellar: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-cellar-in: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-cellar: 320ms;
   --animate-duration: 320ms;
 
   /* Elevation scale — warm, low-spread shadows tuned for both themes.
@@ -81,8 +98,8 @@
   --card-foreground: oklch(0.22 0.018 55);
   --popover: oklch(1 0.004 85);
   --popover-foreground: oklch(0.22 0.018 55);
-  --primary: oklch(0.66 0.13 72);
-  --primary-foreground: oklch(0.2 0.02 55);
+  --primary: oklch(0.50 0.14 68);
+  --primary-foreground: oklch(0.98 0.01 85);
   --secondary: oklch(0.945 0.012 80);
   --secondary-foreground: oklch(0.28 0.018 55);
   --muted: oklch(0.955 0.01 80);
@@ -92,12 +109,24 @@
   --destructive: oklch(0.55 0.21 27.5);
   --border: oklch(0.89 0.012 75);
   --input: oklch(0.89 0.012 75);
-  --ring: oklch(0.66 0.13 72);
+  --ring: oklch(0.50 0.14 68);
 
-  --gold: oklch(0.66 0.13 72);
-  --gold-foreground: oklch(0.2 0.02 55);
+  --gold: oklch(0.50 0.14 68);
+  --gold-foreground: oklch(0.98 0.01 85);
   --wine: oklch(0.42 0.14 18);
   --wine-foreground: oklch(0.97 0.01 85);
+
+  /* Status semantics, parchment theme. Same L/C discipline as --primary
+     (L≈0.5, C≈0.10–0.13) so they read as cellar colours, not Bootstrap.
+     All in sRGB gamut; all ≥4.5:1 on --background and --card. */
+  --success: oklch(0.48 0.105 148); /* laurel   5.97:1 bg / 6.22:1 card */
+  --success-foreground: oklch(0.98 0.01 85);
+  --warning: oklch(0.52 0.125 55); /* ember    5.51:1 bg / 5.74:1 card */
+  --warning-foreground: oklch(0.98 0.01 85);
+  --info: oklch(0.50 0.1 250); /* bottle-glass 5.73:1 bg / 5.96:1 card */
+  --info-foreground: oklch(0.98 0.01 85);
+  --neutral: oklch(0.46 0.02 60); /* warm stone 6.86:1 bg / 7.14:1 card */
+  --neutral-foreground: oklch(0.98 0.01 85);
 
   --chart-1: oklch(0.66 0.13 72);
   --chart-2: oklch(0.42 0.14 18);
@@ -109,12 +138,12 @@
 
   --sidebar: oklch(0.97 0.01 82);
   --sidebar-foreground: oklch(0.22 0.018 55);
-  --sidebar-primary: oklch(0.66 0.13 72);
-  --sidebar-primary-foreground: oklch(0.2 0.02 55);
+  --sidebar-primary: oklch(0.50 0.14 68);
+  --sidebar-primary-foreground: oklch(0.98 0.01 85);
   --sidebar-accent: oklch(0.92 0.035 80);
   --sidebar-accent-foreground: oklch(0.28 0.05 50);
   --sidebar-border: oklch(0.89 0.012 75);
-  --sidebar-ring: oklch(0.66 0.13 72);
+  --sidebar-ring: oklch(0.50 0.14 68);
 
   /* Warm, ink-tinted elevation for the parchment theme. */
   --elev-1:
@@ -145,14 +174,26 @@
   --accent: oklch(0.32 0.04 60);
   --accent-foreground: oklch(0.92 0.04 85);
   --destructive: oklch(0.7 0.19 22);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 13%);
+  --border: oklch(0.32 0.014 56);
+  --input: oklch(0.40 0.016 58);
   --ring: oklch(0.8 0.13 78);
 
   --gold: oklch(0.82 0.13 80);
   --gold-foreground: oklch(0.2 0.03 60);
-  --wine: oklch(0.55 0.16 20);
+  --wine: oklch(0.62 0.16 20);
   --wine-foreground: oklch(0.97 0.01 85);
+
+  /* Status semantics, cellar theme. Lifted to L≈0.74–0.80 like --primary
+     so they glow rather than shout. All in sRGB gamut; all ≥7.6:1 on
+     --background and --card. */
+  --success: oklch(0.78 0.11 150); /* laurel   9.98:1 bg / 9.26:1 card */
+  --success-foreground: oklch(0.2 0.03 60);
+  --warning: oklch(0.80 0.12 64); /* ember   10.00:1 bg / 9.28:1 card */
+  --warning-foreground: oklch(0.2 0.03 60);
+  --info: oklch(0.78 0.09 250); /* bottle-glass 9.62:1 bg / 8.92:1 card */
+  --info-foreground: oklch(0.2 0.03 60);
+  --neutral: oklch(0.74 0.018 80); /* warm stone 8.29:1 bg / 7.69:1 card */
+  --neutral-foreground: oklch(0.2 0.03 60);
 
   --chart-1: oklch(0.82 0.13 80);
   --chart-2: oklch(0.55 0.16 20);
@@ -166,7 +207,7 @@
   --sidebar-primary-foreground: oklch(0.2 0.03 60);
   --sidebar-accent: oklch(0.32 0.04 60);
   --sidebar-accent-foreground: oklch(0.92 0.04 85);
-  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-border: oklch(0.32 0.014 56);
   --sidebar-ring: oklch(0.8 0.13 78);
 
   /* Deeper, near-black elevation for the cellar theme — depth without grey haze. */
@@ -184,10 +225,11 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   body {
     @apply bg-background text-foreground;
+    line-height: 1.75;
     font-feature-settings:
       "liga" 1,
       "calt" 1;
@@ -202,10 +244,15 @@
     never use `uppercase`/`tracking-*` on Persian copy anywhere in the app.
   */
   h1,
-  h2,
-  h3,
-  h4,
-  .font-heading {
+  h2 {
+    @apply font-serif;
+    letter-spacing: normal;
+  }
+  .font-heading.text-3xl,
+  .font-heading.text-4xl,
+  .font-heading.text-5xl,
+  .font-heading.text-6xl,
+  .font-heading.text-7xl {
     @apply font-serif;
     letter-spacing: normal;
   }
@@ -294,8 +341,7 @@
   /* Consistent card elevation + hover. Lifts and warms the ring on hover;
      stays flat for reduced-motion users. Use on product/category/content cards. */
   .hover-lift {
-    @apply ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300;
-    transition-timing-function: var(--ease-cellar);
+    @apply ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-[var(--duration-cellar)] ease-cellar;
   }
   .hover-lift:hover {
     @apply -translate-y-1 ring-primary/30;
@@ -321,6 +367,17 @@
       color-mix(in oklch, var(--gold) 45%, transparent),
       transparent
     );
+  }
+
+  /* Scroll-triggered fade-up used by `Reveal`. JS only toggles `.reveal-visible`. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(var(--reveal-y, 16px));
+  }
+
+  .reveal.reveal-visible {
+    animation: reveal-in 0.5s cubic-bezier(0.22, 1, 0.36, 1)
+      var(--reveal-delay, 0s) both;
   }
 
   /* Soft sheen sweep for premium CTAs / featured chips. Apply to an absolutely
@@ -430,8 +487,36 @@
   }
 }
 
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--reveal-y, 16px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .hover-lift,
   .hover-lift:hover {
+    transform: none;
+    transition: none;
+    box-shadow: none;
+  }
+
+  .reveal,
+  .reveal.reveal-visible {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
+
+@media (scripting: none) {
+  .reveal {
+    opacity: 1;
     transform: none;
   }
 }

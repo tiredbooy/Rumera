@@ -1,7 +1,7 @@
-import { GiftCardIssuer } from "@/features/admin/gift-cards/components/gift-card-issuer";
-import { requireStaff } from "@/lib/auth/session";
+import { requireGiftCardAdmin } from "@/features/admin/gift-cards/admin-only";
+import { GiftCardsBoard } from "@/features/admin/gift-cards/components/gift-cards-board";
 
 export default async function AdminGiftCardsPage() {
-  await requireStaff("/admin/gift-cards");
-  return <GiftCardIssuer />;
+  await requireGiftCardAdmin();
+  return <GiftCardsBoard />;
 }

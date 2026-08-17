@@ -225,7 +225,9 @@ func TestService_GetZoneDetailLoadsEveryMethodPage(t *testing.T) {
 }
 
 func TestService_GetAvailableCalculatesAndOrdersQuotes(t *testing.T) {
-	zones := &shippingZoneRepoStub{regions: []*ShippingZone{{ID: 2}}}
+	zones := &shippingZoneRepoStub{regions: []*ShippingZone{{
+		ID: 2, IsActive: true, RegionCodes: []string{"IR-TEH"},
+	}}}
 	methods := &shippingMethodRepoStub{availableByZone: map[int64][]*ShippingMethod{
 		2: {
 			{ID: 1, Name: "Weight", RateType: ShippingRatePerKg, BaseRate: 2.5},
@@ -251,6 +253,99 @@ func TestService_GetAvailableCalculatesAndOrdersQuotes(t *testing.T) {
 		if quotes[i].EstimatedCost != want[i] {
 			t.Fatalf("quote %d cost = %v; want %v", i, quotes[i].EstimatedCost, want[i])
 		}
+	}
+}
+
+func TestService_GetAvailableCountryFallbackFindsSubdivisionZone(t *testing.T) {
+	teh := &ShippingZone{ID: 2, IsActive: true, RegionCodes: []string{"IR-TEH"}}
+	zones := &shippingZoneRepoStub{regions: []*ShippingZone{teh, teh}}
+	methods := &shippingMethodRepoStub{availableByZone: map[int64][]*ShippingMethod{
+		2: {{ID: 9, Name: "Post", RateType: ShippingRateFlat, BaseRate: 15}},
+	}}
+	svc := NewService(zones, methods)
+
+	quotes, err := svc.GetAvailableForCheckout(context.Background(), "ir", 1, 50)
+	if err != nil {
+		t.Fatalf("country fallback quotes: %v", err)
+	}
+	if zones.requestedRegion != "IR" {
+		t.Fatalf("region = %q; want IR", zones.requestedRegion)
+	}
+	if len(quotes) != 1 || quotes[0].Method.ID != 9 || quotes[0].EstimatedCost != 15 {
+		t.Fatalf("IR quotes = %+v; want one IR-TEH method", quotes)
+	}
+
+	quotes, err = svc.GetAvailableForCheckout(context.Background(), "IR-TEH", 1, 50)
+	if err != nil {
+		t.Fatalf("exact quotes: %v", err)
+	}
+	if len(quotes) != 1 || quotes[0].Method.ID != 9 {
+		t.Fatalf("IR-TEH quotes = %+v", quotes)
+	}
+
+	quotes, err = svc.GetAvailableForCheckout(context.Background(), "IR-ALB", 1, 50)
+	if err != nil {
+		t.Fatalf("other subdivision quotes: %v", err)
+	}
+	if len(quotes) != 0 {
+		t.Fatalf("IR-ALB quotes = %+v; want none", quotes)
+	}
+}
+
+func TestZoneCoversRegion_CountryFallbackAndExact(t *testing.T) {
+	teh := &ShippingZone{RegionCodes: []string{" ir-teh "}}
+	if !zoneCoversRegion(teh, "IR") {
+		t.Fatal("IR should match a zone that lists IR-TEH")
+	}
+	if !zoneCoversRegion(teh, "IR-TEH") {
+		t.Fatal("exact IR-TEH should match")
+	}
+	if zoneCoversRegion(teh, "IR-ALB") {
+		t.Fatal("IR-ALB must not match an IR-TEH-only zone")
+	}
+	if zoneCoversRegion(teh, "DE") {
+		t.Fatal("DE must not match an IR-TEH zone")
+	}
+
+	national := &ShippingZone{RegionCodes: []string{"IR"}}
+	if !zoneCoversRegion(national, "IR") {
+		t.Fatal("IR should match a zone that lists IR")
+	}
+	if zoneCoversRegion(national, "IR-TEH") {
+		t.Fatal("IR-TEH must not match a country-only IR zone")
+	}
+
+	if zoneCoversRegion(nil, "IR") {
+		t.Fatal("nil zone must not cover a region")
+	}
+}
+
+func TestService_AuthorizeCheckoutMethod_CountryFallback(t *testing.T) {
+	zone := &ShippingZone{ID: 4, IsActive: true, RegionCodes: []string{"IR-TEH"}}
+	method := &ShippingMethod{
+		ID: 8, ShippingZoneID: 4, IsActive: true,
+		RateType: ShippingRateFlat, BaseRate: 12,
+	}
+	svc := NewService(&shippingZoneRepoStub{zone: zone}, &shippingMethodRepoStub{method: method})
+
+	got, cost, err := svc.AuthorizeCheckoutMethod(context.Background(), 8, "ir", 1, 50)
+	if err != nil || got == nil || got.ID != 8 || cost != 12 {
+		t.Fatalf("authorize IR = (%+v, %v, %v)", got, cost, err)
+	}
+
+	got, cost, err = svc.AuthorizeCheckoutMethod(context.Background(), 8, "IR-TEH", 1, 50)
+	if err != nil || got == nil || got.ID != 8 || cost != 12 {
+		t.Fatalf("authorize IR-TEH = (%+v, %v, %v)", got, cost, err)
+	}
+
+	_, _, err = svc.AuthorizeCheckoutMethod(context.Background(), 8, "DE", 1, 50)
+	if !errors.Is(err, models.ErrInvalidShippingMethod) {
+		t.Fatalf("authorize DE = %v; want ErrInvalidShippingMethod", err)
+	}
+
+	_, _, err = svc.AuthorizeCheckoutMethod(context.Background(), 8, "IR-ALB", 1, 50)
+	if !errors.Is(err, models.ErrInvalidShippingMethod) {
+		t.Fatalf("authorize IR-ALB = %v; want ErrInvalidShippingMethod", err)
 	}
 }
 

@@ -77,10 +77,36 @@ describe("InventoryTable", () => {
       />,
     );
     expect(screen.getByText("وزن ناقص")).toBeInTheDocument();
+    const physical = screen.getByRole("columnheader", { name: /فیزیکی/ });
+    expect(physical.closest("thead")).toHaveClass("sticky", "top-0");
+    expect(
+      screen.getByText("فیلتر جدول فقط روی ردیف‌های همین صفحه است، نه کل انبار."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("۱ از ۱ ردیف این صفحه")).toBeInTheDocument();
     expect(
       screen.getByTitle(
         "وزن بسته‌بندی روی محصول ثبت نشده — برای محاسبهٔ ارسال لازم است",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("tells an empty warehouse to add a product, not run make seed", () => {
+    const { container } = render(
+      <InventoryTable inventory={[]} canWrite={false} />,
+    );
+    expect(container.textContent).not.toContain("make seed");
+    expect(screen.getByRole("link", { name: "افزودن محصول" })).toHaveAttribute(
+      "href",
+      "/admin/products/new",
+    );
+  });
+
+  it("keeps the numeric column headers stuck while the rows scroll", () => {
+    render(<InventoryTable inventory={inventory} canWrite={false} />);
+    for (const label of ["فیزیکی", "رزرو", "قابل فروش"]) {
+      expect(screen.getByRole("columnheader", { name: label })).toHaveClass(
+        "sticky",
+      );
+    }
   });
 });

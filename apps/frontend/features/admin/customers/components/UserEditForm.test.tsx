@@ -89,6 +89,7 @@ describe("UserEditForm", () => {
     fireEvent.change(screen.getByLabelText("تاریخ تولد"), {
       target: { value: "" },
     });
+    fireEvent.blur(screen.getByLabelText("تاریخ تولد"));
 
     fireEvent.click(screen.getByRole("button", { name: "ذخیرهٔ تغییرات" }));
 

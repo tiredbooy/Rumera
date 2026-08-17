@@ -34,8 +34,7 @@ func (h *Handler) ListPublic(c *gin.Context) {
 		return
 	}
 	filter.Defaults()
-	published := BlogStatusPublished
-	filter.Status = &published
+	applyPublicListFilter(&filter)
 
 	blogs, total, err := h.Posts.List(c.Request.Context(), filter)
 	if err != nil {

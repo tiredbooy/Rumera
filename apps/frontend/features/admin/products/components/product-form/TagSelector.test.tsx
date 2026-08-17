@@ -22,8 +22,16 @@ import { TagSelector } from "./TagSelector";
 
 function Harness({
   initialTags = [{ id: 2, title: "قدیمی" }],
+  availableTags,
 }: {
   initialTags?: Array<{ id: number; title: string }>;
+  availableTags?: Array<{
+    id: number;
+    title: string;
+    slug: string;
+    created_at: string;
+    updated_at: string;
+  }>;
 }) {
   const { control } = useForm<ProductFormValues>({
     defaultValues: { tag_ids: [2] },
@@ -31,7 +39,11 @@ function Harness({
   const selected = useWatch({ control, name: "tag_ids" });
   return (
     <>
-      <TagSelector control={control} initialTags={initialTags} />
+      <TagSelector
+        control={control}
+        initialTags={initialTags}
+        availableTags={availableTags}
+      />
       <output data-testid="selected">{JSON.stringify(selected)}</output>
     </>
   );
@@ -120,5 +132,37 @@ describe("TagSelector", () => {
     expect(
       screen.getByText("هنوز برچسبی برای انتخاب ثبت نشده است."),
     ).toBeInTheDocument();
+  });
+
+  it("uses server-provided tags as the list source while the client query is pending", () => {
+    mocks.query.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      isSuccess: false,
+      isFetching: true,
+      refetch: mocks.refetch,
+    });
+
+    render(
+      <Harness
+        initialTags={[]}
+        availableTags={[
+          {
+            id: 4,
+            title: "سرور",
+            slug: "server",
+            created_at: "2026-08-16T00:00:00Z",
+            updated_at: "2026-08-16T00:00:00Z",
+          },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.queryByText("در حال بارگذاری برچسب‌ها…"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "سرور" }));
+    expect(screen.getByTestId("selected")).toHaveTextContent("[2,4]");
   });
 });

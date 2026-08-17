@@ -1,16 +1,34 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Loader2, XCircle, RotateCcw, MessageSquarePlus } from "lucide-react";
+import {
+  Loader2,
+  XCircle,
+  RotateCcw,
+  MessageSquarePlus,
+} from "lucide-react";
 
 import { faNum, formatPrice } from "@/lib/products";
+import { apiErrorToast } from "@/lib/api/user-facing-error";
 import {
   ORDER_STATUS_FA,
   PAYMENT_FA,
   isCancellable,
+  isPayable,
 } from "@/features/orders/labels";
 import { faDate } from "@/lib/utils/date";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +36,8 @@ import { SmartImage } from "@/components/smart-image";
 import { QueryStateRegion } from "@/components/query-state-region";
 import { useBulkAddCartItems } from "@/features/cart/api";
 import { useCancelOrder, useOrder } from "@/features/orders/hooks";
+import { OrderPayButton } from "@/features/orders/components/order-pay-button";
+import type { Order } from "@/features/orders/types";
 import { AccountSection } from "../../account/components/account-section";
 import { OrderStatusStepper } from "./OrderStatusStepper";
 
@@ -25,6 +45,7 @@ export function OrderDetail({ id }: { id: number }) {
   const { data: order, isLoading, isError, refetch } = useOrder(id);
   const cancel = useCancelOrder();
   const reorder = useBulkAddCartItems();
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -98,6 +119,18 @@ export function OrderDetail({ id }: { id: number }) {
       onError: () => toast.error("افزودن به سبد ناموفق بود"),
     });
   }
+
+  function doCancel() {
+    if (!order) return;
+    cancel.mutate(order.id, {
+      onSuccess: () => toast.success("سفارش لغو شد"),
+      onError: (err) => {
+        const t = apiErrorToast(err, "لغو سفارش ناموفق بود");
+        toast.error(t.title, { description: t.description });
+      },
+    });
+  }
+
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
@@ -196,6 +229,18 @@ export function OrderDetail({ id }: { id: number }) {
         </AccountSection>
 
         <AccountSection title="اقدام‌ها" bodyClassName="flex flex-col gap-2">
+          <OrderPayButton order={order} className="justify-start" />
+          {isPayable(order.status) && order.payment_method === "wallet" ? (
+            <p
+              className="text-xs leading-relaxed text-muted-foreground"
+              data-testid="order-wallet-pay-note"
+            >
+              پرداخت از کیف پول در این صفحه ممکن نیست. سفارش‌های کیف پول فقط
+              هنگام ثبت تسویه می‌شوند — لینک درگاه ساخته نمی‌شود. اگر پرداخت
+              نشده، کیف پول را شارژ کنید و سفارش تازه ثبت کنید، یا همین سفارش را
+              لغو کنید.
+            </p>
+          ) : null}
           <Button
             variant="outline"
             className="justify-start"
@@ -214,12 +259,8 @@ export function OrderDetail({ id }: { id: number }) {
               variant="ghost"
               className="justify-start text-destructive hover:text-destructive"
               disabled={cancel.isPending}
-              onClick={() =>
-                cancel.mutate(order.id, {
-                  onSuccess: () => toast.success("سفارش لغو شد"),
-                  onError: () => toast.error("لغو سفارش ناموفق بود"),
-                })
-              }
+              data-testid="order-cancel-trigger"
+              onClick={() => setCancelOpen(true)}
             >
               {cancel.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -231,9 +272,34 @@ export function OrderDetail({ id }: { id: number }) {
           ) : null}
         </AccountSection>
       </div>
+
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>لغو سفارش؟</AlertDialogTitle>
+            <AlertDialogDescription className="leading-relaxed">
+              این سفارش هنوز پرداخت نشده. با تأیید، سفارش بسته می‌شود و از همین
+              صفحه قابل پرداخت نیست. این کار از این صفحه برنمی‌گردد.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="cursor-pointer">
+              انصراف
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="cursor-pointer bg-destructive text-white hover:bg-destructive/90"
+              data-testid="order-cancel-confirm"
+              onClick={doCancel}
+            >
+              بله، لغو شود
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
+
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

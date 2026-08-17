@@ -17,8 +17,8 @@ tags: [decision, money, reliability]
 Clients and payment gateways deliver **at-least-once**. Middleware + table
 `idempotency_keys` are production-scoped (011b) and mounted on P0 money routes
 (011c). Admin wallet credit keeps a **service-level** ledger key **and** HTTP
-platform. Loyalty redeem has HTTP protection; domain spend event key is still a
-gap (PH-040).
+platform. Loyalty redeem requires a client key; domain spend `ref_id` is
+`{userID}:idem:{key}` (PR-003g).
 
 ## Decision
 
@@ -46,6 +46,8 @@ gap (PH-040).
 
 - FE/BFF must generate and forward `Idempotency-Key` on checkout and money actions
   for replay safety (without a key, request still processes — no platform cache).
+- CORS `Allow-Headers` includes `Idempotency-Key` so browser-direct Go calls from
+  an allowed origin pass preflight ([[BFF Proxies]]).
 - Gateway settlement is three-layered: HTTP key + UNIQUE tx id + pending-only.
 - Operator runbook + per-route API docs + vault playbook shipped (**PH-011e**).
 

@@ -89,10 +89,25 @@ func (h *Handler) PaymentWebhook(c *gin.Context) {
 			httpx.HandleError(c, err)
 			return
 		}
-		// Free the reservation so the stock is sellable again.
-		if pt.OrderID != nil && h.Orders != nil && h.Inventory != nil {
-			if items, err := h.Orders.GetOrderStockLines(ctx, *pt.OrderID); err == nil {
-				_ = h.Inventory.ReleaseForOrder(ctx, *pt.OrderID, items)
+		// Flip the order first so MarkAsPaid (pending-only) rejects a late
+		// succeeded webhook, then release THIS order's reservation identity.
+		if pt.OrderID != nil && h.Orders != nil {
+			if failer, ok := h.Orders.(OrderPaymentFailer); ok {
+				if err := failer.MarkOrderPaymentFailed(ctx, *pt.OrderID); err != nil {
+					httpx.HandleError(c, err)
+					return
+				}
+			}
+			if h.Inventory != nil {
+				items, lerr := h.Orders.GetOrderStockLines(ctx, *pt.OrderID)
+				if lerr != nil {
+					httpx.HandleError(c, lerr)
+					return
+				}
+				if err := h.Inventory.ReleaseForOrder(ctx, *pt.OrderID, items); err != nil {
+					httpx.HandleError(c, err)
+					return
+				}
 			}
 		}
 

@@ -63,7 +63,7 @@ export function CategoryHero({
             <p className="eyebrow mb-4">
               <FolderTree className="size-3.5" aria-hidden /> شاخهٔ مجموعه
             </p>
-            <h1 className="max-w-3xl text-balance font-serif text-4xl leading-[1.08] sm:text-5xl lg:text-6xl">
+            <h1 className="max-w-3xl text-balance font-serif text-4xl leading-[1.3] sm:text-5xl lg:text-6xl">
               {category.title}
             </h1>
             {category.description ? (

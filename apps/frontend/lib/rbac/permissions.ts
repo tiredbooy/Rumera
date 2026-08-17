@@ -25,6 +25,7 @@ export const PERMISSIONS = {
   CUSTOMERS_READ: "customers:read",
   CUSTOMERS_WRITE: "customers:write",
   CUSTOMERS_BAN: "customers:ban",
+  WALLET_CREDIT: "wallet:credit",
   // Reviews / moderation
   REVIEWS_READ: "reviews:read",
   REVIEWS_MODERATE: "reviews:moderate",
@@ -62,6 +63,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "customers:read": "مشاهدهٔ مشتریان",
   "customers:write": "ویرایش مشتریان",
   "customers:ban": "مسدودسازی مشتری",
+  "wallet:credit": "افزایش موجودی کیف پول",
   "reviews:read": "مشاهدهٔ دیدگاه‌ها",
   "reviews:moderate": "بازبینی دیدگاه‌ها",
   "recipes:read": "مشاهدهٔ دستورها",

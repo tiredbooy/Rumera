@@ -13,7 +13,7 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 
-import { authConfig } from "@/lib/auth/auth.config";
+import { authConfig, getAccessTokenFromJwt } from "@/lib/auth/auth.config";
 import {
   accessTokenNeedsRotation,
   hasTerminalRefreshError,
@@ -21,7 +21,7 @@ import {
 
 const { auth } = NextAuth(authConfig);
 
-export default auth((req) => {
+export default auth(async (req) => {
   const { nextUrl } = req;
   const path = nextUrl.pathname;
   const session = req.auth;
@@ -46,9 +46,10 @@ export default auth((req) => {
     return NextResponse.redirect(url);
   }
 
+  const accessToken = await getAccessTokenFromJwt(req);
   if (
     session.error === "RefreshRequired" ||
-    accessTokenNeedsRotation(session.accessToken)
+    accessTokenNeedsRotation(accessToken)
   ) {
     const url = new URL("/api/auth/refresh-session", nextUrl);
     url.searchParams.set("callbackUrl", `${path}${nextUrl.search}`);

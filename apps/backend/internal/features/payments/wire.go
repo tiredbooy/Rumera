@@ -4,6 +4,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/features/inventory"
 	"github.com/tiredbooy/internal/features/loyalty"
+	"github.com/tiredbooy/internal/features/recommendations"
 	"github.com/tiredbooy/internal/features/referral"
 	"github.com/tiredbooy/pkg/validator"
 )
@@ -18,8 +19,19 @@ func NewServiceFromDB(
 	referralSvc *referral.Service,
 	wallet WalletTopUpCreditor,
 	giftCards GiftCardPurchaseFulfiller,
+	startBaseURL string,
 ) *Service {
-	return NewService(NewRepository(db), orderRepo, inv, loyaltySvc, referralSvc, wallet, giftCards)
+	var earner OrderEarner
+	if loyaltySvc != nil {
+		earner = loyaltySvc
+	}
+	var hook PaidOrderHook
+	if referralSvc != nil {
+		hook = referralSvc
+	}
+	return NewService(NewRepository(db), orderRepo, inv, earner, hook, wallet, giftCards).
+		WithStartBaseURL(startBaseURL).
+		WithPurchaseRecorder(recommendations.NewService(recommendations.NewRepository(db), nil))
 }
 
 // NewHTTP constructs the payments HTTP handler after order service exists.

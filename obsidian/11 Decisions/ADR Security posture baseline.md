@@ -22,7 +22,7 @@ Rumera handles auth, payments webhooks, PII, and alcohol retail UX.
 4. Payment webhooks HMAC + fail-closed without secret → [[Payments Backend]]
 5. Media uploads size/pixel guards; unsafe external URL rejection
 6. Production requires strong `JWT_SECRET`, webhook key, DB passwords
-7. Trusted proxies configured so rate limits cannot be spoofed casually
+7. Production requires non-empty `TRUSTED_PROXIES` (compose: Docker/nginx CIDR `172.16.0.0/12`, never `0.0.0.0/0`). Prod nginx resets `X-Forwarded-For` to `$remote_addr` so login/OTP/global rate limits cannot be XFF-spoofed → [[Gateway and nginx]] · [[Env and config]]
 
 ## Consequences
 

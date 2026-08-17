@@ -4,6 +4,8 @@ import {
   ArrowLeft,
   Award,
   CheckCircle2,
+  CircleAlert,
+  Clock,
   Gift,
   Mail,
   Package,
@@ -14,7 +16,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { getAccountOrder } from "@/features/orders/api/account"
-import { ORDER_STATUS_FA } from "@/features/orders/labels"
+import {
+  ORDER_STATUS_FA,
+  canStartOrderPay,
+  isPayable,
+  orderPayCtaLabel,
+} from "@/features/orders/labels"
 import type { Order } from "@/features/orders/types"
 import { ApiError } from "@/lib/api/client"
 import { faNum, formatPrice } from "@/lib/products"
@@ -55,18 +62,20 @@ export async function OrderConfirmationView({ id }: OrderConfirmationViewProps) 
     order.status === "out_for_delivery" ||
     order.status === "delivered"
 
+  const hero = confirmationHero(order.status, isPaidLike, order.payment_method)
+  const HeroIcon = hero.Icon
+
   return (
     <section className="container-px mx-auto max-w-3xl py-14 lg:py-20">
-      {/* Celebratory hero — elegant, candle-lit */}
       <div className="cellar-glow border-hairline relative overflow-hidden rounded-3xl px-6 py-12 text-center ring-1 ring-foreground/10">
-        <span className="mx-auto mb-6 flex size-20 items-center justify-center rounded-full bg-primary/15 text-primary ring-1 ring-primary/25">
-          <CheckCircle2 className="size-10" />
+        <span
+          className={`mx-auto mb-6 flex size-20 items-center justify-center rounded-full ${hero.iconClass}`}
+        >
+          <HeroIcon className="size-10" />
         </span>
-        <p className="eyebrow">سفارش تأیید شد</p>
-        <h1 className="mt-2 font-serif text-4xl sm:text-5xl">سپاس از خرید شما</h1>
-        <p className="mx-auto mt-3 max-w-md text-muted-foreground">
-          سفارش شما با موفقیت ثبت شد. جزئیات را برای پیگیری در دسترس نگه داشته‌ایم.
-        </p>
+        <p className="eyebrow">{hero.eyebrow}</p>
+        <h1 className="mt-2 font-serif text-4xl sm:text-5xl">{hero.title}</h1>
+        <p className="mx-auto mt-3 max-w-md text-muted-foreground">{hero.body}</p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-4 py-1.5 text-sm font-medium backdrop-blur-sm ring-1 ring-foreground/10">
             شمارهٔ سفارش: <span className="text-foil tabular-nums">#{faNum(order.id)}</span>
@@ -195,8 +204,48 @@ export async function OrderConfirmationView({ id }: OrderConfirmationViewProps) 
         </dl>
       </div>
 
+      {/*
+        U-1: these CTAs used to be status-blind, so an order still awaiting
+        payment offered only "track order" and "keep shopping" while the hero
+        text described the remedy in prose. Money left uncollected. The action
+        that actually resolves the order now leads.
+      */}
+      {/*
+        U-1: these CTAs used to be status-blind, so an order still awaiting
+        payment offered only "track order" and "keep shopping" while the hero
+        described the remedy in prose. The action that resolves the order now
+        leads, labelled by status.
+
+        Links, not an inline pay button: this screen is a server component, and
+        `usePayOrder` would drag a QueryClientProvider into its render. The live
+        pay control already exists on the order page, and wallet orders cannot
+        start a gateway payment at all (`POST /orders/:id/pay` refuses them), so
+        for those the only move that leads anywhere is topping up.
+      */}
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-        <Button asChild size="lg" className="h-12">
+        {isPayable(order.status) && order.payment_method === "wallet" ? (
+          <Button asChild size="lg" className="h-12">
+            <Link href="/account/wallet" data-testid="confirmation-topup-cta">
+              شارژ کیف پول <ArrowLeft />
+            </Link>
+          </Button>
+        ) : null}
+        {canStartOrderPay(order) ? (
+          <Button asChild size="lg" className="h-12">
+            <Link
+              href={`/account/orders/${order.id}`}
+              data-testid="confirmation-pay-cta"
+            >
+              {orderPayCtaLabel(order.status)} <ArrowLeft />
+            </Link>
+          </Button>
+        ) : null}
+        <Button
+          asChild
+          size="lg"
+          variant={isPayable(order.status) ? "outline" : "default"}
+          className="h-12"
+        >
           <Link href={`/account/orders/${order.id}`}>
             پیگیری سفارش <ArrowLeft />
           </Link>
@@ -207,6 +256,57 @@ export async function OrderConfirmationView({ id }: OrderConfirmationViewProps) 
       </div>
     </section>
   )
+}
+
+function confirmationHero(
+  status: Order["status"],
+  isPaidLike: boolean,
+  paymentMethod: Order["payment_method"],
+) {
+  const isWallet = paymentMethod === "wallet"
+
+  if (isPaidLike) {
+    return {
+      Icon: CheckCircle2,
+      iconClass: "bg-primary/15 text-primary ring-1 ring-primary/25",
+      eyebrow: "سفارش تأیید شد",
+      title: "سپاس از خرید شما",
+      body: isWallet
+        ? "سفارش شما با موفقیت ثبت شد و مبلغ از کیف پول برداشت شد. جزئیات را برای پیگیری در دسترس نگه داشته‌ایم."
+        : "سفارش شما با موفقیت ثبت شد. جزئیات را برای پیگیری در دسترس نگه داشته‌ایم.",
+    }
+  }
+  if (status === "payment_failed") {
+    return {
+      Icon: CircleAlert,
+      iconClass: "bg-destructive/10 text-destructive ring-1 ring-destructive/25",
+      eyebrow: "سفارش ثبت شد",
+      title: "پرداخت ناموفق",
+      body: isWallet
+        ? "پرداخت از کیف پول انجام نشد. مبلغی برداشت نشده است یا در صورت کسر، بازگردانده شده است. از پیگیری سفارش دوباره تلاش کنید."
+        : "پرداخت این سفارش انجام نشد. مبلغی برداشت نشده است. از پیگیری سفارش دوباره تلاش کنید.",
+    }
+  }
+  if (status === "pending") {
+    return {
+      Icon: Clock,
+      iconClass: "bg-secondary text-primary ring-1 ring-foreground/10",
+      eyebrow: "سفارش ثبت شد",
+      title: "در انتظار پرداخت",
+      body: isWallet
+        ? "سفارش ثبت شد و هنوز پرداخت نشده است. انتخاب کیف پول به‌معنای انجام پرداخت نیست. اگر موجودی کافی نبوده، ابتدا موجودی را افزایش دهید و دوباره تلاش کنید."
+        : "سفارش ثبت شد و هنوز پرداخت نشده است. تا پرداخت موفق، وجهی دریافت نمی‌شود.",
+    }
+  }
+  return {
+    Icon: Package,
+    iconClass: "bg-secondary text-muted-foreground ring-1 ring-foreground/10",
+    eyebrow: "سفارش ثبت شد",
+    title: ORDER_STATUS_FA[status],
+    body: isWallet
+      ? "سفارش ثبت شد. وضعیت فعلی را از نشان سفارش ببینید — این صفحه به‌تنهایی کسر از کیف پول را نشان نمی‌دهد."
+      : "سفارش ثبت شد. وضعیت فعلی را از نشان سفارش ببینید — این صفحه برداشت وجه را نشان نمی‌دهد.",
+  }
 }
 
 function Row({ label, value }: { label: string; value: string }) {

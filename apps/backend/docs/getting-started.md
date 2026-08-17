@@ -52,6 +52,11 @@ ADMIN_PASSWORD=change-me-strong-password
 # Payment gateway webhook — shared secret for HMAC signature verification
 CRYPTO_WEBHOOK_KEY=whsec_change_me
 
+# Gateway pay-start origin (PR-005a). Intents append ?transaction_id=<id>.
+# Required in production. Empty in development leaves payment_url blank
+# (does not fake a successful pay).
+# PAYMENT_START_BASE_URL=https://pay.example.com/start
+
 # SMTP — when SMTP_HOST is unset, email is logged instead of sent (dev mode)
 SMTP_HOST=
 SMTP_PORT=587

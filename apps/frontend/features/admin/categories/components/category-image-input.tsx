@@ -14,6 +14,7 @@ interface CategoryImageInputProps {
   error?: string;
   name?: string;
   urlInputRef?: Ref<HTMLInputElement>;
+  disabled?: boolean;
 }
 
 export function CategoryImageInput({
@@ -25,6 +26,7 @@ export function CategoryImageInput({
   error,
   name,
   urlInputRef,
+  disabled,
 }: CategoryImageInputProps) {
   return (
     <ImageInput
@@ -40,6 +42,7 @@ export function CategoryImageInput({
       ariaDescribedBy={error ? fieldErrorId(id) : undefined}
       placeholder="نشانی تصویر یا بارگذاری فایل"
       previewClassName="max-w-md"
+      disabled={disabled}
     />
   );
 }

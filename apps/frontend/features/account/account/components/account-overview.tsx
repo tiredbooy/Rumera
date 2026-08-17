@@ -27,17 +27,11 @@ import { useTasteProfile } from "@/features/taste/hooks";
 import { useOrders } from "@/features/orders/hooks";
 import { useWallet } from "@/features/wallet/hooks";
 import { useForYou } from "@/features/recommendations/hooks";
+import { loyaltyTierLabel } from "@/features/loyalty/tiers";
 import type { OrderStatus } from "@/features/orders/types";
 import { AccountSection } from "../../account/components/account-section";
 import { OrderCard } from "../../orders/components/OrderCard";
 import { EmptyState } from "../../EmptyState";
-
-const tierFa: Record<string, string> = {
-  bronze: "برنزی",
-  silver: "نقره‌ای",
-  gold: "طلایی",
-  cellar: "سرداب",
-};
 
 /** Statuses we treat as "in flight" for the active-orders KPI. */
 const ACTIVE_STATUSES: OrderStatus[] = [
@@ -203,7 +197,7 @@ export function AccountOverview() {
             icon={Award}
             hint={
               loyalty.data
-                ? `سطح ${tierFa[loyalty.data.tier] ?? loyalty.data.tier}`
+                ? `سطح ${loyaltyTierLabel(loyalty.data.tier)}`
                 : undefined
             }
             href="/account/rewards"
@@ -377,7 +371,7 @@ export function AccountOverview() {
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1.5 text-sm font-medium text-primary">
                 <Award className="size-4" /> سطح{" "}
-                {tierFa[loyalty.data.tier] ?? loyalty.data.tier}
+                {loyaltyTierLabel(loyalty.data.tier)}
               </span>
             </div>
             {loyalty.data.next_tier ? (
@@ -385,7 +379,7 @@ export function AccountOverview() {
                 <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
                   <span>
                     تا سطح{" "}
-                    {tierFa[loyalty.data.next_tier] ?? loyalty.data.next_tier}
+                    {loyaltyTierLabel(loyalty.data.next_tier)}
                   </span>
                   <span>{faNum(loyalty.data.points_to_next)} امتیاز دیگر</span>
                 </div>

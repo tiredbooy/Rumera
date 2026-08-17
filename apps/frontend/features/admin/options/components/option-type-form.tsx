@@ -8,6 +8,16 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   FieldControl,
@@ -75,9 +85,11 @@ function Field({
 export function OptionTypeForm({
   mode,
   option,
+  canWrite = true,
 }: {
   mode: "create" | "edit";
   option?: ProductOptionGroup;
+  canWrite?: boolean;
 }) {
   const router = useRouter();
   const createType = useCreateOptionType();
@@ -89,6 +101,10 @@ export function OptionTypeForm({
   const [formError, setFormError] = React.useState<string | null>(null);
   const [newValue, setNewValue] = React.useState("");
   const [valueError, setValueError] = React.useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = React.useState<{
+    id: number;
+    value: string;
+  } | null>(null);
 
   const {
     register,
@@ -109,6 +125,7 @@ export function OptionTypeForm({
     updateType.isPending ||
     createValue.isPending ||
     deleteValue.isPending;
+  const editorLocked = busy || !canWrite;
 
   React.useEffect(() => {
     if (mode === "edit" || titleTouched) return;
@@ -119,6 +136,7 @@ export function OptionTypeForm({
   }, [displayName, mode, setValue, title, titleTouched]);
 
   async function onSubmit(values: OptionTypeFormValues) {
+    if (!canWrite) return;
     setFormError(null);
     try {
       if (mode === "create") {
@@ -143,6 +161,7 @@ export function OptionTypeForm({
 
   async function addValue(event: React.FormEvent) {
     event.preventDefault();
+    if (!canWrite) return;
     setValueError(null);
     const parsed = optionValueFormSchema.safeParse({
       value: newValue,
@@ -171,10 +190,41 @@ export function OptionTypeForm({
     }
   }
 
+  async function confirmDeleteValue() {
+    if (!pendingDelete || !canWrite) return;
+    const target = pendingDelete;
+    try {
+      await deleteValue.mutateAsync(target.id);
+      setPendingDelete(null);
+      toast.success(`«${target.value}» حذف شد`);
+      router.refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof OptionApiError ? error.message : "حذف ناموفق بود",
+      );
+    }
+  }
+
+  function onFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (!canWrite) {
+      event.preventDefault();
+      return;
+    }
+    void handleSubmit(onSubmit)(event);
+  }
+
   return (
     <div className="mx-auto grid max-w-3xl gap-8">
+      {canWrite ? null : (
+        <p
+          role="status"
+          className="rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground ring-1 ring-border/60"
+        >
+          فقط مشاهده — ذخیره و حذف مقدار به مجوز نوشتن محصول نیاز دارد.
+        </p>
+      )}
       <form
-        onSubmit={handleSubmit(onSubmit)}
+        onSubmit={onFormSubmit}
         className="border-hairline space-y-5 rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6"
         noValidate
       >
@@ -203,7 +253,7 @@ export function OptionTypeForm({
           <Input
             id="option-display-name"
             className="h-11"
-            disabled={busy}
+            disabled={editorLocked}
             {...register("display_name")}
           />
         </Field>
@@ -218,7 +268,7 @@ export function OptionTypeForm({
             id="option-title"
             className="h-11 font-mono"
             dir="ltr"
-            disabled={busy}
+            disabled={editorLocked}
             {...register("title", {
               onChange: () => setTitleTouched(true),
             })}
@@ -226,14 +276,16 @@ export function OptionTypeForm({
         </Field>
 
         <div className="flex flex-wrap gap-2 pt-2">
-          <Button type="submit" className="h-11" disabled={busy}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-            {mode === "create" ? "ساخت ویژگی" : "ذخیره"}
-          </Button>
+          {canWrite ? (
+            <Button type="submit" className="h-11" disabled={busy}>
+              {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+              {mode === "create" ? "ساخت ویژگی" : "ذخیره"}
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" className="h-11" asChild>
             <Link href="/admin/options">بازگشت</Link>
           </Button>
-          {mode === "edit" ? (
+          {canWrite && mode === "edit" ? (
             <Button type="button" variant="secondary" className="h-11" asChild>
               <Link href="/admin/products/new">استفاده در محصول جدید</Link>
             </Button>
@@ -273,67 +325,96 @@ export function OptionTypeForm({
                   >
                     #{value.id}
                   </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-9 text-destructive"
-                    disabled={busy}
-                    aria-label={`حذف ${value.value}`}
-                    onClick={async () => {
-                      try {
-                        await deleteValue.mutateAsync(value.id);
-                        toast.success("مقدار حذف شد");
-                        router.refresh();
-                      } catch (error) {
-                        toast.error(
-                          error instanceof OptionApiError
-                            ? error.message
-                            : "حذف ناموفق بود",
-                        );
+                  {canWrite ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-9 text-destructive"
+                      disabled={busy}
+                      aria-label={`حذف ${value.value}`}
+                      onClick={() =>
+                        setPendingDelete({ id: value.id, value: value.value })
                       }
-                    }}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  ) : null}
                 </li>
               ))
             )}
           </ul>
 
-          <form onSubmit={addValue} className="mt-5 flex flex-col gap-2 sm:flex-row">
-            <div className="min-w-0 flex-1">
-              <Label htmlFor="new-option-value" className="sr-only">
-                مقدار جدید
-              </Label>
-              <Input
-                id="new-option-value"
-                className="h-11"
-                placeholder="مثلاً ۷۵۰ میلی‌لیتر"
-                value={newValue}
-                disabled={busy}
-                onChange={(event) => {
-                  setNewValue(event.target.value);
-                  setValueError(null);
-                }}
-              />
-              {valueError ? (
-                <p role="alert" className="mt-1 text-xs text-destructive">
-                  {valueError}
-                </p>
-              ) : null}
-            </div>
-            <Button type="submit" className="h-11 shrink-0" disabled={busy}>
-              {createValue.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Plus className="size-4" />
-              )}
-              افزودن مقدار
-            </Button>
-          </form>
+          {canWrite ? (
+            <form
+              onSubmit={addValue}
+              className="mt-5 flex flex-col gap-2 sm:flex-row"
+            >
+              <div className="min-w-0 flex-1">
+                <Label htmlFor="new-option-value" className="sr-only">
+                  مقدار جدید
+                </Label>
+                <Input
+                  id="new-option-value"
+                  className="h-11"
+                  placeholder="مثلاً ۷۵۰ میلی‌لیتر"
+                  value={newValue}
+                  disabled={busy}
+                  onChange={(event) => {
+                    setNewValue(event.target.value);
+                    setValueError(null);
+                  }}
+                />
+                {valueError ? (
+                  <p role="alert" className="mt-1 text-xs text-destructive">
+                    {valueError}
+                  </p>
+                ) : null}
+              </div>
+              <Button type="submit" className="h-11 shrink-0" disabled={busy}>
+                {createValue.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Plus className="size-4" />
+                )}
+                افزودن مقدار
+              </Button>
+            </form>
+          ) : null}
         </section>
       ) : null}
+
+      <AlertDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deleteValue.isPending) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف مقدار؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              «{pendingDelete?.value}» از این ویژگی حذف می‌شود. محصولاتی که این
+              مقدار را در تنوع خود دارند ممکن است تنوع ناقص نشان دهند.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteValue.isPending}>
+              انصراف
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteValue.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDeleteValue();
+              }}
+            >
+              حذف مقدار
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

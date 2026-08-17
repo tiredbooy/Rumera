@@ -42,5 +42,5 @@ func (h *Handler) Claim(c *gin.Context) {
 		httpx.HandleError(c, err)
 		return
 	}
-	response.NoContent(c)
+	response.OK(c, ClaimReferralResponse{Claimed: true})
 }

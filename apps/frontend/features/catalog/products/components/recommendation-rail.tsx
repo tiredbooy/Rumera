@@ -59,7 +59,7 @@ export function RecommendationRail({
             ? `/products/${encodeURIComponent(slug)}`
             : undefined;
           const card = (
-            <article className="group/rec hover-lift border-hairline shadow-e1 hover:shadow-e3 flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-[box-shadow,border-color] duration-300 hover:ring-primary/25 motion-reduce:transform-none motion-reduce:transition-none sm:rounded-3xl">
+            <article className="group/rec hover-lift border-hairline shadow-e1 flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card sm:rounded-3xl">
               <div className="relative aspect-[4/3] overflow-hidden sm:aspect-[5/4]">
                 <div className="absolute inset-0 transition-transform duration-300 ease-cellar group-hover/rec:scale-105 motion-reduce:transform-none motion-reduce:transition-none">
                   <StorefrontMedia

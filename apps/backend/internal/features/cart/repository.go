@@ -33,6 +33,8 @@ func NewRepository(db *pgxpool.Pool) Repository {
 	return &cartRepository{db: db}
 }
 
+// GetOrCreate inserts the caller's cart or touches updated_at.
+// Requires UNIQUE(carts.user_id) — 20260816170000_carts_user_id_unique.sql.
 func (r *cartRepository) GetOrCreate(ctx context.Context, userID int64) (*Cart, error) {
 	const q = `
 		INSERT INTO carts (user_id)
@@ -252,5 +254,103 @@ func (r *cartRepository) GetItems(ctx context.Context, cartID int64) ([]CartItem
 		return nil, fmt.Errorf("cartRepository.GetItems rows: %w", err)
 	}
 
+	if err := r.hydrateItemOptions(ctx, items); err != nil {
+		return nil, err
+	}
+
 	return items, nil
+}
+
+// variantOptionsQuery loads option values for many cart variants in one
+// round-trip (product_variants_options → option_values → option_types).
+const variantOptionsQuery = `
+		SELECT
+			pvo.product_variant_id,
+			ov.id,
+			ov.option_type_id,
+			ot.title,
+			ot.display_name,
+			ov.value
+		FROM product_variants_options pvo
+		INNER JOIN option_values ov ON ov.id = pvo.variant_option_id
+		INNER JOIN option_types ot ON ot.id = ov.option_type_id
+		WHERE pvo.product_variant_id = ANY($1)
+		ORDER BY pvo.product_variant_id, ot.display_name, ov.sort_order, ov.value, ov.id`
+
+func (r *cartRepository) hydrateItemOptions(ctx context.Context, items []CartItemResponse) error {
+	ids := collectVariantIDs(items)
+	if len(ids) == 0 {
+		return nil
+	}
+	opts, err := r.loadVariantOptions(ctx, ids)
+	if err != nil {
+		return err
+	}
+	assignVariantOptions(items, opts)
+	return nil
+}
+
+func (r *cartRepository) loadVariantOptions(ctx context.Context, variantIDs []int64) (map[int64][]models.OptionValueResponse, error) {
+	if len(variantIDs) == 0 {
+		return nil, nil
+	}
+
+	rows, err := r.db.Query(ctx, variantOptionsQuery, variantIDs)
+	if err != nil {
+		return nil, fmt.Errorf("cartRepository.loadVariantOptions: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[int64][]models.OptionValueResponse)
+	for rows.Next() {
+		var variantID int64
+		var option models.OptionValueResponse
+		if err := rows.Scan(
+			&variantID,
+			&option.ID,
+			&option.OptionTypeID,
+			&option.OptionTypeTitle,
+			&option.OptionType,
+			&option.Value,
+		); err != nil {
+			return nil, fmt.Errorf("cartRepository.loadVariantOptions scan: %w", err)
+		}
+		result[variantID] = append(result[variantID], option)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("cartRepository.loadVariantOptions rows: %w", err)
+	}
+	return result, nil
+}
+
+func collectVariantIDs(items []CartItemResponse) []int64 {
+	if len(items) == 0 {
+		return nil
+	}
+	seen := make(map[int64]struct{}, len(items))
+	ids := make([]int64, 0, len(items))
+	for _, item := range items {
+		if item.VariantID == 0 {
+			continue
+		}
+		if _, ok := seen[item.VariantID]; ok {
+			continue
+		}
+		seen[item.VariantID] = struct{}{}
+		ids = append(ids, item.VariantID)
+	}
+	return ids
+}
+
+func assignVariantOptions(items []CartItemResponse, optionsByVariant map[int64][]models.OptionValueResponse) {
+	if len(items) == 0 || len(optionsByVariant) == 0 {
+		return
+	}
+	for i := range items {
+		opts, ok := optionsByVariant[items[i].VariantID]
+		if !ok {
+			continue
+		}
+		items[i].Options = opts
+	}
 }

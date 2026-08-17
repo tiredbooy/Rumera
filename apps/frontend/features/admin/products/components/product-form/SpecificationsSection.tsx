@@ -70,7 +70,7 @@ export function SpecificationsSection({
       {weightMissing && !errors.weight ? (
         <p
           role="status"
-          className="sm:col-span-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-950 dark:text-amber-100"
+          className="sm:col-span-2 rounded-xl border border-warning/25 bg-warning/12 px-3 py-2 text-xs leading-5 text-warning"
         >
           وزن ثبت نشده است. در تسویه حساب، وزن این محصول در جمع وزن بسته صفر
           در نظر گرفته می‌شود و ممکن است نرخ «به‌ازای کیلو» یا محدودیت وزن

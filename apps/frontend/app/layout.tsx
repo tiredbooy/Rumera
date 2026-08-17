@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Vazirmatn, Markazi_Text, Geist_Mono } from "next/font/google";
+import { Vazirmatn, Markazi_Text } from "next/font/google";
 import "./globals.css";
 
-import { cn } from "@/lib/utils";
+import { PWA_THEME } from "@/lib/pwa/config";
 import { siteConfig } from "@/lib/site";
+import { cn } from "@/lib/utils";
 import { Providers } from "@/app/providers";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -21,11 +22,6 @@ const markazi = Markazi_Text({
   subsets: ["arabic", "latin"],
   variable: "--font-serif",
   display: "swap",
-});
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
@@ -102,8 +98,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#faf8f4" },
-    { media: "(prefers-color-scheme: dark)", color: "#2b231c" },
+    { media: "(prefers-color-scheme: light)", color: PWA_THEME.themeColorLight },
+    { media: "(prefers-color-scheme: dark)", color: PWA_THEME.themeColorDark },
   ],
   colorScheme: "dark light",
   // iOS standalone notch / home indicator
@@ -127,7 +123,6 @@ export default function RootLayout({
         "h-full antialiased",
         vazirmatn.variable,
         markazi.variable,
-        geistMono.variable
       )}
     >
       <body className="flex min-h-full flex-col font-sans">

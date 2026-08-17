@@ -25,6 +25,7 @@ func RegisterCustomer(c *gin.RouterGroup, h *Handler) {
 	c.PATCH("/reviews/:id", h.Update)
 	c.DELETE("/reviews/:id", h.Delete)
 	c.POST("/reviews/:id/react", h.React)
+	c.DELETE("/reviews/:id/react", h.Unlike)
 	c.GET("/reviews/:id/images", h.Images)
 	c.POST("/reviews/:id/images", h.AddImage)
 }

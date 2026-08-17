@@ -6,7 +6,9 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/admin/customers",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 import { UsersFilters } from "./UsersList";
@@ -29,6 +31,13 @@ describe("UsersFilters", () => {
     expect(screen.getByLabelText("نام، ایمیل یا تلفن")).toHaveValue("mina");
     expect(screen.getByLabelText("نقش")).toHaveValue("vendor");
     expect(screen.getByLabelText("وضعیت")).toHaveValue("inactive");
-    expect(screen.getByRole("button", { name: "اعمال فیلترها" })).toBeVisible();
+    // Filters apply as you go now, so there is no «اعمال» button — only the
+    // reset link the AdminFilterBar puts in the same corner on every screen.
+    expect(
+      screen.queryByRole("button", { name: "اعمال فیلترها" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "پاک کردن همهٔ فیلترها" }),
+    ).toBeVisible();
   });
 });

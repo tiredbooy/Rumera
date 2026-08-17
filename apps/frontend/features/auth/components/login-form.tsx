@@ -13,6 +13,27 @@ import { focusFormControl } from "@/components/ui/field"
 import type { SignInInput } from "@/features/auth/types"
 import { safeCallbackUrl } from "@/features/auth/redirects"
 
+const SIGN_IN_CODE_COPY: Record<string, string> = {
+  RateLimited: "تعداد درخواست‌ها زیاد است. کمی بعد دوباره تلاش کنید.",
+  Inactive: "این حساب غیرفعال است. در صورت نیاز با پشتیبانی تماس بگیرید.",
+  AuthServiceError: "ارتباط با سرور برقرار نشد.",
+  Configuration: "ارتباط با سرور برقرار نشد.",
+}
+
+/** Map Auth.js `signIn({ redirect: false })` result to Persian (no secrets). */
+export function signInErrorMessage(
+  result: { error?: string | null; code?: string | null } | null | undefined,
+  invalidCredentials: string,
+): string {
+  if (!result) return SIGN_IN_CODE_COPY.AuthServiceError
+  const code = result.code?.trim()
+  const key =
+    code && code !== "credentials" && code !== "CredentialsSignin"
+      ? code
+      : (result.error?.trim() ?? "")
+  return SIGN_IN_CODE_COPY[key] ?? invalidCredentials
+}
+
 export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter()
   const returnTo = safeCallbackUrl(callbackUrl)
@@ -34,7 +55,9 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
       redirect: false,
     })
     if (!res || res.error) {
-      setError("ایمیل یا گذرواژه نادرست است.")
+      setError(
+        signInErrorMessage(res, "ایمیل یا گذرواژه نادرست است."),
+      )
       setLoading(false)
       focusFormControl(formElement, "email")
       return

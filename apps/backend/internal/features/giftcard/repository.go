@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -27,6 +28,13 @@ type Repository interface {
 	InsertPurchasedTx(ctx context.Context, tx pgx.Tx, code string, amount decimal.Decimal, purchaserUserID int64, purchaseTxID string) (*GiftCard, error)
 	// ListByPurchaser returns cards bought by the customer (newest first).
 	ListByPurchaser(ctx context.Context, userID int64, limit int) ([]GiftCard, error)
+	// ListAdmin pages every card for staff (newest first). Empty page is [] (never nil).
+	ListAdmin(ctx context.Context, filter AdminFilter) ([]GiftCard, int64, error)
+	// GetByID returns one card. Missing → models.ErrNotFound.
+	GetByID(ctx context.Context, id int64) (*GiftCard, error)
+	// VoidActive sets status=disabled only when the card is still active.
+	// Missing → models.ErrNotFound. Redeemed/disabled → models.ErrInvalidState.
+	VoidActive(ctx context.Context, id int64) (*GiftCard, error)
 }
 
 type repository struct {
@@ -218,6 +226,109 @@ func (r *repository) ListByPurchaser(ctx context.Context, userID int64, limit in
 		return nil, fmt.Errorf("repository.ListByPurchaser scan: %w", err)
 	}
 	return cards, nil
+}
+
+func (r *repository) ListAdmin(ctx context.Context, f AdminFilter) ([]GiftCard, int64, error) {
+	f.Defaults()
+
+	where := []string{"1=1"}
+	args := []any{}
+	n := 1
+	if f.Status != "" {
+		where = append(where, fmt.Sprintf("status = $%d", n))
+		args = append(args, string(f.Status))
+		n++
+	}
+	if search := strings.TrimSpace(f.Search); search != "" {
+		where = append(where, fmt.Sprintf("code ILIKE $%d", n))
+		args = append(args, "%"+search+"%")
+		n++
+	}
+	whereSQL := strings.Join(where, " AND ")
+
+	var total int64
+	countQ := `SELECT COUNT(*) FROM gift_cards WHERE ` + whereSQL
+	if err := r.db.QueryRow(ctx, countQ, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("repository.ListAdmin count: %w", err)
+	}
+	if total == 0 || int64(f.Offset()) >= total {
+		return []GiftCard{}, total, nil
+	}
+
+	sortBy := "created_at"
+	switch f.SortBy {
+	case "created_at", "initial_amount", "status":
+		sortBy = f.SortBy
+	}
+	order := "DESC"
+	if strings.EqualFold(f.OrderBy, "asc") {
+		order = "ASC"
+	}
+
+	listQ := fmt.Sprintf(`
+		SELECT * FROM gift_cards
+		WHERE %s
+		ORDER BY %s %s, id DESC
+		LIMIT $%d OFFSET $%d`, whereSQL, sortBy, order, n, n+1)
+	rows, err := r.db.Query(ctx, listQ, append(args, f.Limit, f.Offset())...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("repository.ListAdmin: %w", err)
+	}
+	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[GiftCard])
+	if err != nil {
+		return nil, 0, fmt.Errorf("repository.ListAdmin scan: %w", err)
+	}
+	if cards == nil {
+		cards = []GiftCard{}
+	}
+	return cards, total, nil
+}
+
+func (r *repository) GetByID(ctx context.Context, id int64) (*GiftCard, error) {
+	if id <= 0 {
+		return nil, models.ErrNotFound
+	}
+	const q = `SELECT * FROM gift_cards WHERE id = $1`
+	rows, err := r.db.Query(ctx, q, id)
+	if err != nil {
+		return nil, fmt.Errorf("repository.GetByID: %w", err)
+	}
+	card, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[GiftCard])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("repository.GetByID scan: %w", err)
+	}
+	return &card, nil
+}
+
+func (r *repository) VoidActive(ctx context.Context, id int64) (*GiftCard, error) {
+	if id <= 0 {
+		return nil, models.ErrNotFound
+	}
+	const q = `
+		UPDATE gift_cards
+		SET status = 'disabled'
+		WHERE id = $1 AND status = 'active'
+		RETURNING *`
+	rows, err := r.db.Query(ctx, q, id)
+	if err != nil {
+		return nil, fmt.Errorf("repository.VoidActive: %w", err)
+	}
+	card, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[GiftCard])
+	if err == nil {
+		return &card, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("repository.VoidActive scan: %w", err)
+	}
+	if _, getErr := r.GetByID(ctx, id); errors.Is(getErr, models.ErrNotFound) {
+		return nil, models.ErrNotFound
+	} else if getErr != nil {
+		return nil, getErr
+	}
+	return nil, models.ErrInvalidState
 }
 
 func isUniqueViolation(err error) bool {

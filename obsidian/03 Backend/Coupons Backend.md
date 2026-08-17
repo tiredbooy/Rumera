@@ -11,6 +11,13 @@ tags: [backend, coupons, commerce]
 Discount coupons: admin CRUD, checkout validate preview, order redemption
 (under row lock + usage recording).
 
+`POST /coupons/validate` never writes `coupon_usages`. When the client omits
+`product_ids` / `category_ids` (and/or sends `order_subtotal` 0), `Service`
+loads the caller's cart via `CartBasketLookup` (`cart.Repository` GetOrCreate
++ GetItems) so scoped codes preview the same basket CreateOrder redeems.
+Empty cart → invalid result, not 500. Wired in `coupons.New` (not
+`container.go`). Debug: [[Playbook Debug Coupon validate]] · [[Cart Backend]].
+
 ## Package (feature slice)
 
 ```text

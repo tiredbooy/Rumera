@@ -44,7 +44,23 @@ func (h *Handler) List(c *gin.Context) {
 
 // LowStockInventory — GET /admin/inventory/low-stock
 func (h *Handler) LowStock(c *gin.Context) {
-	items, err := h.Inventory.GetLowStock(c.Request.Context())
+	var filter InventoryFilter
+	if !httpx.BindQuery(c, h.Validator, &filter) {
+		return
+	}
+	if !inventorySortSupported(filter.SortBy) {
+		response.Error(c, response.ErrInvalidQuery)
+		return
+	}
+	// Convenience read: most-urgent available stock first unless the caller sorts.
+	if filter.SortBy == "" && filter.OrderBy == "" {
+		filter.SortBy = "available_stock"
+		filter.OrderBy = "asc"
+	}
+	filter.Defaults()
+	filter.LowStock = true
+
+	items, total, err := h.Inventory.GetAll(c.Request.Context(), filter)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
@@ -53,7 +69,7 @@ func (h *Handler) LowStock(c *gin.Context) {
 	for i, inv := range items {
 		out[i] = ToInventoryResponse(inv)
 	}
-	response.OK(c, out)
+	response.Paginated(c, out, httpx.Paginate(filter.Page, filter.Limit, total))
 }
 
 // GetVariantInventory — GET /admin/inventory/variants/:variantID
@@ -144,7 +160,24 @@ func (h *Handler) VariantMovements(c *gin.Context) {
 	if !ok {
 		return
 	}
-	movements, err := h.Inventory.GetMovementsByVariant(c.Request.Context(), variantID)
+	var filter MovementFilter
+	if !httpx.BindQuery(c, h.Validator, &filter) {
+		return
+	}
+	if filter.SortBy != "" && filter.SortBy != "created_at" {
+		response.Error(c, response.ErrInvalidQuery)
+		return
+	}
+	filter.Defaults()
+	filter.ProductVariantID = &variantID
+
+	// Same 404 / auto-ensure contract as the unpaginated variant history read.
+	if _, err := h.Inventory.GetByVariantID(c.Request.Context(), variantID); err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+
+	movements, total, err := h.Inventory.GetMovements(c.Request.Context(), filter)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
@@ -153,5 +186,5 @@ func (h *Handler) VariantMovements(c *gin.Context) {
 	for i, m := range movements {
 		out[i] = ToMovementResponse(m)
 	}
-	response.OK(c, out)
+	response.Paginated(c, out, httpx.Paginate(filter.Page, filter.Limit, total))
 }

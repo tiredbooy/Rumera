@@ -65,7 +65,7 @@ type HeroSlideReq struct {
 
 type HeroSlideUpdateReq struct {
 	Eyebrow  models.NullablePatch[string] `json:"eyebrow"`
-	Title    *string               `json:"title"`
+	Title    *string                      `json:"title"`
 	Subtitle models.NullablePatch[string] `json:"subtitle"`
 	Badge    models.NullablePatch[string] `json:"badge"`
 

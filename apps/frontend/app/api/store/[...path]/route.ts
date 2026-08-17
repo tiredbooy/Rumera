@@ -1,9 +1,13 @@
 /**
  * Authenticated BFF proxy. Client React Query hooks call `/api/store/<path>`;
  * this forwards to `${API}/api/v1/<path>` with the caller's bearer token taken
- * from the next-auth session — so the access token never reaches the browser.
+ * from the encrypted Auth.js JWT (`getToken`) — so the access token never
+ * reaches the browser or `GET /api/auth/session`.
  * The Auth.js route wrapper owns refresh rotation and persists its replacement
- * cookie before this handler returns.
+ * cookie before this handler returns. Incoming `Idempotency-Key` is forwarded
+ * when present so money retries reach Go middleware; this route never invents
+ * a key. Incoming analytics `sid`/`did` cookies are copied upstream and matching
+ * Set-Cookie lines are passed back — IDs are never invented here.
  *
  * A path allowlist limits it to per-user / checkout resources, so it can't be
  * used as an open proxy.
@@ -11,9 +15,15 @@
 import { NextResponse } from "next/server";
 import type { NextAuthRequest } from "next-auth";
 
+import { getAccessTokenFromJwt } from "@/lib/auth/auth.config";
 import { routeAuth } from "@/lib/auth/auth";
 import { buildAdminProxyTarget } from "@/lib/api/admin-proxy-path";
 import { API_BASE } from "@/lib/api/client";
+import {
+  pickAnalyticsCookieHeader,
+  pickAnalyticsSetCookies,
+  pickIdempotencyKeyHeader,
+} from "@/lib/api/forward-headers";
 
 const ALLOW = new Set([
   "cart",
@@ -39,6 +49,10 @@ const ALLOW = new Set([
   // can safely proxy it. Without this the entire taste/personalization surface
   // 403s before reaching the backend.
   "me",
+  // `payments` covers customer start/status under /payments/* (PR-005a
+  // payment_url). First-segment only: /api/store/payments → /api/v1/payments.
+  // Admin /admin/payments stays on the admin BFF (`admin` first segment).
+  "payments",
 ]);
 
 async function handle(req: NextAuthRequest, segments: string[]) {
@@ -61,12 +75,15 @@ async function handle(req: NextAuthRequest, segments: string[]) {
   const hasBody = method !== "GET" && method !== "HEAD" && method !== "DELETE";
   const body = hasBody ? await req.text() : undefined;
 
-  const sendUpstream = (accessToken?: string) =>
+  const accessToken = await getAccessTokenFromJwt(req);
+  const sendUpstream = (bearer?: string) =>
     fetch(target.url, {
       method,
       headers: {
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
         ...(body ? { "Content-Type": "application/json" } : {}),
+        ...pickIdempotencyKeyHeader(req.headers),
+        ...pickAnalyticsCookieHeader(req.headers),
       },
       body,
       cache: "no-store",
@@ -74,7 +91,7 @@ async function handle(req: NextAuthRequest, segments: string[]) {
 
   let res: Response;
   try {
-    res = await sendUpstream(session.accessToken);
+    res = await sendUpstream(accessToken);
   } catch {
     return NextResponse.json(
       {
@@ -84,16 +101,25 @@ async function handle(req: NextAuthRequest, segments: string[]) {
     );
   }
 
-  if (res.status === 204) return new NextResponse(null, { status: 204 });
+  if (res.status === 204) return storefrontResponse(res, null);
 
   // Pass the backend's JSON (and status) through unchanged.
   const text = await res.text();
-  return new NextResponse(text, {
-    status: res.status,
-    headers: {
-      "Content-Type": res.headers.get("content-type") ?? "application/json",
-    },
-  });
+  return storefrontResponse(res, text);
+}
+
+function storefrontResponse(res: Response, body: string | null) {
+  const headers = new Headers();
+  if (body !== null) {
+    headers.set(
+      "Content-Type",
+      res.headers.get("content-type") ?? "application/json",
+    );
+  }
+  for (const cookie of pickAnalyticsSetCookies(res.headers.getSetCookie())) {
+    headers.append("Set-Cookie", cookie);
+  }
+  return new NextResponse(body, { status: res.status, headers });
 }
 
 const authenticatedHandler = routeAuth(async (req, ctx) => {

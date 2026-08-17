@@ -64,10 +64,17 @@ export async function allCategorySlugs(): Promise<string[]> {
   });
 }
 
+/**
+ * The storefront layout awaits this on every public page, so `no-store` here made
+ * home, PDP, PLP, categories, journal, recipes, about and FAQ dynamic and defeated
+ * every `revalidate` below it. It is the same directory data as
+ * `listCategoryPage`/`getFeaturedCategories` and admin category writes already blow
+ * CATEGORY_DIRECTORY_CACHE_TAG, so it needs no invalidation of its own.
+ */
 export function getCategoryTree(): Promise<CategoryTree[]> {
   return publicRequest<CategoryTree[]>(
     "/categories/tree",
-    PUBLIC_DETAIL_CACHE_OPTIONS,
+    PUBLIC_DIRECTORY_CACHE_OPTIONS,
   );
 }
 

@@ -1,6 +1,10 @@
 package site_settings
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+	"time"
+)
 
 func TestUpdateApplyReplacesOnlyPresentGroups(t *testing.T) {
 	cur := SiteSettings{
@@ -28,6 +32,22 @@ func TestToPublicOmitsUpdatedAtConcern(t *testing.T) {
 	// Zero gift → defaults for storefront.
 	if !p.Gift.Enabled || len(p.Gift.Options) == 0 {
 		t.Fatalf("gift defaults = %+v", p.Gift)
+	}
+}
+
+func TestUpdateReqJSONUsesExpectedUpdatedAt(t *testing.T) {
+	var req UpdateSiteSettingsReq
+	if err := json.Unmarshal([]byte(`{
+		"expected_updated_at": "2026-06-20T08:00:00Z",
+		"store": {"name": "Rumera"}
+	}`), &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if req.ExpectedUpdatedAt == nil || req.ExpectedUpdatedAt.UTC().Format(time.RFC3339) != "2026-06-20T08:00:00Z" {
+		t.Fatalf("expected_updated_at = %v", req.ExpectedUpdatedAt)
+	}
+	if req.Store == nil || req.Store.Name != "Rumera" {
+		t.Fatalf("store = %+v", req.Store)
 	}
 }
 

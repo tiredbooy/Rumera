@@ -73,6 +73,18 @@ describe("checkout forms", () => {
     expect(screen.getByRole("alert")).toHaveAttribute("id", "coupon-error");
   });
 
+  it("offers a rewards link and does not promise a numeric earn amount", () => {
+    render(<CheckoutPaymentStep {...paymentProps} />);
+
+    expect(
+      screen.getByRole("link", { name: "مشاهدهٔ باشگاه مشتریان" }),
+    ).toHaveAttribute("href", "/account/rewards");
+    expect(
+      screen.getByText(/ثبت سفارش به‌تنهایی امتیاز نمی‌دهد/),
+    ).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/[0-9۰-۹]+\s*امتیاز/);
+  });
+
   it("focuses and describes the first address control after a server error", () => {
     mocks.createAddressMutate.mockImplementation(
       (_input: unknown, callbacks?: MutationCallbacks) =>

@@ -120,6 +120,38 @@ Designed for real deployment:
   service for predictable behaviour under load.
 - **Hardened Redis:** password-protected, `appendonly` persistence, an LRU
   `maxmemory` policy.
+- **Hardened nginx gateway.** `infra/nginx/nginx.prod.conf` (and the matching
+  dev snippet) set `server_tokens off` and conservative security headers
+  (`X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`,
+  `Referrer-Policy: strict-origin-when-cross-origin`) on the edge so `/api/v1`
+  and `/media` — which bypass Next `headers()` — are not header-less. Prod
+  also applies a small `limit_req` zone (`auth`, 10r/s, burst 20) on
+  `/api/v1/auth/` and `/api/public/auth/` as a flood backstop; the Go
+  `LoginRateLimit` (10/min) still owns login/OTP counters. No HSTS while the
+  live listener is HTTP-only. The commented 443 block keeps the existing
+  placeholder hostname — do not invent a public name here.
+
+### Nginx gateway
+
+Configs: [`infra/nginx/nginx.dev.conf`](../infra/nginx/nginx.dev.conf) ·
+[`infra/nginx/nginx.prod.conf`](../infra/nginx/nginx.prod.conf). Both are
+mounted at `/etc/nginx/conf.d/default.conf` (http context).
+
+| Directive | Dev | Prod |
+|-----------|-----|------|
+| `server_tokens off` | yes | yes |
+| Security headers above | yes | yes |
+| `limit_req` on auth/OTP | no (local login must not quota) | `zone=auth:10m rate=10r/s`, `burst=20 nodelay`, `limit_req_status 429` |
+| `server_name` | `_` | `_` (443 example stays commented) |
+
+After editing a snippet, `make dev-restart SVC=nginx` (dev watch also syncs
+the file). Syntax check against the compose image:
+
+```bash
+docker run --rm \
+  -v "$PWD/infra/nginx/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro" \
+  nginx:1.27-alpine nginx -t
+```
 
 ### Required production environment
 
@@ -127,7 +159,12 @@ These must be set in `.env` or the stack won't start:
 
 `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `ANALYTICS_DB_USER`, `ANALYTICS_DB_PASSWORD`,
 `ANALYTICS_DB_NAME`, `REDIS_PASSWORD`, `MEILI_API_KEY`, `JWT_SECRET`,
-`CORS_ALLOWED_ORIGINS`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_API_URL`.
+`CORS_ALLOWED_ORIGINS`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_API_URL`,
+`AUTH_SECRET`, `AUTH_URL`.
+
+`AUTH_SECRET` and `AUTH_URL` are injected into the **frontend** service
+(Auth.js session cookie signing / callback origin). They are not backend
+JWT vars — keep `AUTH_SECRET` distinct from `JWT_SECRET`.
 
 See [`.env.example`](../.env.example) for the full annotated list.
 

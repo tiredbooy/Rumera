@@ -20,8 +20,18 @@ apps/backend/internal/features/reviews/
 | Surface | Paths |
 |---------|--------|
 | Public | `GET /products/:id/reviews`, `/summary`, `GET /reviews/:id` (approved) |
-| Customer | mine, pending, create/update/delete, react, images |
-| Admin | list, status patch |
+| Customer | mine, pending (`LIMIT 100` each), create/update/delete, react, unlike (`DELETE /reviews/:id/react`), images |
+| Admin | list, status patch (`product_title` + `product_slug` from `products`) |
+
+Customer `POST /reviews` allows non-buyers. `HasPurchased` only stamps `verified_purchase`; missing purchase is **not** `403 ACCESS_DENIED`. Duplicate `(user_id, product_id)` is `409 CONFLICT`. New rows default `status=pending`. Success is `201`.
+
+Customer `POST /reviews/:id/images` `image_url` is allow-listed: `https://` or origin-independent `/media/...` (rejects `javascript:`, `http:`).
+
+Public `GET /products/:id/reviews` and `GET /reviews/:id` hydrate `review_images` in one batch query (not N+1).
+
+Customer `DELETE /reviews/:id/react` undoes the caller's vote. No existing vote is still `204` (not `500`). Missing / unapproved review is `404`.
+
+Admin `GET /admin/reviews` and `PATCH /admin/reviews/:id/status` hydrate `product_title` and `product_slug` from `products` (PR-063d). Public `ReviewResponse` stays `product_id` only. Contract: [reviews.md](../../apps/backend/docs/api/reviews.md).
 
 ## Related
 

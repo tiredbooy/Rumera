@@ -137,6 +137,21 @@ func (h *Handler) Register(c *gin.Context) {
 	})
 }
 
+// dummyLoginHash is a bcrypt cost-12 hash of an unpublished random secret.
+// Unknown emails and OTP-only (nil PasswordHash) accounts are compared
+// against it so a miss spends the same time as a wrong-password miss.
+const dummyLoginHash = "$2a$12$.2l3fjlAkG39FQcppF3E3eCqIszaUqEfQ958tvdlrJH/eYXX./Ep2"
+
+// compareLoginPassword always runs bcrypt. A nil stored hash uses dummyLoginHash
+// so unknown-email / OTP-only misses cannot be timed apart from a wrong password.
+func compareLoginPassword(password string, stored *string) bool {
+	hash := dummyLoginHash
+	if stored != nil {
+		hash = *stored
+	}
+	return crypto.CheckPasswordHash(password, hash)
+}
+
 // Login verifies credentials and issues a token pair.
 //
 // POST /auth/login
@@ -147,8 +162,13 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	user, err := h.Users.GetByEmail(c.Request.Context(), req.Email)
-	if err != nil || user.PasswordHash == nil ||
-		!crypto.CheckPasswordHash(req.Password, *user.PasswordHash) {
+	var stored *string
+	if err == nil && user != nil {
+		stored = user.PasswordHash
+	}
+	// bcrypt first so the miss path cannot skip it via short-circuit ||.
+	ok := compareLoginPassword(req.Password, stored)
+	if !ok || err != nil || user == nil || stored == nil {
 		// Same response whether the email is unknown or the password is wrong —
 		// never reveal which, to prevent account enumeration.
 		response.Error(c, response.ErrInvalidCredentials)

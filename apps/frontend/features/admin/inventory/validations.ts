@@ -1,15 +1,13 @@
 import { z } from "zod";
 
 import type { UpdateReorderThresholdInput } from "@/features/inventory/types";
+import { toAsciiDigits } from "@/lib/normalize-digits";
 
 export const MAX_INVENTORY_INTEGER = 2_147_483_647;
 export const MIN_INVENTORY_INTEGER = -2_147_483_648;
 
 export function toAsciiInventoryDigits(value: string): string {
-  return value
-    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
-    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
-    .replace("−", "-");
+  return toAsciiDigits(value);
 }
 
 const nonnegativeInteger = (label: string) =>

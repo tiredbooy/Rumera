@@ -21,8 +21,9 @@ import { useValidateCoupon } from "@/features/coupons/api";
 import { usePlaceOrder } from "@/features/orders/hooks";
 import { useShippingMethods } from "@/features/shipping/api";
 import { usePublicGiftSettings } from "@/features/settings/hooks";
+import { useWallet } from "@/features/wallet/hooks";
 import type { CouponValidation } from "@/features/coupons/types";
-import type { PaymentMethod } from "@/features/orders/types";
+import type { OrderStatus, PaymentMethod } from "@/features/orders/types";
 import { apiErrorMessage, apiErrorToast } from "@/lib/api/user-facing-error";
 import { packageWeightKg } from "../package-weight";
 import {
@@ -34,7 +35,7 @@ import { CheckoutAddressStep } from "./checkout-address-step";
 import { CheckoutPaymentStep } from "./checkout-payment-step";
 import { CheckoutReviewStep } from "./checkout-review-step";
 import { CheckoutShippingStep } from "./checkout-shipping-step";
-import { CheckoutSummary } from "./checkout-summary";
+import { CheckoutSummary, CheckoutTotals } from "./checkout-summary";
 
 type CouponAttempt = {
   code: string;
@@ -59,6 +60,7 @@ export function CheckoutFlow() {
   const [couponCode, setCouponCode] = React.useState("");
   const [couponAttempt, setCouponAttempt] = React.useState<CouponAttempt>();
   const [submitError, setSubmitError] = React.useState<string>();
+  const submitErrorRef = React.useRef<HTMLDivElement>(null);
   const couponAttemptVersion = React.useRef(0);
 
   // Wizard navigation. `maxReached` keeps already-visited steps clickable.
@@ -122,11 +124,10 @@ export function CheckoutFlow() {
   )?.id;
   const addressId = selectedAddressId ?? defaultAddressId;
   const selectedAddress = addresses?.find((a) => a.id === addressId);
-  // Region is authoritative from the selected address country — never a
-  // checkout constant. Quotes stay disabled until an address is chosen.
-  // Region from address country only; package weight = Σ(unit weight_kg × qty).
-  // Backend CreateOrder re-sums from catalogue and authorizes the method again.
-  const shipRegion = (selectedAddress?.country ?? "").trim().toUpperCase();
+  // Prefer ISO-3166-2 province codes (IR-TEH). Country (IR) is the fallback
+  // so saved addresses and CreateOrder (address.Country) still quote.
+  // Package weight = Σ(unit weight_kg × qty); CreateOrder re-sums + authorizes.
+  const shipRegion = checkoutShipRegion(selectedAddress);
   const shipWeight = packageWeightKg(cart?.items);
   const shipping = useShippingMethods(
     shipRegion,
@@ -177,7 +178,21 @@ export function CheckoutFlow() {
           .map((o) => o.label)
       : [];
   const total = Math.max(0, subtotal - discount + shippingCost + giftFee);
+  // U-1. Balance is advisory only — a failed/absent wallet request leaves it null
+  // and the step simply shows nothing rather than guessing. `balance` is a decimal
+  // string on the wire; every other consumer does the same Number() conversion.
+  const walletQuery = useWallet(payment === "wallet");
+  const walletBalance =
+    walletQuery.data?.balance != null ? Number(walletQuery.data.balance) : null;
   const canPlace = !!addressId && !!selectedShipping && !!cart?.items.length;
+
+  React.useEffect(() => {
+    if (!submitError) return;
+    submitErrorRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [submitError]);
 
   const currentKey: CheckoutStepKey = CHECKOUT_STEPS[step].key;
   // Whether the user may advance past the current step.
@@ -259,26 +274,30 @@ export function CheckoutFlow() {
       },
       {
         onSuccess: (order) => {
+          // PR-030c: POST /orders has no payment_url yet (PR-020f).
+          // Do not invent a gateway start URL. Confirmation copy is PR-030a.
           toast.success("سفارش ثبت شد");
-          // Fire-and-forget purchase signals for recommendation profiles.
-          const productIds = [
-            ...new Set(
-              (cart?.items ?? [])
-                .map((item) => item.product_id)
-                .filter((id): id is number => typeof id === "number" && id > 0),
-            ),
-          ];
-          for (const productId of productIds) {
-            void import("@/features/recommendations/client")
-              .then(({ recordInteractionClient }) =>
-                recordInteractionClient({
-                  product_id: productId,
-                  interaction_type: "purchase",
-                  source: "checkout",
-                  metadata: { order_id: order.id },
-                }),
-              )
-              .catch(() => undefined);
+          // PR-030e: purchase recs only after paid-like (wallet may already be paid).
+          if (isPaidLikeOrderStatus(order.status)) {
+            const productIds = [
+              ...new Set(
+                (cart?.items ?? [])
+                  .map((item) => item.product_id)
+                  .filter((id): id is number => typeof id === "number" && id > 0),
+              ),
+            ];
+            for (const productId of productIds) {
+              void import("@/features/recommendations/client")
+                .then(({ recordInteractionClient }) =>
+                  recordInteractionClient({
+                    product_id: productId,
+                    interaction_type: "purchase",
+                    source: "checkout",
+                    metadata: { order_id: order.id },
+                  }),
+                )
+                .catch(() => undefined);
+            }
           }
           router.push(`/checkout/confirmation/${order.id}`);
         },
@@ -440,16 +459,9 @@ export function CheckoutFlow() {
             onHidePriceChange={setHidePrice}
             deliveryDate={deliveryDate}
             onDeliveryDateChange={setDeliveryDate}
+            walletBalance={walletBalance}
+            total={total}
           />
-        ) : null}
-
-        {submitError ? (
-          <QueryStateRegion
-            state="error"
-            className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-          >
-            {submitError}
-          </QueryStateRegion>
         ) : null}
 
         {/* Step 4 — Review */}
@@ -466,6 +478,28 @@ export function CheckoutFlow() {
             onEditShipping={() => goTo(1)}
             onEditPayment={() => goTo(2)}
           />
+        ) : null}
+
+        <CheckoutTotals
+          className="border-hairline rounded-2xl bg-card p-4 ring-1 ring-foreground/5 lg:hidden"
+          totalItems={cart.summary.total_items}
+          subtotal={subtotal}
+          discount={discount}
+          shippingCost={shippingCost}
+          hasSelectedShipping={!!selectedShipping}
+          giftFee={giftFee}
+          total={total}
+        />
+
+        {submitError ? (
+          <div ref={submitErrorRef}>
+            <QueryStateRegion
+              state="error"
+              className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+            >
+              {submitError}
+            </QueryStateRegion>
+          </div>
         ) : null}
 
         {/* Step navigation */}
@@ -530,6 +564,32 @@ export function CheckoutFlow() {
       />
     </div>
   );
+}
+
+/** Same paid-like set as confirmation / loyalty earn. */
+const PAID_LIKE_ORDER_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  "paid",
+  "processing",
+  "ready_to_ship",
+  "shipped",
+  "out_for_delivery",
+  "delivered",
+]);
+
+function isPaidLikeOrderStatus(status: OrderStatus): boolean {
+  return PAID_LIKE_ORDER_STATUSES.has(status);
+}
+
+/** Uppercase IR-… province codes; otherwise the address country. */
+function checkoutShipRegion(address?: {
+  country?: string;
+  state_province?: string;
+} | null): string {
+  const province = (address?.state_province ?? "").trim().toUpperCase();
+  if (/^[A-Z]{2}-.+/.test(province)) {
+    return province;
+  }
+  return (address?.country ?? "").trim().toUpperCase();
 }
 
 

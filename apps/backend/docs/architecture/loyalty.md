@@ -5,8 +5,14 @@ product/ops defining rates and abuse policy.
 
 **Status:** **PH-040a design + PH-040b implementation** (2026-08-12). Earn triggers
 for review and birthday are wired; redeem domain keys bind to HTTP
-`Idempotency-Key`; order clawback helper is ready for refund saga. Admin adjust
-API remains PH-040d. No free money; awards are service-only.
+`Idempotency-Key` (required on redeem, PR-003g); order clawback is wired on
+full `refunded` status (PR-003i; balance only). Admin **member search + account + paginated ledger** are
+mounted (PR-003d). Admin adjust (`POST /admin/users/:userID/loyalty/adjust`)
+is live (PR-003e). Programme rates/tiers + `enabled` persist in
+`loyalty_programme` (PR-003f). Customer `GET /loyalty/transactions` is
+paginated `{results, pagination}` and includes `id` / `ref_type` / `ref_id`
+(PR-003j). Customer `GET /loyalty` includes `redeem_value` (PR-003l) from the
+same persisted programme Redeem uses. No free money; awards are service-only.
 
 **API surface:** [api/loyalty.md](../api/loyalty.md)  
 **Money sagas:** [money-and-stock-sagas.md](./money-and-stock-sagas.md)  
@@ -24,7 +30,7 @@ API remains PH-040d. No free money; awards are service-only.
 | Tier | Derived from lifetime: bronze → silver → gold → cellar |
 | Ledger | Append-only `loyalty_transactions` with **UNIQUE (reason, ref_type, ref_id)** |
 | Redeem | Points → wallet deposit at fixed Toman/point; compensating re-award on deposit fail |
-| Config | Process env `LOYALTY_*` (not DB today) |
+| Config | DB `loyalty_programme` + `loyalty_programme_tiers` (PR-003f). Env `LOYALTY_*` seeds the first row / last-resort fallback. |
 
 **Invariants**
 
@@ -39,42 +45,63 @@ API remains PH-040d. No free money; awards are service-only.
 
 ## 2. Configuration (rates)
 
-### Live env (today)
+**Source of truth (PR-003f):** singleton `loyalty_programme` (`id = 1`) plus
+`loyalty_programme_tiers`. **Not** `site_settings`. Process env `LOYALTY_*`
+seeds the first row (migration defaults) and is last-resort fallback when the
+row is missing (tests). After seed, Award / Redeem / birthday / signup /
+review / `Programme()` load persisted rates.
+
+### Seed env (defaults only)
 
 | Env | Default | Meaning |
 |-----|---------|---------|
 | `LOYALTY_EARN_DIVISOR` | `10000` | Order Toman per **1** point earned (`floor(amount / divisor)`) |
 | `LOYALTY_REDEEM_VALUE` | `1000` | Wallet Toman credit per **1** point redeemed |
 | `LOYALTY_SIGNUP_BONUS` | `100` | One-time points on account creation (`0` = off) |
-| `LOYALTY_REFERRAL_REWARD` | `300` | Points to **both** referrer and referee on first paid order |
-
-### Live env (PH-040b)
-
-| Env | Default | Meaning |
-|-----|---------|---------|
+| `LOYALTY_REFERRAL_REWARD` | `300` | Snapshot default. Referral `Complete` still uses process env (do not change that wiring here). |
 | `LOYALTY_REVIEW_BONUS` | `50` | Points per verified-purchase review (`0` = off) |
 | `LOYALTY_BIRTHDAY_BONUS` | `200` | Points once per calendar year (`0` = off) |
 | `LOYALTY_BIRTHDAY_TZ` | `Asia/Tehran` | Calendar day for birthday match (IANA) |
-| `CRON_LOYALTY_BIRTHDAY_SCHEDULE` | `0 15 1 * * *` | Daily birthday job (6-field UTC cron) |
+| `CRON_LOYALTY_BIRTHDAY_SCHEDULE` | `0 15 1 * * *` | Daily birthday job (6-field UTC cron) — schedule stays env |
 
-### Env vs DB-configurable (decision for PH-040d)
+### `enabled` kill-switch
+
+| `enabled` | Behaviour |
+|-----------|-----------|
+| `true` | Current earn/redeem/adjust behaviour |
+| `false` | All `Award*` / `AwardForOrder` / `AwardSignup` / `AwardForReview` / `AwardBirthday` skip (`loyalty_award_total{result=skip}`). `Redeem` and admin grant/clawback fail with typed `LOYALTY_DISABLED` (409). Reads still work. |
+
+### Admin write
+
+`PUT /admin/loyalty/programme` (`customers:write`, same group as adjust). Body:
+`earn_divisor`, `redeem_value`, bonuses, `birthday_tz`, `referral_reward`,
+`enabled`, `tiers[{id, min_lifetime_points}]`. Divisors/values `> 0`; bonuses
+`≥ 0`; IANA tz (empty → `Asia/Tehran`; invalid → 422). Tiers must include
+`bronze@0` and be strictly increasing for bronze/silver/gold/cellar. No
+`loyalty:write`. No public grant.
+
+`GET /admin/loyalty/programme` includes `enabled`. `config_source` is `"db"`
+when served from the table; `editable` is `true` then.
+
+### Env vs DB
 
 | Option | Status | Notes |
 |--------|--------|-------|
-| **Env-only** | **Chosen (PH-040d)** | Rates stay process env; restart to change |
-| **Admin UI** | **Read-only shipped** | `GET /admin/loyalty/programme` + FE `/admin/loyalty` |
-| **DB rates later** | Deferred | Prefer dedicated keys later — **not** storefront `site_settings` |
-
-**PH-040d decision:** keep env source of truth; operators see effective snapshot + runbook in admin. No free grant / rate-edit API.
+| **Env-only** | Superseded (PH-040d) | Was process env + restart |
+| **Dedicated DB tables** | **Live PR-003f** | `loyalty_programme` + tiers — **not** storefront `site_settings` |
+| **Admin UI** | GET live; PUT live on BE (FE form is a later task) | |
 
 ---
 
 ## 3. Tiers (as-built — keep)
 
-Thresholds on **lifetime_points** (not current balance):
+Thresholds on **lifetime_points** (not current balance). Seed defaults below;
+operators may change the four minima via PUT (bronze must stay 0; strictly
+increasing). Award SQL uses live cutovers — it does **not** hardcode
+1000/5000/20000.
 
-| Tier | Lifetime ≥ | Next |
-|------|------------|------|
+| Tier | Seed lifetime ≥ | Next (seed) |
+|------|-----------------|-------------|
 | `bronze` | 0 | silver at 1 000 |
 | `silver` | 1 000 | gold at 5 000 |
 | `gold` | 5 000 | cellar at 20 000 |
@@ -94,6 +121,11 @@ API exposes `tier`, `next_tier`, `points_to_next` (see loyalty API).
 - `ref_id` must be **globally unique** for that reason/type (include `user_id` when the natural key is not global).
 - Replays with the same triple are no-ops (`ON CONFLICT DO NOTHING`).
 - Do not reuse a `ref_id` for a different user or amount.
+- **Spend (PR-003g):** redeem `ref_id = "{userID}:idem:{key}"`. An unscoped
+  `idem:{key}` would let two users with the same client header collide
+  (second spend is a silent replay). Award keys are unchanged (order id,
+  review id, `{userID}:{year}`, …). Admin adjust remains
+  `{idempotency_key}` (`|actor=` when it fits).
 
 ### 4.1 Order paid — **LIVE**
 
@@ -101,7 +133,7 @@ API exposes `tier`, `next_tier`, `points_to_next` (see loyalty API).
 |--|--|
 | **When** | After payment **Confirm** TX commits (stock deducted + order paid) |
 | **Where** | `payments.Service.Confirm` → `loyalty.AwardForOrder` |
-| **Amount** | `floor(payment_amount / LOYALTY_EARN_DIVISOR)`; skip if ≤ 0 |
+| **Amount** | `floor(payment_amount / earn_divisor)` from persisted programme; skip if ≤ 0 or `enabled=false` |
 | **Reason / ref** | `order_paid` / `order` / `{orderID}` |
 | **Idempotent** | Yes — order id |
 | **Failure** | Best-effort log; must not roll back payment |
@@ -115,7 +147,7 @@ API exposes `tier`, `next_tier`, `points_to_next` (see loyalty API).
 |--|--|
 | **When** | Password register and OTP signup create a new user |
 | **Where** | `auth` handlers → `AwardSignup` |
-| **Amount** | `LOYALTY_SIGNUP_BONUS` |
+| **Amount** | persisted `signup_bonus` |
 | **Reason / ref** | `signup` / `user` / `{userID}` |
 | **Idempotent** | Yes — once per user |
 
@@ -128,7 +160,7 @@ API exposes `tier`, `next_tier`, `points_to_next` (see loyalty API).
 | **Amount** | `LOYALTY_REFERRAL_REWARD` to **referrer** and **referee** |
 | **Reason / ref** | `referral` + `referral_welcome` / `referral` / `{referralRowID}` |
 | **Idempotent** | Complete-once row + ledger unique |
-| **Anti-abuse** | No self-referral; one referral edge per referee; unknown codes ignored |
+| **Anti-abuse** | No self-referral; one referral edge per referee; unknown / already-claimed codes are `400` (PR-054a) |
 
 ### 4.4 Review submitted — **LIVE (PH-040b)**
 
@@ -138,7 +170,7 @@ API exposes `tier`, `next_tier`, `points_to_next` (see loyalty API).
 | **Where** | `AwardForReview` best-effort after insert |
 | **Eligibility** | **Verified purchase only**. Non-buyer reviews earn 0. |
 | **Once rules** | One review per (user, product). Award once per **review id**. |
-| **Amount** | `LOYALTY_REVIEW_BONUS` (fixed; `0` disables) |
+| **Amount** | persisted `review_bonus` (fixed; `0` disables) |
 | **Reason / ref** | `review` / `review` / `{reviewID}` |
 | **Moderation** | Award on **create**, not on admin approve |
 | **Failure** | Best-effort; review create must not fail if loyalty fails |
@@ -149,49 +181,70 @@ API exposes `tier`, `next_tier`, `points_to_next` (see loyalty API).
 |--|--|
 | **When** | Cron `loyalty_birthday` (`CRON_LOYALTY_BIRTHDAY_SCHEDULE`) |
 | **Where** | `Service.RunBirthdayAwards` |
-| **Timezone** | `LOYALTY_BIRTHDAY_TZ` default **`Asia/Tehran`** |
+| **Timezone** | persisted `birthday_tz` (IANA; default **`Asia/Tehran`**) |
 | **Eligibility** | `is_active` and not banned, non-null `birth_date` |
 | **Once rules** | **Once per calendar year** per user |
-| **Amount** | `LOYALTY_BIRTHDAY_BONUS` |
+| **Amount** | persisted `birthday_bonus` |
 | **Reason / ref** | `birthday` / `user` / `{userID}:{YYYY}` |
 | **29 Feb** | On 28 Feb non-leap years, also awards Feb 29 birthdays |
 | **Failure** | Per-user best-effort; job continues |
 
-### 4.6 Admin adjustment — **PLANNED (PH-040b or 040d)**
+### 4.6 Admin operator surface
+
+#### Member search + account + ledger — **LIVE (PR-003d)**
+
+| | |
+|--|--|
+| **When** | Staff with `customers:read` |
+| **API** | `GET /admin/loyalty/members`, `GET /admin/loyalty/members/:userID`, `GET /admin/loyalty/members/:userID/transactions` |
+| **Identity** | `:userID` is `users.user_id` UUID (same as `/admin/customers/:id` and wallet credit) |
+| **Envelope** | Lists use `{results, pagination}` (admin users style) |
+| **Ledger** | Paginated `{results, pagination}`; includes `id`, `ref_type`, `ref_id` (same row fields as customer `GET /loyalty/transactions`, PR-003j) |
+
+#### Programme rates — **LIVE (PR-003f)**
+
+| | |
+|--|--|
+| **When** | Staff with `customers:write` |
+| **API** | `PUT /admin/loyalty/programme` (GET remains `customers:read`) |
+| **Store** | `loyalty_programme` singleton + `loyalty_programme_tiers` |
+| **Kill-switch** | `enabled=false` skips automated earn; redeem/adjust → `LOYALTY_DISABLED` |
+
+#### Adjustment — **LIVE (PR-003e)**
 
 | | |
 |--|--|
 | **When** | Staff action only |
-| **API (planned)** | `POST /admin/users/:id/loyalty/adjust` — **not** a free public credit |
-| **Body (planned)** | `{ "delta": ±int, "note": "…", "idempotency_key": "…" }` — do not invent fields until implement |
-| **Capability** | Reuse `customers:write` or add `loyalty:write` (prefer explicit `loyalty:write` if RBAC matrix is cheap) |
-| **Reason / ref** | `admin_adjust` / `admin` / `{idempotency_key}` (global unique; include staff id in note metadata if needed later) |
-| **Positive delta** | Increases balance + lifetime |
+| **API** | `POST /admin/users/:userID/loyalty/adjust` — **not** a free public credit |
+| **Body** | `{ "delta": ±int ≠ 0, "note": "… max 400", "idempotency_key": "8–128" }` plus `Idempotency-Key` header |
+| **Capability** | `customers:write` (same as wallet credit) |
+| **Identity** | `:userID` is `users.user_id` UUID |
+| **Reason / ref** | `admin_adjust` / `admin` / `{idempotency_key}` (`\|actor={staff_uuid}` appended when it fits `VARCHAR(80)`; long keys hashed) |
+| **Positive delta** | Increases balance + lifetime (`Award`) |
 | **Negative delta** | Clawback path: reduce balance up to available; **do not** reduce lifetime (mirrors refund policy) |
-| **Audit** | Ledger row is the audit; `note` may need a column later — v1 can encode short note in `ref_id` prefix or add `meta` in a follow-up migration |
+| **Replay** | Same key → **200**; first apply → **201** |
+| **Audit** | Ledger row is the audit. No actor/note columns — actor is encoded in `ref_id` when it fits; HTTP payload always returns `actor_user_id` + `note`. |
 
 ---
 
-## 5. Redeem (as-built + PH-040b hardening)
-
-### Today
+## 5. Redeem (as-built + PR-003g)
 
 1. Validate `points >= 1`.  
-2. `Spend` decreases balance if sufficient; ledger `redeem` / `redeem` / `{userID}-{nanos}`.  
-3. Wallet `Deposit` for `points * LOYALTY_REDEEM_VALUE`.  
-4. On deposit failure → compensating `Award` `redeem_reversal` / `redeem` / same ref.
-
-### PH-040b domain spend key
+2. Require a client key (`Idempotency-Key` or body `idempotency_key`). Missing → `400`. No nano-suffix fallback.  
+3. `Spend` decreases balance if sufficient; ledger `redeem` / `redeem` / `{userID}:idem:{key}`.  
+4. Wallet `Deposit` for `points * redeem_value` (persisted). Disabled programme → `LOYALTY_DISABLED`.  
+5. On deposit failure → compensating `Award` `redeem_reversal` / `redeem` / same ref.
 
 | Behaviour | Detail |
 |-----------|--------|
-| HTTP key present | Ledger `ref_id = "idem:"+Idempotency-Key`; spend insert is idempotent; replay skips second wallet deposit |
-| Missing key | Fallback `{userID}-{nanos}` (not client-stable) |
+| Key required | HTTP redeem rejects missing header and missing body key (`400 INVALID_REQUEST`) |
+| Domain ref | `ref_id = "{userID}:idem:{key}"` — user-scoped so two customers can share a client key |
+| Replay | Same user + same key: spend insert is a no-op; wallet deposit is skipped |
 | Race | Ledger claim then balance update under TX |
 
 ---
 
-## 6. Cancel / refund clawback — **POLICY (PH-040b implement with refund path)**
+## 6. Cancel / refund clawback — **POLICY (wired on full `refunded`, PR-003i)**
 
 Order refunds/returns are incomplete product-wide (BACKEND-IMPROVEMENTS #18). Loyalty policy when a **paid order is refunded**:
 
@@ -202,10 +255,10 @@ Order refunds/returns are incomplete product-wide (BACKEND-IMPROVEMENTS #18). Lo
 | Lifetime | **Do not decrease** lifetime_points or auto-demote tier |
 | Balance shortfall | Deduct `min(balance, original_award)`; never negative; residual is written off (ops accept) |
 | Ledger | `order_clawback` / `order` / `{orderID}` — idempotent |
-| Timing | Same side-effect point as wallet/stock refund when that saga is wired |
-| Partial refund | v1: full clawback only on **full** order refund; partial refund clawback deferred |
+| Timing | After a successful `PATCH /admin/orders/:id/status` to full `refunded` (PR-003i). Wallet refund, restock, and coupon reverse remain **PR-020d** — this hook is points-only. |
+| Partial refund | v1: full clawback only on **full** order refund (`refunded`); **not** `partially_refunded`, cancel, or other statuses |
 
-Until refund saga exists, document policy only — no orphan clawback job.
+If clawback fails after the status write already committed, the PATCH logs the cause and returns a wrapped error so the operator knows points may remain. Retry is safe (helper is idempotent). Guests / `user_id` 0 no-op. This is **not** a refund saga.
 
 ---
 
@@ -216,9 +269,9 @@ Until refund saga exists, document policy only — no orphan clawback job.
 | Double webhook | Ledger unique + payment terminal ACK |
 | Fake reviews | Verified-purchase-only earn + one review per product |
 | Birthday spam | Once per year key; require `birth_date` |
-| Self-referral | Blocked in referral claim |
-| Free points API | Not exposed |
-| Redeem spam | HTTP idempotency + balance guard |
+| Self-referral | Blocked in referral claim (`400`; PR-054a) |
+| Free points API | Not exposed on customer API; staff adjust is `customers:write` + key |
+| Redeem spam | Required client key + user-scoped ledger ref + HTTP idempotency + balance guard |
 | Inflated order amount | Earn uses settled payment amount only |
 
 Optional later (not PH-040b): daily earn caps, velocity limits, manual fraud freeze flag on account.
@@ -241,11 +294,14 @@ reviews.Create success
 Cron loyalty_birthday (daily; awards in LOYALTY_BIRTHDAY_TZ)
   → RunBirthdayAwards (live PH-040b)
 
-Admin adjust (PH-040d)
-  → Award or clawback with admin key
+Admin adjust (PR-003e)
+  → Award (positive) or Clawback (negative) with admin key
 
-Order full refund saga (future)
-  → ClawbackOrderEarn (helper ready)
+Admin PATCH order status → full `refunded` (PR-003i)
+  → ClawbackOrderEarn (live; balance only; not a refund saga)
+
+Order full refund saga (PR-020d, future)
+  → wallet + restock + coupon reverse (will keep calling ClawbackOrderEarn)
 ```
 
 ---
@@ -304,11 +360,14 @@ FE/admin API fields** until a consumer exists. Payload is JSON in analytics DB.
 1. [x] Env review/birthday (+ timezone); wired into `loyalty.Service`  
 2. [x] `AwardForReview` + reviews.Create best-effort  
 3. [x] Birthday cron `loyalty_birthday` + `ListBirthdayUserIDs`  
-4. [x] Redeem `ref_id` from HTTP `Idempotency-Key` when present  
+4. [x] Redeem `ref_id` `{userID}:idem:{key}` (required key, PR-003g)  
 5. [x] Unit tests (review verified-only, birthday key, clawback, redeem replay)  
 6. [x] Dual-doc API reasons  
-7. [ ] Admin adjust API → **PH-040d**  
-8. [x] `ClawbackOrderEarn` helper (unit-tested; wire when refund saga lands)
+7. [x] Admin member search + account + paginated ledger → **PR-003d**  
+7b. [x] Admin adjust API → **PR-003e**  
+7c. [x] Persist programme rates/tiers + `enabled` → **PR-003f**  
+8. [x] `ClawbackOrderEarn` helper (unit-tested)
+8b. [x] Wire `ClawbackOrderEarn` on full `refunded` status (PR-003i; balance only)
 
 ---
 

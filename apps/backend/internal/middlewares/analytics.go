@@ -3,7 +3,6 @@ package middlewares
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -14,10 +13,6 @@ import (
 )
 
 const (
-	sessionCookieName = "sid"
-	deviceCookieName  = "did"
-	cookieTTL         = 365 * 24 * time.Hour
-
 	// Context keys handlers may set so the post-request hook can attach
 	// catalog identifiers without re-parsing the response body.
 	AnalyticsProductIDKey = "analytics_product_id"
@@ -26,6 +21,15 @@ const (
 
 func Analytics(queue *analytics.Queue) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Persist before c.Next() so Set-Cookie is written with the response.
+		// Valid incoming sid/did are reused; missing ones are minted once.
+		sidRaw, _ := c.Cookie(analytics.SessionCookieName)
+		didRaw, _ := c.Cookie(analytics.DeviceCookieName)
+		ids := analytics.ResolveVisitorIDs(sidRaw, didRaw, gin.Mode() == gin.ReleaseMode)
+		writeVisitorCookies(c, ids)
+		sessionID := ids.SessionID
+		deviceID := ids.DeviceID
+
 		c.Next()
 
 		method := c.Request.Method
@@ -37,8 +41,6 @@ func Analytics(queue *analytics.Queue) gin.HandlerFunc {
 		referrer := c.Request.Referer()
 		userAgentStr := c.Request.UserAgent()
 		query := c.Request.URL.Query()
-		sessionID := getOrCreateCookieID(c, sessionCookieName)
-		deviceID := getOrCreateCookieID(c, deviceCookieName)
 		userID, _ := c.Get("userID") // set by auth middleware
 
 		// Capture catalog enrichment before leaving the request goroutine.
@@ -87,6 +89,10 @@ func buildEvent(
 	ua := useragent.Parse(userAgentStr)
 	deviceType := resolveDeviceType(ua)
 	eventType := resolveEventType(method, path)
+	searchQuery := searchQueryFromRequest(query, extraPayload)
+	if analytics.IsStorefrontProductSearch(method, path, searchQuery) {
+		eventType = analytics.EventSearchPerformed
+	}
 
 	payload := map[string]any{}
 	for k, v := range extraPayload {
@@ -95,8 +101,10 @@ func buildEvent(
 	if productID > 0 {
 		payload["product_id"] = productID
 	}
-	if q := queryParamFromMap(query, "q"); q != nil && eventType == "search_performed" {
-		payload["query"] = *q
+	if eventType == analytics.EventSearchPerformed && searchQuery != "" {
+		if _, ok := payload["query"]; !ok {
+			payload["query"] = searchQuery
+		}
 	}
 
 	event := &featanalytics.EventReq{
@@ -189,13 +197,11 @@ func resolveDeviceType(ua useragent.UserAgent) featanalytics.DeviceType {
 	}
 }
 
-func getOrCreateCookieID(c *gin.Context, name string) uuid.UUID {
-	if val, err := c.Cookie(name); err == nil {
-		if id, err := uuid.Parse(val); err == nil {
-			return id
-		}
+func writeVisitorCookies(c *gin.Context, ids analytics.VisitorIDs) {
+	for _, ck := range ids.Issued {
+		c.SetSameSite(ck.SameSite)
+		c.SetCookie(ck.Name, ck.Value, ck.MaxAge, ck.Path, ck.Domain, ck.Secure, ck.HttpOnly)
 	}
-	return uuid.New()
 }
 
 func queryParamFromMap(query map[string][]string, key string) *string {
@@ -204,4 +210,23 @@ func queryParamFromMap(query map[string][]string, key string) *string {
 		return &v
 	}
 	return nil
+}
+
+// searchQueryFromRequest prefers the handler payload, then storefront `search`,
+// then the unused `q` used by the historical GET /search classifier.
+func searchQueryFromRequest(query map[string][]string, extra map[string]any) string {
+	if extra != nil {
+		if q, ok := extra["query"].(string); ok {
+			if s := strings.TrimSpace(q); s != "" {
+				return s
+			}
+		}
+	}
+	if q := queryParamFromMap(query, "search"); q != nil {
+		return strings.TrimSpace(*q)
+	}
+	if q := queryParamFromMap(query, "q"); q != nil {
+		return strings.TrimSpace(*q)
+	}
+	return ""
 }

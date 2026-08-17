@@ -39,7 +39,8 @@ export interface StorefrontMediaPolicy {
   widths: number[];
   /** Responsive sizes attribute. */
   sizes: string;
-  format: MediaFormat;
+  /** Omit to let the backend content-negotiate (AVIF when the client accepts it). */
+  format?: MediaFormat;
   quality: number;
   fit: MediaFit;
   /** Fallback monogram when media is missing or fails. */
@@ -68,7 +69,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     height: 600,
     widths: [320, 480, 640, 800],
     sizes: PRODUCT_CARD_SIZES,
-    format: "webp",
     quality: 82,
     fit: "cover",
     monogram: "ر",
@@ -78,7 +78,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 1200,
     widths: [480, 800, 1200, 1600],
     sizes: "(max-width: 1024px) 100vw, 50vw",
-    format: "webp",
     quality: 84,
     fit: "contain",
     monogram: "ر",
@@ -88,7 +87,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 160,
     widths: [80, 120, 160, 240],
     sizes: "4rem",
-    format: "webp",
     quality: 78,
     fit: "cover",
     monogram: "ر",
@@ -101,7 +99,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     widths: [280, 400, 560, 720],
     sizes:
       "(max-width: 391px) calc(100vw - 4.5rem), (max-width: 639px) 20rem, (max-width: 1023px) 21.5rem, (max-width: 1279px) 22rem, 22.5rem",
-    format: "webp",
     quality: 80,
     fit: "cover",
     monogram: "ر",
@@ -113,7 +110,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     widths: [320, 480, 640, 800],
     sizes:
       "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 20rem",
-    format: "webp",
     quality: 80,
     fit: "cover",
     monogram: "ب",
@@ -123,7 +119,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 640,
     widths: [240, 360, 480, 640],
     sizes: "(max-width: 640px) 40vw, 12rem",
-    format: "webp",
     quality: 80,
     fit: "cover",
     monogram: "ر",
@@ -133,7 +128,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 800,
     widths: [320, 480, 640, 800],
     sizes: "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw",
-    format: "webp",
     quality: 80,
     fit: "cover",
     monogram: "د",
@@ -143,7 +137,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 1600,
     widths: [640, 960, 1280, 1600],
     sizes: "100vw",
-    format: "webp",
     quality: 82,
     fit: "cover",
     monogram: "د",
@@ -154,7 +147,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 120,
     widths: [64, 96, 120, 160],
     sizes: "3rem",
-    format: "webp",
     quality: 78,
     fit: "cover",
     monogram: "د",
@@ -164,7 +156,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 1920,
     widths: [640, 960, 1280, 1600, 1920],
     sizes: "100vw",
-    format: "webp",
     quality: 82,
     fit: "cover",
     monogram: "ر",
@@ -175,7 +166,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 800,
     widths: [320, 480, 640, 800],
     sizes: "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
-    format: "webp",
     quality: 80,
     fit: "cover",
     monogram: "د",
@@ -185,7 +175,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 1400,
     widths: [640, 960, 1200, 1400],
     sizes: "(max-width: 1024px) 100vw, 60vw",
-    format: "webp",
     quality: 84,
     fit: "cover",
     monogram: "د",
@@ -196,7 +185,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 320,
     widths: [160, 240, 320, 400],
     sizes: "8rem",
-    format: "webp",
     quality: 80,
     fit: "cover",
     monogram: "ر",
@@ -206,7 +194,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 800,
     widths: [320, 480, 640, 800],
     sizes: "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
-    format: "webp",
     quality: 80,
     fit: "cover",
     monogram: "م",
@@ -216,7 +203,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 1400,
     widths: [640, 960, 1200, 1400],
     sizes: "(max-width: 1024px) 100vw, 70vw",
-    format: "webp",
     quality: 84,
     fit: "cover",
     monogram: "م",
@@ -227,7 +213,6 @@ export const STOREFRONT_MEDIA_POLICY: Record<
     width: 320,
     widths: [160, 240, 320, 400],
     sizes: "8rem",
-    format: "webp",
     quality: 80,
     fit: "cover",
     monogram: "ر",

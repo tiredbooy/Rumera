@@ -44,6 +44,7 @@ export async function CategoryCreateView() {
       />
       <CategoryForm
         mode="create"
+        canWrite
         tree={tree}
         submitLabel="افزودن دسته‌بندی"
       />
@@ -51,7 +52,13 @@ export async function CategoryCreateView() {
   );
 }
 
-export async function CategoryEditView({ id }: { id: string }) {
+export async function CategoryEditView({
+  id,
+  canWrite,
+}: {
+  id: string;
+  canWrite: boolean;
+}) {
   let category: Category;
   try {
     category = await getCategory(id);
@@ -77,6 +84,7 @@ export async function CategoryEditView({ id }: { id: string }) {
       />
       <CategoryForm
         mode="edit"
+        canWrite={canWrite}
         category={category}
         tree={tree}
         submitLabel="ذخیرهٔ تغییرات"

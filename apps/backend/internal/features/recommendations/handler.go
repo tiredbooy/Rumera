@@ -93,6 +93,7 @@ func (h *Handler) ForYou(c *gin.Context) {
 }
 
 // RecordInteraction — POST /recommendations/interactions
+// Unknown product_id is apperr.ErrNotFound → 404 (not a FK 500).
 func (h *Handler) RecordInteraction(c *gin.Context) {
 	uid, ok := httpx.UID(c)
 	if !ok {

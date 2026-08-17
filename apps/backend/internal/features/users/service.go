@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tiredbooy/internal/models"
-		"github.com/tiredbooy/pkg/apperr"
+	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/crypto"
 )
 
@@ -163,7 +163,7 @@ func (s *Service) GetAdminRoles(ctx context.Context) (*AdminRolesResponse, error
 	for _, role := range roles {
 		count := counts[role]
 		summaries = append(summaries, AdminRoleSummary{
-			Role:              role,
+			Role: role,
 			// Panel entry: admin (superuser) and staff (capability-gated).
 			AdminAccess:       IsPanelRole(role),
 			Assignable:        true,
@@ -210,6 +210,11 @@ func (s *Service) AdminCreate(
 	if req.IsActive != nil {
 		isActive = *req.IsActive
 	}
+	if isPrivilegedUserCreate(role, isActive) {
+		if err := s.requireRoleWriter(ctx, actorUserID); err != nil {
+			return nil, err
+		}
+	}
 	hash, err := crypto.HashPassword(req.Password)
 	if err != nil {
 		return nil, apperr.ErrInternal
@@ -232,17 +237,22 @@ func (s *Service) AdminCreate(
 	return user, nil
 }
 
-func (s *Service) Update(ctx context.Context, userID uuid.UUID, req UpdateUserReq) (*User, error) {
+func (s *Service) Update(ctx context.Context, userID uuid.UUID, req UpdateUserReq) (*ProfileUpdate, error) {
 	if userID == uuid.Nil {
 		return nil, apperr.ErrInvalidRequest
 	}
 
-	exists, err := s.userRepo.ExistsByID(ctx, userID)
+	current, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrUserNotFound
+		}
 		return nil, apperr.ErrInternal
 	}
-	if !exists {
-		return nil, apperr.ErrUserNotFound
+
+	pending, err := s.stageSelfServicePhone(ctx, userID, current.Phone, &req)
+	if err != nil {
+		return nil, err
 	}
 
 	user, err := s.userRepo.Update(ctx, userID, req)
@@ -259,7 +269,98 @@ func (s *Service) Update(ctx context.Context, userID uuid.UUID, req UpdateUserRe
 		return nil, apperr.ErrInternal
 	}
 
+	return &ProfileUpdate{User: user, PendingPhone: pending}, nil
+}
+
+// ApplyVerifiedPhone persists a new number after auth OTP to that number
+// succeeds. Self-service Update never writes a changed phone.
+func (s *Service) ApplyVerifiedPhone(ctx context.Context, userID uuid.UUID, phone string) (*User, error) {
+	if userID == uuid.Nil {
+		return nil, apperr.ErrInvalidRequest
+	}
+	normalized, ok := NormalizeIranPhone(phone)
+	if !ok {
+		return nil, apperr.ErrInvalidRequest
+	}
+	if err := s.ensurePhoneAvailable(ctx, userID, normalized); err != nil {
+		return nil, err
+	}
+
+	current, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrUserNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+	if sameCanonicalPhone(current.Phone, normalized) {
+		return current, nil
+	}
+
+	user, err := s.userRepo.Update(ctx, userID, UpdateUserReq{Phone: &normalized})
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrUserNotFound
+		}
+		if errors.Is(err, models.ErrAlreadyExists) || errors.Is(err, models.ErrConflict) {
+			return nil, apperr.ErrConflict
+		}
+		return nil, apperr.ErrInternal
+	}
 	return user, nil
+}
+
+// stageSelfServicePhone drops a changed phone from the profile write and
+// returns it as pending. Same-number / blank values are treated as omitted.
+func (s *Service) stageSelfServicePhone(
+	ctx context.Context,
+	userID uuid.UUID,
+	current *string,
+	req *UpdateUserReq,
+) (*string, error) {
+	if req.Phone == nil {
+		return nil, nil
+	}
+	raw := strings.TrimSpace(*req.Phone)
+	if raw == "" {
+		req.Phone = nil
+		return nil, nil
+	}
+	normalized, ok := NormalizeIranPhone(raw)
+	if !ok {
+		return nil, apperr.ErrInvalidRequest
+	}
+	req.Phone = nil
+	if sameCanonicalPhone(current, normalized) {
+		return nil, nil
+	}
+	if err := s.ensurePhoneAvailable(ctx, userID, normalized); err != nil {
+		return nil, err
+	}
+	return &normalized, nil
+}
+
+// CheckPhoneAvailable reports whether phone can be bound to userID.
+// ErrConflict means another account already owns the number.
+func (s *Service) CheckPhoneAvailable(ctx context.Context, userID uuid.UUID, phone string) error {
+	if userID == uuid.Nil || phone == "" {
+		return apperr.ErrInvalidRequest
+	}
+	return s.ensurePhoneAvailable(ctx, userID, phone)
+}
+
+func (s *Service) ensurePhoneAvailable(ctx context.Context, userID uuid.UUID, phone string) error {
+	existing, err := s.userRepo.GetByPhone(ctx, phone)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil
+		}
+		return apperr.ErrInternal
+	}
+	if existing.UserID != userID {
+		return apperr.ErrConflict
+	}
+	return nil
 }
 
 func (s *Service) AdminUpdate(
@@ -289,6 +390,11 @@ func (s *Service) AdminUpdate(
 	if actorUserID == targetUserID && adminPatchRemovesAccess(req) {
 		return nil, apperr.ErrAccessDenied
 	}
+	if isPrivilegedUserPatch(req) {
+		if err := s.requireRoleWriter(ctx, actorUserID); err != nil {
+			return nil, err
+		}
+	}
 
 	user, err := s.userRepo.AdminUpdate(ctx, actorUserID, targetUserID, req)
 	if err != nil {
@@ -307,7 +413,62 @@ func (s *Service) AdminDeactivate(
 	if actorUserID == targetUserID {
 		return apperr.ErrAccessDenied
 	}
+	if err := s.requireRoleWriter(ctx, actorUserID); err != nil {
+		return err
+	}
 	return mapAdminUserError(s.userRepo.AdminDeactivate(ctx, actorUserID, targetUserID))
+}
+
+// AdminBan sets is_banned / banned_at. HTTP is customers:ban (PR-040e);
+// persistence only requires a live panel actor. Self-ban is denied here and
+// again inside the repository transaction.
+func (s *Service) AdminBan(
+	ctx context.Context,
+	actorUserID, targetUserID uuid.UUID,
+) (*User, error) {
+	if actorUserID == uuid.Nil || targetUserID == uuid.Nil {
+		return nil, apperr.ErrInvalidRequest
+	}
+	if actorUserID == targetUserID {
+		return nil, apperr.ErrAccessDenied
+	}
+	user, err := s.userRepo.AdminBan(ctx, actorUserID, targetUserID)
+	if err != nil {
+		return nil, mapAdminUserError(err)
+	}
+	return user, nil
+}
+
+// AdminUnban clears is_banned / banned_at. Same HTTP/persistence split as
+// AdminBan. Self-unban is denied even though a banned actor cannot authenticate.
+func (s *Service) AdminUnban(
+	ctx context.Context,
+	actorUserID, targetUserID uuid.UUID,
+) (*User, error) {
+	if actorUserID == uuid.Nil || targetUserID == uuid.Nil {
+		return nil, apperr.ErrInvalidRequest
+	}
+	if actorUserID == targetUserID {
+		return nil, apperr.ErrAccessDenied
+	}
+	user, err := s.userRepo.AdminUnban(ctx, actorUserID, targetUserID)
+	if err != nil {
+		return nil, mapAdminUserError(err)
+	}
+	return user, nil
+}
+
+// requireRoleWriter is the service-side gate for role/status writes (PR-040c).
+// HTTP customers:write is not enough; the live actor must be admin.
+func (s *Service) requireRoleWriter(ctx context.Context, actorUserID uuid.UUID) error {
+	actor, err := s.userRepo.GetByID(ctx, actorUserID)
+	if err != nil {
+		return mapAdminUserError(err)
+	}
+	if !mayMutateRoleOrStatus(actor.Role) {
+		return apperr.ErrAccessDenied
+	}
+	return nil
 }
 
 func (s *Service) GetAdminAudit(

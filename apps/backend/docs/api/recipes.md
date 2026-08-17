@@ -34,7 +34,7 @@ The `Recipe` object:
 |-------|------|-------|
 | `id` | int64 | |
 | `title` | string | |
-| `slug` | string | URL-safe; auto-generated from title when omitted |
+| `slug` | string | URL-safe; auto-generated from title when omitted; unique; collision is `409 CONFLICT` |
 | `excerpt` | string \| null | short teaser |
 | `description` | string \| null | |
 | `content` | string | full instructions |
@@ -102,12 +102,16 @@ GET /recipes
 
 Query parameters (all optional): `page`, `limit` (≤100), `sortBy`
 (`published_at` \| `created_at` \| `updated_at` \| `title` \| `view_count` \|
-`total_time`), `orderBy` (`asc` \| `desc`), `search` (literal title/excerpt
-search; `%`, `_`, and `\` are not wildcards), `difficulty`,
+`total_time`), `orderBy` (`asc` \| `desc`), `search` (title/excerpt via
+`rumera_search_normalize`; Arabic-yeh/kaf match Persian; `%`, `_`, and `\`
+are not wildcards), `difficulty`,
 `is_featured`, `tag_id`, `variant_id`, `max_time` (max total minutes).
 
-Public listing is always restricted to `status=published`. Returns the
-[paginated envelope](../conventions.md) of lightweight `RecipeListItem` cards.
+Public listing is always restricted to `status=published` **and** a live
+`published_at` window (`IS NULL OR <= NOW()`). A future stamp is a schedule
+and is omitted like a draft (PR-070g). Admin `GET /admin/recipes` is
+unfiltered. Returns the [paginated envelope](../conventions.md) of lightweight
+`RecipeListItem` cards.
 
 ## Get a recipe by slug
 
@@ -117,7 +121,8 @@ GET /recipes/:slug
 
 Returns the hydrated `RecipeDetail` (ingredients, shoppable products, tags, and
 JSON-LD). Increments `view_count` asynchronously. 404 if the recipe is not
-published.
+published **or** `published_at` is still in the future (PR-070g). NULL
+`published_at` on a published row stays live (legacy).
 
 ## Create a recipe
 
@@ -149,11 +154,17 @@ POST /admin/recipes
 ```
 
 Notes:
-- `slug` is optional — when omitted it is derived from the title and made unique.
+- `slug` is optional — when omitted it is derived from the title and made unique
+  (numeric suffix under a write-tx advisory lock, same pattern as journal).
+- An explicit slug that is already taken is `409 CONFLICT` — never a 500, even
+  when two creates race the unique index (`23505`).
 - Setting `status: "published"` without `published_at` auto-stamps the publish
   time.
 - `ingredients`, `products`, and `tag_ids` are written transactionally with the
   recipe.
+
+**Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `400 INVALID_JSON`,
+`422 VALIDATION_ERROR`, `409 CONFLICT` (duplicate slug).
 
 ## Update a recipe
 
@@ -164,3 +175,8 @@ PATCH /admin/recipes/:id
 All fields optional. For the relation arrays (`ingredients`, `products`,
 `tag_ids`): omitting a key leaves it untouched; sending it (even empty) replaces
 that relation entirely. Editing a recipe busts its public cache.
+
+Changing `slug` to one already owned by another recipe is `409 CONFLICT`
+(checked under the same advisory lock as create; unique-index races also map
+to `409`, not `500`). Keeping the current slug is valid. Punctuation-only slugs
+are `400 INVALID_REQUEST`.

@@ -30,16 +30,16 @@ type AddItemReq struct {
 
 // ItemResponse is a hydrated wishlist line for the API.
 type ItemResponse struct {
-	ID             int64                       `json:"id"`
-	ProductID      int64                       `json:"product_id"`
-	ProductSlug    *string                     `json:"product_slug,omitempty"`
-	ProductTitle   string                      `json:"product_title"`
-	VariantID      int64                       `json:"variant_id"`
-	SKU            *string                     `json:"sku,omitempty"`
-	Price          float64                     `json:"price"`
-	CompareAtPrice *float64                    `json:"compare_at_price,omitempty"`
-	ImageURL       *string                     `json:"image_url,omitempty"`
-	// Options uses the shared catalogue wire shape; currently empty from GetItems.
+	ID             int64    `json:"id"`
+	ProductID      int64    `json:"product_id"`
+	ProductSlug    *string  `json:"product_slug,omitempty"`
+	ProductTitle   string   `json:"product_title"`
+	VariantID      int64    `json:"variant_id"`
+	SKU            *string  `json:"sku,omitempty"`
+	Price          float64  `json:"price"`
+	CompareAtPrice *float64 `json:"compare_at_price,omitempty"`
+	ImageURL       *string  `json:"image_url,omitempty"`
+	// Options uses the shared catalogue wire shape; GetItems hydrates from variant option values.
 	Options   []models.OptionValueResponse `json:"options,omitempty"`
 	IsInStock bool                         `json:"is_in_stock"`
 	AddedAt   time.Time                    `json:"added_at"`

@@ -11,6 +11,10 @@ interface CategoryGridProps {
 }
 
 export function CategoryGrid({ categories }: CategoryGridProps) {
+  if (categories.length === 0) {
+    return null;
+  }
+
   return (
     <section id="categories" className="container-px mx-auto max-w-7xl py-20">
       <Reveal className="flex items-end justify-between gap-4">

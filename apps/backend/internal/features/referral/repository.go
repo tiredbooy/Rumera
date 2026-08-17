@@ -84,8 +84,12 @@ func (r *referralRepository) CreateReferral(ctx context.Context, referrerID, ref
 		INSERT INTO referrals (referrer_user_id, referee_user_id, reward_points)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (referee_user_id) DO NOTHING`
-	if _, err := r.db.Exec(ctx, q, referrerID, refereeID, reward); err != nil {
+	tag, err := r.db.Exec(ctx, q, referrerID, refereeID, reward)
+	if err != nil {
 		return fmt.Errorf("referralRepository.CreateReferral: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return models.ErrConflict
 	}
 	return nil
 }

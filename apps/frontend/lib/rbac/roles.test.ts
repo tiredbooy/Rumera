@@ -28,5 +28,6 @@ describe("admin role semantics", () => {
     expect(permissionsForRole("staff")).not.toContain(
       PERMISSIONS.SETTINGS_MANAGE,
     );
+    expect(permissionsForRole("staff")).not.toContain(PERMISSIONS.WALLET_CREDIT);
   });
 });

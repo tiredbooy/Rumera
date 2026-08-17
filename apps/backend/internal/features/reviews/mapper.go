@@ -25,6 +25,8 @@ func ToReviewResponse(r *Review) ReviewResponse {
 func ToReviewAdminResponse(r *Review) ReviewAdminResponse {
 	return ReviewAdminResponse{
 		ReviewResponse: ToReviewResponse(r),
+		ProductTitle:   r.ProductTitle,
+		ProductSlug:    r.ProductSlug,
 		DeletedAt:      r.DeletedAt,
 		UpdatedAt:      r.UpdatedAt,
 	}

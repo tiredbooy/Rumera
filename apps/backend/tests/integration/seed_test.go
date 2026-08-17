@@ -43,8 +43,12 @@ func seedVariant(t *testing.T, productID int64) int64 {
 
 func seedInventory(t *testing.T, variantID int64, onHand, committed int) {
 	t.Helper()
+	// Upsert: variants created through the service already own a zeroed
+	// inventory row, so seeding stock has to overwrite rather than insert.
 	if _, err := testPool.Exec(context.Background(),
-		`INSERT INTO inventory (product_variant_id, stock_on_hand, committed_stock) VALUES ($1, $2, $3)`,
+		`INSERT INTO inventory (product_variant_id, stock_on_hand, committed_stock) VALUES ($1, $2, $3)
+		 ON CONFLICT (product_variant_id)
+		 DO UPDATE SET stock_on_hand = EXCLUDED.stock_on_hand, committed_stock = EXCLUDED.committed_stock`,
 		variantID, onHand, committed); err != nil {
 		t.Fatalf("seed inventory: %v", err)
 	}
@@ -69,6 +73,19 @@ func seedOrderItem(t *testing.T, orderID, productID, variantID int64, qty int) {
 		`INSERT INTO order_items (order_id, product_id, product_variant_id, quantity, unit_price)
 		 VALUES ($1, $2, $3, $4, 25)`, orderID, productID, variantID, qty); err != nil {
 		t.Fatalf("seed order item: %v", err)
+	}
+	// PR-020b: a pending order's committed stock is bound to an active
+	// inventory_reservations row (written by ReserveForOrderTx at checkout,
+	// backfilled for in-flight orders by 20260816190000). Release/Deduct are
+	// fail-closed without it, so the seeded line needs the same identity.
+	if _, err := testPool.Exec(context.Background(),
+		`INSERT INTO inventory_reservations (order_id, product_variant_id, quantity, status)
+		 VALUES ($1, $2, $3, 'active')
+		 ON CONFLICT (order_id, product_variant_id)
+		 DO UPDATE SET quantity = inventory_reservations.quantity + EXCLUDED.quantity,
+		               status   = 'active'`,
+		orderID, variantID, qty); err != nil {
+		t.Fatalf("seed order reservation: %v", err)
 	}
 }
 
@@ -110,6 +127,23 @@ func physicalStock(t *testing.T, variantID int64) int {
 		t.Fatalf("read stock_on_hand: %v", err)
 	}
 	return n
+}
+
+// assertInventoryRow fails unless variantID has an inventory row with the given counters.
+func assertInventoryRow(t *testing.T, variantID int64, wantOnHand, wantCommitted int) {
+	t.Helper()
+	var onHand, committed int
+	err := testPool.QueryRow(context.Background(),
+		`SELECT stock_on_hand, committed_stock FROM inventory WHERE product_variant_id = $1`,
+		variantID,
+	).Scan(&onHand, &committed)
+	if err != nil {
+		t.Fatalf("inventory for variant %d: %v", variantID, err)
+	}
+	if onHand != wantOnHand || committed != wantCommitted {
+		t.Fatalf("inventory for variant %d = %d/%d; want %d/%d",
+			variantID, onHand, committed, wantOnHand, wantCommitted)
+	}
 }
 
 func orderStatus(t *testing.T, orderID int64) string {

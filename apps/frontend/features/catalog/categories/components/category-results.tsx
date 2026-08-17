@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 
+import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import { CategoryResultsHeading } from "@/features/catalog/categories/components/category-results-heading";
 import {
@@ -22,7 +23,7 @@ import {
   PRODUCT_CARD_GRID_CLASS,
 } from "@/features/catalog/products/components/product-card";
 import type { ProductListItem } from "@/features/catalog/products/types";
-import { Placeholder } from "@/features/dashboard/components/placeholder";
+import { EmptyState } from "@/components/empty-state";
 import type { Pagination } from "@/lib/api/types";
 import { faNum } from "@/lib/products";
 
@@ -257,7 +258,7 @@ function CategoryEmptyState({
 
   return (
     <div className="mt-7">
-      <Placeholder
+      <EmptyState
         icon={PackageOpen}
         title={
           filtered
@@ -291,7 +292,7 @@ function CategoryEmptyState({
             <Link href="/products">همهٔ محصولات</Link>
           </Button>
         </div>
-      </Placeholder>
+      </EmptyState>
     </div>
   );
 }
@@ -305,59 +306,20 @@ function CategoryPagination({
   basePath: string;
   query: CategoryRouteQuery;
 }) {
-  if (pagination.total_pages <= 1) return null;
-
   return (
-    <nav
-      aria-label="صفحه‌بندی محصولات دسته‌بندی"
-      className="mt-12 flex flex-wrap items-center justify-center gap-3"
-    >
-      <Button
-        variant="outline"
-        disabled={!pagination.has_prev}
-        asChild={pagination.has_prev}
-        className="min-h-11 px-4"
-      >
-        {pagination.has_prev ? (
-          <Link
-            href={withCategoryResultsHash(
-              categoryPageHref(basePath, query, pagination.page - 1),
-            )}
-            rel="prev"
-          >
-            قبلی
-          </Link>
-        ) : (
-          <span>قبلی</span>
-        )}
-      </Button>
-
-      <span
-        className="min-w-28 text-center text-sm text-muted-foreground"
-        aria-current="page"
-      >
-        صفحهٔ {faNum(pagination.page)} از {faNum(pagination.total_pages)}
-      </span>
-
-      <Button
-        variant="outline"
-        disabled={!pagination.has_next}
-        asChild={pagination.has_next}
-        className="min-h-11 px-4"
-      >
-        {pagination.has_next ? (
-          <Link
-            href={withCategoryResultsHash(
-              categoryPageHref(basePath, query, pagination.page + 1),
-            )}
-            rel="next"
-          >
-            بعدی <ArrowLeft className="size-4" aria-hidden />
-          </Link>
-        ) : (
-          <span>بعدی</span>
-        )}
-      </Button>
-    </nav>
+    <ListPagination
+      page={pagination.page}
+      totalPages={pagination.total_pages}
+      hasPrev={pagination.has_prev}
+      hasNext={pagination.has_next}
+      prevHref={withCategoryResultsHash(
+        categoryPageHref(basePath, query, pagination.page - 1),
+      )}
+      nextHref={withCategoryResultsHash(
+        categoryPageHref(basePath, query, pagination.page + 1),
+      )}
+      ariaLabel="صفحه‌بندی محصولات دسته‌بندی"
+      className="mt-12"
+    />
   );
 }

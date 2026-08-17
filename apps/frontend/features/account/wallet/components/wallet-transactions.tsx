@@ -1,8 +1,6 @@
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
   RotateCcw,
   ShoppingBag,
   Wallet,
@@ -11,8 +9,9 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { faNum, formatPrice } from "@/lib/products";
+import { formatPrice } from "@/lib/products";
 import { Badge } from "@/components/ui/badge";
+import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,8 +40,12 @@ import {
 } from "@/features/wallet/types";
 import { AccountSection } from "../../account/components/account-section";
 import { EmptyState } from "../../EmptyState";
+import {
+  ledgerCountLabel,
+  type WalletTransactionDirection,
+} from "../ledger-window";
 
-export type WalletTransactionDirection = "all" | "credit" | "debit";
+export type { WalletTransactionDirection };
 
 // Each ledger type has an explicit icon and Persian label so colour is never
 // the sole signal of meaning.
@@ -92,7 +95,10 @@ type WalletTransactionsProps = {
   from: string;
   to: string;
   rows: WalletTransaction[];
-  transactionCount: number;
+  /** Server `pagination.total_items` for the unfiltered ledger. */
+  ledgerTotal: number;
+  /** Rows on this server page before the client dir/date filter. */
+  loadedCount: number;
   totalPages: number;
   safePage: number;
   hasActiveFilter: boolean;
@@ -112,7 +118,8 @@ export function WalletTransactions({
   from,
   to,
   rows,
-  transactionCount,
+  ledgerTotal,
+  loadedCount,
   totalPages,
   safePage,
   hasActiveFilter,
@@ -225,31 +232,51 @@ export function WalletTransactions({
             تلاش دوباره
           </button>
         </QueryStateRegion>
-      ) : transactionCount === 0 ? (
-        <EmptyState
-          icon={Wallet}
-          title={
-            hasActiveFilter
-              ? "تراکنشی با این فیلتر یافت نشد"
-              : "تراکنشی برای نمایش نیست"
-          }
-          description={
-            hasActiveFilter
-              ? "بازهٔ تاریخ یا نوع تراکنش را تغییر دهید."
-              : "پس از نخستین تراکنش، تاریخچهٔ کیف پول شما اینجا نمایش داده می‌شود. می‌توانید با کارت هدیه موجودی خود را افزایش دهید."
-          }
-          className="border-0"
-        >
-          {hasActiveFilter ? (
-            <Button
-              variant="outline"
-              onClick={onResetFilters}
-              className="cursor-pointer"
-            >
-              پاک کردن فیلترها
-            </Button>
-          ) : null}
-        </EmptyState>
+      ) : rows.length === 0 ? (
+        <>
+          <EmptyState
+            icon={Wallet}
+            title={
+              hasActiveFilter
+                ? "تراکنشی با این فیلتر در این صفحه نیست"
+                : "تراکنشی برای نمایش نیست"
+            }
+            description={
+              hasActiveFilter
+                ? "فیلتر فقط روی همین صفحه اعمال می‌شود. بازه یا نوع را عوض کنید یا صفحهٔ دیگری را ببینید."
+                : "پس از نخستین تراکنش، تاریخچهٔ کیف پول شما اینجا نمایش داده می‌شود. می‌توانید با کارت هدیه موجودی خود را افزایش دهید."
+            }
+            className="border-0"
+          >
+            {hasActiveFilter ? (
+              <Button
+                variant="outline"
+                onClick={onResetFilters}
+                className="cursor-pointer"
+              >
+                پاک کردن فیلترها
+              </Button>
+            ) : null}
+          </EmptyState>
+          <ListPagination
+            page={safePage}
+            totalPages={totalPages}
+            hasPrev={safePage > 1}
+            hasNext={safePage < totalPages}
+            onPrev={onPreviousPage}
+            onNext={onNextPage}
+            ariaLabel="صفحه‌بندی تراکنش‌ها"
+            className="border-t border-border/60 px-5 py-3 sm:px-6"
+            label={ledgerCountLabel({
+              hasActiveFilter,
+              rowCount: 0,
+              loadedCount,
+              ledgerTotal,
+              safePage,
+              totalPages,
+            })}
+          />
+        </>
       ) : (
         <>
           <div className="overflow-x-auto">
@@ -287,7 +314,7 @@ export function WalletTransactions({
                             className={cn(
                               "gap-1",
                               credit
-                                ? "bg-emerald-500/12 text-emerald-700 dark:bg-emerald-400/12 dark:text-emerald-300"
+                                ? "bg-success/12 text-success"
                                 : "bg-muted text-muted-foreground",
                             )}
                           >
@@ -313,7 +340,7 @@ export function WalletTransactions({
                         className={cn(
                           "text-end font-medium tabular-nums whitespace-nowrap",
                           credit
-                            ? "text-emerald-600 dark:text-emerald-400"
+                            ? "text-success"
                             : "text-foreground",
                         )}
                         dir="ltr"
@@ -335,43 +362,24 @@ export function WalletTransactions({
               </TableBody>
             </Table>
           </div>
-
-          {/* Pager */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-5 py-3 sm:px-6">
-            <p className="text-xs text-muted-foreground">
-              {faNum(transactionCount)} تراکنش
-              {totalPages > 1
-                ? ` · صفحهٔ ${faNum(safePage)} از ${faNum(totalPages)}`
-                : ""}
-            </p>
-            {totalPages > 1 ? (
-              <nav
-                className="flex items-center gap-1"
-                aria-label="صفحه‌بندی تراکنش‌ها"
-              >
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer"
-                  disabled={safePage <= 1}
-                  onClick={onPreviousPage}
-                >
-                  <ChevronRight className="size-4" aria-hidden /> قبلی
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer"
-                  disabled={safePage >= totalPages}
-                  onClick={onNextPage}
-                >
-                  بعدی <ChevronLeft className="size-4" aria-hidden />
-                </Button>
-              </nav>
-            ) : null}
-          </div>
+          <ListPagination
+            page={safePage}
+            totalPages={totalPages}
+            hasPrev={safePage > 1}
+            hasNext={safePage < totalPages}
+            onPrev={onPreviousPage}
+            onNext={onNextPage}
+            ariaLabel="صفحه‌بندی تراکنش‌ها"
+            className="border-t border-border/60 px-5 py-3 sm:px-6"
+            label={ledgerCountLabel({
+              hasActiveFilter,
+              rowCount: rows.length,
+              loadedCount,
+              ledgerTotal,
+              safePage,
+              totalPages,
+            })}
+          />
         </>
       )}
     </AccountSection>

@@ -4,9 +4,10 @@
 (handler · service · repository · model · `routes.go`).  
 Composed from `internal/routes/routes.go`.
 
-Staff **issue** codes; customers **purchase** via gateway (PH-042a) and **redeem**
-into wallet (single-use). Purchase never credits the buyer wallet — it creates
-an active code after payment succeeds.
+Staff **issue** codes, **list** issued cards, and **void** unused ones.
+Customers **purchase** via gateway (PH-042a) and **redeem** into wallet
+(single-use). Purchase never credits the buyer wallet — it creates an
+active code after payment succeeds.
 
 See [Authentication](../authentication.md) for trust tiers and [Conventions](../conventions.md)
 for the response envelope. Money replay safety:
@@ -18,7 +19,9 @@ for the response envelope. Money replay safety:
 | POST | `/gift-cards/purchase` | 🔒 customer | Start gateway purchase (pending; code after paid) |
 | GET | `/gift-cards/mine` | 🔒 customer | List codes the caller purchased |
 | POST | `/gift-cards/redeem` | 🔒 customer | Redeem a code → wallet credit |
+| GET | `/admin/gift-cards` | 🛡️ admin | Paginated staff ledger (`gift-cards:issue`) |
 | POST | `/admin/gift-cards` | 🛡️ admin | Issue one or more active codes (staff) |
+| POST | `/admin/gift-cards/:id/void` | 🛡️ admin | Disable an active card (cannot redeem) |
 
 ---
 
@@ -33,7 +36,12 @@ Idempotency-Key: <uuid-once-per-purchase-intent>
 Creates a **pending** payment (`order_id` null, `transaction_id` = `gbuy-…`).
 **Does not** issue a code yet. On webhook success, `payments.Confirm` calls
 `giftcard.FulfillPaidPurchaseTx` (same TX) and stores `purchase_txid` for
-idempotency.
+idempotency. A **successful new issue** emails the code to the purchaser
+(Persian body, code + amount) via `notifications.Dispatcher` when wired, else
+`notify.Mailer`. Replay (`GetByPurchaseTxID` hit) does **not** re-send. A
+mailer/dispatch failure does **not** roll back the card — list it on
+`GET /gift-cards/mine`. Email is skipped (fulfill still succeeds) when mailer
+and dispatcher are unset.
 
 **Amount:** 10 000 … 50 000 000 IRT (same bounds as wallet top-up).
 
@@ -52,12 +60,19 @@ idempotency.
     "transaction_id": "gbuy-…",
     "amount": "500000.00",
     "currency": "IRT",
-    "status": "pending"
+    "status": "pending",
+    "payment_url": "https://pay.example.com/start?transaction_id=gbuy-…"
   }
 }
 ```
 
-After paid, list codes:
+`payment_url` is `{PAYMENT_START_BASE_URL}?transaction_id={transaction_id}`
+(PR-005a). Redirect the customer there. Empty when the base is unset
+(development only). Production requires `PAYMENT_START_BASE_URL`. An empty
+URL is **not** a paid purchase.
+
+After paid, the buyer also receives the code by email when notify is wired
+(PR-005b). Always list codes:
 
 ```
 GET /gift-cards/mine
@@ -157,6 +172,85 @@ HTTP money idempotency middleware today (P2). Staff-issued cards have
 **Status** values: `active`, `redeemed`, `disabled`.
 
 **Errors:** `401`, `403`, `422`.
+
+---
+
+## List gift cards (admin)
+
+```
+GET /admin/gift-cards?page=1&limit=20&status=active&search=ABCD
+Authorization: Bearer <admin access_token>
+```
+
+Capability: `gift-cards:issue` (same grant as issue). Paginated envelope
+`{results, pagination}` — **not** wrapped in `data`.
+
+| Query | Type | Default | Notes |
+|-------|------|---------|-------|
+| `page` | int | 1 | 1-based |
+| `limit` | int | 20 | max 100 |
+| `status` | string | — | `active` · `redeemed` · `disabled` |
+| `search` | string | — | case-insensitive match on `code` |
+| `sortBy` | string | `created_at` | `created_at` · `initial_amount` · `status` |
+| `orderBy` | string | `desc` | `asc` or `desc` |
+
+**Response** `200 OK`
+
+```json
+{
+  "results": [
+    {
+      "id": 12,
+      "code": "ABCD-EFGH-JKLM-NPQR",
+      "initial_amount": "500000",
+      "status": "active",
+      "purchaser_user_id": 4,
+      "purchase_txid": "gbuy-…",
+      "created_at": "2026-08-16T10:00:00Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total_items": 1,
+    "total_pages": 1,
+    "has_next": false,
+    "has_prev": false
+  }
+}
+```
+
+`purchaser_user_id` / `purchase_txid` are omitted on staff-issued cards.
+`redeemed_by` / `redeemed_at` appear only after redeem. `results` is always
+an array (never `null`).
+
+**Errors:** `401`, `403`, `400` (bad query).
+
+---
+
+## Void a gift card (admin)
+
+```
+POST /admin/gift-cards/:id/void
+Authorization: Bearer <admin access_token>
+```
+
+Sets `status = disabled` **only** when the card is still `active`. No wallet
+movement. Redeem already treats non-active codes as invalid (`GIFT_CARD_INVALID`).
+
+**Response** `200 OK` — `AdminGiftCardResponse` (same row shape as the list).
+
+**Errors:**
+
+| HTTP | Code | Meaning |
+|------|------|---------|
+| `401` | `UNAUTHORIZED` | Missing/invalid token |
+| `403` | `INSUFFICIENT_PERMISSIONS` | Missing `gift-cards:issue` |
+| `400` | `INVALID_PARAMS` | Non-numeric / non-positive `:id` |
+| `404` | `NOT_FOUND` | Unknown id |
+| `409` | `INVALID_STATE` | Already `redeemed` or `disabled` |
+
+Void is **not** a refund: a redeemed card already credited the wallet.
 
 ---
 

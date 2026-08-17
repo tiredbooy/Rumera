@@ -4,8 +4,9 @@
  * Admin items carry a frontend capability identifier. Only admins receive
  * capabilities; account items are permission-free.
  *
- * Groups are job-based so operators scan by work type (catalogue, commerce,
- * content, insights, system) rather than a mixed flat list.
+ * Groups follow the operator's day: today, daily work, catalogue, customers,
+ * marketing/content, then setup (collapsed by default so a 768px-tall
+ * viewport does not need an inner scrollbar).
  */
 import {
   LayoutDashboard,
@@ -38,6 +39,7 @@ import {
   Gift,
   TicketPercent,
   Truck,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 
@@ -52,20 +54,60 @@ export type NavItem = {
   permission?: Permission;
   /** Match the pathname exactly (for index links) instead of by prefix. */
   exact?: boolean;
+  /** Pending-work count, applied at render from the S-1 work-queue totals. */
+  badge?: number;
 };
 
 export type NavGroup = {
+  /** Stable id for collapse state (localStorage). */
+  id?: string;
   title?: string;
   items: NavItem[];
+  /** Setup/infrequent groups can fold; daily work stays open. */
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 };
 
 export const ADMIN_NAV: NavGroup[] = [
   {
+    id: "today",
+    title: "امروز",
     items: [
       { label: "داشبورد", href: "/admin", icon: LayoutDashboard, exact: true },
     ],
   },
   {
+    id: "daily",
+    title: "کار روزانه",
+    items: [
+      {
+        label: "سفارش‌ها",
+        href: "/admin/orders",
+        icon: ClipboardList,
+        permission: PERMISSIONS.ORDERS_READ,
+      },
+      {
+        label: "پرداخت‌ها",
+        href: "/admin/payments",
+        icon: CreditCard,
+        permission: PERMISSIONS.PAYMENTS_READ,
+      },
+      {
+        label: "دیدگاه‌ها",
+        href: "/admin/reviews",
+        icon: Star,
+        permission: PERMISSIONS.REVIEWS_READ,
+      },
+      {
+        label: "موجودی",
+        href: "/admin/inventory",
+        icon: Boxes,
+        permission: PERMISSIONS.INVENTORY_READ,
+      },
+    ],
+  },
+  {
+    id: "catalogue",
     title: "کاتالوگ",
     items: [
       {
@@ -101,23 +143,7 @@ export const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
-    title: "موجودی و سفارش",
-    items: [
-      {
-        label: "موجودی",
-        href: "/admin/inventory",
-        icon: Boxes,
-        permission: PERMISSIONS.INVENTORY_READ,
-      },
-      {
-        label: "سفارش‌ها",
-        href: "/admin/orders",
-        icon: ClipboardList,
-        permission: PERMISSIONS.ORDERS_READ,
-      },
-    ],
-  },
-  {
+    id: "customers",
     title: "مشتریان",
     items: [
       {
@@ -135,14 +161,9 @@ export const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
-    title: "فروش و لجستیک",
+    id: "marketing",
+    title: "بازاریابی و محتوا",
     items: [
-      {
-        label: "پرداخت‌ها",
-        href: "/admin/payments",
-        icon: CreditCard,
-        permission: PERMISSIONS.PAYMENTS_READ,
-      },
       {
         label: "کدهای تخفیف",
         href: "/admin/coupons",
@@ -150,22 +171,11 @@ export const ADMIN_NAV: NavGroup[] = [
         permission: PERMISSIONS.COUPONS_MANAGE,
       },
       {
-        label: "ارسال و مناطق",
-        href: "/admin/shipping",
-        icon: Truck,
-        permission: PERMISSIONS.SHIPPING_MANAGE,
-      },
-      {
         label: "کارت هدیه",
         href: "/admin/gift-cards",
         icon: Gift,
         permission: PERMISSIONS.GIFT_CARDS_ISSUE,
       },
-    ],
-  },
-  {
-    title: "محتوا",
-    items: [
       {
         label: "ژورنال",
         href: "/admin/journal",
@@ -184,17 +194,20 @@ export const ADMIN_NAV: NavGroup[] = [
         icon: GalleryHorizontalEnd,
         permission: PERMISSIONS.HERO_MANAGE,
       },
-      {
-        label: "دیدگاه‌ها",
-        href: "/admin/reviews",
-        icon: Star,
-        permission: PERMISSIONS.REVIEWS_READ,
-      },
     ],
   },
   {
-    title: "بینش و پایش",
+    id: "setup",
+    title: "پیکربندی",
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
+      {
+        label: "ارسال و مناطق",
+        href: "/admin/shipping",
+        icon: Truck,
+        permission: PERMISSIONS.SHIPPING_MANAGE,
+      },
       {
         label: "تحلیل‌ها",
         href: "/admin/analytics",
@@ -213,11 +226,6 @@ export const ADMIN_NAV: NavGroup[] = [
         icon: Activity,
         permission: PERMISSIONS.ANALYTICS_READ,
       },
-    ],
-  },
-  {
-    title: "سیستم",
-    items: [
       {
         label: "نقش‌ها و دسترسی‌ها",
         href: "/admin/roles",
@@ -257,6 +265,7 @@ export const ACCOUNT_NAV: NavGroup[] = [
       { label: "سلیقهٔ من", href: "/account/taste", icon: Sparkles },
       { label: "باشگاه مشتریان", href: "/account/rewards", icon: Award },
       { label: "اشتراک‌ها", href: "/account/subscriptions", icon: Repeat },
+      { label: "اعلان‌ها", href: "/account/alerts", icon: Bell },
       { label: "دیدگاه‌های من", href: "/account/reviews", icon: MessageSquare },
     ],
   },
@@ -277,4 +286,23 @@ export function filterNav(
       ),
     }))
     .filter((group) => group.items.length > 0);
+}
+
+/**
+ * Copies pending-work counts onto matching items. Zero, null (fetch failed)
+ * and missing keys leave the item unbadged — a failed count must not read as
+ * "nothing waiting".
+ */
+export function applyNavBadges(
+  groups: NavGroup[],
+  badges: Readonly<Record<string, number | null | undefined>>,
+): NavGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => {
+      const count = badges[item.href];
+      if (typeof count !== "number" || count <= 0) return item;
+      return { ...item, badge: count };
+    }),
+  }));
 }

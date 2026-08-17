@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiredbooy/internal/models"
@@ -47,6 +47,10 @@ type service struct {
 	db    pgxBeginner
 	media MediaCleaner
 }
+
+// Serializes create/update slug allocation so two "Old Fashioned" writes
+// cannot both pass SlugExists and then 500 on the unique constraint.
+const recipeSlugWriteLockKey int64 = 7278134300003
 
 func NewService(repo Repository, db pgxBeginner, media MediaCleaner) Service {
 	return &service{repo: repo, db: db, media: media}
@@ -91,8 +95,8 @@ func (s *service) Related(ctx context.Context, recipeID int64, limit int) ([]*Re
 		return nil, fmt.Errorf("service.Related: %w", err)
 	}
 
-	published := RecipeStatusPublished
-	filter := RecipeFilter{Status: &published}
+	filter := RecipeFilter{}
+	applyPublicListFilter(&filter)
 	filter.Limit = limit + 1 // fetch one extra so we can drop the source recipe
 	filter.Page = 1
 	if len(tagIDs) > 0 {
@@ -152,10 +156,10 @@ func (s *service) Create(ctx context.Context, req *RecipeReq) (*RecipeDetailResp
 	if err := normalizeCreateMediaURL(&req.OGImageURL); err != nil {
 		return nil, err
 	}
-	s.applyCreateDefaults(ctx, req)
-
-	if err := s.assertSlugFree(ctx, req.Slug); err != nil {
-		return nil, err
+	generatedSlug := strings.TrimSpace(req.Slug) == ""
+	applyCreateDefaults(req)
+	if !generatedSlug && req.Slug == "" {
+		return nil, apperr.ErrInvalidRequest
 	}
 	if err := validateShoppable(req.Products); err != nil {
 		return nil, err
@@ -167,9 +171,23 @@ func (s *service) Create(ctx context.Context, req *RecipeReq) (*RecipeDetailResp
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	txRepo := s.repo.WithTx(tx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, recipeSlugWriteLockKey); err != nil {
+		return nil, fmt.Errorf("service.Create: lock slug writes: %w", err)
+	}
+	if generatedSlug {
+		req.Slug, err = uniqueRecipeSlug(ctx, txRepo, req.Title)
+		if err != nil {
+			return nil, fmt.Errorf("service.Create: %w", err)
+		}
+	} else if err = assertRecipeSlugFree(ctx, txRepo, req.Slug); err != nil {
+		return nil, err
+	}
 
 	recipe, err := txRepo.Create(ctx, req)
 	if err != nil {
+		if errors.Is(err, models.ErrConflict) {
+			return nil, apperr.ErrConflict
+		}
 		return nil, fmt.Errorf("service.Create: %w", err)
 	}
 
@@ -218,23 +236,14 @@ func (s *service) Update(ctx context.Context, id int64, req *RecipeUpdateReq) (*
 		}
 	}
 
-	// Normalise / guard the slug if it is being changed.
+	// Normalise the slug if it is being changed; uniqueness is checked under
+	// the write-tx advisory lock so a concurrent create cannot 500.
 	if req.Slug != nil {
 		normalized := slugify(*req.Slug)
 		if normalized == "" {
 			return nil, apperr.ErrInvalidRequest
 		}
 		req.Slug = &normalized
-		exists, err := s.repo.SlugExists(ctx, normalized)
-		if err != nil {
-			return nil, fmt.Errorf("service.Update: %w", err)
-		}
-		// Allow keeping the same slug on the same recipe.
-		if exists {
-			if current, gErr := s.repo.GetByID(ctx, id); gErr == nil && current.Slug != normalized {
-				return nil, apperr.ErrConflict
-			}
-		}
 	}
 
 	// Auto-stamp published_at the first time a recipe goes live.
@@ -255,11 +264,34 @@ func (s *service) Update(ctx context.Context, id int64, req *RecipeUpdateReq) (*
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	txRepo := s.repo.WithTx(tx)
+	if req.Slug != nil {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, recipeSlugWriteLockKey); err != nil {
+			return nil, fmt.Errorf("service.Update: lock slug writes: %w", err)
+		}
+		current, slugErr := txRepo.GetByID(ctx, id)
+		if slugErr != nil {
+			if errors.Is(slugErr, models.ErrNotFound) {
+				return nil, apperr.ErrNotFound
+			}
+			return nil, fmt.Errorf("service.Update: %w", slugErr)
+		}
+		exists, existsErr := txRepo.SlugExists(ctx, *req.Slug)
+		if existsErr != nil {
+			return nil, fmt.Errorf("service.Update: %w", existsErr)
+		}
+		// Allow keeping the same slug on the same recipe.
+		if exists && current.Slug != *req.Slug {
+			return nil, apperr.ErrConflict
+		}
+	}
 
 	recipe, err := txRepo.Update(ctx, id, req)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			return nil, apperr.ErrNotFound
+		}
+		if errors.Is(err, models.ErrConflict) {
+			return nil, apperr.ErrConflict
 		}
 		return nil, fmt.Errorf("service.Update: %w", err)
 	}
@@ -351,7 +383,9 @@ func (s *service) hydrate(ctx context.Context, load func() (*Recipe, error)) (*R
 	return &detail, nil
 }
 
-func (s *service) applyCreateDefaults(ctx context.Context, req *RecipeReq) {
+// applyCreateDefaults normalises scalar defaults before the transaction;
+// generated slug allocation happens under the transaction-scoped slug lock.
+func applyCreateDefaults(req *RecipeReq) {
 	if req.Difficulty == "" {
 		req.Difficulty = RecipeDifficultyEasy
 	}
@@ -365,15 +399,13 @@ func (s *service) applyCreateDefaults(ctx context.Context, req *RecipeReq) {
 		now := time.Now().UTC()
 		req.PublishedAt = &now
 	}
-	if strings.TrimSpace(req.Slug) == "" {
-		req.Slug = s.uniqueSlug(ctx, req.Title)
-	} else {
+	if strings.TrimSpace(req.Slug) != "" {
 		req.Slug = slugify(req.Slug)
 	}
 }
 
-func (s *service) assertSlugFree(ctx context.Context, slug string) error {
-	exists, err := s.repo.SlugExists(ctx, slug)
+func assertRecipeSlugFree(ctx context.Context, repo Repository, slug string) error {
+	exists, err := repo.SlugExists(ctx, slug)
 	if err != nil {
 		return fmt.Errorf("service.assertSlugFree: %w", err)
 	}
@@ -383,18 +415,21 @@ func (s *service) assertSlugFree(ctx context.Context, slug string) error {
 	return nil
 }
 
-// uniqueSlug derives a URL-safe slug from the title and appends a numeric suffix
-// until it is free, so creation never fails on a slug collision.
-func (s *service) uniqueSlug(ctx context.Context, title string) string {
+// uniqueRecipeSlug derives a URL-safe slug from the title and appends a numeric
+// suffix until it is free. A repo error is not treated as "free".
+func uniqueRecipeSlug(ctx context.Context, repo Repository, title string) (string, error) {
 	base := slugify(title)
 	if base == "" {
 		base = "recipe"
 	}
 	slug := base
 	for i := 2; ; i++ {
-		exists, err := s.repo.SlugExists(ctx, slug)
-		if err != nil || !exists {
-			return slug
+		exists, err := repo.SlugExists(ctx, slug)
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return slug, nil
 		}
 		slug = base + "-" + strconv.Itoa(i)
 	}

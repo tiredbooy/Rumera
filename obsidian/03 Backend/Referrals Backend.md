@@ -11,7 +11,7 @@ tags: [backend]
 ## API
 
 - `Get` — get-or-create code + pending/completed counts + reward config
-- `Claim` — soft failures (ignore bad/self/already)
+- `Claim` — `200 {claimed:true}` after insert; unknown / self / already-claimed → `400 INVALID_REQUEST` (PR-054a). Never success with `claimed:false`.
 - `OnPaidOrder` — complete pending + dual loyalty award
 
 ## Config

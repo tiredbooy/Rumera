@@ -17,7 +17,7 @@ Living encyclopedia of important variables. Source of truth in code: `apps/backe
 | `ENV` | development / production behavior |
 | `SERVER_PORT` | API listen port (default 8080) |
 | `CORS_ALLOWED_ORIGINS` | Browser origins (prod: explicit) |
-| `TRUSTED_PROXIES` | CIDRs for X-Forwarded-For trust |
+| `TRUSTED_PROXIES` | Ingress CIDRs trusted for `X-Forwarded-For` / `c.ClientIP()`. **Required in production** (`Validate()` fails boot if empty). Compose default `172.16.0.0/12` (Docker user-defined bridge; nginx → backend). Do not set `0.0.0.0/0` — that re-opens XFF spoofing of login/OTP/global rate limits. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Bootstrap admin on first boot |
 
 ## Backend — data stores
@@ -43,6 +43,7 @@ Living encyclopedia of important variables. Source of truth in code: `apps/backe
 | `JWT_ACCESS_TTL` | Access minutes (default 15) |
 | `JWT_REFRESH_TTL` | Refresh minutes (default 7d) |
 | `CRYPTO_WEBHOOK_KEY` | Payment webhook HMAC; **required in production** |
+| `PAYMENT_START_BASE_URL` | Gateway pay-start origin; intents append `?transaction_id=` ([[Payments]] · PR-005a). **Required in production**; empty in dev leaves `payment_url` blank (does not fake pay) |
 
 ## Backend — media
 
@@ -79,8 +80,8 @@ Living encyclopedia of important variables. Source of truth in code: `apps/backe
 | `NEXT_PUBLIC_SITE_URL` | Canonical site / metadata |
 | `NEXT_PUBLIC_API_URL` | Public API origin for RSC |
 | `API_URL` | Server-side API (may differ in Docker) |
-| `NEXT_PUBLIC_MEDIA_BASE_URL` | Media origin override |
-| `AUTH_SECRET` `AUTH_URL` | Auth.js |
+| `NEXT_PUBLIC_MEDIA_BASE_URL` | Media origin override. Also feeds `images.remotePatterns` with `NEXT_PUBLIC_API_URL` (PR-090c). |
+| `AUTH_SECRET` `AUTH_URL` | Auth.js session signing + callback origin. Prod compose injects both into the **frontend** service (`${AUTH_SECRET:?…}`, `${AUTH_URL:?…}`). Not the same as backend `JWT_SECRET`. |
 | `PROMETHEUS_URL` | Admin monitoring |
 | `NEXT_PUBLIC_GRAFANA_URL` | Grafana link |
 | `NEXT_PUBLIC_PWA` | Force PWA flags in dev |

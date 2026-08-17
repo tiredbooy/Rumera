@@ -33,3 +33,15 @@ func TestClaimReferralInputJSONContract(t *testing.T) {
 		t.Fatalf("unexpected claim referral input JSON: got %s, want %s", got, want)
 	}
 }
+
+func TestClaimReferralResponseJSONContract(t *testing.T) {
+	got, err := json.Marshal(ClaimReferralResponse{Claimed: true})
+	if err != nil {
+		t.Fatalf("marshal claim referral response: %v", err)
+	}
+
+	want := `{"claimed":true}`
+	if string(got) != want {
+		t.Fatalf("unexpected claim referral response JSON: got %s, want %s", got, want)
+	}
+}

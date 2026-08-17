@@ -8,6 +8,7 @@ import { SubscriptionCard } from "./subscription-card";
 
 type SubscriptionsPanelProps = {
   subscriptions: Subscription[];
+  addresses: Address[];
   addressById: ReadonlyMap<number, Address>;
   busyId: number | null;
   isLoading: boolean;
@@ -17,10 +18,12 @@ type SubscriptionsPanelProps = {
   onResume: (id: number) => void;
   onRequestPause: (id: number) => void;
   onRequestCancel: (id: number) => void;
+  onChangeAddress: (id: number, addressId: number) => void;
 };
 
 export function SubscriptionsPanel({
   subscriptions,
+  addresses,
   addressById,
   busyId,
   isLoading,
@@ -30,6 +33,7 @@ export function SubscriptionsPanel({
   onResume,
   onRequestPause,
   onRequestCancel,
+  onChangeAddress,
 }: SubscriptionsPanelProps) {
   if (isLoading) {
     return (
@@ -92,11 +96,15 @@ export function SubscriptionsPanel({
               ? addressById.get(subscription.address_id)
               : undefined
           }
+          addresses={addresses}
           busy={busyId === subscription.id}
           onRequestSkip={() => onRequestSkip(subscription.id)}
           onResume={() => onResume(subscription.id)}
           onRequestPause={() => onRequestPause(subscription.id)}
           onRequestCancel={() => onRequestCancel(subscription.id)}
+          onChangeAddress={(addressId) =>
+            onChangeAddress(subscription.id, addressId)
+          }
         />
       ))}
     </ul>

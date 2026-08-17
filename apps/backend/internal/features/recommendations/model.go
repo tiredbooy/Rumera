@@ -97,12 +97,12 @@ type RecommendationQuery struct {
 // RecommendationOpsStats is a read-only operator summary for admin dashboards.
 // Counts come from first-party interaction rows and stored user profiles.
 type RecommendationOpsStats struct {
-	WindowDays           int            `json:"window_days"`
-	InteractionTotal     int64          `json:"interaction_total"`
-	UniqueUsers          int64          `json:"unique_users"`
-	ProfilesTotal        int64          `json:"profiles_total"`
-	InteractionsByType   map[string]int64 `json:"interactions_by_type"`
-	GeneratedAt          time.Time      `json:"generated_at"`
+	WindowDays         int              `json:"window_days"`
+	InteractionTotal   int64            `json:"interaction_total"`
+	UniqueUsers        int64            `json:"unique_users"`
+	ProfilesTotal      int64            `json:"profiles_total"`
+	InteractionsByType map[string]int64 `json:"interactions_by_type"`
+	GeneratedAt        time.Time        `json:"generated_at"`
 }
 
 func (q *RecommendationQuery) Defaults() {

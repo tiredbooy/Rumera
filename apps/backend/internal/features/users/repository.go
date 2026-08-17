@@ -31,6 +31,8 @@ type Repository interface {
 	Update(ctx context.Context, userID uuid.UUID, req UpdateUserReq) (*User, error)
 	AdminUpdate(ctx context.Context, actorUserID, targetUserID uuid.UUID, req AdminUpdateUserReq) (*User, error)
 	AdminDeactivate(ctx context.Context, actorUserID, targetUserID uuid.UUID) error
+	AdminBan(ctx context.Context, actorUserID, targetUserID uuid.UUID) (*User, error)
+	AdminUnban(ctx context.Context, actorUserID, targetUserID uuid.UUID) (*User, error)
 	GetAdminAudit(ctx context.Context, targetUserID uuid.UUID, filter AdminUserAuditFilter) ([]AdminUserAuditEvent, int64, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 	ExistsByID(ctx context.Context, userID uuid.UUID) (bool, error)
@@ -110,6 +112,9 @@ func (r *repository) AdminCreate(
 	actor, err := lockActiveAdmin(ctx, tx, actorUserID)
 	if err != nil {
 		return nil, err
+	}
+	if isPrivilegedUserCreate(req.Role, req.IsActive) && !mayMutateRoleOrStatus(actor.Role) {
+		return nil, models.ErrAccessDenied
 	}
 
 	q := `
@@ -488,6 +493,9 @@ func (r *repository) AdminUpdate(
 	if err != nil {
 		return nil, err
 	}
+	if isPrivilegedUserPatch(req) && !mayMutateRoleOrStatus(actor.Role) {
+		return nil, models.ErrAccessDenied
+	}
 	if actorUserID == targetUserID && adminPatchRemovesOwnAccess(req) {
 		return nil, models.ErrAccessDenied
 	}
@@ -593,6 +601,9 @@ func (r *repository) AdminDeactivate(
 	if err != nil {
 		return err
 	}
+	if !mayMutateRoleOrStatus(actor.Role) {
+		return models.ErrAccessDenied
+	}
 	if actorUserID == targetUserID {
 		return models.ErrAccessDenied
 	}
@@ -631,6 +642,114 @@ func (r *repository) AdminDeactivate(
 		return fmt.Errorf("repository.AdminDeactivate commit: %w", err)
 	}
 	return nil
+}
+
+func (r *repository) AdminBan(
+	ctx context.Context,
+	actorUserID, targetUserID uuid.UUID,
+) (*User, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("repository.AdminBan begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	actor, target, err := lockAdminActorAndTarget(ctx, tx, actorUserID, targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	if actorUserID == targetUserID {
+		return nil, models.ErrAccessDenied
+	}
+	if target.IsBanned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("repository.AdminBan no-op commit: %w", err)
+		}
+		return target, nil
+	}
+	if wouldBanActiveAdmin(target) {
+		n, err := countOtherActiveAdmins(ctx, tx, target.UserID)
+		if err != nil {
+			return nil, err
+		}
+		if isLastActiveAdmin(n) {
+			return nil, models.ErrConflict
+		}
+	}
+
+	updated, err := scanUser(tx.QueryRow(ctx, `
+		UPDATE users
+		SET is_banned = true,
+		    banned_at = NOW(),
+		    sessions_invalidated_at = NOW(),
+		    updated_at = NOW()
+		WHERE user_id = $1
+		RETURNING `+userColumns, targetUserID))
+	if err != nil {
+		return nil, mapUserWriteError("repository.AdminBan", err)
+	}
+	changes := map[string]AdminUserAuditChange{
+		"is_banned": {Before: false, After: true},
+	}
+	if err := insertUserAdminAudit(
+		ctx, tx, actor, targetUserID, AdminUserAuditUpdated,
+		[]string{"is_banned"}, changes,
+	); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("repository.AdminBan commit: %w", err)
+	}
+	return updated, nil
+}
+
+func (r *repository) AdminUnban(
+	ctx context.Context,
+	actorUserID, targetUserID uuid.UUID,
+) (*User, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("repository.AdminUnban begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	actor, target, err := lockAdminActorAndTarget(ctx, tx, actorUserID, targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	if actorUserID == targetUserID {
+		return nil, models.ErrAccessDenied
+	}
+	if !target.IsBanned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("repository.AdminUnban no-op commit: %w", err)
+		}
+		return target, nil
+	}
+
+	updated, err := scanUser(tx.QueryRow(ctx, `
+		UPDATE users
+		SET is_banned = false,
+		    banned_at = NULL,
+		    updated_at = NOW()
+		WHERE user_id = $1
+		RETURNING `+userColumns, targetUserID))
+	if err != nil {
+		return nil, mapUserWriteError("repository.AdminUnban", err)
+	}
+	changes := map[string]AdminUserAuditChange{
+		"is_banned": {Before: true, After: false},
+	}
+	if err := insertUserAdminAudit(
+		ctx, tx, actor, targetUserID, AdminUserAuditUpdated,
+		[]string{"is_banned"}, changes,
+	); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("repository.AdminUnban commit: %w", err)
+	}
+	return updated, nil
 }
 
 func (r *repository) GetAdminAudit(
@@ -707,11 +826,6 @@ func (r *repository) ExistsByID(ctx context.Context, userID uuid.UUID) (bool, er
 	return exists, nil
 }
 
-type adminAuditActor struct {
-	UserID uuid.UUID
-	Email  string
-}
-
 func lockActiveAdmin(ctx context.Context, tx pgx.Tx, actorUserID uuid.UUID) (adminAuditActor, error) {
 	user, err := lockUser(ctx, tx, actorUserID)
 	if err != nil {
@@ -770,13 +884,6 @@ func lockAdminActorAndTarget(
 		return adminAuditActor{}, nil, models.ErrNotFound
 	}
 	return actor, targetUser, nil
-}
-
-func liveAdminActor(user *User) (adminAuditActor, error) {
-	if !user.IsActive || user.IsBanned || user.Role != UserRoleAdmin {
-		return adminAuditActor{}, models.ErrAccessDenied
-	}
-	return adminAuditActor{UserID: user.UserID, Email: user.Email}, nil
 }
 
 // countOtherActiveAdmins counts active, non-banned superusers excluding exclude.

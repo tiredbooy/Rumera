@@ -1,20 +1,18 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeSemantic } from "@/components/ui/badge";
 import { PAYMENT_STATUS_FA } from "@/features/payments/presentation";
 import type { PaymentStatus } from "@/features/payments/types";
 
-const STATUS_VARIANTS: Record<
-  PaymentStatus,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  pending: "outline",
-  succeeded: "default",
-  failed: "destructive",
-  refunded: "secondary",
-  partially_refunded: "secondary",
+const STATUS_VARIANTS: Record<PaymentStatus, BadgeSemantic> = {
+  pending: { tone: "warning" },
+  succeeded: { tone: "success" },
+  failed: { variant: "destructive" },
+  // Refunds are settled money moving back out — neutral, not success.
+  refunded: { tone: "neutral" },
+  partially_refunded: { tone: "neutral" },
 };
 
 export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
   return (
-    <Badge variant={STATUS_VARIANTS[status]}>{PAYMENT_STATUS_FA[status]}</Badge>
+    <Badge {...STATUS_VARIANTS[status]}>{PAYMENT_STATUS_FA[status]}</Badge>
   );
 }

@@ -5,6 +5,60 @@ import { Separator } from "@/components/ui/separator";
 import { faNum, formatPrice } from "@/lib/products";
 import { cn } from "@/lib/utils";
 
+export function CheckoutTotals({
+  totalItems,
+  subtotal,
+  discount,
+  shippingCost,
+  hasSelectedShipping,
+  giftFee = 0,
+  total,
+  className,
+}: {
+  totalItems: number;
+  subtotal: number;
+  discount: number;
+  shippingCost: number;
+  hasSelectedShipping: boolean;
+  giftFee?: number;
+  total: number;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="space-y-2 text-sm">
+        <Row
+          label={`جمع جزء (${faNum(totalItems)} قلم)`}
+          value={formatPrice(subtotal)}
+        />
+        {discount > 0 ? (
+          <Row label="تخفیف" value={`− ${formatPrice(discount)}`} accent />
+        ) : null}
+        <Row
+          label="ارسال"
+          value={
+            hasSelectedShipping || shippingCost > 0
+              ? shippingCost > 0
+                ? formatPrice(shippingCost)
+                : "رایگان"
+              : "—"
+          }
+        />
+        {giftFee > 0 ? (
+          <Row label="بسته‌بندی و افزونهٔ هدیه" value={formatPrice(giftFee)} />
+        ) : null}
+      </div>
+      <Separator className="my-4" />
+      <div className="flex items-baseline justify-between">
+        <span className="font-medium">مبلغ قابل پرداخت</span>
+        <span className="font-serif text-2xl text-foil tabular-nums">
+          {formatPrice(total)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function CheckoutSummary({
   totalItems,
   subtotal,
@@ -32,39 +86,20 @@ export function CheckoutSummary({
   onSubmit: () => void;
 }) {
   return (
-    <aside className="h-fit lg:sticky lg:top-24">
+    <aside className="hidden h-fit lg:sticky lg:top-24 lg:block">
       <div className="border-hairline shadow-e2 relative overflow-hidden rounded-2xl bg-card p-6 ring-1 ring-foreground/5">
         <div aria-hidden className="rule-gold absolute inset-x-6 top-0" />
         <h2 className="font-serif text-2xl">خلاصهٔ سفارش</h2>
-        <div className="mt-4 space-y-2 text-sm">
-          <Row
-            label={`جمع جزء (${faNum(totalItems)} قلم)`}
-            value={formatPrice(subtotal)}
-          />
-          {discount > 0 ? (
-            <Row label="تخفیف" value={`− ${formatPrice(discount)}`} accent />
-          ) : null}
-          <Row
-            label="ارسال"
-            value={
-              hasSelectedShipping || shippingCost > 0
-                ? shippingCost > 0
-                  ? formatPrice(shippingCost)
-                  : "رایگان"
-                : "—"
-            }
-          />
-          {giftFee > 0 ? (
-            <Row label="بسته‌بندی و افزونهٔ هدیه" value={formatPrice(giftFee)} />
-          ) : null}
-        </div>
-        <Separator className="my-4" />
-        <div className="flex items-baseline justify-between">
-          <span className="font-medium">مبلغ قابل پرداخت</span>
-          <span className="font-serif text-2xl text-foil tabular-nums">
-            {formatPrice(total)}
-          </span>
-        </div>
+        <CheckoutTotals
+          className="mt-4"
+          totalItems={totalItems}
+          subtotal={subtotal}
+          discount={discount}
+          shippingCost={shippingCost}
+          hasSelectedShipping={hasSelectedShipping}
+          giftFee={giftFee}
+          total={total}
+        />
 
         {/* Primary place-order CTA also lives here for the final step */}
         {showSubmit ? (
@@ -110,7 +145,7 @@ function Row({
   return (
     <div className="flex items-center justify-between">
       <span className="text-muted-foreground">{label}</span>
-      <span className={cn(accent && "text-emerald-500")}>{value}</span>
+      <span className={cn(accent && "text-success")}>{value}</span>
     </div>
   );
 }

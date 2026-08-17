@@ -456,4 +456,3 @@ func marshalApplicableTo(a *ApplicableTo) ([]byte, error) {
 	}
 	return json.Marshal(a)
 }
-

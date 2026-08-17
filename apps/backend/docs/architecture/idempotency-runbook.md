@@ -12,8 +12,9 @@
 | --- | --- | --- | --- |
 | `POST /api/v1/orders` | `Idempotency-Key` | **Recommended** (optional; without it no HTTP replay cache) | Checkout click / place intent |
 | `POST /api/v1/gift-cards/redeem` | same | Recommended | Redeem button press |
-| `POST /api/v1/loyalty/redeem` | same | Recommended | Redeem action |
+| `POST /api/v1/loyalty/redeem` | same | **Required** (header or body `idempotency_key`) | Redeem action |
 | `POST /api/v1/admin/users/:userID/wallet/credit` | same | Recommended; **also** service stores `idem=` in ledger | Admin confirm credit |
+| `POST /api/v1/admin/users/:userID/loyalty/adjust` | same | Required at service (8–128); HTTP cache when header present | Admin grant / clawback |
 | `POST /api/v1/webhooks/payment` | optional | Auto from body hash if omitted | Gateway redelivery of **same** body |
 
 **How to generate**

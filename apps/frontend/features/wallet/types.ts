@@ -48,6 +48,19 @@ export interface WalletTopUpIntent {
   amount: string;
   currency: string;
   status: string;
+  /** Absolute gateway start URL from the API. Empty when env is unset. */
+  payment_url?: string;
+}
+
+/**
+ * Non-empty API `payment_url` only. Never invent a start URL from
+ * `transaction_id` or a default host.
+ */
+export function usablePaymentUrl(
+  url?: string | null,
+): string | undefined {
+  const trimmed = typeof url === "string" ? url.trim() : "";
+  return trimmed ? trimmed : undefined;
 }
 
 /** Amount bounds aligned with backend Min/MaxWalletTopUpAmount (IRT). */

@@ -5,13 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/features/inventory"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/pkg/apperr"
 )
 
 type Repository interface {
@@ -21,8 +25,11 @@ type Repository interface {
 	GetAll(ctx context.Context, filter OrderFilter) ([]OrderListItem, int64, error)
 	UpdateStatus(ctx context.Context, id int64, req UpdateOrderStatusReq) (*Order, error)
 	Cancel(ctx context.Context, id int64, userID int64) error
+	// CancelTx CAS-updates pending|payment_failed → cancelled on the caller TX.
+	// ownerUserID 0 skips the owner check (admin cancel).
+	CancelTx(ctx context.Context, tx pgx.Tx, id int64, ownerUserID int64) error
 	GetItems(ctx context.Context, orderID int64) ([]OrderItemResponse, error)
-	// GetStockLines returns variant/qty lines for inventory reserve/release/deduct.
+	// GetStockLines returns variant/qty from order_items only (no products join).
 	GetStockLines(ctx context.Context, orderID int64) ([]inventory.StockLine, error)
 	BeginTx(ctx context.Context) (pgx.Tx, error)
 	MarkAsPaid(ctx context.Context, tx pgx.Tx, orderID int64) error
@@ -57,16 +64,22 @@ func (r *orderRepository) Create(
 		INSERT INTO orders (
 			user_id, address_id, status, payment_method,
 			subtotal, discount_amount, shipping_cost, tax_amount, gift_addons_fee,
-			coupon_id, shipping_method_id, notes,
-			is_gift, gift_message, gift_wrap, hide_price, gift_addons, scheduled_delivery_date
+			coupon_id, coupon_code, shipping_method_id, notes,
+			is_gift, gift_message, gift_wrap, hide_price, gift_addons, scheduled_delivery_date,
+			ship_to, shipping_method_name, shipping_method_carrier
 		) VALUES (
 			@user_id, @address_id, 'pending', @payment_method,
 			@subtotal, @discount_amount, @shipping_cost, @tax_amount, @gift_addons_fee,
-			@coupon_id, @shipping_method_id, @notes,
-			@is_gift, @gift_message, @gift_wrap, @hide_price, @gift_addons, @scheduled_delivery_date
+			@coupon_id, @coupon_code, @shipping_method_id, @notes,
+			@is_gift, @gift_message, @gift_wrap, @hide_price, @gift_addons, @scheduled_delivery_date,
+			@ship_to, @shipping_method_name, @shipping_method_carrier
 		)
 		RETURNING *`
 
+	methodName := any(nil)
+	if req.ShippingMethodName != "" {
+		methodName = req.ShippingMethodName
+	}
 	args := pgx.NamedArgs{
 		"user_id":            userID,
 		"address_id":         req.AddressID,
@@ -77,6 +90,7 @@ func (r *orderRepository) Create(
 		"tax_amount":         taxAmount,
 		"gift_addons_fee":    giftAddonsFee,
 		"coupon_id":          couponID,
+		"coupon_code":        req.AppliedCouponCode,
 		"shipping_method_id": req.ShippingMethodID,
 		"notes":              req.Notes,
 
@@ -86,6 +100,9 @@ func (r *orderRepository) Create(
 		"hide_price":              req.HidePrice,
 		"gift_addons":             giftAddonsJSON,
 		"scheduled_delivery_date": req.ScheduledDeliveryDate,
+		"ship_to":                 req.shipToJSON,
+		"shipping_method_name":    methodName,
+		"shipping_method_carrier": req.ShippingMethodCarrier,
 	}
 
 	rows, err := tx.Query(ctx, q, args)
@@ -97,6 +114,7 @@ func (r *orderRepository) Create(
 	if err != nil {
 		return nil, fmt.Errorf("orderRepository.Create scan: %w", err)
 	}
+	r.attachBuyer(ctx, &order)
 	return &order, nil
 }
 
@@ -115,6 +133,7 @@ func (r *orderRepository) GetByID(ctx context.Context, id int64) (*Order, error)
 		}
 		return nil, fmt.Errorf("orderRepository.GetByID scan: %w", err)
 	}
+	r.attachBuyer(ctx, &order)
 	return &order, nil
 }
 
@@ -133,7 +152,32 @@ func (r *orderRepository) GetByIDAndUserID(ctx context.Context, id int64, userID
 		}
 		return nil, fmt.Errorf("orderRepository.GetByIDAndUserID scan: %w", err)
 	}
+	r.attachBuyer(ctx, &order)
 	return &order, nil
+}
+
+func (r *orderRepository) attachBuyer(ctx context.Context, order *Order) {
+	if order == nil || order.UserID == 0 {
+		return
+	}
+	order.Buyer.ID = order.UserID
+	const q = `
+		SELECT user_id, first_name, last_name, email, phone
+		FROM users
+		WHERE id = $1`
+	var (
+		uid                uuid.UUID
+		first, last, phone *string
+		email              string
+	)
+	if err := r.db.QueryRow(ctx, q, order.UserID).Scan(&uid, &first, &last, &email, &phone); err != nil {
+		return
+	}
+	order.Buyer.UserID = uid
+	order.Buyer.FirstName = first
+	order.Buyer.LastName = last
+	order.Buyer.Email = email
+	order.Buyer.Phone = phone
 }
 
 func (r *orderRepository) GetAll(ctx context.Context, f OrderFilter) ([]OrderListItem, int64, error) {
@@ -141,19 +185,34 @@ func (r *orderRepository) GetAll(ctx context.Context, f OrderFilter) ([]OrderLis
 	args := pgx.NamedArgs{}
 
 	if f.UserID != nil {
-		where = append(where, "user_id = @user_id")
+		where = append(where, "o.user_id = @user_id")
 		args["user_id"] = *f.UserID
 	}
+	// The public identifier, which is the only customer id the admin UI has.
+	if strings.TrimSpace(f.UserUUID) != "" {
+		where = append(where, "u.user_id = @user_uuid")
+		args["user_uuid"] = strings.TrimSpace(f.UserUUID)
+	}
 	if f.Status != nil {
-		where = append(where, "status = @status")
+		where = append(where, "o.status = @status")
 		args["status"] = *f.Status
 	}
+	// Validated by the handler before we get here; parsing again is cheap and
+	// keeps a bad literal out of the enum comparison regardless of caller.
+	if statuses, err := f.ValidStatuses(); err == nil && len(statuses) > 0 {
+		raw := make([]string, len(statuses))
+		for i, s := range statuses {
+			raw[i] = string(s)
+		}
+		where = append(where, "o.status = ANY(@statuses)")
+		args["statuses"] = raw
+	}
 	if f.PaidFrom != nil {
-		where = append(where, "paid_at >= @paid_from")
+		where = append(where, "o.paid_at >= @paid_from")
 		args["paid_from"] = *f.PaidFrom
 	}
 	if f.PaidTo != nil {
-		where = append(where, "paid_at <= @paid_to")
+		where = append(where, "o.paid_at <= @paid_to")
 		args["paid_to"] = *f.PaidTo
 	}
 
@@ -162,9 +221,13 @@ func (r *orderRepository) GetAll(ctx context.Context, f OrderFilter) ([]OrderLis
 		"total_amount": true,
 		"status":       true,
 	}
-	sortBy := "created_at"
+	// Qualified with the table alias: users is joined now (CF-1) and also has a
+	// created_at, so a bare column here is an ambiguous-reference error at
+	// runtime — invisible to the compiler and to every test that does not hit a
+	// real database.
+	sortBy := "o.created_at"
 	if allowed[f.SortBy] {
-		sortBy = f.SortBy
+		sortBy = "o." + f.SortBy
 	}
 	order := "DESC"
 	if strings.ToUpper(f.OrderBy) == "ASC" {
@@ -174,6 +237,21 @@ func (r *orderRepository) GetAll(ctx context.Context, f OrderFilter) ([]OrderLis
 	args["limit"] = f.Limit
 	args["offset"] = f.Offset()
 
+	// CF-1. Buyer identity is joined, never fetched per row: attachBuyer costs one
+	// extra round trip per order, which is fine for a single detail view and an
+	// N+1 across a page. orders.user_id is NOT NULL with ON DELETE RESTRICT, so an
+	// inner join can never drop an order.
+	//
+	// Projected only for the admin list. The customer's own GET /orders shares
+	// this repository method and this row struct, and has no use for a buyer
+	// block describing itself.
+	buyerCols := ""
+	if f.includeBuyer {
+		buyerCols = `,
+			u.user_id AS buyer_uuid, u.first_name AS buyer_first_name,
+			u.last_name AS buyer_last_name, u.email AS buyer_email,
+			u.phone AS buyer_phone, o.user_id AS buyer_id`
+	}
 	q := fmt.Sprintf(`
 		SELECT o.id, o.status, o.payment_method, o.total_amount,
 			COALESCE((
@@ -181,12 +259,13 @@ func (r *orderRepository) GetAll(ctx context.Context, f OrderFilter) ([]OrderLis
 				FROM order_items oi
 				WHERE oi.order_id = o.id
 			), 0)::int AS item_count,
-			o.created_at, COUNT(*) OVER() AS total_count
+			o.created_at, COUNT(*) OVER() AS total_count%s
 		FROM orders o
+		JOIN users u ON u.id = o.user_id
 		WHERE %s
 		ORDER BY %s %s
 		LIMIT @limit OFFSET @offset`,
-		strings.Join(where, " AND "), sortBy, order,
+		buyerCols, strings.Join(where, " AND "), sortBy, order,
 	)
 
 	rows, err := r.db.Query(ctx, q, args)
@@ -202,12 +281,23 @@ func (r *orderRepository) GetAll(ctx context.Context, f OrderFilter) ([]OrderLis
 
 	for rows.Next() {
 		var o OrderListItem
-		if err := rows.Scan(
+		dest := []any{
 			&o.ID, &o.Status, &o.PaymentMethod, &o.TotalAmount,
-			&o.ItemCount, &o.CreatedAt,
-			&total,
-		); err != nil {
+			&o.ItemCount, &o.CreatedAt, &total,
+		}
+		var buyer OrderUserIdentity
+		if f.includeBuyer {
+			dest = append(dest,
+				&buyer.UserID, &buyer.FirstName, &buyer.LastName,
+				&buyer.Email, &buyer.Phone, &buyer.ID,
+			)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, 0, fmt.Errorf("orderRepository.GetAll scan: %w", err)
+		}
+		if f.includeBuyer {
+			b := buyer
+			o.Buyer = &b
 		}
 		orders = append(orders, o)
 	}
@@ -240,6 +330,17 @@ func (r *orderRepository) UpdateStatus(ctx context.Context, id int64, req Update
 		args["cancelled_at"] = time.Now()
 	}
 
+	if canPersistParcelTracking(req.Status) {
+		if req.TrackingNumber != nil {
+			sets = append(sets, "tracking_number = @tracking_number")
+			args["tracking_number"] = optionalTextArg(req.TrackingNumber)
+		}
+		if req.ParcelCarrier != nil {
+			sets = append(sets, "parcel_carrier = @parcel_carrier")
+			args["parcel_carrier"] = optionalTextArg(req.ParcelCarrier)
+		}
+	}
+
 	q := fmt.Sprintf(`
 		UPDATE orders SET %s
 		WHERE id = @id
@@ -263,21 +364,74 @@ func (r *orderRepository) UpdateStatus(ctx context.Context, id int64, req Update
 }
 
 func (r *orderRepository) Cancel(ctx context.Context, id int64, userID int64) error {
-	const q = `
+	return r.cancelExec(ctx, r.db, id, userID)
+}
+
+func (r *orderRepository) CancelTx(ctx context.Context, tx pgx.Tx, id int64, ownerUserID int64) error {
+	return r.cancelExec(ctx, tx, id, ownerUserID)
+}
+
+// cancelDB is Exec+QueryRow shared by *pgxpool.Pool and pgx.Tx.
+type cancelDB interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+const cancelOwnedSQL = `
 		UPDATE orders
 		SET status = 'cancelled', cancelled_at = NOW()
 		WHERE id = $1
 		  AND user_id = $2
 		  AND status IN ('pending', 'payment_failed')`
 
-	res, err := r.db.Exec(ctx, q, id, userID)
+const cancelAnySQL = `
+		UPDATE orders
+		SET status = 'cancelled', cancelled_at = NOW()
+		WHERE id = $1
+		  AND status IN ('pending', 'payment_failed')`
+
+func (r *orderRepository) cancelExec(ctx context.Context, db cancelDB, id, ownerUserID int64) error {
+	var (
+		tag pgconn.CommandTag
+		err error
+	)
+	if ownerUserID == 0 {
+		tag, err = db.Exec(ctx, cancelAnySQL, id)
+	} else {
+		tag, err = db.Exec(ctx, cancelOwnedSQL, id, ownerUserID)
+	}
 	if err != nil {
 		return fmt.Errorf("orderRepository.Cancel: %w", err)
 	}
-	if res.RowsAffected() == 0 {
-		return models.ErrNotFound
+	if tag.RowsAffected() == 0 {
+		return classifyCancelMiss(ctx, db, id, ownerUserID)
 	}
 	return nil
+}
+
+func classifyCancelMiss(ctx context.Context, db cancelDB, id, ownerUserID int64) error {
+	var (
+		status string
+		userID int64
+	)
+	err := db.QueryRow(ctx, `SELECT status, user_id FROM orders WHERE id = $1`, id).Scan(&status, &userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.ErrNotFound
+		}
+		return fmt.Errorf("orderRepository.Cancel classify: %w", err)
+	}
+	return cancelMissError(status, userID, ownerUserID)
+}
+
+func cancelMissError(status string, rowUserID, ownerUserID int64) error {
+	if ownerUserID != 0 && rowUserID != ownerUserID {
+		return models.ErrNotFound
+	}
+	if status == string(OrderStatusCancelled) {
+		return apperr.ErrOrderCancelled
+	}
+	return apperr.ErrOrderAlreadyPaid
 }
 
 func (r *orderRepository) GetItems(ctx context.Context, orderID int64) ([]OrderItemResponse, error) {
@@ -333,28 +487,67 @@ func (r *orderRepository) GetItems(ctx context.Context, orderID int64) ([]OrderI
 	return items, nil
 }
 
+// getStockLinesSQL reads variant/qty from order_items only. A missing products
+// row must not drop the line (webhook deduct/release and cancel).
+const getStockLinesSQL = `
+		SELECT product_variant_id, quantity
+		FROM   order_items
+		WHERE  order_id = $1`
 
 func (r *orderRepository) GetStockLines(ctx context.Context, orderID int64) ([]inventory.StockLine, error) {
-	items, err := r.GetItems(ctx, orderID)
+	rows, err := r.db.Query(ctx, getStockLinesSQL, orderID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("orderRepository.GetStockLines: %w", err)
 	}
-	lines := make([]inventory.StockLine, len(items))
-	for i, item := range items {
-		lines[i] = inventory.StockLine{VariantID: item.VariantID, Quantity: item.Quantity}
+	defer rows.Close()
+
+	var lines []inventory.StockLine
+	for rows.Next() {
+		var line inventory.StockLine
+		if err := rows.Scan(&line.VariantID, &line.Quantity); err != nil {
+			return nil, fmt.Errorf("orderRepository.GetStockLines scan: %w", err)
+		}
+		lines = append(lines, line)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("orderRepository.GetStockLines rows: %w", err)
+	}
+	sortStockLinesByVariantID(lines)
 	return lines, nil
 }
 
-func (r *orderRepository) MarkAsPaid(ctx context.Context, tx pgx.Tx, orderID int64) error {
-	const q = `
+// sortStockLinesByVariantID is the lock-order used by GetStockLines so
+// reserve/release/deduct take inventory row locks in VariantID ascending
+// order (avoids 40P01 when two checkouts share variants in opposite order).
+func sortStockLinesByVariantID(lines []inventory.StockLine) {
+	sort.Slice(lines, func(i, j int) bool {
+		return lines[i].VariantID < lines[j].VariantID
+	})
+}
+
+// optionalTextArg trims a PATCH string pointer. Empty becomes SQL NULL.
+func optionalTextArg(p *string) any {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// markAsPaidSQL is the pending→paid UPDATE. paid_at is stamped once (COALESCE).
+const markAsPaidSQL = `
 		UPDATE orders
 		SET status     = 'paid',
+		    paid_at    = COALESCE(paid_at, NOW()),
 		    updated_at = NOW()
 		WHERE id     = $1
 		  AND status = 'pending'`
 
-	res, err := tx.Exec(ctx, q, orderID)
+func (r *orderRepository) MarkAsPaid(ctx context.Context, tx pgx.Tx, orderID int64) error {
+	res, err := tx.Exec(ctx, markAsPaidSQL, orderID)
 	if err != nil {
 		return fmt.Errorf("orderRepository.MarkAsPaid: %w", err)
 	}

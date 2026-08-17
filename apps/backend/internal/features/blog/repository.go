@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/pkg/searchtext"
 )
 
 type CategoryRepository interface {
@@ -273,10 +274,12 @@ func (r *repository) GetBySlug(ctx context.Context, slug string) (*Blog, error) 
 	return b, nil
 }
 
-// GetPublishedBySlug restricts to published posts — the public storefront read.
+// GetPublishedBySlug restricts to published, already-live posts — the public
+// storefront read. Future published_at is a schedule and 404s like a draft.
 func (r *repository) GetPublishedBySlug(ctx context.Context, slug string) (*Blog, error) {
 	query := `SELECT ` + blogColumns + ` FROM blogs
-			  WHERE slug = $1 AND status = 'published' AND deleted_at IS NULL`
+			  WHERE slug = $1 AND status = 'published' AND deleted_at IS NULL
+			    AND ` + publicLivePublishedAtSQL("published_at")
 
 	b := &Blog{}
 	if err := scanBlog(r.db.QueryRow(ctx, query, slug), b); err != nil {
@@ -308,17 +311,25 @@ func (r *repository) GetAll(ctx context.Context) ([]*Blog, error) {
 	return blogs, rows.Err()
 }
 
+// applyListSearch adds Persian-aware title/excerpt ILIKE (PR-070h). Query and
+// columns both pass rumera_search_normalize / searchtext.Normalize so Arabic
+// yeh/kaf match Persian titles. Empty after normalize omits the clause.
+func applyListSearch(where []string, args pgx.NamedArgs, search string) ([]string, pgx.NamedArgs) {
+	if pattern := searchtext.LikeContains(search); pattern != "" {
+		where = append(where, `(rumera_search_normalize(b.title) ILIKE @search ESCAPE E'\\' OR rumera_search_normalize(b.excerpt) ILIKE @search ESCAPE E'\\')`)
+		args["search"] = pattern
+	}
+	return where, args
+}
+
 // List returns a paginated, filtered slice of blogs plus the total count
-// (COUNT(*) OVER()). The public listing forces status='published'; admins may
-// pass any status (or none). Mirrors the recipe list.
+// (COUNT(*) OVER()). The public listing forces status='published' and LiveOnly;
+// admins may pass any status (or none) and still see scheduled stamps.
 func (r *repository) List(ctx context.Context, f BlogFilter) ([]*Blog, int64, error) {
 	where := []string{"b.deleted_at IS NULL"}
 	args := pgx.NamedArgs{}
 
-	if f.Search != "" {
-		where = append(where, `(b.title ILIKE @search ESCAPE E'\\' OR b.excerpt ILIKE @search ESCAPE E'\\')`)
-		args["search"] = "%" + escapeLikePattern(f.Search) + "%"
-	}
+	where, args = applyListSearch(where, args, f.Search)
 	if f.Status != nil {
 		where = append(where, "b.status = @status")
 		args["status"] = string(*f.Status)
@@ -337,6 +348,9 @@ func (r *repository) List(ctx context.Context, f BlogFilter) ([]*Blog, int64, er
 	if f.ExcludeID != nil {
 		where = append(where, "b.id <> @exclude_id")
 		args["exclude_id"] = *f.ExcludeID
+	}
+	if f.LiveOnly {
+		where = append(where, publicLivePublishedAtSQL("b.published_at"))
 	}
 
 	allowed := map[string]string{

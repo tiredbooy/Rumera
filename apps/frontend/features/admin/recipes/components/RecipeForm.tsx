@@ -27,6 +27,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  datetimeLocalToIso,
+  isoToDatetimeLocal,
+  publicationKind,
+  shouldConfirmUnpublish,
+} from "@/features/admin/shared/publication";
+import { parseKeywordList } from "@/features/admin/shared/seo-preview";
 import type {
   AdminRecipeDetail,
   CreateRecipeInput,
@@ -37,6 +44,14 @@ import {
   recipeFormSchema,
   type RecipeFormValues,
 } from "@/features/recipes/validations";
+import { normalizeEditorialSlug } from "@/features/admin/shared/editorial-fields";
+import { apiErrorMessage, localizeApiText } from "@/lib/api/user-facing-error";
+import { toAsciiDigits } from "@/lib/normalize-digits";
+import {
+  ensureIngredientProducts,
+  strOrNull,
+} from "@/features/admin/recipes/sync-shoppable";
+
 import { ContentSection } from "./recipe-form/ContentSection";
 import { GeneralInfoSection } from "./recipe-form/GeneralInfoSection";
 import { IngredientsSection } from "./recipe-form/IngredientsSection";
@@ -48,8 +63,11 @@ import { SpecificationsSection } from "./recipe-form/SpecificationsSection";
 // Numeric fields are kept as strings in the form and coerced on submit, matching
 // product-form.tsx. Empty strings round-trip to the API's optional/zero values.
 
-const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null);
-const intOrZero = (v?: string) => (v && v.trim() !== "" ? Number(v) : 0);
+const intOrZero = (v?: string) => {
+  if (!v) return 0;
+  const n = toAsciiDigits(v).trim();
+  return n !== "" ? Number(n) : 0;
+};
 
 function defaults(recipe?: AdminRecipeDetail): RecipeFormValues {
   return {
@@ -66,21 +84,32 @@ function defaults(recipe?: AdminRecipeDetail): RecipeFormValues {
       : "",
     servings: recipe?.servings ? String(recipe.servings) : "",
     status: recipe?.status ?? "draft",
+    published_at: isoToDatetimeLocal(recipe?.published_at),
     image_url: recipe?.image_url ?? "",
     image_alt: recipe?.image_alt ?? "",
     og_image_url: recipe?.og_image_url ?? "",
     is_featured: recipe?.is_featured ?? false,
     meta_title: recipe?.meta_title ?? "",
     meta_description: recipe?.meta_description ?? "",
+    canonical_url: recipe?.canonical_url ?? "",
+    meta_keywords: (recipe?.meta_keywords ?? []).join("، "),
     tag_ids: (recipe?.tags ?? []).map((t) => t.id),
-    ingredients: (recipe?.ingredients ?? []).map((i) => ({
-      ingredient_name: i.ingredient_name,
-      quantity: i.quantity ?? "",
-      unit: i.unit ?? "",
-      notes: i.notes ?? "",
-      optional: i.optional,
-      product_variant_id: i.product_variant_id,
-    })),
+    ingredients: (recipe?.ingredients ?? []).map((i) => {
+      const linked = recipe?.products.find(
+        (p) => p.product_variant_id === i.product_variant_id,
+      );
+      return {
+        ingredient_name: i.ingredient_name,
+        quantity: i.quantity ?? "",
+        unit: i.unit ?? "",
+        notes: i.notes ?? "",
+        optional: i.optional,
+        product_variant_id: i.product_variant_id,
+        _label: linked?.product_title,
+        _brand: linked?.brand ?? null,
+        _sku: linked?.sku ?? null,
+      };
+    }),
     products: (recipe?.products ?? []).map((p) => ({
       product_variant_id: p.product_variant_id,
       _label: p.product_title,
@@ -98,11 +127,13 @@ export function RecipeForm({
   recipe,
   tags,
   submitLabel = "ذخیره",
+  canWrite = true,
 }: {
   mode: "create" | "edit";
   recipe?: AdminRecipeDetail;
   tags: Tag[];
   submitLabel?: string;
+  canWrite?: boolean;
 }) {
   const router = useRouter();
   const coverMediaRef =
@@ -113,8 +144,12 @@ export function RecipeForm({
     recipe?.image_url ?? "",
   );
   const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
+  const [pendingUnpublish, setPendingUnpublish] =
+    React.useState<RecipeFormValues | null>(null);
+  const skipUnpublishConfirm = React.useRef(false);
   const [isDeleting, startDelete] = React.useTransition();
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [slugTouched, setSlugTouched] = React.useState(mode === "edit");
 
   const {
     register,
@@ -132,6 +167,13 @@ export function RecipeForm({
   const title = watch("title");
   const imageAlt = watch("image_alt");
   const status = watch("status");
+  const publishedAt = watch("published_at");
+  const kind = publicationKind(status, publishedAt);
+
+  React.useEffect(() => {
+    if (slugTouched) return;
+    setValue("slug", normalizeEditorialSlug(title), { shouldValidate: false });
+  }, [setValue, slugTouched, title]);
 
   /** Map the (string-keyed, form-shaped) values onto the API payload. */
   function toPayload(v: RecipeFormValues): CreateRecipeInput {
@@ -146,13 +188,16 @@ export function RecipeForm({
         sort_order: idx,
       }),
     );
-    const products: RecipeProductInput[] = v.products.map((p, idx) => ({
-      product_variant_id: p.product_variant_id,
-      quantity: strOrNull(p.quantity),
-      unit: strOrNull(p.unit),
-      is_primary: p.is_primary,
-      sort_order: idx,
-    }));
+    const products: RecipeProductInput[] = ensureIngredientProducts(
+      v.ingredients,
+      v.products.map((p, idx) => ({
+        product_variant_id: p.product_variant_id,
+        quantity: strOrNull(p.quantity),
+        unit: strOrNull(p.unit),
+        is_primary: p.is_primary,
+        sort_order: idx,
+      })),
+    );
     return {
       title: v.title.trim(),
       slug: strOrNull(v.slug),
@@ -163,12 +208,18 @@ export function RecipeForm({
       cook_time_minutes: intOrZero(v.cook_time_minutes),
       servings: intOrZero(v.servings) || undefined,
       status: v.status,
+      published_at:
+        v.status === "published"
+          ? datetimeLocalToIso(v.published_at)
+          : undefined,
       image_url: strOrNull(v.image_url),
       image_alt: strOrNull(v.image_alt),
       og_image_url: strOrNull(v.og_image_url),
       is_featured: v.is_featured,
       meta_title: strOrNull(v.meta_title),
       meta_description: strOrNull(v.meta_description),
+      canonical_url: strOrNull(v.canonical_url),
+      meta_keywords: parseKeywordList(v.meta_keywords),
       tag_ids: v.tag_ids,
       ingredients,
       products,
@@ -176,26 +227,22 @@ export function RecipeForm({
   }
 
   function applyServerErrors(e: unknown) {
-    if (e instanceof RecipeApiError) {
-      if (e.fields) {
-        Object.entries(e.fields).forEach(([key, msgs], index) => {
-          setError(
-            key as keyof RecipeFormValues,
-            { message: msgs[0] },
-            { shouldFocus: index === 0 },
-          );
-        });
-      }
-      toast.error(e.message);
-    } else if (e instanceof Error) {
-      toast.error(e.message);
-    } else {
-      toast.error("خطای غیرمنتظره رخ داد");
+    if (e instanceof RecipeApiError && e.fields) {
+      Object.entries(e.fields).forEach(([key, msgs], index) => {
+        const raw = msgs[0];
+        if (!raw) return;
+        setError(
+          key as keyof RecipeFormValues,
+          { message: localizeApiText(raw) || raw },
+          { shouldFocus: index === 0 },
+        );
+      });
     }
+    toast.error(apiErrorMessage(e, "خطای غیرمنتظره رخ داد"));
   }
 
   function confirmDelete() {
-    if (!recipe || isDeleting) return;
+    if (!canWrite || !recipe || isDeleting) return;
     setDeleteError(null);
     startDelete(async () => {
       try {
@@ -216,6 +263,15 @@ export function RecipeForm({
   }
 
   async function onSubmit(v: RecipeFormValues) {
+    if (!canWrite) return;
+    if (
+      !skipUnpublishConfirm.current &&
+      shouldConfirmUnpublish(recipe?.status, recipe?.published_at, v.status)
+    ) {
+      setPendingUnpublish(v);
+      return;
+    }
+    skipUnpublishConfirm.current = false;
     let savedOwnerId: number | null = null;
     try {
       const coverMediaError = coverMediaRef.current?.validate() ?? null;
@@ -269,16 +325,46 @@ export function RecipeForm({
     }
   }
 
+  function onFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (!canWrite) {
+      event.preventDefault();
+      return;
+    }
+    void handleSubmit(onSubmit)(event);
+  }
+
+  const editorLocked = isSubmitting || isDeleting || !canWrite;
+
   return (
     <>
       <form
-        onSubmit={handleSubmit(onSubmit)}
+        onSubmit={onFormSubmit}
         className="grid gap-6 lg:grid-cols-[1fr_320px]"
         noValidate
       >
+        {canWrite ? null : (
+          <p
+            role="status"
+            className="rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground ring-1 ring-border/60 lg:col-span-2"
+          >
+            فقط مشاهده — ذخیره، بارگذاری تصویر و حذف دستور به مجوز نوشتن دستور
+            نیاز دارد.
+          </p>
+        )}
+        <fieldset disabled={editorLocked} className="contents">
         <div className="flex flex-col gap-6">
-          <GeneralInfoSection register={register} errors={errors} />
-          <ContentSection control={control} errors={errors} />
+          <GeneralInfoSection
+            control={control}
+            register={register}
+            errors={errors}
+            mode={mode}
+            onSlugEdit={() => setSlugTouched(true)}
+          />
+          <ContentSection
+            control={control}
+            errors={errors}
+            disabled={!canWrite}
+          />
           <SpecificationsSection
             control={control}
             register={register}
@@ -288,6 +374,7 @@ export function RecipeForm({
             control={control}
             register={register}
             errors={errors}
+            setValue={setValue}
           />
           <ShoppableProductsSection
             control={control}
@@ -301,9 +388,10 @@ export function RecipeForm({
             errors={errors}
             ownerId={recipe?.id}
             mediaRef={ogMediaRef}
-            disabled={isSubmitting || isDeleting}
+            disabled={editorLocked}
           />
         </div>
+        </fieldset>
 
         <RecipeSidebar
           control={control}
@@ -312,15 +400,16 @@ export function RecipeForm({
           title={title}
           imageUrl={coverPreview}
           imageAlt={imageAlt}
-          status={status}
+          publicationKind={kind}
           submitLabel={submitLabel}
           isSubmitting={isSubmitting}
           ownerId={recipe?.id}
           mediaRef={coverMediaRef}
           onPreviewChange={setCoverPreview}
-          disabled={isSubmitting || isDeleting}
+          disabled={editorLocked}
+          canWrite={canWrite}
           onCancel={() => router.push("/admin/recipes")}
-          canDelete={mode === "edit" && Boolean(recipe)}
+          canDelete={canWrite && mode === "edit" && Boolean(recipe)}
           isDeleting={isDeleting}
           onDelete={() => {
             setDeleteError(null);
@@ -328,6 +417,42 @@ export function RecipeForm({
           }}
         />
       </form>
+
+      <AlertDialog
+        open={pendingUnpublish !== null}
+        onOpenChange={(open) => {
+          if (!open && !isSubmitting) setPendingUnpublish(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>برداشتن از انتشار</AlertDialogTitle>
+            <AlertDialogDescription>
+              «{recipe?.title}» الان روی سایت دیده می‌شود. با این ذخیره از فروشگاه
+              برداشته می‌شود. ادامه می‌دهید؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel size="lg" disabled={isSubmitting}>
+              انصراف
+            </AlertDialogCancel>
+            <AlertDialogAction
+              size="lg"
+              disabled={isSubmitting}
+              onClick={(event) => {
+                event.preventDefault();
+                const next = pendingUnpublish;
+                if (!next) return;
+                skipUnpublishConfirm.current = true;
+                setPendingUnpublish(null);
+                void onSubmit(next);
+              }}
+            >
+              تأیید برداشتن از انتشار
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={confirmDeleteOpen}

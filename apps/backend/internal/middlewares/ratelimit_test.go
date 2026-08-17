@@ -73,3 +73,30 @@ func TestLoginRateLimit_FailsClosedWithoutRedis(t *testing.T) {
 		t.Fatalf("hit 3: got %d, want 429", c)
 	}
 }
+
+// Password-validate is GET; the same helper must throttle any method.
+func TestLoginRateLimit_FailsClosedOnGET(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/password/validate", LoginRateLimit(nil, 2, time.Minute), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	do := func() int {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/password/validate", nil)
+		req.RemoteAddr = "9.9.9.9:1234"
+		r.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	if c := do(); c != http.StatusOK {
+		t.Fatalf("hit 1: got %d, want 200", c)
+	}
+	if c := do(); c != http.StatusOK {
+		t.Fatalf("hit 2: got %d, want 200", c)
+	}
+	if c := do(); c != http.StatusTooManyRequests {
+		t.Fatalf("hit 3: got %d, want 429", c)
+	}
+}

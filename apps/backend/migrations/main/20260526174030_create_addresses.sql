@@ -40,4 +40,4 @@ EXECUTE FUNCTION set_updated_at();
 
 
 -- +goose Down
-DROP TABLE IF EXSITS addresses;
+DROP TABLE IF EXISTS addresses;

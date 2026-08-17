@@ -34,20 +34,22 @@ import {
   usePendingReviews,
   useDeleteReview,
 } from "@/features/reviews/hooks";
+import { REVIEW_STATUS_FA } from "@/features/reviews/labels";
 import type {
   AccountReview,
   PendingReview,
+  ReviewStatus,
 } from "@/features/reviews/types";
 import { AccountSection } from "../../account/components/account-section";
 import { EmptyState } from "../../EmptyState";
 
-const REVIEW_STATUS_FA: Record<
-  string,
-  { label: string; variant: "secondary" | "default" | "destructive" }
+const REVIEW_STATUS_VARIANT: Record<
+  ReviewStatus,
+  "secondary" | "default" | "destructive"
 > = {
-  pending: { label: "در انتظار تأیید", variant: "secondary" },
-  approved: { label: "منتشر‌شده", variant: "default" },
-  rejected: { label: "رد‌شده", variant: "destructive" },
+  pending: "secondary",
+  approved: "default",
+  rejected: "destructive",
 };
 
 function Stars({ value }: { value: number }) {
@@ -118,10 +120,9 @@ export function ReviewsView() {
           ) : (
             <div className="space-y-4">
               {myList.map((r: AccountReview) => {
-                const status = REVIEW_STATUS_FA[r.status] ?? {
-                  label: r.status,
-                  variant: "secondary" as const,
-                };
+                const statusLabel = REVIEW_STATUS_FA[r.status] ?? r.status;
+                const statusVariant =
+                  REVIEW_STATUS_VARIANT[r.status] ?? "secondary";
                 return (
                   <AccountSection key={r.id} bodyClassName="flex gap-4">
                     <Link
@@ -145,7 +146,7 @@ export function ReviewsView() {
                         >
                           {r.product_title}
                         </Link>
-                        <Badge variant={status.variant}>{status.label}</Badge>
+                        <Badge variant={statusVariant}>{statusLabel}</Badge>
                       </div>
                       <div className="mt-1 flex items-center gap-2">
                         <Stars value={r.rating} />

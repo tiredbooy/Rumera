@@ -4,6 +4,8 @@
  *
  * `role` rides on the token (set from the Go backend's access JWT). Frontend
  * admin capability identifiers are derived from it in the session callback.
+ * The Go access JWT stays on the encrypted Auth.js token only — never on
+ * `Session` / `GET /api/auth/session` / `useSession()`.
  */
 import type { DefaultSession } from "next-auth";
 import type { Role } from "@/lib/rbac/roles";
@@ -14,7 +16,6 @@ export type RefreshError = "RefreshAccessTokenError" | "RefreshRequired";
 export interface AuthSession {
   role: Role;
   permissions: Permission[];
-  accessToken?: string;
   error?: RefreshError;
   user: { id?: string } & DefaultSession["user"];
 }
@@ -35,7 +36,6 @@ declare module "next-auth" {
   interface Session {
     role: AuthSession["role"];
     permissions: AuthSession["permissions"];
-    accessToken?: AuthSession["accessToken"];
     error?: AuthSession["error"];
     user: AuthSession["user"];
   }

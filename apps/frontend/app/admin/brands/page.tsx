@@ -5,7 +5,7 @@ import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { can } from "@/lib/rbac/can";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import { AdminPage } from "@/features/dashboard/components/admin-page";
 import { BrandsTable } from "@/features/admin/brands/components/BrandsTable";
 
 export default async function AdminBrandsPage() {
@@ -15,22 +15,20 @@ export default async function AdminBrandsPage() {
   const canDelete = can(session, PERMISSIONS.PRODUCTS_DELETE);
 
   return (
-    <>
-      <PageHeader
-        title="برندها"
-        description="سازندگان و برندهای موجود در کاتالوگ را مدیریت کنید."
-        actions={
-          canWrite ? (
-            <Button size="sm" asChild>
-              <Link href="/admin/brands/new">
-                <Plus className="size-4" /> برند جدید
-              </Link>
-            </Button>
-          ) : null
-        }
-      />
-
+    <AdminPage
+      title="برندها"
+      description="سازندگان و برندهای موجود در کاتالوگ را مدیریت کنید."
+      action={
+        canWrite ? (
+          <Button size="sm" asChild>
+            <Link href="/admin/brands/new">
+              <Plus className="size-4" /> برند جدید
+            </Link>
+          </Button>
+        ) : null
+      }
+    >
       <BrandsTable canWrite={canWrite} canDelete={canDelete} />
-    </>
+    </AdminPage>
   );
 }

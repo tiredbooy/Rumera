@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   actionConfirmDescription,
   actionSuccessMessage,
+  addressChangeSuccessMessage,
+  canChangeShipTo,
+  missingShipToMessage,
   nextShipHint,
   nextShipTitle,
   planName,
@@ -35,5 +38,19 @@ describe("subscription display helpers (PH-043b)", () => {
     expect(actionConfirmDescription("skip").body).toMatch(/جلو/);
     expect(actionConfirmDescription("cancel").confirm).toMatch(/لغو/);
     expect(actionConfirmDescription("pause").title).toMatch(/توقف/);
+  });
+
+  it("allows ship-to change on active/paused only", () => {
+    expect(canChangeShipTo("active")).toBe(true);
+    expect(canChangeShipTo("paused")).toBe(true);
+    expect(canChangeShipTo("cancelled")).toBe(false);
+  });
+
+  it("missing-address copy points at the picker or the address book", () => {
+    expect(missingShipToMessage(true)).toMatch(/وصل نیست/);
+    expect(missingShipToMessage(true)).toMatch(/انتخاب/);
+    expect(missingShipToMessage(false)).toMatch(/آدرس‌ها/);
+    expect(addressChangeSuccessMessage()).toMatch(/آدرس ارسال/);
+    expect(addressChangeSuccessMessage()).not.toMatch(/پرداخت/);
   });
 });

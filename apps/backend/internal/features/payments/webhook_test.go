@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -110,6 +111,14 @@ func (r *webhookRepo) Fail(_ context.Context, req FailPaymentReq) (*PaymentTrans
 	cp := *pt
 	return &cp, nil
 }
+
+func (r *webhookRepo) InsertEarnIntent(context.Context, pgx.Tx, OrderEarnIntent) error {
+	return nil
+}
+func (r *webhookRepo) ListPendingEarnIntents(context.Context, int) ([]OrderEarnIntent, error) {
+	return nil, nil
+}
+func (r *webhookRepo) MarkEarnAwarded(context.Context, int64) error { return nil }
 
 // orderMarkPaidStub satisfies OrderMarkPaid for Confirm success path.
 type orderMarkPaidStub struct{}
@@ -225,11 +234,19 @@ func (s *releaseSpy) ReleaseForOrder(_ context.Context, orderID int64, items []i
 }
 
 type stockLinesStub struct {
-	lines []inventory.StockLine
+	lines     []inventory.StockLine
+	failCalls atomic.Int32
+	failLast  int64
 }
 
-func (s stockLinesStub) GetOrderStockLines(context.Context, int64) ([]inventory.StockLine, error) {
+func (s *stockLinesStub) GetOrderStockLines(context.Context, int64) ([]inventory.StockLine, error) {
 	return s.lines, nil
+}
+
+func (s *stockLinesStub) MarkOrderPaymentFailed(_ context.Context, orderID int64) error {
+	s.failCalls.Add(1)
+	s.failLast = orderID
+	return nil
 }
 
 func TestPaymentWebhook_Failed_ReleasesReservedStock(t *testing.T) {
@@ -243,9 +260,10 @@ func TestPaymentWebhook_Failed_ReleasesReservedStock(t *testing.T) {
 	})
 	svc := NewService(repo, orderMarkPaidStub{}, nil, nil, nil, nil, nil)
 	inv := &releaseSpy{}
+	orders := &stockLinesStub{lines: []inventory.StockLine{{VariantID: 9, Quantity: 2}}}
 	h := &Handler{
 		Payments:      svc,
-		Orders:        stockLinesStub{lines: []inventory.StockLine{{VariantID: 9, Quantity: 2}}},
+		Orders:        orders,
 		Inventory:     inv,
 		WebhookSecret: secret,
 	}
@@ -253,6 +271,9 @@ func TestPaymentWebhook_Failed_ReleasesReservedStock(t *testing.T) {
 	body := `{"transaction_id":"gw-tx-fail-release","status":"failed","error_message":"declined"}`
 	if got := postWebhook(h, body, secret).Code; got != http.StatusOK {
 		t.Fatalf("status = %d", got)
+	}
+	if orders.failCalls.Load() != 1 || orders.failLast != oid {
+		t.Fatalf("MarkOrderPaymentFailed calls=%d last=%d; want 1/%d", orders.failCalls.Load(), orders.failLast, oid)
 	}
 	if inv.calls.Load() != 1 {
 		t.Fatalf("ReleaseForOrder calls = %d; want 1 after fail", inv.calls.Load())
@@ -271,6 +292,38 @@ func TestPaymentWebhook_Failed_ReleasesReservedStock(t *testing.T) {
 	if inv.calls.Load() != 1 {
 		t.Fatalf("ReleaseForOrder after replay = %d; want still 1", inv.calls.Load())
 	}
+	if orders.failCalls.Load() != 1 {
+		t.Fatalf("MarkOrderPaymentFailed after replay = %d; want still 1", orders.failCalls.Load())
+	}
+}
+
+func TestPaymentWebhook_Failed_SurfacesReleaseError(t *testing.T) {
+	const secret = "whsec_fail_release_err"
+	oid := int64(8)
+	repo := newWebhookRepo(&PaymentTransaction{
+		ID:            4,
+		OrderID:       &oid,
+		Status:        PaymentStatusPending,
+		TransactionID: "gw-tx-fail-release-err",
+	})
+	svc := NewService(repo, orderMarkPaidStub{}, nil, nil, nil, nil, nil)
+	h := &Handler{
+		Payments:      svc,
+		Orders:        &stockLinesStub{lines: []inventory.StockLine{{VariantID: 1, Quantity: 1}}},
+		Inventory:     releaseErrStub{},
+		WebhookSecret: secret,
+	}
+	body := `{"transaction_id":"gw-tx-fail-release-err","status":"failed","error_message":"declined"}`
+	w := postWebhook(h, body, secret)
+	if w.Code == http.StatusOK {
+		t.Fatalf("status = %d; release error must not be swallowed as 200", w.Code)
+	}
+}
+
+type releaseErrStub struct{}
+
+func (releaseErrStub) ReleaseForOrder(context.Context, int64, []inventory.StockLine) error {
+	return errors.New("release failed")
 }
 
 func TestPaymentWebhook_UnknownTransaction_NotFound(t *testing.T) {

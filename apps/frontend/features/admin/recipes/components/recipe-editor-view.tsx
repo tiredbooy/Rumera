@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { listTags } from "@/features/catalog/tags/api/public";
+import { fetchLookupList } from "@/features/admin/shared/fetch-lookup-list";
 import type { Tag } from "@/features/catalog/tags/types";
 import { PageHeader } from "@/features/dashboard/components/page-header";
 import { getAdminRecipe } from "@/features/recipes/api/server";
@@ -14,16 +14,10 @@ import { ApiError } from "@/lib/api/client";
 
 import { RecipeForm } from "./RecipeForm";
 
-async function loadRecipeTags(): Promise<Tag[]> {
-  try {
-    return (await listTags({ limit: 200 })).results ?? [];
-  } catch {
-    return [];
-  }
-}
-
 export async function RecipeCreateView() {
-  const tags = await loadRecipeTags();
+  const tags = await fetchLookupList<Tag>(
+    "/tags?limit=100&sortBy=title&orderBy=asc",
+  );
 
   return (
     <>
@@ -38,12 +32,23 @@ export async function RecipeCreateView() {
           </Button>
         }
       />
-      <RecipeForm mode="create" tags={tags} submitLabel="افزودن دستور" />
+      <RecipeForm
+        mode="create"
+        canWrite
+        tags={tags}
+        submitLabel="ساخت دستور"
+      />
     </>
   );
 }
 
-export async function RecipeEditView({ id }: { id: string }) {
+export async function RecipeEditView({
+  id,
+  canWrite,
+}: {
+  id: string;
+  canWrite: boolean;
+}) {
   let recipe: AdminRecipeDetail;
   try {
     // Admin detail hydrates ingredients, products, and tags and includes drafts.
@@ -53,7 +58,9 @@ export async function RecipeEditView({ id }: { id: string }) {
     throw error;
   }
 
-  const tags = await loadRecipeTags();
+  const tags = await fetchLookupList<Tag>(
+    "/tags?limit=100&sortBy=title&orderBy=asc",
+  );
 
   return (
     <>
@@ -70,6 +77,7 @@ export async function RecipeEditView({ id }: { id: string }) {
       />
       <RecipeForm
         mode="edit"
+        canWrite={canWrite}
         recipe={recipe}
         tags={tags}
         submitLabel="ذخیرهٔ تغییرات"

@@ -61,7 +61,14 @@ Outside Docker, use `PROMETHEUS_URL=http://localhost:9090` instead.
 |-----------|-----|
 | `PROMETHEUS_URL` unset | «پیکربندی نشده» + setup steps |
 | Timeout / connection error | «در دسترس نیست» |
-| Queries succeed but empty series | Charts show «داده‌ای نیست»; KPIs show «—» |
+| Queries succeed but empty series | Charts show «داده‌ای برای این بازه نیست»; KPIs show «—» |
+
+## Time-series charts (PR-100e)
+
+`MonitoringCharts` renders req/s, 5xx %, and p95 as TanStack Charts `areaY` +
+`lineY` (not Recharts). Empty series keep the local ChartCard copy. X ticks and
+point labels use `fa-IR` clock times; series paint comes from CSS vars
+(`--primary`, `--destructive`, `--chart-2`). Analytics `Charts.tsx` is unchanged.
 
 ## Security
 

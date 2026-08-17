@@ -22,7 +22,7 @@ type Repository interface {
 	GetAll(ctx context.Context, filter BrandFilter) ([]*Brand, int64, error)
 	Update(ctx context.Context, id int64, req UpdateBrandReq) (*Brand, error)
 	Delete(ctx context.Context, id int64) error
-	ExistsByTitle(ctx context.Context, title string) (bool, error)
+	ExistsByTitle(ctx context.Context, title string, excludeID int64) (bool, error)
 	ExistsBySlug(ctx context.Context, slug string, excludeID int64) (bool, error)
 }
 
@@ -275,16 +275,14 @@ func (r *repository) Delete(ctx context.Context, id int64) error {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ExistsByTitle
-// Used by the service before Create/Update to give a clean
-// conflict error instead of catching a DB unique violation.
+// Existence checks exclude the row being edited so unchanged unique values are valid.
 // ─────────────────────────────────────────────────────────────
 
-func (r *repository) ExistsByTitle(ctx context.Context, title string) (bool, error) {
-	const q = `SELECT EXISTS(SELECT 1 FROM brands WHERE title = $1)`
+func (r *repository) ExistsByTitle(ctx context.Context, title string, excludeID int64) (bool, error) {
+	const q = `SELECT EXISTS(SELECT 1 FROM brands WHERE title = $1 AND ($2 = 0 OR id <> $2))`
 
 	var exists bool
-	if err := r.db.QueryRow(ctx, q, title).Scan(&exists); err != nil {
+	if err := r.db.QueryRow(ctx, q, title, excludeID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("repository.ExistsByTitle: %w", err)
 	}
 	return exists, nil

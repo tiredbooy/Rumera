@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { FilterX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AdminFilterBar } from "@/features/dashboard/components/admin-page";
 import {
   Select,
   SelectContent,
@@ -81,23 +81,14 @@ export function PaymentListFilters({
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 id="payment-list-title" className="font-serif text-lg">
-            دفتر تراکنش‌ها
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            فیلترها مستقیماً روی دادهٔ واقعی پرداخت اعمال می‌شوند.
-          </p>
-        </div>
-        {hasFilters ? (
-          <Button type="button" variant="ghost" size="sm" onClick={onReset}>
-            <FilterX className="size-4" aria-hidden /> پاک کردن فیلترها
-          </Button>
-        ) : null}
-      </div>
-
-      <div className="mb-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_12rem_12rem]">
+      <AdminFilterBar
+        id="payment-filter-title"
+        title="جستجو و فیلتر تراکنش‌ها"
+        description="فیلترها مستقیماً روی دادهٔ واقعی پرداخت اعمال می‌شوند. وضعیت و ترتیب بی‌درنگ، شناسه‌ها با «اعمال شناسه‌ها»."
+        hasFilters={hasFilters}
+        onReset={onReset}
+        gridClassName="lg:grid-cols-[minmax(0,1fr)_12rem_12rem]"
+      >
         <form
           key={`${orderID ?? ""}-${userID ?? ""}`}
           onSubmit={applyIDFilters}
@@ -117,7 +108,7 @@ export function PaymentListFilters({
               aria-describedby={
                 filterError ? "payment-filter-error" : undefined
               }
-              className="h-11"
+              className="h-9"
             />
           </div>
           <div className="min-w-0">
@@ -134,10 +125,10 @@ export function PaymentListFilters({
               aria-describedby={
                 filterError ? "payment-filter-error" : undefined
               }
-              className="h-11"
+              className="h-9"
             />
           </div>
-          <Button type="submit" variant="outline" className="h-11">
+          <Button type="submit" variant="outline" className="h-9">
             اعمال شناسه‌ها
           </Button>
         </form>
@@ -149,7 +140,7 @@ export function PaymentListFilters({
           }
         >
           <SelectTrigger
-            className="h-11 w-full"
+            className="h-9 w-full"
             aria-label="فیلتر وضعیت پرداخت"
           >
             <SelectValue />
@@ -172,7 +163,7 @@ export function PaymentListFilters({
             onUpdate({ sort: value === "newest" ? undefined : value })
           }
         >
-          <SelectTrigger className="h-11 w-full" aria-label="ترتیب تراکنش‌ها">
+          <SelectTrigger className="h-9 w-full" aria-label="ترتیب تراکنش‌ها">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -182,7 +173,7 @@ export function PaymentListFilters({
             <SelectItem value="amount_asc">کمترین مبلغ</SelectItem>
           </SelectContent>
         </Select>
-      </div>
+      </AdminFilterBar>
 
       {filterError ? (
         <p

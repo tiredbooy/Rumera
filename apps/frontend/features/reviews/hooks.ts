@@ -58,6 +58,7 @@ export function useAdminReviews(query: ReviewListQuery = {}) {
   return useQuery({
     queryKey: reviewKeys.admin(query),
     queryFn: () => listAdminReviewsClient(query),
+    placeholderData: (previous) => previous,
   });
 }
 

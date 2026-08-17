@@ -27,8 +27,9 @@ Mounted from `internal/routes/routes.go`:
 - Admin credit (**service** `idem=<key>` + **HTTP** platform)
 - Loyalty redeem → `wallet.Service.Deposit`
 - Gift-card redeem
-- **Gateway top-up (PH-041a)** — `POST /wallet/topup` → pending payment → webhook Confirm → `CreditGatewayTopUpTx` (`topup_txid=` marker)
-- Payment refunds / purchase debit (when wired)
+- **Gateway top-up (PH-041a)** — `POST /wallet/topup` → pending payment + `payment_url` (PR-005a) → webhook Confirm → `CreditGatewayTopUpTx` (`topup_txid=` marker)
+- Payment refunds
+- **Checkout purchase (PR-020a)** — `orders` calls `PurchaseTx` on the create TX (with `MarkAsPaid` + `DeductForOrderTx`). No unpaid payment row.
 
 ## Gateway top-up
 
@@ -37,7 +38,7 @@ Journey: [[Journey Account wallet top-up]]
 
 ## Related
 
-[[Account Domain]] · [[Money and stock rules]] · [[Payments Backend]] · [[ADR Idempotency platform]] ·  
+[[Account Domain]] · [[Money and stock rules]] · [[Payments Backend]] · [[Orders]] · [[ADR Idempotency platform]] ·  
 [[Playbook Debug Idempotency]] · [[Loyalty Wallet Gift Cards]]
 
 API: `apps/backend/docs/api/wallet.md`

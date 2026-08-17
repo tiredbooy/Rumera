@@ -3,9 +3,9 @@
 package integration
 
 import (
-	"github.com/tiredbooy/internal/features/catalog/product"
 	"context"
 	"errors"
+	"github.com/tiredbooy/internal/features/catalog/product"
 	"os"
 	"sync"
 	"sync/atomic"

@@ -29,11 +29,26 @@ knows the reason.
 3. `httpx` maps sentinels → `response.AppCode`; `*apperr.AppError` via `response.FromAppError`.
 4. Unknown bare `error` → `500 INTERNAL_ERROR` with generic message (root cause stays in logs only).
 
+### Cart unexpected SQL (PR-010b)
+
+Unexpected cart repo/DB failures (`GetOrCreate`, `GetItems`, `AddItem`, …) are
+logged in `internal/features/cart` (`slog.Error` with `op` + cause) and returned
+as `apperr.ErrInternal`. The public envelope stays `500 INTERNAL_ERROR` with the
+generic message — no SQL. Typed mappings (`PRODUCT_NOT_FOUND`,
+`PRODUCT_UNAVAILABLE`, `OUT_OF_STOCK`, `NOT_FOUND`) are unchanged.
+
+`PRODUCT_UNAVAILABLE` on add-to-cart covers an inactive variant **and** an
+inactive parent product. `GetByIDForAdmin` distinguishes a missing parent
+(`PRODUCT_NOT_FOUND`) from a draft/unpublished one so a line cannot insert
+then vanish on `GetItems` (`p.is_active = true`). Bulk add skips those
+lines as `unavailable` rather than failing the whole request.
+
 ## Money / checkout / auth catalogue (high traffic)
 
 | Code | HTTP | Meaning | Typical trigger | Client guidance |
 |------|------|---------|-----------------|-----------------|
 | `OUT_OF_STOCK` | 409 | Not enough sellable stock | Order create reserve; cart add | Reduce qty or remove line |
+| `PRODUCT_UNAVAILABLE` | 409 | Variant or parent product is inactive | Cart add / bulk add | Pick another product |
 | `CART_EMPTY` | 400 | No lines to check out | Place order | Add items first |
 | `INVALID_SHIPPING_METHOD` | 400 | Method not allowed for address/weight | Place order | Pick another method |
 | `INVALID_COUPON` | 400 | Code unknown | Apply coupon / order | Check spelling |
@@ -44,6 +59,7 @@ knows the reason.
 | `COUPON_USER_LIMIT` | 409 | Per-user uses exhausted | Coupon validate | Remove coupon |
 | `INSUFFICIENT_FUNDS` | 409 | Wallet balance too low | Wallet purchase/withdraw | Top up or lower amount |
 | `INSUFFICIENT_POINTS` | 409 | Loyalty points too low | Loyalty redeem | Earn more or redeem fewer |
+| `LOYALTY_DISABLED` | 409 | Programme kill-switch is off | Redeem / admin adjust | Operator re-enables via PUT programme |
 | `GIFT_CARD_INVALID` | 404 | Bad or already used code | Gift redeem | Check code |
 | `ORDER_NOT_FOUND` | 404 | No such order | Get/cancel order | Refresh list |
 | `ORDER_ALREADY_PAID` | 409 | Cannot re-pay | Payment confirm path | Stop retry as new pay |

@@ -5,7 +5,7 @@ import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { can } from "@/lib/rbac/can";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import { AdminPage } from "@/features/dashboard/components/admin-page";
 import { CategoriesTable } from "@/features/admin/categories/components/CategoryTable";
 
 export default async function AdminCategoriesPage() {
@@ -13,22 +13,20 @@ export default async function AdminCategoriesPage() {
   const canWrite = can(session, PERMISSIONS.PRODUCTS_WRITE);
 
   return (
-    <>
-      <PageHeader
-        title="دسته‌بندی‌ها"
-        description="ساختار درختی دسته‌بندی‌های کاتالوگ را مدیریت کنید."
-        actions={
-          canWrite ? (
-            <Button size="sm" asChild>
-              <Link href="/admin/categories/new">
-                <Plus className="size-4" /> دسته‌بندی جدید
-              </Link>
-            </Button>
-          ) : null
-        }
-      />
-
+    <AdminPage
+      title="دسته‌بندی‌ها"
+      description="ساختار درختی دسته‌بندی‌های کاتالوگ را مدیریت کنید."
+      action={
+        canWrite ? (
+          <Button size="sm" asChild>
+            <Link href="/admin/categories/new">
+              <Plus className="size-4" /> دسته‌بندی جدید
+            </Link>
+          </Button>
+        ) : null
+      }
+    >
       <CategoriesTable canWrite={canWrite} />
-    </>
+    </AdminPage>
   );
 }

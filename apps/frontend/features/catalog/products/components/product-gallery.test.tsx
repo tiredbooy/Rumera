@@ -61,6 +61,11 @@ describe("ProductGallery keyboard interaction", () => {
     // Clean frame: no cellar-glow backdrop on the media stage.
     expect(frame.className).not.toContain("cellar-glow");
 
+    const counter = screen.getByText("۱ / ۳");
+    expect(counter.className).toContain("left-1/2");
+    expect(counter.className).toContain("-translate-x-1/2");
+    expect(counter.className).not.toContain("start-1/2");
+
     fireEvent.click(next);
     expect(screen.getByRole("img", { name: "تصویر دوم" })).toBeInTheDocument();
     fireEvent.click(next);

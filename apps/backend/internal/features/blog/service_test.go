@@ -20,6 +20,7 @@ func (b blogBeginnerStub) Begin(context.Context) (pgx.Tx, error) { return b.tx, 
 type blogRepositoryStub struct {
 	txRepo                Repository
 	getByID               func(int64) (*Blog, error)
+	getPublishedBySlug    func(string) (*Blog, error)
 	create                func(*BlogReq) (*Blog, error)
 	update                func(int64, *BlogUpdateReq) (*Blog, error)
 	assignCategories      func(int64, []int64) error
@@ -79,7 +80,10 @@ func (r *blogRepositoryStub) GetBySlug(context.Context, string) (*Blog, error) {
 	return nil, models.ErrNotFound
 }
 
-func (r *blogRepositoryStub) GetPublishedBySlug(context.Context, string) (*Blog, error) {
+func (r *blogRepositoryStub) GetPublishedBySlug(_ context.Context, slug string) (*Blog, error) {
+	if r.getPublishedBySlug != nil {
+		return r.getPublishedBySlug(slug)
+	}
 	return nil, models.ErrNotFound
 }
 
@@ -406,6 +410,81 @@ func TestBlogCategoryUpdateRejectsDescendantParent(t *testing.T) {
 	fields, ok := apperr.Fields(err)
 	if !ok || len(fields["parent_id"]) == 0 || repo.updateCalls != 1 {
 		t.Fatalf("fields/update calls = %#v/%d", fields, repo.updateCalls)
+	}
+}
+
+func TestIsPubliclyLiveHonorsPublishedAtSchedule(t *testing.T) {
+	now := time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC)
+	future := now.Add(time.Minute)
+	past := now.Add(-time.Minute)
+	if isPubliclyLive(BlogStatusPublished, &future, now) {
+		t.Fatal("future published_at must stay hidden")
+	}
+	if !isPubliclyLive(BlogStatusPublished, &past, now) {
+		t.Fatal("past published_at must be live")
+	}
+	if !isPubliclyLive(BlogStatusPublished, &now, now) {
+		t.Fatal("published_at equal to now must be live")
+	}
+	if !isPubliclyLive(BlogStatusPublished, nil, now) {
+		t.Fatal("null published_at must stay live")
+	}
+	if isPubliclyLive(BlogStatusDraft, &past, now) {
+		t.Fatal("draft must stay hidden")
+	}
+}
+
+func TestApplyPublicListFilterForcesPublishedLiveOnly(t *testing.T) {
+	draft := BlogStatusDraft
+	filter := BlogFilter{Status: &draft}
+	applyPublicListFilter(&filter)
+	if filter.Status == nil || *filter.Status != BlogStatusPublished || !filter.LiveOnly {
+		t.Fatalf("public list filter = %+v, want published + LiveOnly", filter)
+	}
+}
+
+func TestGetPublishedBySlugHidesFuturePublishedAt(t *testing.T) {
+	future := time.Now().UTC().Add(time.Hour)
+	repo := &blogRepositoryStub{
+		getPublishedBySlug: func(slug string) (*Blog, error) {
+			return &Blog{ID: 3, Slug: slug, Status: BlogStatusPublished, PublishedAt: &future}, nil
+		},
+	}
+	svc := NewService(repo, blogBeginnerStub{}, nil)
+	_, err := svc.GetPublishedBySlug(context.Background(), "scheduled")
+	if !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("GetPublishedBySlug = %v, want not found", err)
+	}
+}
+
+func TestGetPublishedBySlugAllowsLiveAndLegacyNull(t *testing.T) {
+	past := time.Now().UTC().Add(-time.Hour)
+	cases := []struct {
+		name string
+		at   *time.Time
+	}{
+		{"past", &past},
+		{"null", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &blogRepositoryStub{
+				getPublishedBySlug: func(slug string) (*Blog, error) {
+					return &Blog{
+						ID: 4, Slug: slug, Title: "Live",
+						Status: BlogStatusPublished, PublishedAt: tc.at,
+					}, nil
+				},
+			}
+			svc := NewService(repo, blogBeginnerStub{}, nil)
+			got, err := svc.GetPublishedBySlug(context.Background(), "live")
+			if err != nil {
+				t.Fatalf("GetPublishedBySlug: %v", err)
+			}
+			if got.Title != "Live" {
+				t.Fatalf("title = %q", got.Title)
+			}
+		})
 	}
 }
 

@@ -4,7 +4,7 @@ import { ArrowLeft, Globe2, Tag } from "lucide-react";
 
 import { listBrands } from "@/features/catalog/brands/api";
 import { productListBrandHref } from "@/features/catalog/products/list-routing";
-import { Placeholder } from "@/features/dashboard/components/placeholder";
+import { EmptyState } from "@/components/empty-state";
 import { StorefrontMedia } from "@/components/storefront-media";
 import { buildMetadata } from "@/lib/seo/metadata";
 import { faNum } from "@/lib/products";
@@ -62,7 +62,7 @@ export default async function BrandsIndexPage() {
 
       {loadError ? (
         <div className="mt-12">
-          <Placeholder
+          <EmptyState
             icon={Tag}
             title="بارگذاری برندها ناموفق بود"
             description="بعداً دوباره تلاش کنید یا از فهرست محصولات استفاده کنید."
@@ -70,7 +70,7 @@ export default async function BrandsIndexPage() {
         </div>
       ) : brands.length === 0 ? (
         <div className="mt-12">
-          <Placeholder
+          <EmptyState
             icon={Tag}
             title="برندی نیست"
             description="پس از افزودن برند در پنل مدیریت، اینجا فهرست می‌شوند."

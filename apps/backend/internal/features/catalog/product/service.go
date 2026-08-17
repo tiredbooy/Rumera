@@ -3,10 +3,9 @@ package product
 import (
 	"context"
 	"errors"
-	catvariant "github.com/tiredbooy/internal/features/catalog/variant"
-	"strings"
 
 	"github.com/tiredbooy/internal/features/catalog/tag"
+	catvariant "github.com/tiredbooy/internal/features/catalog/variant"
 	"github.com/tiredbooy/internal/features/media"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/apperr"
@@ -39,9 +38,19 @@ func (s *Service) Create(ctx context.Context, req CreateProductReq) (*Product, e
 		return nil, err
 	}
 
-	// Slug and code are optional (nullable in DB, omitempty in DTO). Only check
-	// uniqueness for whichever is actually provided — dereferencing them
-	// unconditionally panicked when the frontend sent a title-only product.
+	slug, err := normalizeProductSlug(req.Slug)
+	if err != nil {
+		return nil, err
+	}
+	// Create persists is_active=true (DB default). An active product without a
+	// slug has no storefront PDP.
+	if slug == nil {
+		return nil, errActiveProductNeedsSlug()
+	}
+	req.Slug = slug
+
+	// Code is optional. Slug uniqueness runs after slugify so mixed-case /
+	// spaced values collide with the canonical path they will store.
 	if err := s.assertSlugAndCodeUnique(ctx, derefOr(req.Slug, ""), derefOr(req.Code, ""), 0); err != nil {
 		return nil, err
 	}
@@ -91,7 +100,7 @@ func (s *Service) GetByIDForAdmin(ctx context.Context, id int64) (*Product, erro
 }
 
 func (s *Service) GetBySlug(ctx context.Context, slug string) (*Product, error) {
-	slug = strings.TrimSpace(slug)
+	slug = normalizePublicSlug(slug)
 	if slug == "" {
 		return nil, apperr.ErrInvalidRequest
 	}
@@ -137,15 +146,32 @@ func (s *Service) Update(ctx context.Context, id int64, req UpdateProductReq) (*
 
 	// Guard unique fields only when they're actually being changed
 	if req.Slug != nil {
-		if *req.Slug == "" {
-			return nil, apperr.ErrInvalidRequest
+		slug, err := normalizeProductSlug(req.Slug)
+		if err != nil {
+			return nil, err
 		}
+		if slug == nil {
+			return nil, productSlugFieldError(errMsgInvalidPublicSlug)
+		}
+		req.Slug = slug
 		exists, err := s.productRepo.ExistsBySlug(ctx, *req.Slug, id)
 		if err != nil {
 			return nil, apperr.ErrInternal
 		}
 		if exists {
 			return nil, apperr.ErrConflict
+		}
+	}
+	if req.IsActive != nil && *req.IsActive && req.Slug == nil {
+		existing, err := s.productRepo.GetByIDForAdmin(ctx, id)
+		if err != nil {
+			if errors.Is(err, models.ErrNotFound) {
+				return nil, apperr.ErrProductNotFound
+			}
+			return nil, apperr.ErrInternal
+		}
+		if !storedProductHasSlug(existing.Slug) {
+			return nil, errActiveProductNeedsSlug()
 		}
 	}
 	if req.Code != nil {
@@ -388,10 +414,8 @@ func (s *Service) assertSlugAndCodeUnique(ctx context.Context, slug, code string
 	return nil
 }
 
-// validateCreateProductReq enforces the only genuinely-required invariant:
-// a non-empty title. Slug, code and category_id are nullable in the DB and
-// omitempty in the DTO, so the frontend may legitimately send them as null for
-// a title-only product; requiring them here produced an opaque 400.
+// validateCreateProductReq enforces a non-empty title. Slug is required
+// separately after slugify because create rows default to is_active=true.
 func validateCreateProductReq(req CreateProductReq) error {
 	if req.Title == "" {
 		return apperr.ErrInvalidRequest

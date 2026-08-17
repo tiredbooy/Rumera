@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ListPagination } from "@/components/list-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +55,10 @@ import type {
   DiscountType,
 } from "@/features/coupons/types";
 import { DashboardErrorState } from "@/features/dashboard/components/async-state";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import {
+  AdminFilterBar,
+  AdminPage,
+} from "@/features/dashboard/components/admin-page";
 import { faNum, formatPrice } from "@/lib/products";
 import { faDate } from "@/lib/utils/date";
 
@@ -227,68 +231,103 @@ export function CouponsBoard() {
       : "غیرفعال‌سازی کد تخفیف ناموفق بود"
     : null;
 
+  const hasFilters = Boolean(query) || status !== "all" || Boolean(type);
+
   return (
-    <>
-      <PageHeader
-        title="کدهای تخفیف"
-        description="کدها، بازهٔ اعتبار، محدودیت مصرف و دامنهٔ کاربرد را مدیریت کنید."
-        actions={
-          <Button size="sm" asChild>
-            <Link href="/admin/coupons/new">
-              <Plus className="size-4" /> کد جدید
-            </Link>
-          </Button>
-        }
-      />
-
-      <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem_11rem]">
-        <label className="relative block">
-          <span className="sr-only">جستجوی کد تخفیف</span>
-          <Search
-            className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="جستجو بر اساس کد…"
-            className="ps-9"
-          />
-        </label>
-        <Select
-          value={status}
-          onValueChange={(value) =>
-            updateURL({ status: value === "all" ? undefined : value }, true)
-          }
+    <AdminPage
+      title="کدهای تخفیف"
+      description="کدها، بازهٔ اعتبار، محدودیت مصرف و دامنهٔ کاربرد را مدیریت کنید."
+      action={
+        <Button size="sm" asChild>
+          <Link href="/admin/coupons/new">
+            <Plus className="size-4" /> کد جدید
+          </Link>
+        </Button>
+      }
+      filters={
+        <AdminFilterBar
+          id="coupons-filter-title"
+          title="جستجو و فیلتر کدها"
+          hasFilters={hasFilters}
+          onReset={() => router.push(pathname)}
+          gridClassName="sm:grid-cols-[minmax(0,1fr)_11rem_11rem]"
         >
-          <SelectTrigger className="w-full" aria-label="فیلتر وضعیت">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">همهٔ وضعیت‌ها</SelectItem>
-            <SelectItem value="current">فعال در بازهٔ زمانی</SelectItem>
-            <SelectItem value="inactive">غیرفعال</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={type ?? "all"}
-          onValueChange={(value) =>
-            updateURL({ type: value === "all" ? undefined : value }, true)
-          }
-        >
-          <SelectTrigger className="w-full" aria-label="فیلتر نوع تخفیف">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">همهٔ انواع</SelectItem>
-            <SelectItem value="percentage">درصدی</SelectItem>
-            <SelectItem value="fixed_amount">مبلغ ثابت</SelectItem>
-            <SelectItem value="free_shipping">ارسال رایگان</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
+          <label className="relative block">
+            <span className="sr-only">جستجوی کد تخفیف</span>
+            <Search
+              className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="جستجو بر اساس کد…"
+              className="h-11 ps-9"
+            />
+          </label>
+          <Select
+            value={status}
+            onValueChange={(value) =>
+              updateURL({ status: value === "all" ? undefined : value }, true)
+            }
+          >
+            <SelectTrigger className="h-11 w-full" aria-label="فیلتر وضعیت">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">همهٔ وضعیت‌ها</SelectItem>
+              <SelectItem value="current">فعال در بازهٔ زمانی</SelectItem>
+              <SelectItem value="inactive">غیرفعال</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={type ?? "all"}
+            onValueChange={(value) =>
+              updateURL({ type: value === "all" ? undefined : value }, true)
+            }
+          >
+            <SelectTrigger className="h-11 w-full" aria-label="فیلتر نوع تخفیف">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">همهٔ انواع</SelectItem>
+              <SelectItem value="percentage">درصدی</SelectItem>
+              <SelectItem value="fixed_amount">مبلغ ثابت</SelectItem>
+              <SelectItem value="free_shipping">ارسال رایگان</SelectItem>
+            </SelectContent>
+          </Select>
+        </AdminFilterBar>
+      }
+      pagination={
+        coupons.data &&
+        (coupons.data.pagination.total_items > 0 ||
+          coupons.data.pagination.has_prev ||
+          coupons.data.pagination.has_next) ? (
+          <ListPagination
+            page={coupons.data.pagination.page}
+            totalPages={coupons.data.pagination.total_pages}
+            hasPrev={coupons.data.pagination.has_prev}
+            hasNext={coupons.data.pagination.has_next}
+            onPrev={() =>
+              updateURL({
+                page: previousPage > 1 ? String(previousPage) : undefined,
+              })
+            }
+            onNext={() => updateURL({ page: String(page + 1) })}
+            disabled={coupons.isFetching}
+            ariaLabel="صفحه‌بندی کدهای تخفیف"
+            label={
+              <>
+                {faNum(coupons.data.pagination.total_items)} کد · صفحهٔ{" "}
+                {faNum(coupons.data.pagination.page)} از{" "}
+                {faNum(coupons.data.pagination.total_pages)}
+              </>
+            }
+          />
+        ) : null
+      }
+    >
       {mutationError ? (
         <p role="alert" className="mb-4 text-sm text-destructive">
           {mutationError}
@@ -312,7 +351,7 @@ export function CouponsBoard() {
           <p className="font-serif text-lg">
             {outOfRangePage
               ? "در حال بازگشت به آخرین صفحه…"
-              : query || status !== "all" || type
+              : hasFilters
                 ? "کدی با این فیلتر پیدا نشد"
                 : "هنوز کد تخفیفی ساخته نشده است"}
           </p>
@@ -405,47 +444,6 @@ export function CouponsBoard() {
         </div>
       ) : null}
 
-      {coupons.data &&
-      (coupons.data.pagination.total_items > 0 ||
-        coupons.data.pagination.has_prev ||
-        coupons.data.pagination.has_next) ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
-            {faNum(coupons.data.pagination.total_items)} کد · صفحهٔ{" "}
-            {faNum(coupons.data.pagination.page)} از{" "}
-            {faNum(coupons.data.pagination.total_pages)}
-            {coupons.isFetching ? (
-              <Loader2
-                className="ms-1 inline size-3 animate-spin"
-                aria-hidden
-              />
-            ) : null}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!coupons.data.pagination.has_prev || coupons.isFetching}
-              onClick={() =>
-                updateURL({
-                  page: previousPage > 1 ? String(previousPage) : undefined,
-                })
-              }
-            >
-              قبلی
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!coupons.data.pagination.has_next || coupons.isFetching}
-              onClick={() => updateURL({ page: String(page + 1) })}
-            >
-              بعدی
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
       <AlertDialog
         open={archiveTarget !== null}
         onOpenChange={(open) =>
@@ -480,6 +478,6 @@ export function CouponsBoard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </AdminPage>
   );
 }

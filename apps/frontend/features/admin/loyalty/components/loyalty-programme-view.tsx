@@ -12,69 +12,61 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/features/dashboard/components/page-header";
 import { faNum, formatPrice } from "@/lib/products";
 
+import { loyaltyTierLabel } from "../labels";
 import type { LoyaltyProgramme } from "../types";
-
-const TIER_FA: Record<string, string> = {
-  bronze: "برنزی",
-  silver: "نقره‌ای",
-  gold: "طلایی",
-  cellar: "سرداب",
-};
+import { LoyaltyProgrammeForm } from "./loyalty-programme-form";
 
 export function LoyaltyProgrammeView({
   programme,
+  canWrite = false,
 }: {
   programme: LoyaltyProgramme;
+  /** customers:write — the same capability the backend requires for the PUT. */
+  canWrite?: boolean;
 }) {
   const rates = [
     {
       icon: ShoppingBag,
       label: "امتیاز خرید",
       value: `هر ${faNum(programme.earn_divisor)} تومان = ۱ امتیاز`,
-      hint: "LOYALTY_EARN_DIVISOR",
+      hint: "مبلغ خرید لازم برای هر امتیاز",
     },
     {
       icon: Wallet,
       label: "بازخرید به کیف پول",
       value: `هر امتیاز ≈ ${formatPrice(programme.redeem_value)}`,
-      hint: "LOYALTY_REDEEM_VALUE",
+      hint: "ارزش هر امتیاز هنگام بازخرید",
     },
     {
       icon: Award,
       label: "هدیهٔ عضویت",
       value: `${faNum(programme.signup_bonus)} امتیاز`,
-      hint: "LOYALTY_SIGNUP_BONUS",
+      hint: "یک‌بار، هنگام عضویت",
     },
     {
       icon: Star,
       label: "نظر خرید تأییدشده",
       value: `${faNum(programme.review_bonus)} امتیاز`,
-      hint: "LOYALTY_REVIEW_BONUS",
+      hint: "برای هر نظر تأییدشده",
     },
     {
       icon: Cake,
       label: "هدیهٔ تولد",
       value: `${faNum(programme.birthday_bonus)} امتیاز / سال`,
-      hint: `LOYALTY_BIRTHDAY_BONUS · TZ ${programme.birthday_tz}`,
+      hint: `سالانه · منطقهٔ زمانی ${programme.birthday_tz}`,
     },
     {
       icon: Users,
       label: "پاداش معرفی",
       value: `${faNum(programme.referral_reward)} امتیاز برای هر طرف`,
-      hint: "LOYALTY_REFERRAL_REWARD",
+      hint: "برای هر طرف معرفی",
     },
   ];
 
   return (
     <>
-      <PageHeader
-        title="باشگاه مشتریان"
-        description="نرخ‌ها و سطوح امتیاز مؤثر در این استقرار. منبع پیکربندی: متغیرهای محیطی (فقط‌خواندنی)."
-      />
-
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <Badge variant="secondary" className="gap-1.5">
           <Lock className="size-3.5" />
@@ -88,20 +80,23 @@ export function LoyaltyProgrammeView({
           <Info className="mt-0.5 size-4 shrink-0 text-primary" />
           <div className="space-y-1">
             <p className="font-medium text-foreground">
-              تغییر نرخ‌ها بدون ریستارت سرویس پشتیبانی نمی‌شود
+              این استقرار هنوز ردیف برنامه را ندارد
             </p>
             <p>
-              برای به‌روزرسانی، متغیرهای{" "}
-              <code className="rounded bg-background px-1 py-0.5 text-xs">
-                LOYALTY_*
-              </code>{" "}
-              را در محیط اجرا تنظیم کنید و API را ری‌استارت کنید. endpoint
-              عمومی برای «اهدا رایگان» امتیاز وجود ندارد.
+              مقادیر زیر از متغیرهای محیطی خوانده شده‌اند و تا ساخته‌شدن ردیف
+              برنامه قابل ویرایش نیستند.
             </p>
             <p className="text-xs">{programme.runbook}</p>
           </div>
         </div>
-      ) : null}
+      ) : canWrite ? (
+        <LoyaltyProgrammeForm programme={programme} />
+      ) : (
+        <div className="border-hairline mb-6 flex gap-3 rounded-2xl bg-muted/40 p-4 text-sm text-muted-foreground ring-1 ring-foreground/5">
+          <Info className="mt-0.5 size-4 shrink-0 text-primary" />
+          <p>ویرایش برنامه به دسترسی «customers:write» نیاز دارد.</p>
+        </div>
+      )}
 
       <section className="mb-8">
         <h2 className="mb-3 font-serif text-xl">نرخ‌های مؤثر</h2>
@@ -143,7 +138,7 @@ export function LoyaltyProgrammeView({
               {programme.tiers.map((t) => (
                 <tr key={t.id}>
                   <td className="px-4 py-2.5 font-medium">
-                    {TIER_FA[t.id] ?? t.id}
+                    {loyaltyTierLabel(t.id)}
                     <span className="ms-2 font-mono text-xs text-muted-foreground">
                       {t.id}
                     </span>

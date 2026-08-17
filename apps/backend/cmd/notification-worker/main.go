@@ -91,7 +91,14 @@ func main() {
 		}
 		defer pool.Close()
 		store := notifpg.NewStore(pool)
-		pub := notifkafka.NewPublisher(brokers)
+		mech, err := cfg.KafkaSASL()
+		if err != nil {
+			// Config.Validate already built this at boot; getting here would mean
+			// dialing the broker unauthenticated, so refuse to start.
+			log.Fatalf("notification-worker: kafka sasl: %v", err)
+		}
+		auth := notifkafka.Auth{SASL: mech, TLS: cfg.KafkaTLSEnabled}
+		pub := notifkafka.NewPublisher(brokers, auth)
 		defer pub.Close()
 
 		handler := &notifications.DeliveryHandler{
@@ -113,13 +120,19 @@ func main() {
 			consumer := notifkafka.NewConsumer(brokers, group, []string{
 				notifications.TopicOTP,
 				notifications.TopicEmail,
-			})
+			}, auth)
 			consumer.Handler = handler
 			consumer.Log = zlog
 			consumer.DLQ = pub
+			// Do not thread the signal context into Run: that cancels the
+			// provider HTTP call mid-flight on SIGTERM. Stop by Close() instead.
 			g.Go(func() error {
 				zlog.Info("kafka consumer running")
-				return consumer.Run(gctx)
+				return consumer.Run(context.Background())
+			})
+			g.Go(func() error {
+				<-ctx.Done()
+				return consumer.Close()
 			})
 		}
 

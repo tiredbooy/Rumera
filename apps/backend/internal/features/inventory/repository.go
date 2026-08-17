@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
 )
@@ -83,42 +84,64 @@ const ensureInventorySQL = `
 	WHERE EXISTS (SELECT 1 FROM product_variants WHERE id = $1)
 	ON CONFLICT (product_variant_id) DO NOTHING`
 
+// inventoryExec is the Exec/QueryRow surface shared by the pool and a TX.
+type inventoryExec interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// EnsureForVariantTx inserts a zero-stock inventory row for variantID on the
+// given transaction when missing. Callers that create a variant in the same TX
+// (editor aggregate, legacy product+variant create) must invoke this before
+// commit so the variant is visible to admin stock tools and checkout.
+// Returns models.ErrNotFound if the product_variant does not exist.
+func EnsureForVariantTx(ctx context.Context, tx pgx.Tx, variantID int64) error {
+	return ensureForVariant(ctx, tx, variantID)
+}
+
+// DropEmptyForVariantsTx removes the auto-created zero-stock inventory rows of
+// the given variants so the variants themselves can be deleted. Every variant
+// now owns an inventory row (EnsureForVariantTx), and inventory holds a
+// RESTRICT FK, so without this no variant would ever be deletable. Rows that
+// still carry stock stay put and the FK turns the delete into a conflict; the
+// same is true for variants with inventory_movements history.
+func DropEmptyForVariantsTx(ctx context.Context, tx pgx.Tx, variantIDs []int64) error {
+	if len(variantIDs) == 0 {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM inventory
+		WHERE product_variant_id = ANY($1)
+		  AND stock_on_hand = 0
+		  AND committed_stock = 0`, variantIDs); err != nil {
+		return fmt.Errorf("inventory.DropEmptyForVariants: %w", err)
+	}
+	return nil
+}
+
 func (r *inventoryRepository) EnsureForVariant(ctx context.Context, variantID int64) error {
-	tag, err := r.db.Exec(ctx, ensureInventorySQL, variantID)
+	return ensureForVariant(ctx, r.db, variantID)
+}
+
+func (r *inventoryRepository) EnsureForVariantTx(ctx context.Context, tx pgx.Tx, variantID int64) error {
+	return EnsureForVariantTx(ctx, tx, variantID)
+}
+
+func ensureForVariant(ctx context.Context, exec inventoryExec, variantID int64) error {
+	tag, err := exec.Exec(ctx, ensureInventorySQL, variantID)
 	if err != nil {
-		return fmt.Errorf("inventoryRepository.EnsureForVariant: %w", err)
+		return fmt.Errorf("inventory.EnsureForVariant: %w", err)
 	}
 	if tag.RowsAffected() > 0 {
 		return nil
 	}
 	// Either already existed or variant is missing — distinguish.
 	var exists bool
-	if err := r.db.QueryRow(ctx,
+	if err := exec.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM product_variants WHERE id = $1)`,
 		variantID,
 	).Scan(&exists); err != nil {
-		return fmt.Errorf("inventoryRepository.EnsureForVariant exists: %w", err)
-	}
-	if !exists {
-		return models.ErrNotFound
-	}
-	return nil
-}
-
-func (r *inventoryRepository) EnsureForVariantTx(ctx context.Context, tx pgx.Tx, variantID int64) error {
-	tag, err := tx.Exec(ctx, ensureInventorySQL, variantID)
-	if err != nil {
-		return fmt.Errorf("inventoryRepository.EnsureForVariantTx: %w", err)
-	}
-	if tag.RowsAffected() > 0 {
-		return nil
-	}
-	var exists bool
-	if err := tx.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM product_variants WHERE id = $1)`,
-		variantID,
-	).Scan(&exists); err != nil {
-		return fmt.Errorf("inventoryRepository.EnsureForVariantTx exists: %w", err)
+		return fmt.Errorf("inventory.EnsureForVariant exists: %w", err)
 	}
 	if !exists {
 		return models.ErrNotFound
@@ -320,6 +343,17 @@ func (r *inventoryRepository) Adjust(ctx context.Context, tx pgx.Tx, variantID i
 }
 
 func (r *inventoryRepository) Reserve(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error {
+	// Bind the reservation to this order first. An already-active row is
+	// idempotent (no second committed increment). Only a released row may
+	// reactivate and increment committed again.
+	claimed, err := activateReservation(ctx, tx, orderID, variantID, quantity)
+	if err != nil {
+		return err
+	}
+	if !claimed {
+		return nil
+	}
+
 	// Reservations move physical stock from available to committed without changing
 	// stock_on_hand. Payment confirmation performs the physical deduction.
 	const q = `
@@ -347,6 +381,16 @@ func (r *inventoryRepository) Reserve(ctx context.Context, tx pgx.Tx, variantID 
 }
 
 func (r *inventoryRepository) Release(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error {
+	released, err := closeReservation(ctx, tx, orderID, variantID, quantity, reservationReleased)
+	if err != nil {
+		return err
+	}
+	if !released {
+		// Already released/deducted (or never ours) — do not decrement a
+		// foreign committed counter.
+		return nil
+	}
+
 	const q = `
 		UPDATE inventory
 		SET committed_stock = committed_stock - @quantity,
@@ -372,6 +416,16 @@ func (r *inventoryRepository) Release(ctx context.Context, tx pgx.Tx, variantID 
 }
 
 func (r *inventoryRepository) Deduct(ctx context.Context, tx pgx.Tx, variantID int64, quantity int, orderID int64) error {
+	closed, err := closeReservation(ctx, tx, orderID, variantID, quantity, reservationDeducted)
+	if err != nil {
+		return err
+	}
+	if !closed {
+		// No active reservation for this order — late success after fail/release
+		// must not drain another checkout's committed pool.
+		return models.ErrInvalidState
+	}
+
 	// Payment confirmation removes the reserved quantity from both physical and
 	// committed stock, leaving available stock unchanged.
 	const q = `

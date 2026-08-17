@@ -33,3 +33,9 @@ type ReferralResponse struct {
 type ClaimReferralInput struct {
 	Code string `json:"code" validate:"required"`
 }
+
+// ClaimReferralResponse is returned only after a new referral row is created.
+// Invalid or already-claimed codes are 400, never claimed=false.
+type ClaimReferralResponse struct {
+	Claimed bool `json:"claimed"`
+}

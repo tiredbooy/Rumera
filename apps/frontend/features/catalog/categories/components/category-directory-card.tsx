@@ -59,7 +59,7 @@ export function CategoryDirectoryCard({
   return (
     <article
       aria-labelledby={titleId}
-      className="border-hairline shadow-e1 hover:shadow-e3 relative flex h-full min-w-0 flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:ring-primary/30 motion-reduce:transform-none motion-reduce:transition-none"
+      className="hover-lift border-hairline shadow-e1 relative flex h-full min-w-0 flex-col overflow-hidden rounded-3xl bg-card"
     >
       {href ? (
         <Link

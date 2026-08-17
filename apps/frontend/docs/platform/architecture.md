@@ -69,6 +69,10 @@ Markazi Text → `--font-serif`, Geist Mono → `--font-mono`), defines global
 sit inside, and therefore do not wrap, that segment's own `layout.tsx`. Layout
 errors bubble to the nearest parent `error.tsx`; root-layout errors are handled
 by `app/global-error.tsx`, and same-segment loading UI cannot cover layout work.
+`global-error.tsx` logs to `console.error` only. There is no Sentry (or other
+third-party error SDK) in the frontend install graph — `@sentry/nextjs` was
+removed in PR-090d because it was never initialized and no `SENTRY_DSN` exists.
+Do not re-add the SDK without a real DSN.
 
 ---
 
@@ -193,6 +197,11 @@ Notes that are easy to get wrong:
   `${API}/api/v1/admin/products`.
 - `/api/admin` preserves **`multipart/form-data` bodies verbatim** (boundary
   intact) so product image uploads pass through; `/api/store` forwards JSON only.
+- Store and admin BFFs forward incoming **`Idempotency-Key`** when present
+  (`pickIdempotencyKeyHeader`). They do not invent a key.
+- Store BFF copies incoming analytics **`sid`/`did`** cookies upstream and
+  matching `Set-Cookie` back (`pickAnalyticsCookieHeader`). It does not
+  invent IDs.
 - All proxies pass the backend status and JSON through **unchanged**, return
   `204` as an empty body, and map a fetch failure to a `502 UPSTREAM_UNAVAILABLE`.
 - Backend authorization still runs on top — the admin proxy's live check and
@@ -293,6 +302,7 @@ reads or exchanges a raw refresh token itself.
 | `lib/rbac/`                               | `roles.ts` (Role→Permission map, `isStaff`, `permissionsForRole`), `permissions.ts` (`PERMISSIONS` catalogue), `can.ts` (`can`/`hasAny`/`hasAll`), `nav.ts` (permission-filtered sidebar)       |
 | `lib/seo/`                                | `metadata.ts` (`buildMetadata` / `noindexMetadata`), `jsonld.ts` (structured-data builders)                                                                                                     |
 | `lib/home/`, `lib/journal/`, `lib/admin/` | Section-specific server data helpers                                                                                                                                                            |
+| `lib/charts/`                             | Admin TanStack Charts kernel (`RumeraChart`, cellar theme, `faTick` / `faMoneyTick`). Marks stay in the feature. See [admin console](../features/admin-console.md#admin-charts)                 |
 | `lib/` (root)                             | `site.ts` (`siteConfig`, `absoluteUrl`), `utils.ts` (`cn`), `products.ts` (`faNum`, `categoryFa`, sample data), `recipes.ts`, `journal.ts`, `recently-viewed.ts`                                |
 
 Admin browser clients live with their resource under `features/` rather than in
@@ -320,8 +330,9 @@ sitemap still need live API data or a populated cache.
 
 ### `components/` — UI, grouped by surface
 
-- `components/ui/` — the shadcn/Radix primitive layer (~55 components: button,
-  dialog, table, form, etc.) plus the RTL `direction` provider.
+- `components/ui/` — the shadcn/Radix primitive layer (~32 imported
+  components: button, dialog, table, field, etc.) plus the RTL `direction`
+  provider. Unused zero-import copies were removed in PR-090i.
 - Surface folders: `account/`, `admin/`, `dashboard/`, `auth/`, `cart/`,
   `catalog/`, `checkout/`, `home/`, `journal/`, `recipes/`, `loyalty/`,
   `subscriptions/`, `taste/`, `wallet/`, `referral/`, `motion/`.
@@ -351,6 +362,8 @@ as React Query hooks under `lib/api/`, not in `hooks/`.
 - **`output: "standalone"`** ([`next.config.ts`](../../next.config.ts)) for a minimal
   Docker image, plus `optimizePackageImports` for `lucide-react`/`motion`/etc.,
   security headers, and AVIF/WebP image negotiation.
+  `images.remotePatterns` is the hostnames of `NEXT_PUBLIC_MEDIA_BASE_URL` then
+  `NEXT_PUBLIC_API_URL` (no `hostname: "**"`). Empty env = same-origin only.
 - **Rendering modes are explicit per route:** dashboards declare
   `export const dynamic = "force-dynamic"`; cacheable catalogue pages declare
   `export const revalidate = 3600` and may use `generateStaticParams`.

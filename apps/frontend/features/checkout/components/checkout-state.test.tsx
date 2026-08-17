@@ -2,12 +2,13 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Address } from "@/features/addresses/types";
 import type { Cart } from "@/features/cart/types";
 import type { CouponValidation } from "@/features/coupons/types";
+import type { Order, OrderStatus, PaymentMethod } from "@/features/orders/types";
 import type { ShippingMethod } from "@/features/shipping/types";
 import { ApiClientError } from "@/lib/api/store-client";
 
@@ -24,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   usePlaceOrder: vi.fn(),
   useShippingMethods: vi.fn(),
   useValidateCoupon: vi.fn(),
+  useWallet: vi.fn(),
+  recordInteractionClient: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -55,7 +58,26 @@ vi.mock("@/features/orders/hooks", () => ({
 }));
 
 vi.mock("@/features/shipping/api", () => ({
-  useShippingMethods: () => mocks.useShippingMethods(),
+  useShippingMethods: (...args: unknown[]) => mocks.useShippingMethods(...args),
+}));
+
+vi.mock("@/features/settings/hooks", () => ({
+  usePublicGiftSettings: () => ({
+    data: null,
+    isPending: false,
+    isError: false,
+    isFetching: false,
+  }),
+}));
+
+// U-1: checkout reads the wallet balance to warn about a shortfall before submit.
+vi.mock("@/features/wallet/hooks", () => ({
+  useWallet: () => mocks.useWallet(),
+}));
+
+vi.mock("@/features/recommendations/client", () => ({
+  recordInteractionClient: (...args: unknown[]) =>
+    mocks.recordInteractionClient(...args),
 }));
 
 import { CheckoutFlow } from "./checkout-flow";
@@ -138,8 +160,37 @@ type CouponCallbacks = {
 };
 
 type OrderCallbacks = {
+  onSuccess?: (order: Order) => void;
   onError?: (error: unknown) => void;
 };
+
+function placedOrder(
+  status: OrderStatus,
+  payment_method: PaymentMethod = "wallet",
+): Order {
+  return {
+    id: 42,
+    status,
+    payment_method,
+    subtotal: 1_000,
+    discount_amount: 0,
+    shipping_cost: 50,
+    tax_amount: 0,
+    total_amount: 1_050,
+    created_at: "2026-01-01T00:00:00Z",
+    items: [
+      {
+        id: 1,
+        product_id: 1,
+        variant_id: 11,
+        product_title: "محصول آزمایشی",
+        quantity: 1,
+        unit_price: 1_000,
+        total_price: 1_000,
+      },
+    ],
+  };
+}
 
 function successfulQuery<T>(data: T) {
   return {
@@ -158,12 +209,21 @@ function goToPayment() {
   fireEvent.click(screen.getByRole("button", { name: /ادامه/ }));
 }
 
+function goToReviewAndSubmit() {
+  goToPayment();
+  fireEvent.click(screen.getByRole("button", { name: /ادامه/ }));
+  fireEvent.click(screen.getAllByRole("button", { name: /ثبت و پرداخت/ })[0]);
+}
+
 function fillAddressForm() {
   fireEvent.change(screen.getByLabelText("نام و نام خانوادگی"), {
     target: { value: "گیرنده جدید" },
   });
   fireEvent.change(screen.getByLabelText("نشانی"), {
     target: { value: "خیابان سوم" },
+  });
+  fireEvent.change(screen.getByLabelText("استان"), {
+    target: { value: "تهران" },
   });
   fireEvent.change(screen.getByLabelText("شهر"), {
     target: { value: "تهران" },
@@ -181,6 +241,9 @@ beforeEach(() => {
   mocks.useCart.mockReturnValue(successfulQuery(cart));
   mocks.useAddresses.mockReturnValue(successfulQuery(addresses));
   mocks.useShippingMethods.mockReturnValue(successfulQuery(shippingMethods));
+  // Default: balance unknown, so the shortfall warning stays out of the way of
+  // every test that is not about it.
+  mocks.useWallet.mockReturnValue(successfulQuery(undefined));
   mocks.useValidateCoupon.mockReturnValue({
     isPending: false,
     mutate: mocks.couponMutate,
@@ -193,9 +256,38 @@ beforeEach(() => {
     isPending: false,
     mutate: mocks.createAddressMutate,
   });
+  mocks.recordInteractionClient.mockResolvedValue(undefined);
 });
 
 describe("checkout state logic", () => {
+  it("quotes shipping with country when the address province is a display name", () => {
+    mocks.useAddresses.mockReturnValue(
+      successfulQuery([{ ...addresses[1], state_province: "تهران" }]),
+    );
+    render(<CheckoutFlow />);
+
+    expect(mocks.useShippingMethods).toHaveBeenCalledWith(
+      "IR",
+      0,
+      cart.summary.subtotal,
+      true,
+    );
+  });
+
+  it("quotes shipping with the province when it is an IR- region code", () => {
+    mocks.useAddresses.mockReturnValue(
+      successfulQuery([{ ...addresses[1], state_province: "ir-teh" }]),
+    );
+    render(<CheckoutFlow />);
+
+    expect(mocks.useShippingMethods).toHaveBeenCalledWith(
+      "IR-TEH",
+      0,
+      cart.summary.subtotal,
+      true,
+    );
+  });
+
   it("derives the initial selection from the default address without a render update", () => {
     render(<CheckoutFlow />);
 
@@ -237,6 +329,54 @@ describe("checkout state logic", () => {
     ).toBeChecked();
   });
 
+  // U-1. Wallet is the preselected method, so an empty wallet used to be
+  // discovered only as a 409 at submit, after the whole checkout was filled in.
+  function reachPaymentStep() {
+    fireEvent.click(screen.getByRole("button", { name: /ادامه/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /ارسال استاندارد/ }));
+    fireEvent.click(screen.getByRole("button", { name: /ادامه/ }));
+  }
+
+  it("warns before submit when the wallet cannot cover the order", () => {
+    mocks.useWallet.mockReturnValue(successfulQuery({ balance: "1000" }));
+    render(<CheckoutFlow />);
+    reachPaymentStep();
+
+    expect(screen.getByTestId("checkout-wallet-balance")).toBeInTheDocument();
+    expect(screen.getByTestId("checkout-wallet-shortfall")).toBeInTheDocument();
+    expect(screen.getByTestId("checkout-wallet-topup-cta")).toHaveAttribute(
+      "href",
+      "/account/wallet",
+    );
+  });
+
+  it("shows the balance without a shortfall warning when the wallet covers it", () => {
+    mocks.useWallet.mockReturnValue(
+      successfulQuery({ balance: "999999999" }),
+    );
+    render(<CheckoutFlow />);
+    reachPaymentStep();
+
+    expect(screen.getByTestId("checkout-wallet-balance")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("checkout-wallet-shortfall"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says nothing about the wallet when the balance is unknown", () => {
+    // Guest, or the wallet request failed. Never guess a shortfall.
+    mocks.useWallet.mockReturnValue(successfulQuery(undefined));
+    render(<CheckoutFlow />);
+    reachPaymentStep();
+
+    expect(
+      screen.queryByTestId("checkout-wallet-balance"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("checkout-wallet-shortfall"),
+    ).not.toBeInTheDocument();
+  });
+
   it.each([
     { existing: [] as Address[], expectedDefault: true },
     { existing: addresses, expectedDefault: false },
@@ -250,7 +390,11 @@ describe("checkout state logic", () => {
       fillAddressForm();
 
       expect(mocks.createAddressMutate).toHaveBeenCalledWith(
-        expect.objectContaining({ is_default: expectedDefault }),
+        expect.objectContaining({
+          is_default: expectedDefault,
+          country: "IR",
+          state_province: "تهران",
+        }),
         expect.any(Object),
       );
     },
@@ -357,6 +501,9 @@ describe("checkout state logic", () => {
   });
 
   it("keeps order submission failures visible beside the retry action", () => {
+    const scrollIntoView = vi.fn();
+    const previousScroll = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
     mocks.placeOrderMutate.mockImplementation(
       (_input: unknown, callbacks?: OrderCallbacks) =>
         callbacks?.onError?.(
@@ -366,15 +513,102 @@ describe("checkout state logic", () => {
     render(<CheckoutFlow />);
     goToPayment();
     fireEvent.click(screen.getByRole("button", { name: /ادامه/ }));
-    fireEvent.click(
-      screen.getAllByRole("button", { name: /ثبت و پرداخت/ })[0],
-    );
+    try {
+      const submit = screen.getAllByRole("button", { name: /ثبت و پرداخت/ })[0];
+      fireEvent.click(submit);
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "موجودی برخی اقلام کافی نیست",
-    );
-    expect(mocks.toastError).toHaveBeenCalledWith(
-      expect.stringContaining("موجودی برخی اقلام کافی نیست"),
-    );
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent("موجودی کافی نیست");
+      expect(
+        alert.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(scrollIntoView).toHaveBeenCalled();
+      expect(mocks.toastError).toHaveBeenCalledWith("موجودی کافی نیست", {
+        description: "تعداد را کم کنید یا کالا را از سبد حذف کنید.",
+      });
+    } finally {
+      HTMLElement.prototype.scrollIntoView = previousScroll;
+    }
   });
+
+  it("links to Cellar Club without inventing unpaid earn amounts", () => {
+    render(<CheckoutFlow />);
+    goToPayment();
+
+    const rewards = screen.getByRole("link", { name: "مشاهدهٔ باشگاه مشتریان" });
+    expect(rewards).toHaveAttribute("href", "/account/rewards");
+    expect(screen.getByText(/پس از/)).toHaveTextContent("تأیید پرداخت");
+    expect(screen.getByText(/ثبت سفارش به‌تنهایی امتیاز نمی‌دهد/)).toBeInTheDocument();
+
+    const paymentStep = screen.getByRole("heading", {
+      name: "باشگاه مشتریان",
+    }).closest("section");
+    expect(paymentStep).toBeTruthy();
+    expect(paymentStep).not.toHaveTextContent(/[0-9۰-۹]+\s*امتیاز/);
+    expect(paymentStep).not.toHaveTextContent(/امتیاز می‌گیرید|امتیاز دریافت/);
+  });
+
+  it.each([
+    "paid",
+    "processing",
+    "ready_to_ship",
+    "shipped",
+    "out_for_delivery",
+    "delivered",
+  ] as const)(
+    "records purchase recs when place-order returns paid-like status %s",
+    async (status) => {
+      mocks.placeOrderMutate.mockImplementation(
+        (_input: unknown, callbacks?: OrderCallbacks) =>
+          callbacks?.onSuccess?.(placedOrder(status)),
+      );
+      render(<CheckoutFlow />);
+      goToReviewAndSubmit();
+
+      await waitFor(() => {
+        expect(mocks.recordInteractionClient).toHaveBeenCalledWith({
+          product_id: 1,
+          interaction_type: "purchase",
+          source: "checkout",
+          metadata: { order_id: 42 },
+        });
+      });
+      expect(mocks.routerPush).toHaveBeenCalledWith(
+        "/checkout/confirmation/42",
+      );
+    },
+  );
+
+  it("does not record purchase recs for pending bank_transfer", async () => {
+    mocks.placeOrderMutate.mockImplementation(
+      (_input: unknown, callbacks?: OrderCallbacks) =>
+        callbacks?.onSuccess?.(placedOrder("pending", "bank_transfer")),
+    );
+    render(<CheckoutFlow />);
+    goToReviewAndSubmit();
+
+    expect(mocks.routerPush).toHaveBeenCalledWith(
+      "/checkout/confirmation/42",
+    );
+    await Promise.resolve();
+    expect(mocks.recordInteractionClient).not.toHaveBeenCalled();
+  });
+
+  it.each(["payment_failed", "cancelled"] as const)(
+    "does not record purchase recs when place-order returns unpaid status %s",
+    async (status) => {
+      mocks.placeOrderMutate.mockImplementation(
+        (_input: unknown, callbacks?: OrderCallbacks) =>
+          callbacks?.onSuccess?.(placedOrder(status)),
+      );
+      render(<CheckoutFlow />);
+      goToReviewAndSubmit();
+
+      expect(mocks.routerPush).toHaveBeenCalledWith(
+        "/checkout/confirmation/42",
+      );
+      await Promise.resolve();
+      expect(mocks.recordInteractionClient).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -27,7 +27,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import {
+  AdminFilterBar,
+  AdminPage,
+} from "@/features/dashboard/components/admin-page";
 import {
   JournalApiError,
   useAdminJournalCategories,
@@ -107,44 +110,55 @@ export function JournalCategoriesBoard({ canWrite }: { canWrite: boolean }) {
       : "ارتباط با سرور برقرار نشد. دوباره تلاش کنید.";
 
   return (
-    <>
-      <PageHeader
-        title="دسته‌های ژورنال"
-        description="ساختار موضوعی نوشته‌ها و رابطهٔ دسته‌های مادر و فرزند را مدیریت کنید."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/admin/journal">
-                <ArrowRight className="size-4" /> بازگشت به ژورنال
+    <AdminPage
+      breadcrumb={[
+        { label: "پنل مدیریت", href: "/admin" },
+        { label: "ژورنال", href: "/admin/journal" },
+      ]}
+      title="دسته‌های ژورنال"
+      description="ساختار موضوعی نوشته‌ها و رابطهٔ دسته‌های مادر و فرزند را مدیریت کنید."
+      action={
+        <>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/journal">
+              <ArrowRight className="size-4" /> بازگشت به ژورنال
+            </Link>
+          </Button>
+          {canWrite ? (
+            <Button size="sm" asChild>
+              <Link href="/admin/journal/categories/new">
+                <Plus className="size-4" /> دستهٔ جدید
               </Link>
             </Button>
-            {canWrite ? (
-              <Button size="sm" asChild>
-                <Link href="/admin/journal/categories/new">
-                  <Plus className="size-4" /> دستهٔ جدید
-                </Link>
-              </Button>
-            ) : null}
-          </div>
-        }
-      />
-
-      <label className="relative mb-5 block max-w-xl">
-        <span className="sr-only">جستجوی دستهٔ ژورنال</span>
-        <Search
-          className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
-          aria-hidden
-        />
-        <Input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="جستجو در نام، نامک یا توضیحات…"
-          className="ps-9"
-          disabled={removeCategory.isPending}
-        />
-      </label>
-
+          ) : null}
+        </>
+      }
+      filters={
+        <AdminFilterBar
+          id="journal-categories-filter-title"
+          title="جستجوی دسته‌ها"
+          hasFilters={Boolean(search)}
+          onReset={() => setSearch("")}
+          gridClassName="max-w-xl"
+        >
+          <label className="relative block">
+            <span className="sr-only">جستجوی دستهٔ ژورنال</span>
+            <Search
+              className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="جستجو در نام، نامک یا توضیحات…"
+              className="h-11 ps-9"
+              disabled={removeCategory.isPending}
+            />
+          </label>
+        </AdminFilterBar>
+      }
+    >
       {removeCategory.error ? (
         <p
           role="alert"
@@ -351,6 +365,6 @@ export function JournalCategoriesBoard({ canWrite }: { canWrite: boolean }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </AdminPage>
   );
 }

@@ -39,8 +39,8 @@ const AVAILABILITY_CHIP: Record<
   { tone: string; chip: string }
 > = {
   ready: {
-    tone: "bg-emerald-500",
-    chip: "border-emerald-500/20 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
+    tone: "bg-success",
+    chip: "border-success/25 bg-success/12 text-success",
   },
   out_of_stock: {
     tone: "bg-destructive",
@@ -53,8 +53,8 @@ const AVAILABILITY_CHIP: Record<
 };
 
 const LOW_STOCK_CHIP = {
-  tone: "bg-amber-500",
-  chip: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  tone: "bg-warning",
+  chip: "border-warning/25 bg-warning/12 text-warning",
 };
 
 /** Luxe storefront card backed only by the real product-list projection. */
@@ -108,12 +108,9 @@ export function ProductCard({
     <Card
       asChild
       className={cn(
-        "group/product border-hairline shadow-e2 relative h-full min-w-0 gap-0 overflow-hidden bg-card py-0",
+        "group/product hover-lift border-hairline shadow-e2 relative h-full min-w-0 gap-0 overflow-hidden bg-card py-0",
         "[container-type:inline-size]",
-        "transition-[transform,box-shadow,border-color] duration-300 ease-cellar",
-        "hover:-translate-y-1 hover:border-primary/30 hover:shadow-e3",
         "focus-within:ring-2 focus-within:ring-primary/40",
-        "motion-reduce:transform-none motion-reduce:transition-none!",
         className,
       )}
     >
@@ -208,12 +205,13 @@ export function ProductCard({
               {visibleTags.map((tag) => (
                 <Badge
                   key={tag.id}
+                  asChild
                   role="listitem"
                   variant="secondary"
                   title={tag.title}
-                  className="min-h-7 max-w-32 min-w-0 shrink truncate border border-primary/10 bg-accent/60 px-2 text-[10px] text-foreground sm:max-w-36 sm:px-2.5 sm:text-[11px]"
+                  className="min-h-7 max-w-32 min-w-0 shrink truncate border border-primary/10 bg-accent/60 px-2 text-[10px] text-foreground hover:bg-accent sm:max-w-36 sm:px-2.5 sm:text-[11px]"
                 >
-                  {tag.title}
+                  <Link href={`/tags/${tag.id}`}>{tag.title}</Link>
                 </Badge>
               ))}
               {hiddenTagCount ? (

@@ -53,16 +53,16 @@ const heroKeys = {
 
 const statusClasses: Record<HeroPublicationStatus, string> = {
   active:
-    "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400",
+    "bg-success/12 text-success ring-success/25",
   scheduled:
-    "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300",
+    "bg-warning/12 text-warning ring-warning/25",
   expired: "bg-destructive/10 text-destructive ring-destructive/20",
   inactive: "bg-muted text-muted-foreground ring-border/60",
 };
 
 const statusDotClasses: Record<HeroPublicationStatus, string> = {
-  active: "bg-emerald-500",
-  scheduled: "bg-amber-500",
+  active: "bg-success",
+  scheduled: "bg-warning",
   expired: "bg-destructive",
   inactive: "bg-muted-foreground/50",
 };

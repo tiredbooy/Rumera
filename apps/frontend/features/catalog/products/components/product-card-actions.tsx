@@ -35,10 +35,20 @@ export const PRODUCT_CARD_ACTIONS_OVERLAY_CLASS = cn(
   "motion-reduce:transform-none motion-reduce:transition-none",
 );
 
+const HEART_CHROME_CLASS = cn(
+  "absolute end-3 top-3 z-20 flex size-11 items-center justify-center rounded-full",
+  "border border-border/50 bg-background/85 text-foreground shadow-e1 backdrop-blur-md",
+  "transition-[color,background-color,box-shadow] duration-200",
+  "hover:bg-background hover:text-wine hover:shadow-e2",
+  "focus-visible:ring-2 focus-visible:ring-primary",
+  "motion-reduce:transition-none",
+);
+
 /**
  * Overlay commerce controls for ProductCard.
  *
- * Wishlist stays always available (corner chrome).
+ * Wishlist stays in the corner: a real variant toggle when the list row
+ * resolved one purchasable variant, otherwise a PDP link (options first).
  * Quick-add / option CTAs stay off the media until fine-pointer hover or
  * keyboard focus. Touch users use the persistent purchase link in the card body.
  */
@@ -53,9 +63,15 @@ export function ProductCardActions({
   const { status } = useSession();
   const router = useRouter();
   const authenticated = status === "authenticated";
-  const wishlist = useWishlist(
-    authenticated && purchasableVariantId !== undefined,
-  );
+  const canWishlistVariant = purchasableVariantId !== undefined;
+  // List projection omits a variant id when options must be chosen.
+  // Wishlist API is variant-scoped — never POST a product-level item.
+  const canChooseOptionsOnPdp =
+    !canWishlistVariant &&
+    Boolean(productHref) &&
+    hasActiveVariants &&
+    hasAvailableVariants;
+  const wishlist = useWishlist(authenticated && canWishlistVariant);
   const addWishlist = useAddWishlistItem();
   const removeWishlist = useRemoveWishlistItem();
   const recordInteraction = useRecordInteraction();
@@ -97,7 +113,7 @@ export function ProductCardActions({
 
   return (
     <>
-      {purchasableVariantId ? (
+      {canWishlistVariant ? (
         <button
           type="button"
           onClick={toggleWishlist}
@@ -109,12 +125,8 @@ export function ProductCardActions({
           }
           aria-pressed={Boolean(wishlistItem)}
           className={cn(
-            "absolute end-3 top-3 z-20 flex size-11 cursor-pointer items-center justify-center rounded-full",
-            "border border-border/50 bg-background/85 text-foreground shadow-e1 backdrop-blur-md",
-            "transition-[color,background-color,box-shadow] duration-200",
-            "hover:bg-background hover:text-wine hover:shadow-e2",
-            "focus-visible:ring-2 focus-visible:ring-primary",
-            "disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none",
+            HEART_CHROME_CLASS,
+            "cursor-pointer disabled:cursor-wait disabled:opacity-70",
             wishlistItem && "border-wine/30 text-wine",
           )}
         >
@@ -124,6 +136,14 @@ export function ProductCardActions({
             <Heart className={cn("size-4", wishlistItem && "fill-current")} />
           )}
         </button>
+      ) : canChooseOptionsOnPdp && productHref ? (
+        <Link
+          href={productHref}
+          aria-label={`برای افزودن ${productTitle} به علاقه‌مندی‌ها ابتدا گزینه را انتخاب کنید`}
+          className={cn(HEART_CHROME_CLASS, "cursor-pointer")}
+        >
+          <Heart className="size-4" aria-hidden />
+        </Link>
       ) : null}
 
       <div

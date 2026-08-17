@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { signOut } from "next-auth/react"
-import { Menu, LogOut, Store, Search, ExternalLink } from "lucide-react"
+import { Menu, LogOut, Store, ExternalLink } from "lucide-react"
 
 import { RumeraBrandMark } from "@/components/brand/rumera-brand-mark"
 import { cn } from "@/lib/utils"
@@ -15,6 +15,14 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { ModeToggle } from "@/components/mode-toggle"
+import {
+  AdminCommandMenu,
+  AdminCommandTrigger,
+} from "./admin-command-menu"
+import {
+  AdminContentWidthProvider,
+  type AdminContentWidth,
+} from "./admin-content-width"
 import { DashboardNav } from "./dashboard-nav"
 
 export type DashboardUser = {
@@ -34,16 +42,33 @@ export function DashboardShell({
   variant,
   permissions,
   user,
+  navBadges,
   children,
 }: {
   variant: "admin" | "account"
   permissions: string[]
   user: DashboardUser
+  navBadges?: Readonly<Record<string, number | null | undefined>>
   children: React.ReactNode
 }) {
   const [open, setOpen] = React.useState(false)
+  const [commandOpen, setCommandOpen] = React.useState(false)
+  const [contentWidth, setContentWidth] =
+    React.useState<AdminContentWidth>("default")
   const title = variant === "admin" ? "پنل مدیریت" : "حساب کاربری"
   const initial = (user.name ?? user.email ?? "?").trim().charAt(0)
+
+  React.useEffect(() => {
+    if (variant !== "admin") return
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        setCommandOpen((current) => !current)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [variant])
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -59,10 +84,11 @@ export function DashboardShell({
 
       <div className="mx-3 h-px bg-border/60" />
 
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      <div className="flex-1 overflow-y-auto px-3 py-3">
         <DashboardNav
           variant={variant}
           permissions={permissions}
+          badges={navBadges}
           onNavigate={() => setOpen(false)}
         />
       </div>
@@ -106,7 +132,7 @@ export function DashboardShell({
       {/* Main column */}
       <div className="flex min-h-dvh flex-col">
         {/* Mobile top bar */}
-        <header className="flex h-14 items-center justify-between border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl lg:hidden">
+        <header className="flex h-14 items-center justify-between gap-2 border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl lg:hidden">
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="باز کردن منو">
@@ -118,25 +144,26 @@ export function DashboardShell({
               {sidebar}
             </SheetContent>
           </Sheet>
-          <span className="font-serif text-lg">
+          <span className="min-w-0 truncate font-serif text-lg">
             <span className="text-foil">رومرا</span>
+            <span className="ms-2 text-base text-muted-foreground">{title}</span>
           </span>
-          <ModeToggle />
+          <div className="flex items-center gap-0.5">
+            {variant === "admin" ? (
+              <AdminCommandTrigger
+                variant="icon"
+                onOpen={() => setCommandOpen(true)}
+              />
+            ) : null}
+            <ModeToggle />
+          </div>
         </header>
 
-        {/* Desktop top bar — command-style search affordance + quick actions */}
+        {/* Desktop top bar — ⌘K command search + quick actions */}
         <header className="sticky top-0 z-20 hidden h-14 items-center gap-3 border-b border-border/60 bg-background/70 px-6 backdrop-blur-xl lg:flex">
-          <button
-            type="button"
-            className="group flex h-9 w-full max-w-sm items-center gap-2.5 rounded-lg border border-border/70 bg-muted/40 px-3 text-sm text-muted-foreground transition-colors hover:border-border hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            aria-label="جستجو"
-          >
-            <Search className="size-4 shrink-0" />
-            <span className="truncate">جستجو در پنل…</span>
-            <kbd className="ms-auto hidden rounded border border-border/70 bg-background/60 px-1.5 py-0.5 font-mono text-[0.625rem] text-muted-foreground sm:inline-block" dir="ltr">
-              ⌘K
-            </kbd>
-          </button>
+          {variant === "admin" ? (
+            <AdminCommandTrigger onOpen={() => setCommandOpen(true)} />
+          ) : null}
           <div className="ms-auto flex items-center gap-1">
             <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground" asChild>
               <Link href="/" target="_blank">
@@ -150,13 +177,28 @@ export function DashboardShell({
           </div>
         </header>
 
+        <AdminContentWidthProvider onWidthChange={setContentWidth}>
         <main
           id="main-content"
           tabIndex={-1}
-          className="mx-auto w-full max-w-[78rem] flex-1 px-5 py-6 lg:px-8 lg:py-8"
+          className={cn(
+            "mx-auto w-full flex-1 px-5 py-6 lg:px-8 lg:py-8",
+            variant === "admin" && contentWidth === "wide"
+              ? "max-w-none"
+              : "max-w-[78rem]",
+          )}
         >
           {children}
         </main>
+        </AdminContentWidthProvider>
+        {variant === "admin" ? (
+          <AdminCommandMenu
+            permissions={permissions}
+            open={commandOpen}
+            onOpenChange={setCommandOpen}
+            trigger="none"
+          />
+        ) : null}
       </div>
     </div>
   )

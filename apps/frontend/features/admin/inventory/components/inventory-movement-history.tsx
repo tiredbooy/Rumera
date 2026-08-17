@@ -6,8 +6,8 @@ import {
   PackageSearch,
 } from "lucide-react";
 
+import { ListPagination } from "@/components/list-pagination";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import type { Pagination } from "@/lib/api/types";
 import { faNum } from "@/lib/products";
 import { faDateTime } from "@/lib/utils/date";
@@ -94,7 +94,7 @@ export function InventoryMovementHistory({
                       <span
                         className={
                           increase
-                            ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20 dark:text-emerald-400"
+                            ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-success/12 text-success ring-1 ring-success/25"
                             : "flex size-10 shrink-0 items-center justify-center rounded-xl bg-destructive/10 text-destructive ring-1 ring-destructive/15"
                         }
                       >
@@ -132,7 +132,7 @@ export function InventoryMovementHistory({
                       <span
                         className={
                           increase
-                            ? "font-mono text-base font-semibold text-emerald-600 dark:text-emerald-400"
+                            ? "font-mono text-base font-semibold text-success"
                             : "font-mono text-base font-semibold text-destructive"
                         }
                         dir="ltr"
@@ -154,44 +154,16 @@ export function InventoryMovementHistory({
         </ol>
       )}
 
-      {pagination.has_prev || pagination.has_next ? (
-        <nav
-          className="mt-4 flex flex-wrap items-center justify-between gap-3"
-          aria-label="صفحه‌بندی گردش موجودی"
-        >
-          <p className="text-xs text-muted-foreground">
-            صفحهٔ {faNum(pagination.page)} از {faNum(pagination.total_pages)}
-          </p>
-          <div className="flex gap-2">
-            {pagination.has_prev ? (
-              <Button variant="outline" size="sm" className="h-11" asChild>
-                <Link
-                  href={inventoryMovementPageHref(
-                    variantID,
-                    pagination.page - 1,
-                  )}
-                  rel="prev"
-                >
-                  رویدادهای جدیدتر
-                </Link>
-              </Button>
-            ) : null}
-            {pagination.has_next ? (
-              <Button variant="outline" size="sm" className="h-11" asChild>
-                <Link
-                  href={inventoryMovementPageHref(
-                    variantID,
-                    pagination.page + 1,
-                  )}
-                  rel="next"
-                >
-                  رویدادهای قدیمی‌تر
-                </Link>
-              </Button>
-            ) : null}
-          </div>
-        </nav>
-      ) : null}
+      <ListPagination
+        page={pagination.page}
+        totalPages={pagination.total_pages}
+        hasPrev={pagination.has_prev}
+        hasNext={pagination.has_next}
+        prevHref={inventoryMovementPageHref(variantID, pagination.page - 1)}
+        nextHref={inventoryMovementPageHref(variantID, pagination.page + 1)}
+        ariaLabel="صفحه‌بندی گردش موجودی"
+        className="mt-4"
+      />
     </section>
   );
 }

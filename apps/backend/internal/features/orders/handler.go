@@ -1,33 +1,33 @@
 package orders
 
 import (
-	"context"
-	"fmt"
-	"time"
-
 	"github.com/gin-gonic/gin"
-	"github.com/tiredbooy/internal/features/users"
 	"github.com/tiredbooy/internal/middlewares"
-	"github.com/tiredbooy/internal/notifications"
 	"github.com/tiredbooy/internal/platform/httpx"
-	"github.com/tiredbooy/pkg/async"
-	"github.com/tiredbooy/pkg/notify"
 	"github.com/tiredbooy/pkg/response"
 	"github.com/tiredbooy/pkg/validator"
 )
 
 // Handler is the HTTP surface for customer and admin orders.
 type Handler struct {
-	Orders        Service
-	Users         *users.Service
-	Notifications *notifications.Dispatcher
-	Notify        notify.Mailer
-	Validator     *validator.Validator
+	Orders    Service
+	Receipt   *ReceiptSender
+	Validator *validator.Validator
 }
 
 // NewHandler constructs the orders HTTP handler.
-func NewHandler(svc Service, users *users.Service, notif *notifications.Dispatcher, mail notify.Mailer, v *validator.Validator) *Handler {
-	return &Handler{Orders: svc, Users: users, Notifications: notif, Notify: mail, Validator: v}
+func NewHandler(svc Service, receipt *ReceiptSender, v *validator.Validator) *Handler {
+	return &Handler{Orders: svc, Receipt: receipt, Validator: v}
+}
+
+// eventsOwnReceipt reports whether the order.paid consumer sends the wallet
+// checkout receipt, in which case this handler must not.
+//
+// Read off the service rather than injected as a flag so there is exactly one
+// source of truth for "is the bus on" and the two can never disagree.
+func (h *Handler) eventsOwnReceipt() bool {
+	impl, ok := h.Orders.(*orderService)
+	return ok && impl.eventsOwnSideEffects()
 }
 
 // CreateOrder places an order for the authenticated user.
@@ -82,40 +82,16 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 		}
 	}
 
-	h.sendOrderConfirmation(c, order)
+	// Wallet checkout is already paid here. Non-wallet stays pending — receipt
+	// waits for payments.Confirm (PR-020o).
+	//
+	// Skipped when the event bus is on: the wallet rail now emits order.paid.v1
+	// inside the settle transaction and the receipt consumer sends from that, so
+	// doing it here too would email the buyer twice.
+	if order.Status == OrderStatusPaid && h.Receipt != nil && !h.eventsOwnReceipt() {
+		_ = h.Receipt.SendPaidOrderReceipt(c.Request.Context(), order.UserID, order.ID, order.TotalAmount)
+	}
 	response.Created(c, ToOrderResponse(order, items))
-}
-
-// sendOrderConfirmation emails the buyer a receipt, off the request path. It
-// resolves the address from the authenticated UUID and never blocks or fails
-// the response. Uses the notification dispatcher when configured (async outbox).
-func (h *Handler) sendOrderConfirmation(c *gin.Context, order *Order) {
-	if h.Notifications == nil && h.Notify == nil {
-		return
-	}
-	uid, ok := middlewares.UserUUID(c)
-	if !ok {
-		return
-	}
-	user, err := h.Users.GetByID(c.Request.Context(), uid)
-	if err != nil {
-		return
-	}
-	email := user.Email
-	body := fmt.Sprintf(
-		`<p>Thanks for your order!</p>`+
-			`<p>Order <strong>#%d</strong> has been received and is now being processed.</p>`+
-			`<p>Total: <strong>%.2f</strong></p>`,
-		order.ID, order.TotalAmount,
-	)
-	subject := "Your order confirmation"
-	async.GoCtx("orders.confirm_email", 15*time.Second, func(ctx context.Context) {
-		if h.Notifications != nil {
-			_ = h.Notifications.DispatchOrderConfirmed(ctx, email, subject, body, order.ID, "")
-			return
-		}
-		_ = h.Notify.Send(ctx, email, subject, body)
-	})
 }
 
 // ListMyOrders — GET /orders
@@ -130,6 +106,10 @@ func (h *Handler) ListMyOrders(c *gin.Context) {
 	}
 	filter.Defaults()
 	filter.UserID = &userID // never let a customer browse other users' orders
+	// user_uuid is admin triage (CF-1). ANDing it with the owner clause above
+	// already makes it useless here, but clearing it keeps that a property of this
+	// handler rather than of predicate ordering.
+	filter.UserUUID = ""
 
 	orders, total, err := h.Orders.GetAllOrders(c.Request.Context(), filter)
 	if err != nil {
@@ -164,6 +144,30 @@ func (h *Handler) GetMyOrder(c *gin.Context) {
 	response.OK(c, ToOrderResponse(order, items))
 }
 
+// PayOrder — POST /orders/:id/pay
+func (h *Handler) PayOrder(c *gin.Context) {
+	userID, ok := httpx.UID(c)
+	if !ok {
+		return
+	}
+	id, ok := httpx.ParamInt64(c, "id")
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+	order, err := h.Orders.PayOrder(ctx, id, userID)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	items, err := h.Orders.GetOrderItems(ctx, order.ID)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.OK(c, ToOrderResponse(order, items))
+}
+
 // CancelOrder — POST /orders/:id/cancel
 func (h *Handler) CancelOrder(c *gin.Context) {
 	userID, ok := httpx.UID(c)
@@ -181,6 +185,19 @@ func (h *Handler) CancelOrder(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// AdminCancelOrder — POST /admin/orders/:id/cancel
+func (h *Handler) AdminCancelOrder(c *gin.Context) {
+	id, ok := httpx.ParamInt64(c, "id")
+	if !ok {
+		return
+	}
+	if err := h.Orders.AdminCancelOrder(c.Request.Context(), id); err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.NoContent(c)
+}
+
 // ── Admin ──────────────────────────────────────────────────────────────────
 
 // ListOrders — GET /admin/orders
@@ -190,6 +207,16 @@ func (h *Handler) ListOrders(c *gin.Context) {
 		return
 	}
 	filter.Defaults()
+	// orders.status is a Postgres enum, so an unknown literal would surface as a
+	// 500. Reject it here as the 400 it actually is.
+	if _, err := filter.ValidStatuses(); err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	// CF-1: admin triage needs to see who bought what without opening each order.
+	// Deliberately not bound from the query string — the customer-facing
+	// ListMyOrders shares this filter and must never project a buyer block.
+	filter = AdminListFilter(filter)
 
 	orders, total, err := h.Orders.GetAllOrders(c.Request.Context(), filter)
 	if err != nil {
@@ -230,7 +257,27 @@ func (h *Handler) UpdateOrderStatus(c *gin.Context) {
 	if !httpx.BindJSON(c, h.Validator, &req) {
 		return
 	}
-	order, err := h.Orders.UpdateOrderStatus(c.Request.Context(), id, req)
+	ctx := c.Request.Context()
+	order, err := h.Orders.UpdateOrderStatus(ctx, id, req)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	items, err := h.Orders.GetOrderItems(ctx, order.ID)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.OK(c, ToOrderListItem(order, len(items)))
+}
+
+// RefundOrder — POST /admin/orders/:id/refund
+func (h *Handler) RefundOrder(c *gin.Context) {
+	id, ok := httpx.ParamInt64(c, "id")
+	if !ok {
+		return
+	}
+	order, err := h.Orders.RefundOrder(c.Request.Context(), id)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return

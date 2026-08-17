@@ -24,7 +24,8 @@ export interface PaymentTransaction {
 
 /** Admin projection returned by all `/admin/payments` endpoints. */
 export interface AdminPaymentTransaction extends PaymentTransaction {
-  user_id?: number;
+  /** Public `users.user_id` (UUID), same as `/admin/customers/:id`. */
+  user_id?: string;
   /** Base64-encoded gateway response bytes. */
   raw_response?: string;
 }

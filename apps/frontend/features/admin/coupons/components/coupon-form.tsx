@@ -28,13 +28,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { JalaliDateTimeInput } from "@/components/ui/jalali-datetime-input";
 import { MultiTagPicker } from "@/features/admin/shared/multi-tag-picker";
 import {
+  ProductPicker,
+  type ProductPickerOption,
+} from "@/features/admin/shared/product-picker";
+import {
   CouponApiError,
   useCreateAdminCoupon,
   useUpdateAdminCoupon,
 } from "@/features/coupons/api";
 import type { Coupon } from "@/features/coupons/types";
+import { apiErrorMessage, localizeApiText } from "@/lib/api/user-facing-error";
 import { cn } from "@/lib/utils";
 
+import {
+  couponMoneyHint,
+  summarizeCouponOffer,
+} from "../coupon-offer";
 import {
   couponFormDefaults,
   couponFormSchema,
@@ -116,6 +125,31 @@ function Field({
   );
 }
 
+function MoneyInput({
+  unit,
+  hideUnit,
+  children,
+}: {
+  id?: string;
+  unit: string;
+  hideUnit?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative">
+      {children}
+      {hideUnit ? null : (
+        <span
+          className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-xs text-muted-foreground"
+          aria-hidden
+        >
+          {unit}
+        </span>
+      )}
+    </div>
+  );
+}
+
 const formFields = new Set<keyof CouponFormValues>([
   "code",
   "description",
@@ -141,7 +175,8 @@ export function CouponForm({
 }: {
   mode: "create" | "edit";
   coupon?: Coupon;
-  productOptions?: { id: number; title: string }[];
+  /** Seeds labels for products already in scope (CF-2). */
+  productOptions?: ProductPickerOption[];
   categoryOptions?: { id: number; title: string }[];
 }) {
   const router = useRouter();
@@ -161,27 +196,42 @@ export function CouponForm({
   });
 
   const discountType = useWatch({ control, name: "discount_type" });
+  const discountValue = useWatch({ control, name: "discount_value" }) ?? "";
+  const maxDiscountAmount =
+    useWatch({ control, name: "max_discount_amount" }) ?? "";
+  const minOrderAmount = useWatch({ control, name: "min_order_amount" }) ?? "";
   const applicability = useWatch({ control, name: "applicability" });
+  const offerSummary = summarizeCouponOffer({
+    discountType,
+    discountValue,
+    maxDiscountAmount,
+    minOrderAmount,
+  });
   const busy = isSubmitting || createCoupon.isPending || updateCoupon.isPending;
 
   function applyError(error: unknown) {
-    if (error instanceof CouponApiError) {
-      let focused = false;
-      for (const [key, messages] of Object.entries(error.fields ?? {})) {
-        if (!formFields.has(key as keyof CouponFormValues)) continue;
-        setError(
-          key as keyof CouponFormValues,
-          { message: messages[0] },
-          { shouldFocus: !focused },
-        );
-        focused = true;
-      }
-      setFormError(error.message);
-      toast.error(error.message);
-      return;
+    const fallback = "ذخیرهٔ کد تخفیف ناموفق بود";
+    const message = apiErrorMessage(error, fallback);
+    const fields =
+      error instanceof CouponApiError
+        ? error.fields
+        : error && typeof error === "object" && "fields" in error
+          ? (error as CouponApiError).fields
+          : undefined;
+    let focused = false;
+    for (const [key, messages] of Object.entries(fields ?? {})) {
+      if (!formFields.has(key as keyof CouponFormValues)) continue;
+      const raw = messages[0];
+      if (!raw) continue;
+      setError(
+        key as keyof CouponFormValues,
+        { message: localizeApiText(raw) || raw },
+        { shouldFocus: !focused },
+      );
+      focused = true;
     }
-    setFormError("ذخیرهٔ کد تخفیف ناموفق بود");
-    toast.error("ذخیرهٔ کد تخفیف ناموفق بود");
+    setFormError(message);
+    toast.error(message);
   }
 
   async function onSubmit(values: CouponFormValues) {
@@ -291,64 +341,96 @@ export function CouponForm({
       <Section title="ارزش و شرط سفارش">
         <Field
           id="discount_value"
-          label={discountType === "percentage" ? "درصد تخفیف" : "مقدار تخفیف"}
+          label={
+            discountType === "percentage"
+              ? "درصد تخفیف"
+              : discountType === "fixed_amount"
+                ? "مقدار تخفیف (تومان)"
+                : "مقدار تخفیف"
+          }
           error={errors.discount_value?.message}
           hint={
             discountType === "free_shipping"
               ? "برای ارسال رایگان مقدار صفر است."
-              : undefined
+              : discountType === "fixed_amount"
+                ? couponMoneyHint(discountValue) ?? undefined
+                : undefined
           }
         >
-          <Input
+          <MoneyInput
             id="discount_value"
-            type="number"
-            min={0}
-            max={
-              discountType === "percentage"
-                ? 100
-                : discountType === "fixed_amount"
-                  ? MAX_COUPON_MONEY
-                  : 0
-            }
-            step="0.01"
-            dir="ltr"
-            readOnly={discountType === "free_shipping"}
-            {...register("discount_value")}
-          />
+            unit={discountType === "percentage" ? "٪" : "تومان"}
+            hideUnit={discountType === "free_shipping"}
+          >
+            <Input
+              id="discount_value"
+              className="pe-14"
+              type="number"
+              min={0}
+              max={
+                discountType === "percentage"
+                  ? 100
+                  : discountType === "fixed_amount"
+                    ? MAX_COUPON_MONEY
+                    : 0
+              }
+              step="0.01"
+              dir="ltr"
+              readOnly={discountType === "free_shipping"}
+              {...register("discount_value")}
+            />
+          </MoneyInput>
         </Field>
         {discountType === "percentage" ? (
           <Field
             id="max_discount_amount"
-            label="سقف مبلغ تخفیف"
+            label="سقف مبلغ تخفیف (تومان)"
             error={errors.max_discount_amount?.message}
-            hint="خالی یعنی بدون سقف"
+            hint={
+              couponMoneyHint(maxDiscountAmount) ?? "خالی یعنی بدون سقف"
+            }
           >
-            <Input
-              id="max_discount_amount"
-              type="number"
-              min={0.01}
-              max={MAX_COUPON_MONEY}
-              step="0.01"
-              dir="ltr"
-              {...register("max_discount_amount")}
-            />
+            <MoneyInput id="max_discount_amount" unit="تومان">
+              <Input
+                id="max_discount_amount"
+                className="pe-14"
+                type="number"
+                min={0.01}
+                max={MAX_COUPON_MONEY}
+                step="0.01"
+                dir="ltr"
+                {...register("max_discount_amount")}
+              />
+            </MoneyInput>
           </Field>
         ) : null}
         <Field
           id="min_order_amount"
-          label="حداقل مبلغ سفارش"
+          label="حداقل مبلغ سفارش (تومان)"
           error={errors.min_order_amount?.message}
+          hint={couponMoneyHint(minOrderAmount) ?? undefined}
         >
-          <Input
-            id="min_order_amount"
-            type="number"
-            min={0}
-            max={MAX_COUPON_MONEY}
-            step="0.01"
-            dir="ltr"
-            {...register("min_order_amount")}
-          />
+          <MoneyInput id="min_order_amount" unit="تومان">
+            <Input
+              id="min_order_amount"
+              className="pe-14"
+              type="number"
+              min={0}
+              max={MAX_COUPON_MONEY}
+              step="0.01"
+              dir="ltr"
+              {...register("min_order_amount")}
+            />
+          </MoneyInput>
         </Field>
+        {offerSummary ? (
+          <p
+            role="status"
+            className="rounded-xl bg-muted/50 px-3 py-2 text-sm sm:col-span-2"
+          >
+            {offerSummary}
+          </p>
+        ) : null}
       </Section>
 
       <Section title="محدودیت مصرف و بازهٔ اعتبار">
@@ -479,17 +561,21 @@ export function CouponForm({
                     .split(",")
                     .map((part) => Number(part.trim()))
                     .filter((id) => Number.isFinite(id) && id > 0);
+                  // CF-2: searches the server as you type, so a coupon can be
+                  // scoped to any product — not just the newest 100. Seeded with
+                  // the already-selected products so an existing scope stays
+                  // visible instead of silently vanishing from the picker while
+                  // remaining live in the backend.
                   return (
-                    <MultiTagPicker
-                      label="محصول‌ها"
-                      emptyLabel="محصولی برای انتخاب بارگذاری نشده است."
-                      options={productOptions}
-                      value={selected}
-                      disabled={busy}
-                      onChange={(next) =>
-                        field.onChange(next.join(", "))
-                      }
-                    />
+                    <div>
+                      <p className="mb-2 text-sm font-medium">محصول‌ها</p>
+                      <ProductPicker
+                        value={selected}
+                        initialOptions={productOptions}
+                        disabled={busy}
+                        onChange={(next) => field.onChange(next.join(", "))}
+                      />
+                    </div>
                   );
                 }}
               />

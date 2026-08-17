@@ -3,9 +3,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ProductDetail } from "@/features/catalog/products/types";
 import type { JournalDetail } from "@/features/journal/types";
 import type { RecipeDetail } from "@/features/recipes/types";
+import { absoluteUrl, siteConfig } from "@/lib/site";
+
 import {
   contentListLd,
   journalArticleLd,
+  organizationLd,
   productDetailLd,
   recipeDetailLd,
 } from "./jsonld";
@@ -171,7 +174,19 @@ describe("editorial structured data", () => {
       dateModified: post.updated_at,
       articleSection: ["راهنما"],
       timeRequired: "PT7M",
+      publisher: {
+        "@type": "Organization",
+        name: siteConfig.name,
+        url: siteConfig.url,
+        logo: {
+          "@type": "ImageObject",
+          url: absoluteUrl(siteConfig.logo),
+        },
+      },
     });
+    expect(journalArticleLd(post).publisher.logo.url).toBe(
+      organizationLd().logo,
+    );
     expect(JSON.stringify(journalArticleLd(post))).not.toContain('"author"');
   });
 

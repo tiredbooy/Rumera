@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -164,6 +165,64 @@ func TestService_Purchase_RejectsBadInput(t *testing.T) {
 	}
 }
 
+func TestService_PurchaseTx_UsesCallerTx(t *testing.T) {
+	caller := &fakeTx{}
+	var gotTx pgx.Tx
+	repo := &repoStub{
+		tx: &fakeTx{},
+		getByUserIDFn: func(context.Context, int64) (*Wallet, error) {
+			return &Wallet{ID: 1, Balance: 1000}, nil
+		},
+		purchaseFn: func(_ context.Context, tx pgx.Tx, walletID int64, amount float64, orderID int64) (*Transaction, error) {
+			gotTx = tx
+			return &Transaction{WalletID: walletID, Amount: amount, Type: TransactionTypePurchase}, nil
+		},
+	}
+	svc := NewService(repo)
+
+	if err := svc.PurchaseTx(context.Background(), caller, 1, 100, 42); err != nil {
+		t.Fatalf("PurchaseTx err = %v; want nil", err)
+	}
+	if gotTx != caller {
+		t.Fatal("PurchaseTx must debit on the caller TX")
+	}
+	if caller.committed {
+		t.Fatal("PurchaseTx must not commit the caller TX")
+	}
+}
+
+func TestService_PurchaseTx_InsufficientFunds(t *testing.T) {
+	repo := &repoStub{
+		getByUserIDFn: func(context.Context, int64) (*Wallet, error) {
+			return &Wallet{ID: 1, Balance: 5}, nil
+		},
+		purchaseFn: func(context.Context, pgx.Tx, int64, float64, int64) (*Transaction, error) {
+			return nil, models.ErrInsufficientFunds
+		},
+	}
+	svc := NewService(repo)
+
+	err := svc.PurchaseTx(context.Background(), &fakeTx{}, 1, 100, 42)
+	if !errors.Is(err, apperr.ErrInsufficientFunds) {
+		t.Fatalf("err = %v; want apperr.ErrInsufficientFunds", err)
+	}
+}
+
+func TestService_AvailableBalance(t *testing.T) {
+	svc := NewService(&repoStub{
+		getByUserIDFn: func(context.Context, int64) (*Wallet, error) {
+			return &Wallet{ID: 1, Balance: 250}, nil
+		},
+	})
+	bal, err := svc.AvailableBalance(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("AvailableBalance: %v", err)
+	}
+	if bal != 250 {
+		t.Fatalf("balance = %v; want 250", bal)
+	}
+}
+
 func TestService_AdminCredit_RecordsActorAndIdempotency(t *testing.T) {
 	actor := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	tx := &fakeTx{}
@@ -228,5 +287,38 @@ func TestService_AdminCredit_RejectsBadKey(t *testing.T) {
 	}
 	if _, err := svc.AdminCredit(context.Background(), actor, 1, 10, "", "has space xx"); !errors.Is(err, apperr.ErrInvalidRequest) {
 		t.Fatalf("space key err = %v", err)
+	}
+}
+
+func TestTopUpResponseJSON_PaymentURL(t *testing.T) {
+	payload, err := json.Marshal(TopUpResponse{
+		PaymentID:     901,
+		TransactionID: "wtop-abc",
+		Amount:        "100000.00",
+		Currency:      "IRT",
+		Status:        "pending",
+		PaymentURL:    "https://pay.example.com/start?transaction_id=wtop-abc",
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got["payment_url"] != "https://pay.example.com/start?transaction_id=wtop-abc" {
+		t.Fatalf("payment_url = %#v", got["payment_url"])
+	}
+
+	empty, err := json.Marshal(TopUpResponse{TransactionID: "wtop-abc"})
+	if err != nil {
+		t.Fatalf("marshal empty: %v", err)
+	}
+	var emptyGot map[string]any
+	if err := json.Unmarshal(empty, &emptyGot); err != nil {
+		t.Fatalf("unmarshal empty: %v", err)
+	}
+	if emptyGot["payment_url"] != "" {
+		t.Fatalf("unset payment_url = %#v; want empty string", emptyGot["payment_url"])
 	}
 }

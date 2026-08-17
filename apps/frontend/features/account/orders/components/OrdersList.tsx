@@ -1,58 +1,41 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, ShoppingBag, ChevronRight, ChevronLeft } from "lucide-react";
+import { Loader2, ShoppingBag } from "lucide-react";
 
-import { faNum } from "@/lib/products";
+import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useOrders } from "@/features/orders/hooks";
-import type { OrderListItem, OrderStatus } from "@/features/orders/types";
+import {
+  ACCOUNT_ORDER_TAB_STATUSES,
+  useOrdersTab,
+  type AccountOrderTab,
+} from "@/features/orders/hooks";
 import { OrderCard } from "./OrderCard";
 import { EmptyState } from "@/features/account/EmptyState";
 
-/** Filter tabs → the set of statuses each one matches (empty = all). */
-const TABS: {
-  value: string;
-  label: string;
-  match: (s: OrderStatus) => boolean;
-}[] = [
-  { value: "all", label: "همه", match: () => true },
-  {
-    value: "processing",
-    label: "در حال پردازش",
-    match: (s) =>
-      ["pending", "paid", "processing", "ready_to_ship"].includes(s),
-  },
-  {
-    value: "shipped",
-    label: "ارسال‌شده",
-    match: (s) => ["shipped", "out_for_delivery"].includes(s),
-  },
-  { value: "delivered", label: "تحویل‌شده", match: (s) => s === "delivered" },
-  {
-    value: "cancelled",
-    label: "لغو/بازگشت",
-    match: (s) =>
-      [
-        "cancelled",
-        "refund_requested",
-        "refund_approved",
-        "refunded",
-        "partially_refunded",
-      ].includes(s),
-  },
+const TABS: { value: AccountOrderTab; label: string }[] = [
+  { value: "all", label: "همه" },
+  { value: "processing", label: "در حال پردازش" },
+  { value: "shipped", label: "ارسال‌شده" },
+  { value: "delivered", label: "تحویل‌شده" },
+  { value: "cancelled", label: "لغو/بازگشت" },
 ];
 
-export function OrdersList() {
-  const [tab, setTab] = React.useState("all");
+export function OrdersList({
+  initialTab = "all",
+}: {
+  initialTab?: AccountOrderTab;
+} = {}) {
+  const [tab, setTab] = React.useState<AccountOrderTab>(initialTab);
   const [page, setPage] = React.useState(1);
-  const { data, isLoading, isError, isFetching, refetch } = useOrders({ page });
+  const { data, isLoading, isError, isFetching, refetch } = useOrdersTab({
+    page,
+    statuses: ACCOUNT_ORDER_TAB_STATUSES[tab],
+  });
 
-  const matcher = TABS.find((t) => t.value === tab) ?? TABS[0];
-  const all = data?.results ?? [];
-  const visible = all.filter((o: OrderListItem) => matcher.match(o.status));
+  const visible = data?.results ?? [];
   const pagination = data?.pagination;
 
   return (
@@ -60,7 +43,7 @@ export function OrdersList() {
       <Tabs
         value={tab}
         onValueChange={(v) => {
-          setTab(v);
+          setTab(v as AccountOrderTab);
           setPage(1);
         }}
         className="mb-6"
@@ -120,36 +103,23 @@ export function OrdersList() {
         </div>
       )}
 
-      {/* Pagination */}
-      {pagination && pagination.total_pages > 1 ? (
-        <div className="mt-6 flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!pagination.has_prev || isFetching}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            <ChevronRight className="size-4" /> قبلی
-          </Button>
-          <span className="px-2 text-sm text-muted-foreground">
-            {isFetching ? (
+      {pagination ? (
+        <ListPagination
+          page={pagination.page}
+          totalPages={pagination.total_pages}
+          hasPrev={pagination.has_prev}
+          hasNext={pagination.has_next}
+          onPrev={() => setPage((p) => Math.max(1, p - 1))}
+          onNext={() => setPage((p) => p + 1)}
+          disabled={isFetching}
+          ariaLabel="صفحه‌بندی سفارش‌ها"
+          className="mt-6"
+          label={
+            isFetching ? (
               <Loader2 className="inline size-4 animate-spin" />
-            ) : (
-              <>
-                صفحهٔ {faNum(pagination.page)} از{" "}
-                {faNum(pagination.total_pages)}
-              </>
-            )}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!pagination.has_next || isFetching}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            بعدی <ChevronLeft className="size-4" />
-          </Button>
-        </div>
+            ) : undefined
+          }
+        />
       ) : null}
     </div>
   );

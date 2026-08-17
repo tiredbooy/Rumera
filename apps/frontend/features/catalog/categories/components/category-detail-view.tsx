@@ -50,9 +50,7 @@ export async function CategoryDetailView({
   }
 
   const context = findCategoryContext(tree, category.id);
-  if (!context) {
-    throw new Error(`Category ${category.id} is missing from the public tree`);
-  }
+  if (!context) notFound();
   const ancestors = context.ancestors;
   const children = context.category.children ?? [];
   const parent = ancestors.at(-1);

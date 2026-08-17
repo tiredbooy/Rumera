@@ -1,9 +1,29 @@
-# Redpanda (Kafka-compatible) for local notification development.
+# Redpanda (Kafka-compatible) for local notification + domain-event development.
 # From this directory:
 #   docker compose -f docker-compose.kafka.yml up -d
 #
-# Brokers for host processes: localhost:9092
+# Brokers for HOST processes:      localhost:19092   (the published port)
+# Brokers for CONTAINER processes: redpanda:9092     (internal listener)
 # Console UI: http://localhost:8085  (optional)
+#
+# ── Reaching this broker from the app containers ─────────────────────────────
+# This is a SEPARATE compose project, so by default it sits on its own network
+# and the backend container cannot resolve `redpanda` at all. Two options:
+#
+#   1. Backend on the host (`go run ./cmd/server`): nothing to do — use
+#      KAFKA_BROKERS=localhost:19092.
+#
+#   2. Backend in compose: bring the app stack up FIRST, then start this stack
+#      with KAFKA_NETWORK set to that stack's network so the two join up:
+#
+#        docker compose -f ../../../../docker-compose.dev.yml up -d
+#        KAFKA_NETWORK=rumera-dev_rumera_network \
+#          docker compose -f docker-compose.kafka.yml up -d
+#
+#      (production project prefix is `rumera`, so `rumera_rumera_network`)
+#      Then set KAFKA_BROKERS=redpanda:9092 on the backend service.
+#
+# None of this is needed for EVENTS_BUS=postgres, which is the default.
 name: rumera-kafka
 
 services:
@@ -42,14 +62,11 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        rpk topic create rumera.notification.otp.v1 -p 3 -r 1 --brokers redpanda:9092 || true
-        rpk topic create rumera.notification.email.v1 -p 3 -r 1 --brokers redpanda:9092 || true
-        rpk topic create rumera.notification.otp.v1.dlq -p 1 -r 1 --brokers redpanda:9092 || true
-        rpk topic create rumera.notification.email.v1.dlq -p 1 -r 1 --brokers redpanda:9092 || true
-        echo "topics ready"
+    volumes:
+      - ./create-topics.sh:/create-topics.sh:ro
+    entrypoint: ["/bin/sh", "/create-topics.sh"]
+    environment:
+      KAFKA_BROKERS: redpanda:9092
 
   console:
     image: docker.redpanda.com/redpandadata/console:v2.7.2
@@ -60,3 +77,10 @@ services:
       - "8085:8080"
     environment:
       KAFKA_BROKERS: redpanda:9092
+
+# Default network. Override KAFKA_NETWORK to an already-running app stack's
+# network (see the header) so backend containers can reach the broker; leave it
+# unset for host-run processes, which use localhost:19092.
+networks:
+  default:
+    name: ${KAFKA_NETWORK:-rumera-kafka_default}

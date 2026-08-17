@@ -76,3 +76,17 @@ export function deactivateAdminUser(userID: string): Promise<void> {
     method: "DELETE",
   });
 }
+
+/** POST /admin/users/:id/ban — customers:ban (not customers:write). */
+export function banAdminUser(userID: string): Promise<AdminUser> {
+  return customerRequest<AdminUser>(`admin/users/${userID}/ban`, {
+    method: "POST",
+  });
+}
+
+/** POST /admin/users/:id/unban — customers:ban (not customers:write). */
+export function unbanAdminUser(userID: string): Promise<AdminUser> {
+  return customerRequest<AdminUser>(`admin/users/${userID}/unban`, {
+    method: "POST",
+  });
+}

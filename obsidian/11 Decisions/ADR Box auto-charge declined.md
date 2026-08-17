@@ -31,6 +31,8 @@ Keep **email-driven** renewal. Re-open only when prerequisites in project doc
 - No surprise Netflix-style billing  
 - Ops still owns box fulfilment  
 - Customers manage via `/account/subscriptions` after the reminder email  
+- PR-057a: `next_renewal_at` rolls only after the reminder actually sends  
+- PR-055a: reminder goes through [[Notifications]] dispatcher when wired (still no charge)
 - Future auto-charge is a **new** product task, not residual debt  
 
 ## Related

@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"html"
+	"log/slog"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -14,10 +16,38 @@ import (
 	"github.com/tiredbooy/pkg/apperr"
 )
 
-// Service issues gift cards (admin), fulfills paid purchases (PH-042a), and
-// redeems codes into a customer's wallet.
+// Mailer is the subset of pkg/notify used to deliver the purchased code.
+// Optional — fulfill succeeds when unset (PR-005b).
+type Mailer interface {
+	Send(ctx context.Context, to, subject, htmlBody string) error
+}
+
+// GiftPurchaseNotifier delivers the purchased-code email (inline or async outbox).
+// Prefer notifications.Dispatcher via WithDispatcher when the outbox is wired.
+type GiftPurchaseNotifier interface {
+	DispatchGiftPurchased(ctx context.Context, to, subject, htmlBody, correlationID, idempotencyKey string) error
+}
+
+// PurchaserEmailLookup resolves the buyer's email after a successful paid issue.
+// Optional — fulfill succeeds when unset or when lookup returns empty.
+type PurchaserEmailLookup interface {
+	EmailByUserID(ctx context.Context, userID int64) (string, error)
+}
+
+// EmailByUserIDFunc adapts a function to PurchaserEmailLookup.
+type EmailByUserIDFunc func(ctx context.Context, userID int64) (string, error)
+
+func (f EmailByUserIDFunc) EmailByUserID(ctx context.Context, userID int64) (string, error) {
+	return f(ctx, userID)
+}
+
+// Service issues gift cards (admin), lists/voids them (PR-056a), fulfills
+// paid purchases (PH-042a), and redeems codes into a customer's wallet.
 type Service struct {
-	repo Repository
+	repo       Repository
+	mailer     Mailer
+	dispatcher GiftPurchaseNotifier
+	emails     PurchaserEmailLookup
 }
 
 const maxGiftCardBatchSize = 500
@@ -26,6 +56,32 @@ func NewService(repo Repository, _ *wallet.Service) *Service {
 	// WalletService is accepted for constructor signature stability with the
 	// DI graph; redeem now credits the wallet inside the repository transaction.
 	return &Service{repo: repo}
+}
+
+// WithMailer sets the optional inline mailer used when no dispatcher is wired.
+// Nil is allowed; fulfill still succeeds and logs that email was skipped.
+func (s *Service) WithMailer(m Mailer) *Service {
+	if s != nil {
+		s.mailer = m
+	}
+	return s
+}
+
+// WithDispatcher prefers the notification outbox (or inline dispatcher) over
+// the mailer. Nil is allowed. Bootstrap (PR-020a) should chain this after New.
+func (s *Service) WithDispatcher(d GiftPurchaseNotifier) *Service {
+	if s != nil {
+		s.dispatcher = d
+	}
+	return s
+}
+
+// WithPurchaserEmailLookup sets how fulfill finds the buyer's address.
+func (s *Service) WithPurchaserEmailLookup(l PurchaserEmailLookup) *Service {
+	if s != nil {
+		s.emails = l
+	}
+	return s
 }
 
 // Issue creates `count` gift cards of `amount` and returns them (with codes).
@@ -68,6 +124,9 @@ func (s *Service) Issue(ctx context.Context, amount decimal.Decimal, count int) 
 
 // FulfillPaidPurchaseTx issues one active card for a settled gateway payment.
 // Idempotent on purchase_txid (PH-042a). Runs inside payments.Confirm TX.
+// A successful new issue emails the code (PR-005b). Replay (already issued)
+// returns nil without notify. Send/enqueue failures are logged and do not
+// roll back the card — the buyer can still read it from GET /gift-cards/mine.
 func (s *Service) FulfillPaidPurchaseTx(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -80,7 +139,7 @@ func (s *Service) FulfillPaidPurchaseTx(
 	}
 	purchaseTxID = strings.TrimSpace(purchaseTxID)
 	if existing, err := s.repo.GetByPurchaseTxID(ctx, purchaseTxID); err == nil && existing != nil {
-		return nil // already issued for this payment
+		return nil // already issued for this payment — do not re-send
 	} else if err != nil && !errors.Is(err, models.ErrNotFound) {
 		return apperr.ErrInternal
 	}
@@ -95,20 +154,110 @@ func (s *Service) FulfillPaidPurchaseTx(
 		if err != nil {
 			return apperr.ErrInternal
 		}
-		_, err = s.repo.InsertPurchasedTx(ctx, tx, codes[0], dec, userID, purchaseTxID)
+		card, err := s.repo.InsertPurchasedTx(ctx, tx, codes[0], dec, userID, purchaseTxID)
 		if err == nil {
+			code := codes[0]
+			if card != nil && card.Code != "" {
+				code = card.Code
+			}
+			s.notifyPurchased(ctx, userID, code, dec, purchaseTxID)
 			return nil
 		}
 		if errors.Is(err, models.ErrConflict) {
 			// Code collision or concurrent fulfill on same purchase_txid.
 			if existing, e2 := s.repo.GetByPurchaseTxID(ctx, purchaseTxID); e2 == nil && existing != nil {
-				return nil
+				return nil // winner already issued — do not re-send
 			}
 			continue
 		}
 		return apperr.ErrInternal
 	}
 	return apperr.ErrInternal
+}
+
+func (s *Service) notifyPurchased(ctx context.Context, userID int64, code string, amount decimal.Decimal, purchaseTxID string) {
+	if s == nil {
+		return
+	}
+	if s.dispatcher == nil && s.mailer == nil {
+		slog.Info("giftcard: skip purchase email",
+			"user_id", userID, "purchase_txid", purchaseTxID, "reason", "mailer_unset")
+		return
+	}
+	if s.emails == nil {
+		slog.Info("giftcard: skip purchase email",
+			"user_id", userID, "purchase_txid", purchaseTxID, "reason", "email_lookup_unset")
+		return
+	}
+	to, err := s.emails.EmailByUserID(ctx, userID)
+	to = strings.TrimSpace(to)
+	if err != nil || to == "" {
+		slog.Info("giftcard: skip purchase email",
+			"user_id", userID, "purchase_txid", purchaseTxID, "reason", "no_email")
+		return
+	}
+
+	subject, body := purchasedGiftEmail(code, amount)
+	idem := fmt.Sprintf("gift_purchase:%s", purchaseTxID)
+	if s.dispatcher != nil {
+		if err := s.dispatcher.DispatchGiftPurchased(ctx, to, subject, body, purchaseTxID, idem); err != nil {
+			slog.Warn("giftcard: purchase email dispatch failed",
+				"user_id", userID, "purchase_txid", purchaseTxID, "err", err)
+		}
+		return
+	}
+	if err := s.mailer.Send(ctx, to, subject, body); err != nil {
+		slog.Warn("giftcard: purchase email send failed",
+			"user_id", userID, "purchase_txid", purchaseTxID, "err", err)
+	}
+}
+
+func purchasedGiftEmail(code string, amount decimal.Decimal) (subject, body string) {
+	subject = "کد کارت هدیه رومرا"
+	body = fmt.Sprintf(
+		`<p>خرید کارت هدیه شما با موفقیت انجام شد.</p>`+
+			`<p>مبلغ کارت: <strong>%s تومان</strong></p>`+
+			`<p>کد کارت هدیه:</p>`+
+			`<p dir="ltr" style="font-size:18px"><strong>%s</strong></p>`+
+			`<p>اگر این ایمیل را ندیدید، کد در حساب کاربری شما (کارت‌های هدیه) هم نمایش داده می‌شود.</p>`,
+		html.EscapeString(amount.String()),
+		html.EscapeString(code),
+	)
+	return
+}
+
+// ListAdmin pages every issued card for staff (PR-056a).
+func (s *Service) ListAdmin(ctx context.Context, filter AdminFilter) ([]AdminGiftCardResponse, int64, error) {
+	filter.Defaults()
+	cards, total, err := s.repo.ListAdmin(ctx, filter)
+	if err != nil {
+		return nil, 0, apperr.ErrInternal
+	}
+	out := make([]AdminGiftCardResponse, 0, len(cards))
+	for _, c := range cards {
+		out = append(out, toAdminGiftCard(c))
+	}
+	return out, total, nil
+}
+
+// Void marks an active card disabled so it cannot be redeemed. Redeemed or
+// already-disabled cards are a state conflict — money already moved or already void.
+func (s *Service) Void(ctx context.Context, id int64) (*AdminGiftCardResponse, error) {
+	if id <= 0 {
+		return nil, apperr.ErrInvalidRequest
+	}
+	card, err := s.repo.VoidActive(ctx, id)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		if errors.Is(err, models.ErrInvalidState) {
+			return nil, models.ErrInvalidState
+		}
+		return nil, apperr.ErrInternal
+	}
+	out := toAdminGiftCard(*card)
+	return &out, nil
 }
 
 // ListPurchased returns gift cards the user paid for (for code delivery after buy).

@@ -4,7 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { AlertTriangle, Loader2, RotateCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Placeholder } from "@/features/dashboard/components/placeholder";
+import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 
 /**
@@ -93,11 +93,13 @@ export function DashboardEmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn(className)}>
-      <Placeholder icon={icon} title={title} description={description} />
-      {action ? (
-        <div className="mt-4 flex justify-center">{action}</div>
-      ) : null}
-    </div>
+    <EmptyState
+      icon={icon}
+      title={title}
+      description={description}
+      className={className}
+    >
+      {action}
+    </EmptyState>
   );
 }

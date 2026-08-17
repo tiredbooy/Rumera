@@ -18,7 +18,9 @@ func RegisterPublic(v1 *gin.RouterGroup, h *Handler, jwt token.Manager, store ca
 	}
 	auth := v1.Group("/auth")
 
-	// Throttle credential-sensitive endpoints: max 10 attempts per IP per minute.
+	// Shared per-IP limiter (10/min): login, register, forgot, OTP,
+	// refresh, logout, and password validate/reset. Same helper as login so
+	// a Redis outage still falls back to the in-memory window.
 	throttle := mw.LoginRateLimit(store, 10, time.Minute)
 	auth.POST("/login", throttle, h.Login)
 	auth.POST("/register", throttle, h.Register)
@@ -28,22 +30,27 @@ func RegisterPublic(v1 *gin.RouterGroup, h *Handler, jwt token.Manager, store ca
 	auth.POST("/otp/request", throttle, h.RequestOTP)
 	auth.POST("/otp/verify", throttle, h.VerifyOTP)
 
-	auth.POST("/refresh", h.Refresh)
-	auth.POST("/logout", h.Logout)
-	auth.GET("/password/validate", h.ValidateResetToken)
-	auth.POST("/password/reset", h.ResetPassword)
+	auth.POST("/refresh", throttle, h.Refresh)
+	auth.POST("/logout", throttle, h.Logout)
+	auth.GET("/password/validate", throttle, h.ValidateResetToken)
+	auth.POST("/password/reset", throttle, h.ResetPassword)
 }
 
 // RegisterCustomer mounts authenticated self-service auth routes.
 // Parent group must already apply Auth middleware (typically the /auth group).
 //
 //	GET /auth/me
+//	POST /auth/me/phone/otp
+//	POST /auth/me/phone/verify
+//
 // Profile PATCH is owned by features/users.RegisterCustomer.
 func RegisterCustomer(me *gin.RouterGroup, h *Handler) {
 	if h == nil {
 		h = &Handler{}
 	}
 	me.GET("/me", h.Me)
+	me.POST("/me/phone/otp", h.RequestPhoneChangeOTP)
+	me.POST("/me/phone/verify", h.VerifyPhoneChangeOTP)
 }
 
 // RegisterAdmin is a no-op for auth (no admin-only auth routes).

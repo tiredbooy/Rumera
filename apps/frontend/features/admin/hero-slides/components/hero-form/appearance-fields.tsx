@@ -3,6 +3,7 @@ import { Controller } from "react-hook-form";
 import type { Control, FieldErrors, UseFormRegister } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";
+import { JalaliDateTimeInput } from "@/components/ui/jalali-datetime-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { HeroSlideFormValues } from "@/features/hero-slides/validations";
@@ -88,13 +89,18 @@ export function HeroAppearanceFields({
         hint="خالی یعنی نمایش بدون زمان شروع."
         error={errors.starts_at?.message}
       >
-        <Input
-          id="starts_at"
-          type="datetime-local"
-          step={1}
-          dir="ltr"
-          aria-invalid={!!errors.starts_at}
-          {...register("starts_at")}
+        <Controller
+          control={control}
+          name="starts_at"
+          render={({ field }) => (
+            <JalaliDateTimeInput
+              id="starts_at"
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              invalid={!!errors.starts_at}
+            />
+          )}
         />
       </FormField>
 
@@ -104,13 +110,18 @@ export function HeroAppearanceFields({
         hint="خالی یعنی نمایش بدون زمان پایان."
         error={errors.ends_at?.message}
       >
-        <Input
-          id="ends_at"
-          type="datetime-local"
-          step={1}
-          dir="ltr"
-          aria-invalid={!!errors.ends_at}
-          {...register("ends_at")}
+        <Controller
+          control={control}
+          name="ends_at"
+          render={({ field }) => (
+            <JalaliDateTimeInput
+              id="ends_at"
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              invalid={!!errors.ends_at}
+            />
+          )}
         />
       </FormField>
 

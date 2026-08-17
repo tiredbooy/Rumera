@@ -17,7 +17,8 @@ Flow:
 ```
 Customer POST /wallet/topup { amount }
   → pending payment_transactions (order_id NULL, transaction_id = wtop-…)
-  → FE pays gateway with that transaction_id
+  → response includes payment_url = {PAYMENT_START_BASE_URL}?transaction_id=wtop-…
+  → FE redirects to payment_url (empty only when base unset in dev)
 Webhook POST /webhooks/payment status=succeeded
   → payments.Confirm
   → payment succeeded + wallet deposit (same TX)
@@ -59,9 +60,16 @@ Fail path with null order: no stock release.
 
 ---
 
+## Payment start URL (PR-005a)
+
+`payment_url` is built in `payments.Service` from `PAYMENT_START_BASE_URL` +
+query `transaction_id`. No PSP client lives in this repo. Production
+`Config.Validate` requires the env. Dev may omit it; then `payment_url` is
+`""` and operators must not treat the intent as paid.
+
 ## Explicit non-goals
 
 - Free public deposit
 - Re-opening withdraw
 - Multi-currency top-up
-- Gateway SDK embed (intent returns `transaction_id` for external pay)
+- Full PSP / gateway SDK (start URL only; webhook is still the settle rail)

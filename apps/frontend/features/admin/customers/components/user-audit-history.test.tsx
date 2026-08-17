@@ -72,10 +72,10 @@ describe("UserAuditHistory", () => {
     );
     expect(within(entries[1]).getByText("ساخت کاربر")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "رویدادهای جدیدتر" }),
+      screen.getByRole("link", { name: "صفحهٔ قبلی" }),
     ).toHaveAttribute("href", "/admin/customers/user-2");
     expect(
-      screen.getByRole("link", { name: "رویدادهای قدیمی‌تر" }),
+      screen.getByRole("link", { name: "صفحهٔ بعدی" }),
     ).toHaveAttribute("href", "/admin/customers/user-2?audit_page=3");
   });
 });

@@ -12,6 +12,7 @@ import {
   useRemoveWishlistItem,
 } from "@/features/wishlist/hooks";
 import { useAddCartItem, useBulkAddCartItems } from "@/features/cart/api";
+import { cartMutationErrorMessage } from "@/features/cart/errors";
 import { useRecordInteraction } from "@/features/recommendations/hooks";
 import type {
   BulkAddCartResult,
@@ -158,10 +159,11 @@ export function WishlistView() {
           })
           .catch(() => undefined);
       }
-    } catch {
-      setRowStatus(item.id, { kind: "error", message: "افزودن ناموفق بود" });
+    } catch (error) {
+      const message = cartMutationErrorMessage(error);
+      setRowStatus(item.id, { kind: "error", message });
       setActionStatus(`افزودن ${item.product_title} به سبد خرید ناموفق بود`);
-      toast.error("افزودن به سبد ناموفق بود", {
+      toast.error(message, {
         description: item.product_title,
       });
     } finally {
@@ -409,9 +411,9 @@ export function WishlistView() {
                       className={cn(
                         "text-[10px] font-medium",
                         rowStatus.kind === "success" &&
-                          "text-emerald-700 dark:text-emerald-300",
+                          "text-success",
                         rowStatus.kind === "warning" &&
-                          "text-amber-700 dark:text-amber-300",
+                          "text-warning",
                         rowStatus.kind === "error" && "text-destructive",
                         rowStatus.kind === "pending" &&
                           "text-muted-foreground",

@@ -8,13 +8,25 @@ import { SiteFooter } from "@/components/site-footer";
 import { AgeGate } from "@/features/compliance/components/age-gate";
 import { ReferralTracker } from "@/features/referral/components/referral-tracker";
 import { getCategoryTree } from "@/features/catalog/categories/api";
+import { getPublicSiteSettingsOrNull } from "@/features/settings/api/server";
+import { MaintenanceScreen } from "@/features/storefront/maintenance/components/maintenance-screen";
+import { presentMaintenanceCopy } from "@/features/storefront/maintenance/present-maintenance";
 
 export default async function StorefrontLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const categories = await getCategoryTree();
+  // Settings 5xx fails open so an outage cannot 500 or close the shop.
+  const maintenanceCopy = presentMaintenanceCopy(
+    (await getPublicSiteSettingsOrNull())?.maintenance,
+  );
+  if (maintenanceCopy) {
+    return <MaintenanceScreen message={maintenanceCopy} />;
+  }
+
+  // Layout errors 500 every public page; header already renders an empty tree.
+  const categories = await getCategoryTree().catch(() => []);
 
   return (
     <>

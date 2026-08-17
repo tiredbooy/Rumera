@@ -31,7 +31,7 @@ func (s *service) Create(ctx context.Context, req CreateBrandReq) (*Brand, error
 	if req.Title == "" {
 		return nil, apperr.ErrInvalidRequest
 	}
-	exists, err := s.repo.ExistsByTitle(ctx, req.Title)
+	exists, err := s.repo.ExistsByTitle(ctx, req.Title, 0)
 	if err != nil {
 		return nil, fmt.Errorf("service.Create: check title: %w", err)
 	}
@@ -101,7 +101,7 @@ func (s *service) Update(ctx context.Context, id int64, req UpdateBrandReq) (*Br
 			return nil, apperr.ErrInvalidRequest
 		}
 		req.Title = &title
-		exists, err := s.repo.ExistsByTitle(ctx, title)
+		exists, err := s.repo.ExistsByTitle(ctx, title, id)
 		if err != nil {
 			return nil, fmt.Errorf("service.Update: check title: %w", err)
 		}

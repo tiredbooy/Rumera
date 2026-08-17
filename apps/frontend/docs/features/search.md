@@ -40,9 +40,11 @@ Both use `role="search"` and accessible labels (Persian).
 ## What the backend does (short)
 
 Today search is **Postgres `ILIKE` with Persian-aware normalize** (PH-030a), not
-Meilisearch. Free-text matches product **title, description, brand, and category**
+Meilisearch. Free-text matches product **title, description, code**, brand
+title, category title, variant **SKU**, and attached **tag** title (PR-070e)
 after normalizing Arabic/Persian confusables (`ك/ي` → `ک/ی`), stripping ZWNJ, and
-collapsing whitespace. Ranking and typo-tolerance remain limited.
+collapsing whitespace. Ranking and typo-tolerance remain limited. Slug is not
+matched.
 
 **PH-030b** prepared a Meili index client + full reindex cron behind
 `MEILI_ENABLED` (default off). Storefront is **not** cut over; dual-path design
@@ -58,17 +60,33 @@ filter over a full catalogue download.
 
 - Reuse `ProductCard` + `PRODUCT_CARD_GRID_CLASS` so search results match home
   and catalogue truthfulness (price, stock, links).
-- Empty query: do not fetch products; show prompt + optional category directory.
+- Empty query: do not fetch the search list; show prompt + optional category
+  directory. Soft suggestions (`listProducts` first page) may fail silently.
 - Non-empty with zero hits: dedicated empty state (not a hard error).
+  Placeholder and zero-hit copy list **title, description, brand,
+  category, code, SKU, and tag** (PR-080p) — the same fields
+  `GET /products?search=` matches after PR-070e. Do not claim
+  title-only or slug search.
+- **API failure is not zero hits (PR-080f).** A rejected `listProducts({ search })`
+  must not settle to `[]`. Show `CatalogueLoadError` (`role="alert"` +
+  `router.refresh()` «تلاش مجدد»). Do not render «نتیجه‌ای پیدا نشد» or the
+  zero-hit suggestion framing. Categories may still appear as an escape path.
+
+Same split on `/products` (`ProductListView`): catalogue 5xx/network is an
+inline retry card, not «محصولی برای نمایش نیست». Successful empty remains the
+empty Placeholder with no outage language.
 
 ---
 
-## Analytics (optional product work)
+## Analytics
 
-If you need admin “top terms,” ensure the app still emits search events the
-analytics middleware can see (backend event type `search_performed`). Frontend
-admin charts read aggregated data via `features/analytics/api.ts` — they do not
-query Meili.
+Storefront search does **not** call `GET /search`. The public list
+`GET /products?search=` is classified as `search_performed` (`query` +
+`results_count`) after a successful list read. A failed list is an error, not
+zero hits — do not treat a 5xx as an empty results page.
+
+Frontend admin charts read aggregated data via `features/analytics/api.ts` —
+they do not query Meili.
 
 ---
 

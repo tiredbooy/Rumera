@@ -72,7 +72,7 @@ describe("describeApiError (PH-012d)", () => {
         email: ["must be valid"],
       }),
     );
-    expect(d.fieldErrors?.email).toEqual(["must be valid"]);
+    expect(d.fieldErrors?.email?.[0]).toMatch(/معتبر/);
     expect(d.title).toMatch(/نامعتبر|اطلاعات/);
   });
 
@@ -82,6 +82,18 @@ describe("describeApiError (PH-012d)", () => {
       "generic",
     );
     expect(msg).toBe("موجودی کافی نیست");
+  });
+
+  it("translates a coupon conflict instead of leaking English", () => {
+    const d = describeApiError(
+      new ApiError(
+        409,
+        "CONFLICT",
+        "coupon code is already used by another coupon",
+      ),
+    );
+    expect(d.title).toMatch(/کد تخفیف/);
+    expect(d.title.toLowerCase()).not.toContain("already used");
   });
 });
 

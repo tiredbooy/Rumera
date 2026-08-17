@@ -4,6 +4,14 @@
 **Implementation (feature slice):** `internal/features/payments/`
 Read-only admin access to payment transactions. Transactions are **created and transitioned by the order & gateway flow**, not over HTTP — so this surface only lets admins list and look up records. There are no create/update/delete endpoints.
 
+Customer pay-start is not a payments HTTP route. Wallet top-up, gift-card
+purchase, and checkout `payments.Create` attach `payment_url` =
+`{PAYMENT_START_BASE_URL}?transaction_id={id}` (PR-005a). Operators **must**
+set `PAYMENT_START_BASE_URL` in production (config validation fails closed).
+Development may omit it; then `payment_url` is empty and the customer cannot
+be redirected — that is **not** a successful pay. Order responses do not yet
+include this field (PR-020f).
+
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.
 
 | Method | Path | Tier | Description |
@@ -12,7 +20,7 @@ See [Authentication](../authentication.md) for the token model and trust tiers, 
 | GET | `/admin/payments/:id` | 🛡️ admin | Get a transaction by internal id |
 | GET | `/admin/payments/by-transaction/:txid` | 🛡️ admin | Get a transaction by gateway transaction id |
 
-Every endpoint returns `PaymentTransactionAdminResponse`, which extends the customer-facing shape with `user_id` and the raw gateway `raw_response`.
+Every endpoint returns `PaymentTransactionAdminResponse`, which extends the customer-facing shape with `user_id` and the raw gateway `raw_response`. Response `user_id` is `users.user_id` (public UUID), the same identity as `GET /admin/customers/:id` (PR-064d). It is omitted when the payment has no user or the public id cannot be resolved. The integer `users.id` is never emitted. The list **filter** `user_id` is still the internal integer id.
 
 **Status** values: `pending`, `succeeded`, `failed`, `refunded`, `partially_refunded`.
 **Payment method** values: `card`, `crypto`, `bank_transfer`, `wallet`, `gateway`.
@@ -30,7 +38,7 @@ Authorization: Bearer <admin access_token>
 
 | Param | Type | Description |
 |-------|------|-------------|
-| `user_id` | int | Transactions for a specific user |
+| `user_id` | int | Transactions for a specific user (`users.id`, not the public UUID) |
 | `order_id` | int | Transactions for a specific order |
 | `status` | string | One of `pending` `succeeded` `failed` `refunded` `partially_refunded` |
 
@@ -42,7 +50,7 @@ Authorization: Bearer <admin access_token>
     {
       "id": 501,
       "order_id": 1200,
-      "user_id": 42,
+      "user_id": "11111111-1111-1111-1111-111111111111",
       "amount": 89.90,
       "currency": "USD",
       "status": "succeeded",
@@ -77,7 +85,7 @@ Authorization: Bearer <admin access_token>
   "data": {
     "id": 501,
     "order_id": 1200,
-    "user_id": 42,
+    "user_id": "11111111-1111-1111-1111-111111111111",
     "amount": 89.90,
     "currency": "USD",
     "status": "failed",

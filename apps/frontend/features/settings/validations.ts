@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { toAsciiDigits } from "@/lib/normalize-digits";
+
 const emailish = z
   .string()
   .trim()
@@ -26,9 +28,10 @@ export const giftOptionFormSchema = z.object({
   description: z.string().max(500, "حداکثر ۵۰۰ نویسه"),
   /** Minor display unit as digit string (تومان). */
   price: z.string().refine(
-    (value) =>
-      value.trim() === "" ||
-      (/^\d+$/.test(value.trim()) && Number(value.trim()) >= 0),
+    (value) => {
+      const n = toAsciiDigits(value).trim();
+      return n === "" || (/^\d+$/.test(n) && Number(n) >= 0);
+    },
     { message: "قیمت نامنفی و صحیح وارد کنید" },
   ),
   enabled: z.boolean(),
@@ -56,11 +59,13 @@ export const siteSettingsFormSchema = z.object({
   youtube: z.string().trim().max(255),
   linkedin: z.string().trim().max(255),
   freeThreshold: z.string().refine(
-    (value) =>
-      value.trim() === "" ||
-      (/^\d+$/.test(value.trim()) &&
-        Number.isInteger(Number(value)) &&
-        Number(value) >= 0),
+    (value) => {
+      const n = toAsciiDigits(value).trim();
+      return (
+        n === "" ||
+        (/^\d+$/.test(n) && Number.isInteger(Number(n)) && Number(n) >= 0)
+      );
+    },
     { message: "عدد صحیح و نامنفی وارد کنید" },
   ),
   note: z.string().max(1000, "حداکثر ۱۰۰۰ نویسه"),

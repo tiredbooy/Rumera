@@ -127,6 +127,7 @@ export function listProductOptionValues(
   );
 }
 
+/** N+1: types then per-type values. Throws — do not catch-all to `[]`. */
 export async function getProductOptionCatalog(): Promise<ProductOptionGroup[]> {
   const optionTypes = await listProductOptionTypes();
   const values = await Promise.all(
@@ -136,6 +137,21 @@ export async function getProductOptionCatalog(): Promise<ProductOptionGroup[]> {
     ...optionType,
     values: values[index] ?? [],
   }));
+}
+
+export const PRODUCT_OPTION_CATALOG_ERROR =
+  "بارگذاری ویژگی‌های تنوع ناموفق بود. دوباره تلاش کنید.";
+
+/** Isolate catalog load so a throw cannot take down the product editor. */
+export async function loadProductOptionCatalog(): Promise<{
+  optionTypes: ProductOptionGroup[];
+  error: string | null;
+}> {
+  try {
+    return { optionTypes: await getProductOptionCatalog(), error: null };
+  } catch {
+    return { optionTypes: [], error: PRODUCT_OPTION_CATALOG_ERROR };
+  }
 }
 
 // ─────────────────────────────────────────────

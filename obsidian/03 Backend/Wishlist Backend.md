@@ -8,7 +8,7 @@ tags: [backend, wishlist, account]
 
 # Wishlist Backend
 
-One wishlist per customer (get-or-create). Items are product variants with catalogue join for title, price, stock, image.
+One wishlist per customer (get-or-create). Items are product variants with catalogue join for title, price, stock, image. `GetItems` is capped at `LIMIT 100` (newest first) and hydrates line `options` from [[Catalogue]] variant option values in one query (`product_variants_options` → `option_values` → `option_types`, `ANY($1)`). Empty/omitted when the variant has none.
 
 ## Package (feature slice)
 

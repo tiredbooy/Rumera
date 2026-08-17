@@ -11,6 +11,8 @@ const (
 )
 
 // ProductAlert is a customer's subscription to be notified about a variant.
+// ProductTitle / ProductSlug / CurrentPrice are hydrated on list (JOIN);
+// create RETURNING leaves them nil.
 type ProductAlert struct {
 	ID               int64      `db:"id"`
 	UserID           int64      `db:"user_id"`
@@ -20,6 +22,9 @@ type ProductAlert struct {
 	ReferencePrice   float64    `db:"reference_price"`
 	NotifiedAt       *time.Time `db:"notified_at"`
 	CreatedAt        time.Time  `db:"created_at"`
+	ProductTitle     *string    `db:"product_title"`
+	ProductSlug      *string    `db:"product_slug"`
+	CurrentPrice     *float64   `db:"current_price"`
 }
 
 // CreateProductAlertReq is the payload for subscribing to a product alert.
@@ -30,6 +35,8 @@ type CreateProductAlertReq struct {
 }
 
 // ProductAlertResponse is the customer-facing view of a product alert.
+// GET /alerts hydrates product_title, product_slug, and current_price
+// (the subscribed variant's live price) so the account list needs no second hop.
 type ProductAlertResponse struct {
 	ID               int64      `json:"id"`
 	ProductVariantID int64      `json:"product_variant_id"`
@@ -37,6 +44,9 @@ type ProductAlertResponse struct {
 	TargetPrice      *float64   `json:"target_price"`
 	NotifiedAt       *time.Time `json:"notified_at"`
 	CreatedAt        time.Time  `json:"created_at"`
+	ProductTitle     *string    `json:"product_title"`
+	ProductSlug      *string    `json:"product_slug"`
+	CurrentPrice     *float64   `json:"current_price"`
 }
 
 // PendingAlert is a satisfied alert row joined with everything the notifier

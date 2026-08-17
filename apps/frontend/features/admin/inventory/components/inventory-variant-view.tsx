@@ -119,7 +119,7 @@ export function InventoryVariantView({
             {inventory.missing_weight ? (
               <div
                 role="status"
-                className="mb-4 flex flex-wrap items-start gap-3 rounded-xl bg-amber-500/10 px-3.5 py-3 text-sm text-amber-950 ring-1 ring-inset ring-amber-500/25 dark:text-amber-100"
+                className="mb-4 flex flex-wrap items-start gap-3 rounded-xl bg-warning/12 px-3.5 py-3 text-sm text-warning ring-1 ring-inset ring-warning/25"
               >
                 <Scale className="mt-0.5 size-4 shrink-0" aria-hidden />
                 <div className="min-w-0 flex-1 space-y-1">
@@ -132,7 +132,7 @@ export function InventoryVariantView({
                     asChild
                     variant="outline"
                     size="sm"
-                    className="mt-2 h-9 border-amber-600/30 bg-background/60"
+                    className="mt-2 h-9 border-warning/30 bg-background/60"
                   >
                     <Link href={`/admin/products/${inventory.product_id}`}>
                       ویرایش وزن محصول

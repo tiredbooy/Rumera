@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   listAdminOrdersClient,
+  refundAdminOrderClient,
   updateAdminOrderStatusClient,
 } from "@/features/orders/api/admin-client";
 import { adminOrderKeys } from "@/features/orders/query-keys";
@@ -25,6 +26,16 @@ export function useUpdateAdminOrderStatus(orderId: number) {
   return useMutation({
     mutationFn: (data: UpdateOrderStatusInput) =>
       updateAdminOrderStatusClient(orderId, data),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: adminOrderKeys.all }),
+  });
+}
+
+export function useRefundAdminOrder(orderId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => refundAdminOrderClient(orderId),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: adminOrderKeys.all }),
   });

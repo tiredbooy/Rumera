@@ -21,6 +21,10 @@ Runbooks for debugging and common changes.
 - [[Playbook Debug Session loop]]
 - [[Playbook Debug Stale storefront cache]]
 - [[Playbook Wishlist stock honesty]]
+- [[Playbook Confirmation status copy]]
+- [[Playbook Debug Product alert notify]]
+- [[Playbook Debug Subscription renewal email]]
+- [[Playbook Debug Coupon validate]]
 - [[Playbook Incident first response]]
 
 ## Change
@@ -29,6 +33,7 @@ Runbooks for debugging and common changes.
 - [[Playbook Add backend endpoint]]
 - [[Playbook Add admin module]]
 - [[Playbook Run seed and verify home]]
+- [[Playbook Change cellar box address]]
 
 Related: [[Testing]] · [[Agent onboarding]] · [[Journeys MOC]]
 

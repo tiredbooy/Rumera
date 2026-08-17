@@ -19,7 +19,6 @@ type ApplicableTo struct {
 	ProductIDs  []int64 `json:"product_ids,omitempty"`
 }
 
-
 type Coupon struct {
 	ID                int64         `db:"id"`
 	Code              string        `db:"code"`
@@ -73,7 +72,7 @@ type UpdateCouponReq struct {
 	IsActive          models.NullablePatch[bool]         `json:"is_active"`
 	StartsAt          models.NullablePatch[time.Time]    `json:"starts_at"`
 	ExpiresAt         models.NullablePatch[time.Time]    `json:"expires_at"`
-	ExpectedUpdatedAt time.Time                   `json:"-"`
+	ExpectedUpdatedAt time.Time                          `json:"-"`
 }
 
 type ValidateCouponReq struct {
@@ -126,4 +125,3 @@ type CouponValidationResult struct {
 	IsValid        bool            `json:"is_valid"`
 	InvalidReason  string          `json:"invalid_reason,omitempty"`
 }
-

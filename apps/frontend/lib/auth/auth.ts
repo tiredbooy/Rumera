@@ -8,7 +8,11 @@
  * to read `role` and `exp` — we trust it because we just received it over the
  * wire from our own API in direct response to a credential exchange.
  */
-import NextAuth, { type NextAuthConfig, type User } from "next-auth";
+import NextAuth, {
+  CredentialsSignin,
+  type NextAuthConfig,
+  type User,
+} from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import type { JWT } from "next-auth/jwt";
 
@@ -23,6 +27,50 @@ import {
 import type { AccessTokenClaims } from "@/features/auth/types";
 import type { Role } from "@/lib/rbac/roles";
 import "./types";
+
+/** Codes Auth.js puts on `signIn` result / `?code=` (never backend secrets). */
+export type AuthorizeFailureCode =
+  | "RateLimited"
+  | "Inactive"
+  | "CredentialsSignin"
+  | "AuthServiceError";
+
+export function authorizeFailureCode(error: unknown): AuthorizeFailureCode {
+  if (error instanceof AuthServerError) {
+    if (error.status === 429 || error.code === "TOO_MANY_REQUESTS") {
+      return "RateLimited";
+    }
+    if (
+      error.status === 403 ||
+      error.code === "ACCOUNT_DISABLED" ||
+      error.code === "FORBIDDEN"
+    ) {
+      return "Inactive";
+    }
+    if (
+      error.status === 401 ||
+      error.status === 422 ||
+      error.code === "INVALID_CREDENTIALS" ||
+      error.code === "VALIDATION_ERROR"
+    ) {
+      return "CredentialsSignin";
+    }
+    return "AuthServiceError";
+  }
+  return "AuthServiceError";
+}
+
+function throwAuthorizeFailure(error: unknown): never {
+  const failure = new CredentialsSignin();
+  failure.code = authorizeFailureCode(error);
+  throw failure;
+}
+
+function throwAuthorizeCode(code: AuthorizeFailureCode): never {
+  const failure = new CredentialsSignin();
+  failure.code = code;
+  throw failure;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -79,7 +127,7 @@ export function nodeAuthConfig(canPersistRotation: boolean): NextAuthConfig {
               email: String(creds.email),
               password: String(creds.password),
             });
-            if (!data?.access_token) return null;
+            if (!data?.access_token) throwAuthorizeCode("AuthServiceError");
 
             const decoded = decodeJwt(data.access_token);
 
@@ -97,12 +145,13 @@ export function nodeAuthConfig(canPersistRotation: boolean): NextAuthConfig {
               accessTokenExpires: (decoded.exp ?? 0) * 1000,
             };
           } catch (error) {
+            if (error instanceof CredentialsSignin) throw error;
             if (error instanceof AuthServerError) {
               console.error("Login failed with status:", error.status);
             } else {
-              console.error("❌ Authorize fetch error:", error);
+              console.error("Authorize fetch error:", error);
             }
-            return null;
+            throwAuthorizeFailure(error);
           }
         },
       }),
@@ -120,7 +169,7 @@ export function nodeAuthConfig(canPersistRotation: boolean): NextAuthConfig {
               phone: String(creds.phone),
               code: String(creds.code),
             });
-            if (!data?.access_token) return null;
+            if (!data?.access_token) throwAuthorizeCode("AuthServiceError");
 
             const decoded = decodeJwt(data.access_token);
             const fullName = [data.user?.first_name, data.user?.last_name]
@@ -137,8 +186,13 @@ export function nodeAuthConfig(canPersistRotation: boolean): NextAuthConfig {
               accessTokenExpires: (decoded.exp ?? 0) * 1000,
             };
           } catch (error) {
-            console.error("❌ OTP authorize fetch error:", error);
-            return null;
+            if (error instanceof CredentialsSignin) throw error;
+            if (error instanceof AuthServerError) {
+              console.error("OTP login failed with status:", error.status);
+            } else {
+              console.error("OTP authorize fetch error:", error);
+            }
+            throwAuthorizeFailure(error);
           }
         },
       }),

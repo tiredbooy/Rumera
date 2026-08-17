@@ -9,6 +9,7 @@ import {
   productDetailCacheTag,
   RECIPE_CACHE_TAG,
   RECOMMENDATION_CACHE_TAG,
+  SETTINGS_CACHE_TAG,
 } from "@/lib/cache-tags";
 
 export type RevalidationPath = {
@@ -114,6 +115,17 @@ function brandWritePlan(): AdminRevalidationPlan {
   };
 }
 
+/**
+ * Settings reach every storefront page through the layout, so the whole shell is
+ * the blast radius. `type: "layout"` on `/` covers the nested route groups.
+ */
+function settingsWritePlan(): AdminRevalidationPlan {
+  return {
+    tags: uniqueTags([SETTINGS_CACHE_TAG]),
+    paths: [{ path: "/", type: "layout" }],
+  };
+}
+
 /** Returns the storefront cache entries directly affected by an admin write. */
 export function getAdminRevalidationPlan(
   segments: string[],
@@ -137,6 +149,9 @@ export function getAdminRevalidationPlan(
   }
   if (resource === "categories") {
     return categoryWritePlan();
+  }
+  if (resource === "settings") {
+    return settingsWritePlan();
   }
   if (resource === "hero-slides") {
     return heroWritePlan();

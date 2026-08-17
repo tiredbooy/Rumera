@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -71,8 +73,16 @@ func (f *fakeCache) Set(ctx context.Context, key, value string, ttl time.Duratio
 	return nil
 }
 
-func (f *fakeCache) Incr(ctx context.Context, key string, ttl time.Duration) (int64, error) {
-	return 0, nil
+func (f *fakeCache) Incr(_ context.Context, key string, _ time.Duration) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var n int64
+	if v, ok := f.data[key]; ok {
+		fmt.Sscan(v, &n)
+	}
+	n++
+	f.data[key] = strconv.FormatInt(n, 10)
+	return n, nil
 }
 func (f *fakeCache) KeysByPrefix(_ context.Context, prefix string) ([]string, error) {
 	f.mu.Lock()

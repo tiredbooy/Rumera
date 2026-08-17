@@ -9,19 +9,11 @@ import { formatPrice } from "@/lib/products";
 import { cn } from "@/lib/utils";
 
 import { useMyGiftCards } from "./hooks";
+import { GIFT_CARD_STATUS_FA } from "./labels";
 import type { GiftCardStatus, PurchasedGiftCard } from "./types";
 
 function statusLabel(status: GiftCardStatus): string {
-  switch (status) {
-    case "active":
-      return "فعال";
-    case "redeemed":
-      return "استفاده‌شده";
-    case "disabled":
-      return "غیرفعال";
-    default:
-      return status;
-  }
+  return GIFT_CARD_STATUS_FA[status] ?? status;
 }
 
 function statusTone(status: GiftCardStatus): string {

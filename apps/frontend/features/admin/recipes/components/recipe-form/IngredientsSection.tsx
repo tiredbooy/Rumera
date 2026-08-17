@@ -14,6 +14,7 @@ import {
   type Control,
   type FieldErrors,
   type UseFormRegister,
+  type UseFormSetValue,
 } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fieldErrorId } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
+import {
+  VariantPicker,
+  type VariantOption,
+} from "@/features/admin/products/components/variant-picker";
 import { faNum } from "@/lib/products";
 import type { RecipeFormValues } from "@/features/recipes/validations";
 
@@ -28,10 +33,12 @@ export function IngredientsSection({
   control,
   register,
   errors,
+  setValue,
 }: {
   control: Control<RecipeFormValues>;
   register: UseFormRegister<RecipeFormValues>;
   errors: FieldErrors<RecipeFormValues>;
+  setValue: UseFormSetValue<RecipeFormValues>;
 }) {
   const { fields, append, remove, move } = useFieldArray({
     control,
@@ -46,8 +53,8 @@ export function IngredientsSection({
           مواد لازم
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          هر ماده را با مقدار و واحد آن فهرست کنید. ترتیب نمایش با جابه‌جایی
-          ردیف‌ها تغییر می‌کند.
+          هر ماده را با مقدار و واحد آن فهرست کنید. پیوند به یک تنوع کاتالوگ،
+          همان ماده را در فروشگاه قابل خرید می‌کند.
         </p>
       </header>
       <div className="flex flex-col gap-3">
@@ -134,6 +141,50 @@ export function IngredientsSection({
                       id={`ingredients.${i}.notes`}
                       placeholder="مثلاً تازه فشرده"
                       {...register(`ingredients.${i}.notes`)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5 sm:col-span-2">
+                    <Label
+                      id={`ingredients.${i}.product-label`}
+                      className="text-xs"
+                    >
+                      پیوند به کاتالوگ (اختیاری)
+                    </Label>
+                    <Controller
+                      control={control}
+                      name={`ingredients.${i}.product_variant_id`}
+                      render={({ field }) => (
+                        <VariantPicker
+                          value={field.value}
+                          ariaLabelledBy={`ingredients.${i}.product-label`}
+                          initialLabel={
+                            f._label
+                              ? {
+                                  variantId: f.product_variant_id ?? 0,
+                                  productTitle: f._label,
+                                  brand: f._brand ?? null,
+                                  sku: f._sku ?? null,
+                                  price: 0,
+                                }
+                              : null
+                          }
+                          onChange={(opt: VariantOption | null) => {
+                            field.onChange(opt?.variantId ?? null);
+                            setValue(
+                              `ingredients.${i}._label`,
+                              opt?.productTitle ?? "",
+                            );
+                            setValue(
+                              `ingredients.${i}._brand`,
+                              opt?.brand ?? null,
+                            );
+                            setValue(
+                              `ingredients.${i}._sku`,
+                              opt?.sku ?? null,
+                            );
+                          }}
+                        />
+                      )}
                     />
                   </div>
                   <div className="flex items-center gap-2 sm:col-span-2">

@@ -1,117 +1,65 @@
 "use client";
 
 import { useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, RotateCcw, Search, SlidersHorizontal, X } from "lucide-react";
+import { Loader2, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { AdminFilterBar } from "@/features/dashboard/components/admin-page";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  FilterSearchInput,
+  FilterSelect,
+} from "@/features/dashboard/components/admin-filter-controls";
 import type { UserListFilters } from "@/features/customers/types";
 import { ROLE_LABELS } from "@/lib/rbac/roles";
 
 const ROLE_OPTIONS = ["customer", "vendor", "admin", "staff"] as const;
 
+const ROLE_FILTER_OPTIONS = [
+  { value: "", label: "همهٔ نقش‌ها" },
+  ...ROLE_OPTIONS.map((role) => ({ value: role, label: ROLE_LABELS[role] })),
+];
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "", label: "فعال، غیرفعال و مسدود" },
+  { value: "active", label: "فقط فعال" },
+  { value: "inactive", label: "غیرفعال یا مسدود" },
+];
+
 export function UsersFilters({ filters }: { filters: UserListFilters }) {
-  const hasFilters =
-    Boolean(filters.query) || Boolean(filters.role) || filters.status !== "all";
-
   return (
-    <section
-      className="border-hairline mb-5 rounded-2xl bg-card p-4 ring-1 ring-foreground/[0.04]"
-      aria-labelledby="users-filter-title"
+    <AdminFilterBar
+      id="users-filter-title"
+      title="جستجو و فیلتر کاربران"
+      hasFilters={
+        Boolean(filters.query) ||
+        Boolean(filters.role) ||
+        filters.status !== "all"
+      }
+      resetHref="/admin/customers"
+      gridClassName="sm:grid-cols-2 lg:grid-cols-[minmax(16rem,1fr)_12rem_12rem] lg:items-end"
     >
-      <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-        <SlidersHorizontal className="size-4 text-primary" aria-hidden />
-        <h2 id="users-filter-title">جستجو و فیلتر کاربران</h2>
-      </div>
-      <form
-        action="/admin/customers"
-        method="get"
-        className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(16rem,1fr)_12rem_12rem_auto] lg:items-end"
-      >
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <Label htmlFor="users-query">نام، ایمیل یا تلفن</Label>
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
-              aria-hidden
-            />
-            <Input
-              id="users-query"
-              name="q"
-              type="search"
-              defaultValue={filters.query}
-              placeholder="جستجوی کاربران…"
-              className="h-11 ps-9"
-            />
-          </div>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <Label htmlFor="users-role">نقش</Label>
-          <NativeSelect
-            id="users-role"
-            name="role"
-            defaultValue={filters.role ?? "all"}
-            className="w-full [&_[data-slot=native-select]]:h-11"
-          >
-            <NativeSelectOption value="all">همهٔ نقش‌ها</NativeSelectOption>
-            {ROLE_OPTIONS.map((role) => (
-              <NativeSelectOption key={role} value={role}>
-                {ROLE_LABELS[role]}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <Label htmlFor="users-status">وضعیت</Label>
-          <NativeSelect
-            id="users-status"
-            name="status"
-            defaultValue={filters.status}
-            className="w-full [&_[data-slot=native-select]]:h-11"
-          >
-            <NativeSelectOption value="all">
-              فعال، غیرفعال و مسدود
-            </NativeSelectOption>
-            <NativeSelectOption value="active">فقط فعال</NativeSelectOption>
-            <NativeSelectOption value="inactive">
-              غیرفعال یا مسدود
-            </NativeSelectOption>
-          </NativeSelect>
-        </div>
-
-        <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-1">
-          <Button
-            type="submit"
-            size="lg"
-            className="h-11 flex-1 cursor-pointer"
-          >
-            اعمال فیلترها
-          </Button>
-          {hasFilters ? (
-            <Button
-              variant="outline"
-              size="lg"
-              asChild
-              className="h-11 cursor-pointer"
-            >
-              <Link href="/admin/customers" aria-label="پاک کردن همهٔ فیلترها">
-                <X className="size-4" aria-hidden />
-                پاک کردن
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-      </form>
-    </section>
+      <FilterSearchInput
+        id="users-query"
+        label="نام، ایمیل یا تلفن"
+        placeholder="جستجوی کاربران…"
+        value={filters.query}
+      />
+      <FilterSelect
+        id="users-role"
+        label="نقش"
+        param="role"
+        value={filters.role ?? ""}
+        options={ROLE_FILTER_OPTIONS}
+      />
+      <FilterSelect
+        id="users-status"
+        label="وضعیت"
+        param="status"
+        value={filters.status === "all" ? "" : filters.status}
+        options={STATUS_FILTER_OPTIONS}
+      />
+    </AdminFilterBar>
   );
 }
 

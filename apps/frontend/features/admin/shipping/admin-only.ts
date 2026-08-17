@@ -1,11 +1,8 @@
 import "server-only";
 
-import { redirect } from "next/navigation";
-
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
 
 export async function requireShippingAdmin(callbackUrl = "/admin/shipping") {
-  const session = await requireStaff(callbackUrl);
-  if (session.role !== "admin") redirect("/forbidden");
-  return session;
+  return requirePermission(PERMISSIONS.SHIPPING_MANAGE, callbackUrl);
 }

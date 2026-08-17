@@ -19,6 +19,11 @@ describe("jalali conversion", () => {
     expect(display).toMatch(/^\d{4}\/\d{2}\/\d{2} 14:30$/);
   });
 
+  it("omits the time from a date-only Gregorian value", () => {
+    const display = gregorianLocalToJalaliDisplay("2026-08-08");
+    expect(display).toMatch(/^\d{4}\/\d{2}\/\d{2}$/);
+  });
+
   it("parses Jalali display back to datetime-local", () => {
     const j = toJalali(2026, 3, 21);
     const display = `${j.jy}/${String(j.jm).padStart(2, "0")}/${String(j.jd).padStart(2, "0")} 09:15`;
@@ -29,5 +34,12 @@ describe("jalali conversion", () => {
   it("returns empty string for blank input and null for garbage", () => {
     expect(jalaliDisplayToGregorianLocal("")).toBe("");
     expect(jalaliDisplayToGregorianLocal("not-a-date")).toBeNull();
+  });
+
+  it("accepts Persian digits in a Jalali display string", () => {
+    const j = toJalali(2026, 3, 21);
+    const display = `${j.jy}/${String(j.jm).padStart(2, "0")}/${String(j.jd).padStart(2, "0")} 09:15`;
+    const persian = display.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]!);
+    expect(jalaliDisplayToGregorianLocal(persian)).toBe("2026-03-21T09:15");
   });
 });

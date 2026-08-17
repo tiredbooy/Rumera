@@ -18,11 +18,13 @@ function normalizeSearch(value: string): string {
 
 export function TagSelector({
   control,
+  availableTags = [],
   initialTags = [],
   disabled = false,
   error,
 }: {
   control: Control<ProductFormValues>;
+  availableTags?: Tag[];
   initialTags?: ProductTag[];
   disabled?: boolean;
   error?: string;
@@ -30,11 +32,13 @@ export function TagSelector({
   const query = useAllTags();
   const [search, setSearch] = React.useState("");
   const tagsByID = new Map<number, Tag | ProductTag>();
+  for (const tag of availableTags) tagsByID.set(tag.id, tag);
   for (const tag of initialTags) tagsByID.set(tag.id, tag);
   for (const tag of query.data ?? []) tagsByID.set(tag.id, tag);
   const tags = [...tagsByID.values()].sort((a, b) =>
     a.title.localeCompare(b.title, "fa"),
   );
+  const waitingOnClient = query.isPending && availableTags.length === 0;
   const errorId = fieldErrorId("tag_ids");
   const needle = normalizeSearch(search);
   const filtered = needle
@@ -52,7 +56,7 @@ export function TagSelector({
         فهرست مشخص‌اند.
       </p>
 
-      {query.isPending ? (
+      {waitingOnClient ? (
         <p
           role="status"
           className="flex items-center gap-2 text-sm text-muted-foreground"
@@ -83,7 +87,7 @@ export function TagSelector({
         </div>
       ) : null}
 
-      {query.isSuccess && tags.length === 0 ? (
+      {!waitingOnClient && !query.isError && tags.length === 0 ? (
         <p className="rounded-xl bg-muted/50 px-3 py-3 text-sm text-muted-foreground">
           هنوز برچسبی برای انتخاب ثبت نشده است.
         </p>
@@ -98,7 +102,7 @@ export function TagSelector({
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            disabled={disabled || query.isPending}
+            disabled={disabled || waitingOnClient}
             placeholder="جستجوی برچسب…"
             className="h-11 ps-9"
             aria-label="جستجوی برچسب"

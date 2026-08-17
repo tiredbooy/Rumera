@@ -141,6 +141,11 @@ an option combination are allowed.
 
 **Response** `201 Created` — the created `VariantResponse`.
 
+Create also inserts a **zero-stock inventory row** (`EnsureForVariant`). Editor
+aggregate saves and legacy `POST /admin/products` with inline variants do the
+same via `EnsureForVariantTx` in their write transaction — see
+[Products](./products.md). Stock stays 0 until an admin restock.
+
 **Errors:** `400 INVALID_PARAMS`/`INVALID_JSON`, `422 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `404 NOT_FOUND`, `409 CONFLICT` (SKU or option combination already exists).
 
 ---

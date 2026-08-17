@@ -1,29 +1,153 @@
 "use client";
 
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useMemo } from "react";
+import { areaY, defineChart, lineY } from "@tanstack/charts";
+import { scaleLinear } from "@tanstack/charts/scales/linear";
+import { tooltip } from "@tanstack/charts/tooltip";
 
 import type { MonitoringSnapshot } from "@/features/admin/monitoring/lib/types";
+import {
+  faTick,
+  RumeraChart,
+  rumeraChartTheme,
+  rumeraSvgAnimation,
+  usePrefersReducedMotion,
+} from "@/lib/charts";
+
+type ChartRow = {
+  t: number;
+  v: number;
+  label: string;
+};
+
+function formatFaTime(ms: number) {
+  return new Date(ms).toLocaleTimeString("fa-IR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function toChart(
   points: { t: number; v: number }[],
   map: (v: number) => number = (v) => v,
-) {
+): ChartRow[] {
   return points.map((p) => ({
     t: p.t * 1000,
     v: map(p.v),
-    label: new Date(p.t * 1000).toLocaleTimeString("fa-IR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
+    label: formatFaTime(p.t * 1000),
   }));
+}
+
+function formatRate(v: number) {
+  return faTick(v);
+}
+
+function formatPct(v: number) {
+  return `${faTick(v)}٪`;
+}
+
+function formatMs(v: number) {
+  return `${faTick(v)} ms`;
+}
+
+function seriesDefinition(
+  rows: ChartRow[],
+  opts: {
+    color: string;
+    valueLabel: string;
+    formatValue: (v: number) => string;
+    animate: boolean;
+  },
+) {
+  const yMax = Math.max(0, ...rows.map((row) => row.v));
+  return defineChart({
+    marks: [
+      areaY(rows, {
+        id: "fill",
+        x: "t",
+        y1: 0,
+        y2: "v",
+        fill: opts.color,
+        fillOpacity: 0.15,
+      }),
+      lineY(rows, {
+        id: "line",
+        x: "t",
+        y: "v",
+        stroke: opts.color,
+        strokeWidth: 2,
+      }),
+    ],
+    x: {
+      scale: scaleLinear,
+      grid: true,
+      axis: {
+        ticks: {
+          format: (value) => formatFaTime(Number(value)),
+        },
+        tickLabels: {
+          fontSize: 10,
+          thin: { minGap: 24 },
+        },
+      },
+    },
+    y: {
+      scale: () => scaleLinear().domain([0, yMax === 0 ? 1 : yMax]),
+      nice: true,
+      grid: true,
+      axis: {
+        ticks: {
+          format: (value) => faTick(Number(value)),
+        },
+        tickLabels: { fontSize: 10 },
+      },
+    },
+    clip: true,
+    focus: "nearest-x",
+    svgAnimation: opts.animate ? rumeraSvgAnimation : false,
+    theme: rumeraChartTheme,
+    tooltip: {
+      use: tooltip,
+      format: (point) =>
+        `${point.datum.label} — ${opts.valueLabel}: ${opts.formatValue(point.datum.v)}`,
+    },
+  });
+}
+
+function SeriesChart({
+  rows,
+  color,
+  valueLabel,
+  formatValue,
+  ariaLabel,
+}: {
+  rows: ChartRow[];
+  color: string;
+  valueLabel: string;
+  formatValue: (v: number) => string;
+  ariaLabel: string;
+}) {
+  const reduceMotion = usePrefersReducedMotion();
+  const definition = useMemo(
+    () =>
+      seriesDefinition(rows, {
+        color,
+        valueLabel,
+        formatValue,
+        animate: !reduceMotion,
+      }),
+    [rows, color, valueLabel, formatValue, reduceMotion],
+  );
+
+  return (
+    <RumeraChart
+      definition={definition}
+      height={192}
+      initialWidth={360}
+      ariaLabel={ariaLabel}
+      className="h-full min-h-0 w-full"
+    />
+  );
 }
 
 function ChartCard({
@@ -57,60 +181,33 @@ export function MonitoringCharts({ data }: { data: MonitoringSnapshot }) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <ChartCard title="نرخ درخواست (req/s)" empty={rate.length === 0}>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={rate}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={24} />
-            <YAxis tick={{ fontSize: 10 }} width={40} />
-            <Tooltip />
-            <Area
-              type="monotone"
-              dataKey="v"
-              name="req/s"
-              stroke="hsl(var(--primary))"
-              fill="hsl(var(--primary) / 0.15)"
-              strokeWidth={2}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+        <SeriesChart
+          rows={rate}
+          color="var(--primary)"
+          valueLabel="req/s"
+          formatValue={formatRate}
+          ariaLabel="نرخ درخواست در ثانیه"
+        />
       </ChartCard>
 
       <ChartCard title="خطای ۵xx (٪)" empty={errors.length === 0}>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={errors}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={24} />
-            <YAxis tick={{ fontSize: 10 }} width={40} />
-            <Tooltip />
-            <Area
-              type="monotone"
-              dataKey="v"
-              name="٪"
-              stroke="hsl(var(--destructive))"
-              fill="hsl(var(--destructive) / 0.12)"
-              strokeWidth={2}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+        <SeriesChart
+          rows={errors}
+          color="var(--destructive)"
+          valueLabel="٪"
+          formatValue={formatPct}
+          ariaLabel="سهم خطای پنج‌صد"
+        />
       </ChartCard>
 
       <ChartCard title="تأخیر p95 (ms)" empty={p95.length === 0}>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={p95}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={24} />
-            <YAxis tick={{ fontSize: 10 }} width={48} />
-            <Tooltip />
-            <Area
-              type="monotone"
-              dataKey="v"
-              name="ms"
-              stroke="hsl(var(--chart-2))"
-              fill="hsl(var(--chart-2) / 0.15)"
-              strokeWidth={2}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+        <SeriesChart
+          rows={p95}
+          color="var(--chart-2)"
+          valueLabel="ms"
+          formatValue={formatMs}
+          ariaLabel="تأخیر صدک نود و پنج به میلی‌ثانیه"
+        />
       </ChartCard>
     </div>
   );

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 
+import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -22,7 +23,7 @@ import type {
   UserListSearchParams,
 } from "@/features/customers/types";
 import { parseUserListFilters } from "@/features/customers/validations";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import { AdminPage } from "@/features/dashboard/components/admin-page";
 import { ApiError } from "@/lib/api/errors";
 import { faNum } from "@/lib/products";
 import { faDate } from "@/lib/utils/date";
@@ -43,42 +44,88 @@ export function usersPageHref(filters: UserListFilters, page: number): string {
   return qs ? `/admin/customers?${qs}` : "/admin/customers";
 }
 
+/**
+ * CF-1. This used to require the internal bigint, which no customers response
+ * has ever contained — so it returned undefined for every real row and the
+ * orders count rendered as dead text. `GET /admin/orders` now accepts the public
+ * UUID, which is the id this screen actually holds.
+ *
+ * Still guarded: only the public UUID shape produces a link, so a numeric id or
+ * a stray string cannot build a filter that silently matches the wrong customer.
+ */
+const PUBLIC_USER_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function adminOrdersForUserHref(userId: string): string | undefined {
+  const id = userId.trim();
+  if (!PUBLIC_USER_ID.test(id)) return undefined;
+  return `/admin/orders?user_uuid=${encodeURIComponent(id)}`;
+}
+
+function UserOrdersCount({
+  userId,
+  totalOrders,
+}: {
+  userId: string;
+  totalOrders: number;
+}) {
+  const label = (
+    <span className="tabular-nums">{faNum(totalOrders)} سفارش</span>
+  );
+  const href = adminOrdersForUserHref(userId);
+  if (!href) return label;
+  return (
+    <Link
+      href={href}
+      className="-m-1 inline-flex min-h-11 items-center rounded-lg p-1 underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/40"
+    >
+      {label}
+    </Link>
+  );
+}
+
 export function CustomersView({
   searchParams,
+  canWrite,
 }: {
   searchParams: CustomersSearchParams;
+  canWrite: boolean;
 }) {
   const filters = parseUserListFilters(searchParams);
 
   return (
-    <>
-      <PageHeader
-        title="کاربران"
-        description="مدیریت همهٔ حساب‌های فعال و غیرفعال، نقش‌ها و وضعیت دسترسی"
-        actions={
-          <Button asChild size="lg" className="h-11 cursor-pointer">
+    <AdminPage
+      title="کاربران"
+      description="مدیریت همهٔ حساب‌های فعال و غیرفعال، نقش‌ها و وضعیت دسترسی"
+      action={
+        canWrite ? (
+          <Button asChild size="sm">
             <Link href="/admin/customers/new">
               <Plus className="size-4" aria-hidden />
               ساخت کاربر
             </Link>
           </Button>
-        }
-      />
-      <UsersFilters
-        key={`${filters.query}|${filters.role ?? "all"}|${filters.status}`}
-        filters={filters}
-      />
+        ) : null
+      }
+      filters={<UsersFilters filters={filters} />}
+    >
       <Suspense
         key={`${filters.query}|${filters.role ?? "all"}|${filters.status}|${filters.page}`}
         fallback={<UsersListSkeleton />}
       >
-        <UsersTable filters={filters} />
+        <UsersTable filters={filters} canWrite={canWrite} />
       </Suspense>
-    </>
+    </AdminPage>
   );
 }
 
-export async function UsersTable({ filters }: { filters: UserListFilters }) {
+export async function UsersTable({
+  filters,
+  canWrite,
+}: {
+  filters: UserListFilters;
+  canWrite: boolean;
+}) {
   let data;
   try {
     data = await listUsers({
@@ -138,11 +185,11 @@ export async function UsersTable({ filters }: { filters: UserListFilters }) {
           >
             <Link href="/admin/customers">پاک کردن فیلترها</Link>
           </Button>
-        ) : (
+        ) : canWrite ? (
           <Button size="lg" asChild className="mt-1 cursor-pointer">
             <Link href="/admin/customers/new">ساخت نخستین کاربر</Link>
           </Button>
-        )}
+        ) : null}
       </div>
     );
   }
@@ -199,6 +246,15 @@ export async function UsersTable({ filters }: { filters: UserListFilters }) {
                   </dd>
                 </div>
                 <div className="col-span-2 flex items-center justify-between gap-3 border-t border-border/40 pt-3">
+                  <dt className="text-muted-foreground">سفارش‌ها</dt>
+                  <dd>
+                    <UserOrdersCount
+                      userId={user.user_id}
+                      totalOrders={user.total_orders}
+                    />
+                  </dd>
+                </div>
+                <div className="col-span-2 flex items-center justify-between gap-3">
                   <dt className="text-muted-foreground">تاریخ عضویت</dt>
                   <dd className="tabular-nums">{faDate(user.created_at)}</dd>
                 </div>
@@ -220,6 +276,9 @@ export async function UsersTable({ filters }: { filters: UserListFilters }) {
               </TableHead>
               <TableHead className="h-10 text-xs font-medium text-muted-foreground">
                 وضعیت
+              </TableHead>
+              <TableHead className="h-10 text-end text-xs font-medium text-muted-foreground">
+                سفارش‌ها
               </TableHead>
               <TableHead className="h-10 text-end text-xs font-medium text-muted-foreground">
                 تاریخ عضویت
@@ -267,6 +326,12 @@ export async function UsersTable({ filters }: { filters: UserListFilters }) {
                       banned={user.is_banned}
                     />
                   </TableCell>
+                  <TableCell className="text-end">
+                    <UserOrdersCount
+                      userId={user.user_id}
+                      totalOrders={user.total_orders}
+                    />
+                  </TableCell>
                   <TableCell className="text-end text-muted-foreground tabular-nums">
                     {faDate(user.created_at)}
                   </TableCell>
@@ -277,52 +342,22 @@ export async function UsersTable({ filters }: { filters: UserListFilters }) {
         </Table>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-muted-foreground">
-          {faNum(pagination.total_items)} کاربر · صفحهٔ {faNum(pagination.page)}{" "}
-          از {faNum(pagination.total_pages)}
-        </p>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-          {pagination.has_prev ? (
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="h-11 cursor-pointer"
-            >
-              <Link
-                href={usersPageHref(filters, pagination.page - 1)}
-                rel="prev"
-              >
-                قبلی
-              </Link>
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" className="h-11" disabled>
-              قبلی
-            </Button>
-          )}
-          {pagination.has_next ? (
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="h-11 cursor-pointer"
-            >
-              <Link
-                href={usersPageHref(filters, pagination.page + 1)}
-                rel="next"
-              >
-                بعدی
-              </Link>
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" className="h-11" disabled>
-              بعدی
-            </Button>
-          )}
-        </div>
-      </div>
+      <ListPagination
+        page={pagination.page}
+        totalPages={pagination.total_pages}
+        hasPrev={pagination.has_prev}
+        hasNext={pagination.has_next}
+        prevHref={usersPageHref(filters, pagination.page - 1)}
+        nextHref={usersPageHref(filters, pagination.page + 1)}
+        ariaLabel="صفحه‌بندی کاربران"
+        className="mt-6"
+        label={
+          <>
+            {faNum(pagination.total_items)} کاربر · صفحهٔ {faNum(pagination.page)}{" "}
+            از {faNum(pagination.total_pages)}
+          </>
+        }
+      />
     </>
   );
 }

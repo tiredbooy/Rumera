@@ -49,9 +49,10 @@ Header search / /search?q=…
 
 Same `search` query param pattern is reused for admin/list endpoints on brands,
 categories, recipes, blogs, coupons, shipping, inventory, users, etc. — each
-with its own column set. **Only the product catalogue free-text path** uses the
-Persian normalizer + multi-field OR today (storefront discovery). Other list
-search endpoints remain simple `ILIKE` unless later extended.
+with its own column set. Product catalogue, journal (`title`/`excerpt`), and
+recipe (`title`/`excerpt`) free-text paths use `rumera_search_normalize` +
+`pkg/searchtext` so Arabic-yeh/kaf match Persian (PR-070h); other list
+endpoints remain raw `ILIKE`.
 
 ### Normalization rules (Go + SQL lockstep)
 
@@ -76,11 +77,15 @@ Free-text `search=` matches **any** of:
 
 1. Product `title`
 2. Product `description`
-3. Brand `title` (EXISTS on `brands`)
-4. Category `title` (EXISTS on `categories`)
+3. Product `code`
+4. Brand `title` (EXISTS on `brands`)
+5. Category `title` (EXISTS on `categories`)
+6. Variant `sku` (EXISTS on `product_variants`)
+7. Tag `title` (EXISTS on `product_tags` + `tags`)
 
 Structured filters (`brand`, `category_id`, price, tags, …) stay separate query
 params. **No new facet contract** in PH-030a — existing list filters are enough.
+PR-070e added code/SKU/tag-title ILIKE; no new trigram index (description still unindexed).
 
 ### Indexes (pg_trgm)
 
@@ -169,10 +174,14 @@ Incremental write hooks and HTTP dual-path are **out of PH-030b** (readiness onl
 ### Event capture
 
 Storefront/analytics middleware records events into the **analytics** database
-(`events` hypertable / table). Search-related type:
+(`events` hypertable / table). There is **no** `GET /search`. Live shopper
+search is `GET /products?search=` (Next `/search?q=` → `listProducts({ search })`).
 
-- `event_type = 'search_performed'`
-- payload includes `query`, `results_count`, and related fields
+- `event_type = 'search_performed'` when `GET /api/v1/products` has a non-empty `search`
+- payload: `query` (the `search` string) + `results_count` (unpaginated match total)
+- `results_count` is attached only after a successful list read — a failed
+  `GET /products` does **not** invent an empty page or `results_count: 0`
+- Admin `GET /admin/products?search=` is not a shopper search event
 
 Events are ingested asynchronously (buffered queue; drop-on-full). See main
 [architecture.md](../architecture.md).
@@ -226,6 +235,8 @@ content decisions.
 ## Related tests
 
 - `pkg/searchtext` — normalize + LIKE escape unit tests
+- `internal/analytics` — `IsStorefrontProductSearch` / `SearchPayload`
+- `internal/features/catalog/product/handler_list_test.go` — `search=` payload; list error ≠ empty hits
 - `internal/features/catalog/product/repository_test.go` — search clause fields, Persian query bind, empty-after-normalize, wildcard escape
 - Integration (tag-gated): `tests/integration/product_test.go` — literal `%`/`_`/`\` search
 - Frontend search is mostly compositional; catalogue presentation tests cover

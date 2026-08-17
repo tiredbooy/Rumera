@@ -3,11 +3,13 @@ package recipes
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiredbooy/internal/mocks"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/pkg/apperr"
 )
 
 type recipeBeginnerStub struct{ tx pgx.Tx }
@@ -18,7 +20,9 @@ func (b recipeBeginnerStub) Begin(context.Context) (pgx.Tx, error) { return b.tx
 type minimalRepoStub struct {
 	txRepo            Repository
 	withTxCalls       int
+	getByID           func(int64) (*Recipe, error)
 	create            func(*RecipeReq) (*Recipe, error)
+	update            func(int64, *RecipeUpdateReq) (*Recipe, error)
 	createIngredients func(int64, []*RecipeIngredientReq) error
 	assignProducts    func(int64, []*RecipeProductReq) error
 	assignTags        func(int64, []int64) error
@@ -33,7 +37,10 @@ func (r *minimalRepoStub) WithTx(pgx.Tx) Repository {
 	return r
 }
 
-func (r *minimalRepoStub) GetByID(context.Context, int64) (*Recipe, error) {
+func (r *minimalRepoStub) GetByID(_ context.Context, id int64) (*Recipe, error) {
+	if r.getByID != nil {
+		return r.getByID(id)
+	}
 	return nil, models.ErrNotFound
 }
 func (r *minimalRepoStub) GetBySlug(context.Context, string) (*Recipe, error) {
@@ -51,7 +58,10 @@ func (r *minimalRepoStub) Create(_ context.Context, req *RecipeReq) (*Recipe, er
 	}
 	return &Recipe{ID: 1, Title: req.Title, Slug: req.Slug, Status: req.Status}, nil
 }
-func (r *minimalRepoStub) Update(context.Context, int64, *RecipeUpdateReq) (*Recipe, error) {
+func (r *minimalRepoStub) Update(_ context.Context, id int64, req *RecipeUpdateReq) (*Recipe, error) {
+	if r.update != nil {
+		return r.update(id, req)
+	}
 	return nil, models.ErrNotFound
 }
 func (r *minimalRepoStub) Delete(context.Context, int64) error { return nil }
@@ -182,5 +192,180 @@ func TestRecipeCreateCommitsWhenRelationsSucceed(t *testing.T) {
 	}
 	if root.withTxCalls != 1 {
 		t.Fatalf("WithTx calls = %d, want 1", root.withTxCalls)
+	}
+}
+
+func TestRecipeCreateExplicitSlugConflictIs409(t *testing.T) {
+	tx := &mocks.FakeTx{}
+	txRepo := &minimalRepoStub{
+		slugExists: func(string) (bool, error) { return true, nil },
+		create: func(*RecipeReq) (*Recipe, error) {
+			t.Fatal("Create must not insert after a taken slug")
+			return nil, nil
+		},
+	}
+	svc := NewService(&minimalRepoStub{txRepo: txRepo}, recipeBeginnerStub{tx: tx}, nil)
+
+	_, err := svc.Create(context.Background(), &RecipeReq{
+		Title: "Old Fashioned",
+		Slug:  "old-fashioned",
+	})
+	if !errors.Is(err, apperr.ErrConflict) {
+		t.Fatalf("Create error = %v, want conflict", err)
+	}
+	if tx.Committed {
+		t.Fatal("conflict must not commit")
+	}
+}
+
+func TestRecipeCreateUniqueViolationIs409(t *testing.T) {
+	tx := &mocks.FakeTx{}
+	txRepo := &minimalRepoStub{
+		create: func(*RecipeReq) (*Recipe, error) {
+			return nil, fmt.Errorf("creating recipe: %w", models.ErrConflict)
+		},
+	}
+	svc := NewService(&minimalRepoStub{txRepo: txRepo}, recipeBeginnerStub{tx: tx}, nil)
+
+	_, err := svc.Create(context.Background(), &RecipeReq{
+		Title: "Old Fashioned",
+		Slug:  "old-fashioned",
+	})
+	if !errors.Is(err, apperr.ErrConflict) {
+		t.Fatalf("Create error = %v, want conflict", err)
+	}
+	if tx.Committed {
+		t.Fatal("unique violation must not commit")
+	}
+}
+
+func TestRecipeCreateDoesNotTreatSlugLookupErrorAsFree(t *testing.T) {
+	tx := &mocks.FakeTx{}
+	lookupErr := errors.New("slug lookup failed")
+	var createdSlug string
+	txRepo := &minimalRepoStub{
+		slugExists: func(string) (bool, error) { return false, lookupErr },
+		create: func(req *RecipeReq) (*Recipe, error) {
+			createdSlug = req.Slug
+			return &Recipe{ID: 1, Title: req.Title, Slug: req.Slug}, nil
+		},
+	}
+	svc := NewService(&minimalRepoStub{txRepo: txRepo}, recipeBeginnerStub{tx: tx}, nil)
+
+	_, err := svc.Create(context.Background(), &RecipeReq{Title: "Old Fashioned"})
+	if !errors.Is(err, lookupErr) {
+		t.Fatalf("Create error = %v, want slug lookup failure", err)
+	}
+	if createdSlug != "" {
+		t.Fatalf("create ran with slug %q after lookup error", createdSlug)
+	}
+	if tx.Committed {
+		t.Fatal("lookup error must not commit")
+	}
+}
+
+func TestRecipeCreateSuffixesGeneratedSlugUnderLock(t *testing.T) {
+	tx := &mocks.FakeTx{}
+	var persisted string
+	txRepo := &minimalRepoStub{
+		slugExists: func(slug string) (bool, error) {
+			return slug == "old-fashioned", nil
+		},
+		create: func(req *RecipeReq) (*Recipe, error) {
+			persisted = req.Slug
+			return &Recipe{ID: 8, Title: req.Title, Slug: req.Slug, Status: req.Status}, nil
+		},
+	}
+	root := &minimalRepoStub{
+		txRepo: txRepo,
+		slugExists: func(string) (bool, error) {
+			t.Fatal("slug check must run on the tx repo after the advisory lock")
+			return false, nil
+		},
+	}
+	svc := NewService(root, recipeBeginnerStub{tx: tx}, nil)
+
+	result, err := svc.Create(context.Background(), &RecipeReq{Title: "Old Fashioned"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if persisted != "old-fashioned-2" || result.Slug != persisted {
+		t.Fatalf("persisted/result slugs = %q/%q", persisted, result.Slug)
+	}
+	if !tx.Committed {
+		t.Fatal("expected commit")
+	}
+}
+
+func TestRecipeUpdateSlugConflictIs409(t *testing.T) {
+	tx := &mocks.FakeTx{}
+	taken := "negroni"
+	txRepo := &minimalRepoStub{
+		getByID: func(int64) (*Recipe, error) {
+			return &Recipe{ID: 4, Slug: "old-fashioned"}, nil
+		},
+		slugExists: func(slug string) (bool, error) { return slug == taken, nil },
+		update: func(int64, *RecipeUpdateReq) (*Recipe, error) {
+			t.Fatal("Update must not write a colliding slug")
+			return nil, nil
+		},
+	}
+	svc := NewService(&minimalRepoStub{txRepo: txRepo}, recipeBeginnerStub{tx: tx}, nil)
+
+	_, err := svc.Update(context.Background(), 4, &RecipeUpdateReq{Slug: &taken})
+	if !errors.Is(err, apperr.ErrConflict) {
+		t.Fatalf("Update error = %v, want conflict", err)
+	}
+	if tx.Committed {
+		t.Fatal("conflict must not commit")
+	}
+}
+
+func TestRecipeUpdateKeepsOwnSlug(t *testing.T) {
+	tx := &mocks.FakeTx{}
+	own := "old-fashioned"
+	txRepo := &minimalRepoStub{
+		getByID: func(int64) (*Recipe, error) {
+			return &Recipe{ID: 4, Title: "Old Fashioned", Slug: own}, nil
+		},
+		slugExists: func(slug string) (bool, error) { return slug == own, nil },
+		update: func(_ int64, req *RecipeUpdateReq) (*Recipe, error) {
+			return &Recipe{ID: 4, Title: "Old Fashioned", Slug: *req.Slug}, nil
+		},
+	}
+	svc := NewService(&minimalRepoStub{txRepo: txRepo}, recipeBeginnerStub{tx: tx}, nil)
+
+	result, err := svc.Update(context.Background(), 4, &RecipeUpdateReq{Slug: &own})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if result.Slug != own {
+		t.Fatalf("slug = %q, want own slug", result.Slug)
+	}
+	if !tx.Committed {
+		t.Fatal("expected commit")
+	}
+}
+
+func TestRecipeUpdateUniqueViolationIs409(t *testing.T) {
+	tx := &mocks.FakeTx{}
+	next := "old-fashioned-2"
+	txRepo := &minimalRepoStub{
+		getByID: func(int64) (*Recipe, error) {
+			return &Recipe{ID: 4, Slug: "old-fashioned"}, nil
+		},
+		slugExists: func(string) (bool, error) { return false, nil },
+		update: func(int64, *RecipeUpdateReq) (*Recipe, error) {
+			return nil, fmt.Errorf("updating recipe: %w", models.ErrConflict)
+		},
+	}
+	svc := NewService(&minimalRepoStub{txRepo: txRepo}, recipeBeginnerStub{tx: tx}, nil)
+
+	_, err := svc.Update(context.Background(), 4, &RecipeUpdateReq{Slug: &next})
+	if !errors.Is(err, apperr.ErrConflict) {
+		t.Fatalf("Update error = %v, want conflict", err)
+	}
+	if tx.Committed {
+		t.Fatal("unique violation must not commit")
 	}
 }

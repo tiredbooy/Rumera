@@ -1,7 +1,6 @@
 package referral
 
 import (
-	"github.com/tiredbooy/internal/features/loyalty"
 	"context"
 	"crypto/rand"
 	"errors"
@@ -9,18 +8,24 @@ import (
 	"strings"
 
 	"github.com/tiredbooy/internal/models"
-		"github.com/tiredbooy/pkg/apperr"
+	"github.com/tiredbooy/pkg/apperr"
 )
+
+// PointAwarder is implemented by loyalty.Service. Award is idempotent per
+// (reason, ref_type, ref_id) so a failed Complete can safely replay.
+type PointAwarder interface {
+	Award(ctx context.Context, userID int64, delta int, reason, refType, refID string) error
+}
 
 // Service manages referral codes and completion (awarding both sides
 // when a referee's first order is paid).
 type Service struct {
 	repo    Repository
-	loyalty *loyalty.Service
+	loyalty PointAwarder
 	reward  int
 }
 
-func NewService(repo Repository, loyalty *loyalty.Service, reward int) *Service {
+func NewService(repo Repository, loyalty PointAwarder, reward int) *Service {
 	return &Service{repo: repo, loyalty: loyalty, reward: reward}
 }
 
@@ -38,21 +43,24 @@ func (s *Service) Get(ctx context.Context, userID int64) (*ReferralResponse, err
 	return &ReferralResponse{Code: code, Pending: pending, Completed: completed, Reward: s.reward}, nil
 }
 
-// Claim links the (authenticated) referee to the owner of `code`. Invalid codes,
-// self-referral, and already-referred customers are silent no-ops, so the caller
-// can fire-and-forget without surfacing errors to a new shopper.
+// Claim links the (authenticated) referee to the owner of `code`.
+// Success means a new pending row exists. Unknown, self, and already-claimed
+// codes are 400 INVALID_REQUEST — never a silent success.
 func (s *Service) Claim(ctx context.Context, refereeID int64, code string) error {
 	code = strings.ToUpper(strings.TrimSpace(code))
 	if code == "" {
-		return nil
+		return apperr.ErrInvalidRequest
 	}
 
 	ownerID, err := s.repo.GetUserByCode(ctx, code)
 	if err != nil {
-		return nil // unknown code → ignore
+		if errors.Is(err, models.ErrNotFound) {
+			return apperr.ErrInvalidRequest
+		}
+		return apperr.ErrInternal
 	}
 	if ownerID == refereeID {
-		return nil // can't refer yourself
+		return apperr.ErrInvalidRequest
 	}
 
 	has, err := s.repo.HasReferral(ctx, refereeID)
@@ -60,17 +68,22 @@ func (s *Service) Claim(ctx context.Context, refereeID int64, code string) error
 		return apperr.ErrInternal
 	}
 	if has {
-		return nil // already referred by someone
+		return apperr.ErrInvalidRequest
 	}
 
 	if err := s.repo.CreateReferral(ctx, ownerID, refereeID, s.reward); err != nil {
+		if errors.Is(err, models.ErrConflict) {
+			return apperr.ErrInvalidRequest
+		}
 		return apperr.ErrInternal
 	}
 	return nil
 }
 
-// OnPaidOrder completes a pending referral for the referee (if any) and awards
-// points to both sides. Idempotent: once completed there's no pending row left.
+// OnPaidOrder awards both sides then completes the pending referral.
+// Award is idempotent per referral id. If either Award errors the pending
+// row is left so a retry can replay Award then Complete. Callers (payments
+// Confirm) may treat the error as non-fatal to the payment.
 func (s *Service) OnPaidOrder(ctx context.Context, refereeID int64) error {
 	ref, err := s.repo.FindPendingByReferee(ctx, refereeID)
 	if err != nil {
@@ -80,16 +93,17 @@ func (s *Service) OnPaidOrder(ctx context.Context, refereeID int64) error {
 		return err
 	}
 
-	if err := s.repo.Complete(ctx, ref.ID); err != nil {
-		return err
-	}
-
 	refKey := strconv.FormatInt(ref.ID, 10)
 	if s.loyalty != nil && ref.RewardPoints > 0 {
-		_ = s.loyalty.Award(ctx, ref.ReferrerUserID, ref.RewardPoints, "referral", "referral", refKey)
-		_ = s.loyalty.Award(ctx, ref.RefereeUserID, ref.RewardPoints, "referral_welcome", "referral", refKey)
+		if err := s.loyalty.Award(ctx, ref.ReferrerUserID, ref.RewardPoints, "referral", "referral", refKey); err != nil {
+			return err
+		}
+		if err := s.loyalty.Award(ctx, ref.RefereeUserID, ref.RewardPoints, "referral_welcome", "referral", refKey); err != nil {
+			return err
+		}
 	}
-	return nil
+
+	return s.repo.Complete(ctx, ref.ID)
 }
 
 func (s *Service) getOrCreateCode(ctx context.Context, userID int64) (string, error) {

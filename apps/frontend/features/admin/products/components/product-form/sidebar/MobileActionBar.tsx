@@ -15,6 +15,7 @@ export function MobileActionBar({
   isLocked,
   hasPendingRetry,
   savePhase,
+  canWrite = true,
   onCancel,
 }: {
   control: Control<ProductFormValues>;
@@ -22,6 +23,7 @@ export function MobileActionBar({
   isLocked: boolean;
   hasPendingRetry: boolean;
   savePhase: ProductSavePhase;
+  canWrite?: boolean;
   onCancel: () => void;
 }) {
   return (
@@ -42,7 +44,7 @@ export function MobileActionBar({
                 id="is_active_mobile"
                 checked={field.value}
                 onCheckedChange={field.onChange}
-                disabled={isLocked}
+                disabled={isLocked || !canWrite}
                 aria-label="وضعیت انتشار محصول"
               />
             </div>
@@ -54,15 +56,16 @@ export function MobileActionBar({
             type="button"
             variant="outline"
             size="sm"
-            disabled={isSubmitting}
             onClick={onCancel}
           >
             انصراف
           </Button>
-          <Button type="submit" size="sm" disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
-            {productSaveAction(savePhase, hasPendingRetry)}
-          </Button>
+          {canWrite ? (
+            <Button type="submit" size="sm" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+              {productSaveAction(savePhase, hasPendingRetry)}
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>

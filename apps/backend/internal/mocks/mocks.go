@@ -11,13 +11,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/tiredbooy/internal/features/wallet"
-	"github.com/tiredbooy/internal/features/coupons"
-	"github.com/tiredbooy/internal/features/shipping"
 	"github.com/tiredbooy/internal/features/cart"
+	"github.com/tiredbooy/internal/features/coupons"
 	"github.com/tiredbooy/internal/features/inventory"
 	"github.com/tiredbooy/internal/features/orders"
 	"github.com/tiredbooy/internal/features/payments"
+	"github.com/tiredbooy/internal/features/shipping"
+	"github.com/tiredbooy/internal/features/wallet"
 	"github.com/tiredbooy/internal/models"
 )
 
@@ -96,6 +96,12 @@ func (m *OrderRepo) Cancel(ctx context.Context, id, userID int64) error {
 	}
 	return nil
 }
+func (m *OrderRepo) CancelTx(ctx context.Context, tx pgx.Tx, id, ownerUserID int64) error {
+	if m.CancelFn != nil {
+		return m.CancelFn(ctx, id, ownerUserID)
+	}
+	return nil
+}
 func (m *OrderRepo) MarkAsPaid(ctx context.Context, tx pgx.Tx, orderID int64) error {
 	if m.MarkAsPaidFn != nil {
 		return m.MarkAsPaidFn(ctx, tx, orderID)
@@ -153,7 +159,7 @@ func (m *CartRepo) Clear(ctx context.Context, tx pgx.Tx, cartID int64) error {
 	return nil
 }
 func (m *CartRepo) GetByUserID(context.Context, int64) (*cart.Cart, error) { return nil, nil }
-func (m *CartRepo) Delete(context.Context, int64) error                      { return nil }
+func (m *CartRepo) Delete(context.Context, int64) error                    { return nil }
 func (m *CartRepo) AddItem(context.Context, int64, cart.AddCartItemReq) (*cart.CartItem, error) {
 	return nil, nil
 }
@@ -201,7 +207,7 @@ func (m *CouponRepo) GetAll(context.Context, coupons.CouponFilter) ([]*coupons.C
 func (m *CouponRepo) Update(context.Context, int64, coupons.UpdateCouponReq) (*coupons.Coupon, error) {
 	return nil, nil
 }
-func (m *CouponRepo) Delete(context.Context, int64) error                { return nil }
+func (m *CouponRepo) Delete(context.Context, int64) error { return nil }
 func (m *CouponRepo) Deactivate(context.Context, int64) (*coupons.Coupon, error) {
 	return nil, nil
 }
@@ -248,6 +254,9 @@ func (m *CouponUsageRepo) GetByCouponID(context.Context, int64) ([]*coupons.Coup
 }
 func (m *CouponUsageRepo) GetByUserID(context.Context, int64) ([]*coupons.CouponUsage, error) {
 	return nil, nil
+}
+func (m *CouponUsageRepo) DeleteByOrderTx(context.Context, pgx.Tx, int64) error {
+	return nil
 }
 
 // ── Shipping MethodRepository ────────────────────────────────────────────────
@@ -452,19 +461,26 @@ func (m *PaymentRepo) Confirm(context.Context, pgx.Tx, payments.ConfirmPaymentRe
 func (m *PaymentRepo) Fail(context.Context, payments.FailPaymentReq) (*payments.PaymentTransaction, error) {
 	return nil, nil
 }
+func (m *PaymentRepo) InsertEarnIntent(context.Context, pgx.Tx, payments.OrderEarnIntent) error {
+	return nil
+}
+func (m *PaymentRepo) ListPendingEarnIntents(context.Context, int) ([]payments.OrderEarnIntent, error) {
+	return nil, nil
+}
+func (m *PaymentRepo) MarkEarnAwarded(context.Context, int64) error { return nil }
 
 // ── Compile-time interface assertions ────────────────────────────────────────
 
 var (
-	_ pgx.Tx                                    = (*FakeTx)(nil)
-	_ orders.Repository                         = (*OrderRepo)(nil)
-	_ orders.ItemRepository                     = (*OrderItemRepo)(nil)
-	_ cart.Repository                           = (*CartRepo)(nil)
-	_ coupons.Repository                        = (*CouponRepo)(nil)
-	_ coupons.UsageRepository                   = (*CouponUsageRepo)(nil)
-	_ shipping.MethodRepository                 = (*ShippingMethodRepo)(nil)
-	_ inventory.Repository                      = (*InventoryRepo)(nil)
-	_ inventory.MovementRepository           = (*MovementRepo)(nil)
-	_ wallet.Repository                        = (*WalletRepo)(nil)
-	_ payments.Repository                       = (*PaymentRepo)(nil)
+	_ pgx.Tx                       = (*FakeTx)(nil)
+	_ orders.Repository            = (*OrderRepo)(nil)
+	_ orders.ItemRepository        = (*OrderItemRepo)(nil)
+	_ cart.Repository              = (*CartRepo)(nil)
+	_ coupons.Repository           = (*CouponRepo)(nil)
+	_ coupons.UsageRepository      = (*CouponUsageRepo)(nil)
+	_ shipping.MethodRepository    = (*ShippingMethodRepo)(nil)
+	_ inventory.Repository         = (*InventoryRepo)(nil)
+	_ inventory.MovementRepository = (*MovementRepo)(nil)
+	_ wallet.Repository            = (*WalletRepo)(nil)
+	_ payments.Repository          = (*PaymentRepo)(nil)
 )

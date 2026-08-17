@@ -4,6 +4,7 @@ import {
   formatReviewDate,
   ReviewStars,
 } from "@/features/catalog/products/components/reviews-section/review-display";
+import { REVIEW_STATUS_FA } from "@/features/reviews/labels";
 import type { Review } from "@/features/reviews/types";
 import { faNum } from "@/lib/products";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,7 @@ export function ReviewCard({
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {isPending ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground">
-            در انتظار تأیید
+            {REVIEW_STATUS_FA.pending}
           </span>
         ) : review.verified_purchase ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">

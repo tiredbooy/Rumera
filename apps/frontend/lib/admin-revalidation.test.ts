@@ -10,6 +10,7 @@ import {
   productDetailCacheTag,
   RECIPE_CACHE_TAG,
   RECOMMENDATION_CACHE_TAG,
+  SETTINGS_CACHE_TAG,
 } from "./cache-tags";
 import { getAdminRevalidationPlan } from "./admin-revalidation";
 
@@ -39,6 +40,16 @@ describe("getAdminRevalidationPlan", () => {
       path: "/categories/[slug]",
       type: "page",
     });
+  });
+
+  // Storefront settings are cached since P0-7, and the layout reads the maintenance
+  // kill switch from them. Without this tag an operator closing or reopening the shop
+  // waits out the TTL, so the branch existing is a correctness requirement.
+  it("invalidates the storefront shell after site settings writes", () => {
+    const plan = getAdminRevalidationPlan(["admin", "settings"], "PUT", 200);
+
+    expect(plan.tags).toContain(SETTINGS_CACHE_TAG);
+    expect(plan.paths).toContainEqual({ path: "/", type: "layout" });
   });
 
   it("invalidates product surfaces after attached product media uploads", () => {

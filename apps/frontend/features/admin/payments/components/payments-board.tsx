@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Gift } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import { AdminPage } from "@/features/dashboard/components/admin-page";
 import { useAdminPayments } from "@/features/payments/hooks";
 import type { PaymentTransactionListQuery } from "@/features/payments/types";
 
@@ -86,22 +86,22 @@ export function PaymentsBoard() {
   const hasFilters = Boolean(status || orderID || userID || sort !== "newest");
 
   return (
-    <>
-      <PageHeader
-        title="تراکنش‌های پرداخت"
-        description="وضعیت پرداخت‌ها را بررسی و شناسه‌های درگاه را با سفارش‌های ثبت‌شده تطبیق دهید. این بخش عمداً فقط خواندنی است."
-        actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/gift-cards">
-              <Gift className="size-4" aria-hidden /> صدور کارت هدیه
-            </Link>
-          </Button>
-        }
-      />
-
+    <AdminPage
+      title="تراکنش‌های پرداخت"
+      description="وضعیت پرداخت‌ها را بررسی و شناسه‌های درگاه را با سفارش‌های ثبت‌شده تطبیق دهید. این بخش عمداً فقط خواندنی است. فیلترها روی دادهٔ واقعی پرداخت اعمال می‌شوند؛ وضعیت و ترتیب بی‌درنگ، شناسه‌ها با «اعمال شناسه‌ها»."
+      action={
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/admin/gift-cards">
+            <Gift className="size-4" aria-hidden /> صدور کارت هدیه
+          </Link>
+        </Button>
+      }
+    >
       <PaymentLookup />
 
-      <section aria-labelledby="payment-list-title" className="mt-6">
+      {/* Two panels on one page: the ledger keeps its own filter bar and pager
+          directly above/below itself rather than in the page-level slots. */}
+      <section aria-label="دفتر تراکنش‌ها" className="mt-6">
         <PaymentListFilters
           orderID={orderID}
           userID={userID}
@@ -121,6 +121,6 @@ export function PaymentsBoard() {
           }
         />
       </section>
-    </>
+    </AdminPage>
   );
 }

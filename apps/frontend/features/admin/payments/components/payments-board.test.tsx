@@ -110,6 +110,41 @@ describe("PaymentsBoard", () => {
     });
   });
 
+  it("links a public user UUID to the customer detail page", () => {
+    const publicUserID = "11111111-1111-1111-1111-111111111111";
+    mocks.list.mockReturnValue({
+      data: {
+        results: [
+          {
+            id: 51,
+            order_id: 9,
+            user_id: publicUserID,
+            amount: "450000",
+            currency: "IRT",
+            status: "succeeded",
+            payment_method: "gateway",
+            transaction_id: "gateway-51",
+            created_at: "2026-07-29T12:00:00Z",
+          },
+        ],
+        pagination: { ...pagination, total_items: 1 },
+      },
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    render(<PaymentsBoard />);
+
+    const customerLinks = screen.getAllByRole("link", { name: publicUserID });
+    expect(customerLinks.length).toBeGreaterThan(0);
+    for (const link of customerLinks) {
+      expect(link).toHaveAttribute("href", `/admin/customers/${publicUserID}`);
+    }
+    expect(screen.queryByRole("link", { name: /#7/ })).not.toBeInTheDocument();
+  });
+
   it("looks up a gateway id and links the real result to its detail page", async () => {
     const result = {
       id: 51,

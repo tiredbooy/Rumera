@@ -48,26 +48,36 @@ export function CouponFormWithOptions({
     let cancelled = false;
     void (async () => {
       try {
-        const [productsPage, tree] = await Promise.all([
-          listSelectableProducts({ limit: 100, page: 1 }),
+        // CF-2: fetch exactly the products already in scope, by id, instead of
+        // the newest 100 and hoping the selection is among them. The picker
+        // searches the server from here on, so this is only about LABELLING an
+        // existing selection — a scope pointing at product #500 used to render
+        // as an empty picker over a discount that was really applied.
+        const scopedIDs = coupon?.applicable_to?.product_ids ?? [];
+        const [scoped, tree] = await Promise.all([
+          scopedIDs.length
+            ? listSelectableProducts({
+                ids: scopedIDs.join(","),
+                limit: Math.min(scopedIDs.length, 100),
+                page: 1,
+              })
+            : Promise.resolve(null),
           getCategoryTree().catch(() => [] as CategoryTree[]),
         ]);
         if (cancelled) return;
         setProductOptions(
-          (productsPage.results ?? []).map((p) => ({
-            id: p.id,
-            title: p.title,
-          })),
+          (scoped?.results ?? []).map((p) => ({ id: p.id, title: p.title })),
         );
         setCategoryOptions(flattenCategories(tree));
       } catch {
-        // Form still works; pickers show empty labels.
+        // The picker still works: it labels unknown ids as «محصول ۵۰۰» rather
+        // than dropping them, so a failed lookup degrades instead of erasing.
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [coupon]);
 
   return (
     <CouponForm

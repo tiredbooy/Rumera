@@ -1,5 +1,28 @@
 # Notifications architecture — Kafka worker (Task 061j)
 
+> **Commands, not facts.** This outbox carries *instructions* ("send this SMS")
+> with exactly one deliverer. Business *facts* ("order 42 was paid") live in a
+> separate outbox with many independent consumers — see
+> [domain-events.md](domain-events.md). A consumer of a fact may issue a command
+> through this path; the reverse never happens.
+>
+> **Corrected since this doc was first written:**
+> - `ClaimUnpublished` now really does use `FOR UPDATE SKIP LOCKED`. It
+>   previously did not, despite what this document and the code comment claimed,
+>   so concurrent relays could publish the same row twice.
+> - The delivery ledger is now a **claim/confirm pair**. It used to be written
+>   before the provider call and treated as proof of delivery, so the first
+>   provider failure marked the message delivered forever and the retry skipped
+>   it — at-least-once was really at-most-never.
+> - A failed publish now backs off (`publish_after`) instead of staying eligible
+>   on every tick and starving the batch behind it.
+> - The Kafka consumer now retries the failed message **in place**. It used to
+>   `continue` without committing, but `FetchMessage` had already advanced the
+>   reader, so the failed message was silently skipped with no consumer lag to
+>   alert on.
+> - `EnqueueTx` exists, so a command can be enqueued on the caller's
+>   transaction rather than dual-written on a separate pool connection.
+
 ## Why Kafka (evidence-based)
 
 | Current mechanism | Limitation |
@@ -16,7 +39,10 @@ Kafka gives **durable, ordered (per key) async delivery**, **consumer groups**, 
 |----------|---------|------------------------|------------|
 | `handlers/auth_otp.go` | SMS OTP | `Dispatcher.DispatchOTP` | `notification.otp.v1` |
 | `PasswordResetService` | Email | `Dispatcher.DispatchPasswordReset` | `notification.password_reset.v1` |
-| `handlers/order.go` `sendOrderConfirmation` | Email | `Dispatcher.DispatchOrderConfirmed` | `notification.order_confirmed.v1` |
+| `orders.ReceiptSender` after paid Confirm / wallet-paid create (PR-020o) | Email | `Dispatcher.DispatchOrderConfirmed` | `notification.order_confirmed.v1` |
+| `giftcard.FulfillPaidPurchaseTx` | Email | `Dispatcher.DispatchGiftPurchased` | `notification.gift_purchased.v1` |
+| `corn/alert_check_job.go` | Email | `Dispatcher.DispatchAlert` | `notification.alert.v1` |
+| `corn/subscription_renewal_job.go` | Email | `Dispatcher.DispatchSubscriptionRenewal` | `notification.subscription_renewal.v1` |
 
 **Easy local default:** `NOTIFICATIONS_MODE=inline` + `SMS_PROVIDER=log` — OTP codes appear in API logs, no Kafka.  
 **Async:** `NOTIFICATIONS_MODE=async` + `KAFKA_BROKERS=…` + `make notification-worker` (see cutover section / `deploy/kafka/README.md`).
@@ -53,11 +79,13 @@ HTTP / domain service
 | Topic | Key | Value (JSON) | Notes |
 |-------|-----|--------------|--------|
 | `rumera.notification.otp.v1` | `phone` | OTP payload | High priority, short retention OK |
-| `rumera.notification.email.v1` | `user_id` | template + vars | password reset, order confirm |
+| `rumera.notification.email.v1` | `user_id` / `to` | template + vars | password reset, order confirm, gift, alert, box renewal |
 | `rumera.notification.otp.v1.dlq` | same | original + error | Manual replay |
 | `rumera.notification.email.v1.dlq` | same | original + error | Manual replay |
 
-**Retention:** 7d default; DLQ 30d. **Partitions:** 3 in dev, scale with consumer count in prod.
+**Retention:** 720h (`EVENTS_RETENTION`) on every topic including DLQ, set by
+`deploy/kafka/create-topics.sh`. **Partitions:** 3 in dev, scale with consumer
+count in prod.
 
 ## Event envelope (versioned)
 
@@ -181,7 +209,10 @@ See package docs under `internal/notifications/` and `cmd/notification-worker`.
 |-----------|----------|
 | `handlers.RequestOTP` | `Dispatcher.DispatchOTP` |
 | `PasswordResetService.RequestReset` | `Dispatcher.DispatchPasswordReset` via `WithNotifier` |
-| `handlers.sendOrderConfirmation` | `Dispatcher.DispatchOrderConfirmed` |
+| `orders.ReceiptSender` (paid Confirm / wallet-paid create) | `Dispatcher.DispatchOrderConfirmed` |
+| `giftcard.FulfillPaidPurchaseTx` | `Dispatcher.DispatchGiftPurchased` (new issue only) |
+| `cron.AlertCheckJob` | `Dispatcher.DispatchAlert` (PR-055a; `notified_at` only after dispatch/send) |
+| `cron.SubscriptionRenewalJob` | `Dispatcher.DispatchSubscriptionRenewal` (PR-055a; date rolls only after dispatch/send) |
 
 ### Worker
 

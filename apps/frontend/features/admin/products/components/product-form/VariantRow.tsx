@@ -7,14 +7,24 @@ import {
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
-import { Controller, useWatch } from "react-hook-form";
+import { Controller, useFormState, useWatch } from "react-hook-form";
 import type {
   Control,
-  FieldErrors,
+  UseFieldArrayRemove,
   UseFormRegister,
   UseFormSetValue,
 } from "react-hook-form";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,13 +47,12 @@ function formatPrice(value?: string) {
   return price > 0 ? `${price.toLocaleString("fa-IR")} تومان` : "بدون قیمت";
 }
 
-export function VariantRow({
+export const VariantRow = React.memo(function VariantRow({
   index,
   fieldId,
   register,
   control,
   setValue,
-  errors,
   optionTypes,
   images,
   availableStock,
@@ -57,17 +66,24 @@ export function VariantRow({
   register: UseFormRegister<ProductFormValues>;
   control: Control<ProductFormValues>;
   setValue: UseFormSetValue<ProductFormValues>;
-  errors: FieldErrors<ProductFormValues>;
   optionTypes: ProductOptionGroup[];
   images?: ProductImage[];
   availableStock?: number;
   isPersisted?: boolean;
   defaultOpen?: boolean;
   disabled?: boolean;
-  onRemove: () => void;
+  onRemove: UseFieldArrayRemove;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
-  const variant = useWatch({ control, name: `variants.${index}` });
+  const [removeOpen, setRemoveOpen] = React.useState(false);
+  const sku = useWatch({ control, name: `variants.${index}.sku` });
+  const price = useWatch({ control, name: `variants.${index}.price` });
+  const selectedOptionIds =
+    useWatch({ control, name: `variants.${index}.option_value_ids` }) ?? [];
+  const { errors } = useFormState({
+    control,
+    name: `variants.${index}`,
+  });
   const skuError = errors.variants?.[index]?.sku?.message;
   const priceError = errors.variants?.[index]?.price?.message;
   const compareError = errors.variants?.[index]?.compare_at_price?.message;
@@ -81,7 +97,6 @@ export function VariantRow({
   const compareId = `variants.${index}.compare_at_price`;
   const activeId = `variants.${index}.is_active`;
   const rowTitleId = `${fieldId}-title`;
-  const selectedOptionIds = variant?.option_value_ids ?? [];
   const selectedOptionLabels = optionTypes.flatMap((group) =>
     group.values
       .filter((value) => selectedOptionIds.includes(value.id))
@@ -101,6 +116,7 @@ export function VariantRow({
         : "موجودی پس از ایجاد";
 
   return (
+    <>
     <Collapsible open={isOpen} onOpenChange={setOpen}>
       <div
         role="group"
@@ -134,10 +150,10 @@ export function VariantRow({
                   className="mt-0.5 block truncate text-xs text-muted-foreground"
                   dir="ltr"
                 >
-                  {variant?.sku?.trim() || "SKU تعیین نشده"}
+                  {sku?.trim() || "SKU تعیین نشده"}
                 </span>
                 <span className="mt-1 flex flex-wrap gap-1.5 md:hidden">
-                  <Badge variant="outline">{formatPrice(variant?.price)}</Badge>
+                  <Badge variant="outline">{formatPrice(price)}</Badge>
                   <Badge
                     variant={availableStock === 0 ? "destructive" : "secondary"}
                   >
@@ -149,7 +165,7 @@ export function VariantRow({
           </CollapsibleTrigger>
 
           <span className="hidden text-sm md:block">
-            {formatPrice(variant?.price)}
+            {formatPrice(price)}
           </span>
           <Badge
             variant={availableStock === 0 ? "destructive" : "secondary"}
@@ -187,7 +203,7 @@ export function VariantRow({
             disabled={disabled}
             aria-label={`حذف تنوع ${index + 1}`}
             className="size-11 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            onClick={onRemove}
+            onClick={() => setRemoveOpen(true)}
           >
             <Trash2 className="size-4" aria-hidden />
           </Button>
@@ -310,5 +326,33 @@ export function VariantRow({
         </CollapsibleContent>
       </div>
     </Collapsible>
+    <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>حذف تنوع؟</AlertDialogTitle>
+          <AlertDialogDescription>
+            {sku?.trim()
+              ? `تنوع «${sku.trim()}» از این محصول حذف می‌شود.`
+              : `تنوع ${index + 1} از این محصول حذف می‌شود.`}
+            {isPersisted
+              ? " پس از ذخیره، این SKU از کاتالوگ هم برداشته می‌شود."
+              : " هنوز ذخیره نشده و فقط از این فرم حذف می‌شود."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>انصراف</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={() => {
+              setRemoveOpen(false);
+              onRemove(index);
+            }}
+          >
+            حذف تنوع
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
-}
+});

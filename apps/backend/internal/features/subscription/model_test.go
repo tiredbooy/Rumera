@@ -26,6 +26,41 @@ func TestSubscriptionResponseOmitsNilAddressID(t *testing.T) {
 	}
 }
 
+func TestUpdateSubscriptionReqJSON(t *testing.T) {
+	var addressOnly UpdateSubscriptionReq
+	if err := json.Unmarshal([]byte(`{"address_id":12}`), &addressOnly); err != nil {
+		t.Fatalf("unmarshal address-only: %v", err)
+	}
+	if addressOnly.Action != "" {
+		t.Fatalf("action = %q, want empty", addressOnly.Action)
+	}
+	if addressOnly.AddressID == nil || *addressOnly.AddressID != 12 {
+		t.Fatalf("address_id = %v, want 12", addressOnly.AddressID)
+	}
+	if !addressOnly.HasPatch() {
+		t.Fatal("address-only must count as a patch")
+	}
+
+	var both UpdateSubscriptionReq
+	if err := json.Unmarshal([]byte(`{"action":"pause","address_id":3}`), &both); err != nil {
+		t.Fatalf("unmarshal action+address: %v", err)
+	}
+	if both.Action != SubscriptionActionPause {
+		t.Fatalf("action = %q, want pause", both.Action)
+	}
+	if both.AddressID == nil || *both.AddressID != 3 {
+		t.Fatalf("address_id = %v, want 3", both.AddressID)
+	}
+
+	var empty UpdateSubscriptionReq
+	if err := json.Unmarshal([]byte(`{}`), &empty); err != nil {
+		t.Fatalf("unmarshal empty: %v", err)
+	}
+	if empty.HasPatch() {
+		t.Fatal("empty body must not count as a patch")
+	}
+}
+
 func TestCreateSubscriptionReqAddressIDNullability(t *testing.T) {
 	for _, input := range []string{
 		`{"cadence":"monthly"}`,

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ListPagination } from "@/components/list-pagination";
 import { SmartImage } from "@/components/smart-image";
 import {
   AlertDialog,
@@ -40,13 +41,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import {
+  AdminFilterBar,
+  AdminPage,
+} from "@/features/dashboard/components/admin-page";
 import {
   JournalApiError,
   useAdminJournalPosts,
   useDeleteJournalPost,
   useUpdateJournalPost,
 } from "@/features/journal/api/client";
+import {
+  PUBLICATION_KIND_FA,
+  publicationKind,
+} from "@/features/admin/shared/publication";
+import { JOURNAL_STATUS_FA } from "@/features/journal/labels";
 import type {
   AdminJournalListQuery,
   JournalListItem,
@@ -56,11 +65,6 @@ import { faNum } from "@/lib/products";
 import { faDate } from "@/lib/utils/date";
 
 const PAGE_SIZE = 18;
-const STATUS_LABELS: Record<JournalStatus, string> = {
-  draft: "پیش‌نویس",
-  published: "منتشرشده",
-  archived: "بایگانی‌شده",
-};
 
 function positivePage(value: string | null): number {
   if (!value || !/^[1-9]\d*$/.test(value)) return 1;
@@ -134,8 +138,18 @@ function JournalCard({
           sizes="(min-width: 1280px) 30vw, (min-width: 640px) 50vw, 100vw"
         />
         <span className="absolute end-3 top-3">
-          <Badge variant={statusVariant(post.status)}>
-            {STATUS_LABELS[post.status]}
+          <Badge
+            variant={
+              publicationKind(post.status, post.published_at) === "scheduled"
+                ? "outline"
+                : statusVariant(post.status)
+            }
+          >
+            {
+              PUBLICATION_KIND_FA[
+                publicationKind(post.status, post.published_at)
+              ]
+            }
           </Badge>
         </span>
         {post.is_featured ? (
@@ -317,71 +331,99 @@ export function JournalBoard({ canWrite }: { canWrite: boolean }) {
   const mutationError = publishPost.error ?? removePost.error;
 
   return (
-    <>
-      <PageHeader
-        title="ژورنال"
-        description="نوشته‌های آموزشی و روایی رومرا را از پیش‌نویس تا انتشار مدیریت کنید."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/admin/journal/categories">
-                <FolderTree className="size-4" /> دسته‌های ژورنال
+    <AdminPage
+      title="ژورنال"
+      description="نوشته‌های آموزشی و روایی رومرا را از پیش‌نویس تا انتشار مدیریت کنید."
+      action={
+        <>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/journal/categories">
+              <FolderTree className="size-4" /> دسته‌های ژورنال
+            </Link>
+          </Button>
+          {canWrite ? (
+            <Button size="sm" asChild>
+              <Link href="/admin/journal/new">
+                <Plus className="size-4" /> نوشتهٔ جدید
               </Link>
             </Button>
-            {canWrite ? (
-              <Button size="sm" asChild>
-                <Link href="/admin/journal/new">
-                  <Plus className="size-4" /> نوشتهٔ جدید
-                </Link>
-              </Button>
-            ) : null}
-          </div>
-        }
-      />
-
-      <div className="mb-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-        <label className="relative block">
-          <span className="sr-only">جستجوی نوشته</span>
-          <Search
-            className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            type="search"
-            value={search}
-            onChange={(event) =>
-              setSearchState({ source: query, value: event.target.value })
-            }
-            placeholder="جستجو در عنوان و خلاصه…"
-            className="ps-9"
-            disabled={mutationPending}
-          />
-        </label>
-        <Select
-          value={status ?? "all"}
-          onValueChange={(value) =>
-            updateURL({
-              status: value === "all" ? undefined : value,
-              page: undefined,
-            })
-          }
-          disabled={mutationPending}
+          ) : null}
+        </>
+      }
+      filters={
+        <AdminFilterBar
+          id="journal-filter-title"
+          title="جستجو و فیلتر نوشته‌ها"
+          hasFilters={Boolean(query) || Boolean(status)}
+          onReset={() => router.push(pathname)}
+          gridClassName="sm:grid-cols-[minmax(0,1fr)_220px]"
         >
-          <SelectTrigger
-            aria-label="فیلتر وضعیت انتشار"
-            className="min-h-11 w-full"
+          <label className="relative block">
+            <span className="sr-only">جستجوی نوشته</span>
+            <Search
+              className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={search}
+              onChange={(event) =>
+                setSearchState({ source: query, value: event.target.value })
+              }
+              placeholder="جستجو در عنوان و خلاصه…"
+              className="h-11 ps-9"
+              disabled={mutationPending}
+            />
+          </label>
+          <Select
+            value={status ?? "all"}
+            onValueChange={(value) =>
+              updateURL({
+                status: value === "all" ? undefined : value,
+                page: undefined,
+              })
+            }
+            disabled={mutationPending}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">همهٔ وضعیت‌ها</SelectItem>
-            <SelectItem value="draft">پیش‌نویس</SelectItem>
-            <SelectItem value="published">منتشرشده</SelectItem>
-            <SelectItem value="archived">بایگانی‌شده</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
+            <SelectTrigger
+              aria-label="فیلتر وضعیت انتشار"
+              className="min-h-11 w-full"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">همهٔ وضعیت‌ها</SelectItem>
+              <SelectItem value="draft">پیش‌نویس</SelectItem>
+              <SelectItem value="published">منتشرشده</SelectItem>
+              <SelectItem value="archived">بایگانی‌شده</SelectItem>
+            </SelectContent>
+          </Select>
+        </AdminFilterBar>
+      }
+      pagination={
+        posts.data && posts.data.pagination.total_items > 0 ? (
+          <ListPagination
+            page={posts.data.pagination.page}
+            totalPages={posts.data.pagination.total_pages}
+            hasPrev={posts.data.pagination.has_prev}
+            hasNext={posts.data.pagination.has_next}
+            onPrev={() =>
+              updateURL({ page: page > 2 ? String(page - 1) : undefined })
+            }
+            onNext={() => updateURL({ page: String(page + 1) })}
+            disabled={posts.isFetching || mutationPending}
+            ariaLabel="صفحه‌بندی نوشته‌ها"
+            label={
+              <>
+                {faNum(posts.data.pagination.total_items)} نوشته · صفحهٔ{" "}
+                {faNum(posts.data.pagination.page)} از{" "}
+                {faNum(posts.data.pagination.total_pages)}
+              </>
+            }
+          />
+        ) : null
+      }
+    >
       {mutationError ? (
         <p
           role="alert"
@@ -490,50 +532,6 @@ export function JournalBoard({ canWrite }: { canWrite: boolean }) {
         </div>
       ) : null}
 
-      {posts.data && posts.data.pagination.total_items > 0 ? (
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground" aria-live="polite">
-            {faNum(posts.data.pagination.total_items)} نوشته · صفحهٔ{" "}
-            {faNum(posts.data.pagination.page)} از{" "}
-            {faNum(posts.data.pagination.total_pages)}
-            {posts.isFetching ? (
-              <Loader2
-                className="ms-1 inline size-3 animate-spin"
-                aria-hidden
-              />
-            ) : null}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={
-                !posts.data.pagination.has_prev ||
-                posts.isFetching ||
-                mutationPending
-              }
-              onClick={() =>
-                updateURL({ page: page > 2 ? String(page - 1) : undefined })
-              }
-            >
-              قبلی
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={
-                !posts.data.pagination.has_next ||
-                posts.isFetching ||
-                mutationPending
-              }
-              onClick={() => updateURL({ page: String(page + 1) })}
-            >
-              بعدی
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
       <AlertDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
@@ -570,6 +568,6 @@ export function JournalBoard({ canWrite }: { canWrite: boolean }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </AdminPage>
   );
 }

@@ -83,6 +83,20 @@ describe("sitemap tag discovery", () => {
   });
 });
 
+describe("sitemap brands discovery", () => {
+  it("includes the public brands index", async () => {
+    const entries = await sitemap();
+
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        url: absoluteUrl("/brands"),
+        changeFrequency: "weekly",
+        priority: 0.7,
+      }),
+    );
+  });
+});
+
 describe("sitemap category discovery", () => {
   it("includes the category directory and only encoded routeable details", async () => {
     mocks.listCategories.mockResolvedValue([

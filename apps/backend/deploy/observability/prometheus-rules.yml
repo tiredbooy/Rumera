@@ -114,3 +114,34 @@ groups:
         annotations:
           summary: "Cache circuit breaker is open"
           description: "The cache circuit breaker has been open for over a minute; Redis is short-circuited and reads fall back to the database."
+
+  # These rules only evaluate where Prometheus is actually scraped today —
+  # docker-compose.dev.yml and deploy/observability/docker-compose.observability.yml.
+  # The prod stack does not run Prometheus, so they have nowhere to fire there yet.
+  - name: rumera-backend-events
+    rules:
+      - alert: EventOutboxLagHigh
+        expr: event_outbox_lag_seconds{job="rumera-backend"} > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Event outbox lag above 5 minutes"
+          description: "Oldest due, unprocessed consumption is {{ $value | humanizeDuration }} old."
+
+      - alert: EventDLQIncrease
+        expr: increase(event_dlq_total{job="rumera-backend"}[15m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Facts landed in the event DLQ"
+          description: "{{ $value }} consumption(s) were parked for an operator in the last 15m (consumer={{ $labels.consumer }}, type={{ $labels.type }})."
+
+      - alert: EventPublishErrors
+        expr: rate(event_published_total{job="rumera-backend",result="error"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Event publish errors"
+          description: "Relaying facts to the bus is failing for type={{ $labels.type }} ({{ $value }} errors/s)."

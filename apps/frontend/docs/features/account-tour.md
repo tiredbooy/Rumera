@@ -11,8 +11,8 @@ backend APIs under [`docs/api/`](../../../backend/docs/api/) (wallet, loyalty, �
 ## What “account” is
 
 The **customer dashboard** for signed-in shoppers: orders, addresses, wishlist,
-rewards, wallet, taste profile, subscriptions, reviews, and settings. It is
-**not** the staff admin console (`/admin`).
+rewards, wallet, taste profile, subscriptions, product alerts, reviews, and
+settings. It is **not** the staff admin console (`/admin`).
 
 ```
 Browser /account/*
@@ -44,6 +44,7 @@ Canonical links live in `lib/rbac/nav.ts` → `ACCOUNT_NAV` (used by
 | سلیقهٔ من | `/account/taste` | `features/account/taste` + `features/taste` |
 | باشگاه مشتریان | `/account/rewards` | `features/account` rewards + `features/loyalty` (+ referral UI) |
 | اشتراک‌ها | `/account/subscriptions` | `features/account/subscriptions` + `features/subscriptions` |
+| اعلان‌ها | `/account/alerts` | `features/product-alerts` |
 | کیف پول | `/account/wallet` | `features/account/wallet` + `features/wallet` |
 | دیدگاه‌های من | `/account/reviews` | `features/account/reviews` + `features/reviews` |
 | تنظیمات حساب | `/account/settings` | `features/account/settings` + profile |
@@ -63,8 +64,11 @@ Uses React Query hooks from multiple domains in one view
 ### Orders
 
 List + detail of **the caller’s** orders only. Backend always scopes by `uid`
-from JWT. Cancellation and status display follow order API semantics; payment
-status is a read model (settlement is webhook-driven — see
+from JWT. List tabs send `status` to `GET /orders` (one request per mapped
+status; the API is single-status) and merge those **server pages**. They do
+not client-filter the current unfiltered page. A failed fetch shows retry, not
+the empty-orders panel. Cancellation and status display follow order API
+semantics; payment status is a read model (settlement is webhook-driven — see
 [payments-and-webhooks](../../../backend/docs/architecture/payments-and-webhooks.md)).
 
 ### Addresses
@@ -99,7 +103,7 @@ created. UI must not invent balances.
 | API | Role |
 |-----|------|
 | `GET referrals/me` | Share code / status |
-| `POST referrals/claim` | Attach code as referee |
+| `POST referrals/claim` | Attach code as referee — `200 {claimed:true}` or `400` |
 | On paid order | `referral.OnPaidOrder` completes pending referral (backend) |
 
 Often surfaced inside rewards / settings marketing copy; claim may also appear
@@ -123,7 +127,7 @@ Gift cards:
 - Customer purchase: `features/gift-cards/gift-card-purchase.tsx` → pending `gbuy-…`
 - Self-delivery: `GET /gift-cards/mine` → `gift-card-mine.tsx`
 - Customer redeem: `features/wallet/gift-card-redeem.tsx` → wallet credit
-- Admin issue: `features/admin/gift-cards` + gift-card APIs
+- Admin issue + paginated list/void: `features/admin/gift-cards` + gift-card APIs (PR-064a)
 - Docs: [gift-cards.md](./gift-cards.md)
 
 ### Subscriptions (cellar box)
@@ -134,16 +138,27 @@ FE detail: [subscriptions.md](./subscriptions.md) (PH-043b polish).
 
 | Concept | Storefront meaning |
 |---------|-------------------|
-| Plan | Fixed cellar box |
+| Plan | Fixed cellar box — at most one **active** per customer (PR-057b; second create 409) |
 | Cadence | Monthly or quarterly |
 | Actions | Pause, skip one period, cancel, resume/reactivate (confirm for pause/skip/cancel) |
 | Next date | Labelled **ارسال باکس بعدی** — email reminder window, not an invoice |
-| Address | Optional on create; missing-address callout when active without ship-to |
+| Address | Optional on create; amber «آدرسی به این باکس وصل نیست» when unresolved; active/paused picker PATCHes `{ address_id }` (PR-035b) |
 | Contents | Curated physical assortment — **not** a per-user SKU list in the API |
 
 Backend product model:
 [box-subscriptions.md](../../../backend/docs/architecture/box-subscriptions.md).
 Renewal cron: Persian **RTL** email when due + rolls the date; **does not auto-charge**.
+
+### Product alerts (`/account/alerts`)
+
+List + delete of the caller’s restock / price-drop subscriptions. Create stays
+on the PDP (`AlertButton`). `GET /alerts` is `{ data: ProductAlert[] }` with
+variant id, type, optional `target_price`, and `notified_at` — **no** product
+title/slug until backend enrichment (PR-053b). The page shows `تنوع #…` and
+does not invent a name. Delete uses `DELETE /alerts/:id` after confirm.
+
+Hooks: `features/product-alerts/{api,hooks}.ts` — `useProductAlerts`,
+`useDeleteProductAlert`.
 
 ### Reviews
 
@@ -168,6 +183,9 @@ features/<domain>/types.ts              # wire types matching Go JSON
 Example: wallet **view** under `features/account/wallet`, wallet **API** under
 `features/wallet`. Do not fetch wallet from a random `lib/` helper.
 
+Account surfaces do **not** keep local `api.ts` / `types.ts` / `validations.ts`
+shells (PR-035d deleted the empty leftovers). Import the domain module.
+
 ---
 
 ## Auth and caching rules
@@ -189,6 +207,7 @@ Example: wallet **view** under `features/account/wallet`, wallet **API** under
 | Buy gift card (paid) | Code on mine list; optional gift share |
 | Redeem gift card | Wallet credit |
 | Add wishlist on PDP | Wishlist page |
+| Subscribe to restock / price-drop on PDP | Account alerts list |
 | Checkout address | Address book |
 
 ---

@@ -3,9 +3,9 @@
 package integration
 
 import (
-	"github.com/tiredbooy/internal/features/catalog/product"
 	"context"
 	"errors"
+	"github.com/tiredbooy/internal/features/catalog/product"
 	"github.com/tiredbooy/internal/features/catalog/tag"
 	"os"
 	"testing"

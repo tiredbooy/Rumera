@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { ADMIN_NAV, ACCOUNT_NAV, filterNav } from "./nav";
+import { Package } from "lucide-react";
+
+import { ADMIN_NAV, ACCOUNT_NAV, applyNavBadges, filterNav } from "./nav";
 import { PERMISSIONS } from "./permissions";
 
 function hrefs(permissions: (typeof PERMISSIONS)[keyof typeof PERMISSIONS][]) {
@@ -50,20 +52,32 @@ describe("admin module navigation", () => {
   it("organizes admin links into job-based groups", () => {
     const titles = ADMIN_NAV.map((group) => group.title).filter(Boolean);
     expect(titles).toEqual([
+      "امروز",
+      "کار روزانه",
       "کاتالوگ",
-      "موجودی و سفارش",
       "مشتریان",
-      "فروش و لجستیک",
-      "محتوا",
-      "بینش و پایش",
-      "سیستم",
+      "بازاریابی و محتوا",
+      "پیکربندی",
     ]);
-    const insights = ADMIN_NAV.find((g) => g.title === "بینش و پایش");
-    expect(insights?.items.map((i) => i.href)).toEqual(
+    const daily = ADMIN_NAV.find((g) => g.title === "کار روزانه");
+    expect(daily?.items.map((i) => i.href)).toEqual([
+      "/admin/orders",
+      "/admin/payments",
+      "/admin/reviews",
+      "/admin/inventory",
+    ]);
+
+    const setup = ADMIN_NAV.find((g) => g.title === "پیکربندی");
+    expect(setup?.collapsible).toBe(true);
+    expect(setup?.defaultCollapsed).toBe(true);
+    expect(setup?.items.map((i) => i.href)).toEqual(
       expect.arrayContaining([
+        "/admin/shipping",
         "/admin/analytics",
         "/admin/recommendations",
         "/admin/monitoring",
+        "/admin/roles",
+        "/admin/settings",
       ]),
     );
 
@@ -76,12 +90,35 @@ describe("admin module navigation", () => {
       "/admin/options",
     ]);
 
-    // Drop empty groups when the operator lacks inventory + orders.
+    // Drop empty groups when the operator lacks daily-work + catalogue write.
     const onlyTags = filterNav(ADMIN_NAV, {
       permissions: [PERMISSIONS.TAGS_MANAGE],
     });
-    expect(onlyTags.some((g) => g.title === "موجودی و سفارش")).toBe(false);
+    expect(onlyTags.some((g) => g.title === "کار روزانه")).toBe(false);
     expect(onlyTags.some((g) => g.title === "کاتالوگ")).toBe(true);
+  });
+
+  it("applies pending counts onto matching items and skips zero or failed", () => {
+    const [daily] = applyNavBadges(
+      [
+        {
+          title: "کار روزانه",
+          items: [
+            { label: "سفارش‌ها", href: "/admin/orders", icon: Package },
+            { label: "دیدگاه‌ها", href: "/admin/reviews", icon: Package },
+            { label: "موجودی", href: "/admin/inventory", icon: Package },
+          ],
+        },
+      ],
+      {
+        "/admin/orders": 4,
+        "/admin/reviews": 0,
+        "/admin/inventory": null,
+      },
+    );
+    expect(daily.items[0].badge).toBe(4);
+    expect(daily.items[1].badge).toBeUndefined();
+    expect(daily.items[2].badge).toBeUndefined();
   });
 
   it("groups account links without permission gates", () => {

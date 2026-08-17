@@ -77,6 +77,9 @@ describe("ProductCard", () => {
     expect(markup).toContain('aria-label="برچسب‌های محصول"');
     expect(markup).toContain("هدیهٔ بسیار ویژهٔ رومرا");
     expect(markup).toContain("کمیاب و کلکسیونی");
+    expect(markup).toContain('href="/tags/1"');
+    expect(markup).toContain('href="/tags/2"');
+    expect(markup).not.toContain('href="/tags/3"');
     expect(markup).toContain("min-w-0");
     expect(markup).toContain("shrink");
     expect(markup).not.toContain("محدود");
@@ -86,6 +89,16 @@ describe("ProductCard", () => {
     expect(markup).toContain("[@media(any-pointer:coarse)]:inline");
     expect(markup).not.toContain("max-sm:opacity-90");
     expect(markup).toContain("backdrop-blur");
+  });
+
+  it("links visible tag chips to /tags/:id from the DTO id, not a slug", () => {
+    const markup = renderToStaticMarkup(<ProductCard product={product} />);
+
+    expect(markup).toContain('href="/tags/1"');
+    expect(markup).toContain('href="/tags/2"');
+    expect(markup).not.toContain('href="/tags/hediye');
+    expect(markup).not.toContain("/tags/هدیه");
+    expect(markup).not.toContain('href="/tags/3"');
   });
 
   it("renders truthful unavailable and missing-public-page states", () => {

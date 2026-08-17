@@ -31,6 +31,8 @@ type productServiceRepo struct {
 	syncTagIDs    []int64
 	deleteErr     error
 	deleteID      int64
+	createCalls   int
+	createReq     CreateProductReq
 }
 
 func (r *productServiceRepo) GetBySlug(_ context.Context, slug string) (*Product, error) {
@@ -87,11 +89,17 @@ func (r *productServiceRepo) Delete(_ context.Context, id int64) error {
 	return r.deleteErr
 }
 
-func TestProductServiceGetBySlugTrimsAndPreservesExactSlug(t *testing.T) {
-	slug := "Exact-Slug"
+func (r *productServiceRepo) Create(_ context.Context, req CreateProductReq) (*Product, error) {
+	r.createCalls++
+	r.createReq = req
+	return &Product{ID: 1, Title: req.Title, Slug: req.Slug, IsActive: true}, nil
+}
+
+func TestProductServiceGetBySlugNormalizesCanonicalSlug(t *testing.T) {
+	slug := "exact-slug"
 	repo := &productServiceRepo{product: &Product{ID: 3, Slug: &slug, IsActive: true}}
 
-	product, err := NewService(repo, nil, nil).GetBySlug(context.Background(), "  "+slug+"  ")
+	product, err := NewService(repo, nil, nil).GetBySlug(context.Background(), "  Exact--Slug  ")
 	if err != nil {
 		t.Fatalf("get by slug: %v", err)
 	}
@@ -195,6 +203,107 @@ func TestProductServiceUpdateRejectsIdentityOwnedByAnotherProduct(t *testing.T) 
 	}
 	if repo.slugExcludeID != 42 || repo.updateCalls != 0 {
 		t.Fatalf("exclusion/update calls = %d/%d; want 42/0", repo.slugExcludeID, repo.updateCalls)
+	}
+}
+
+func TestProductServiceCreateSlugifiesAndRequiresSlug(t *testing.T) {
+	repo := &productServiceRepo{}
+	raw := "  Highland / Single--Malt?  "
+
+	created, err := NewService(repo, nil, nil).Create(context.Background(), CreateProductReq{
+		Title: "Highland Single Malt",
+		Slug:  &raw,
+	})
+	if err != nil {
+		t.Fatalf("create with slug: %v", err)
+	}
+	if repo.createCalls != 1 || repo.createReq.Slug == nil || *repo.createReq.Slug != "highland-single-malt" {
+		t.Fatalf("create request = %+v", repo.createReq)
+	}
+	if created.Slug == nil || *created.Slug != "highland-single-malt" {
+		t.Fatalf("created slug = %+v", created.Slug)
+	}
+
+	missingRepo := &productServiceRepo{}
+	_, err = NewService(missingRepo, nil, nil).Create(context.Background(), CreateProductReq{Title: "Draft"})
+	assertProductSlugValidation(t, err, errMsgActiveProductNeedsSlug)
+	if missingRepo.createCalls != 0 {
+		t.Fatal("create without slug reached repository")
+	}
+
+	garbage := "---"
+	garbageRepo := &productServiceRepo{}
+	_, err = NewService(garbageRepo, nil, nil).Create(context.Background(), CreateProductReq{
+		Title: "Draft",
+		Slug:  &garbage,
+	})
+	assertProductSlugValidation(t, err, errMsgInvalidPublicSlug)
+	if garbageRepo.createCalls != 0 {
+		t.Fatal("create with invalid slug reached repository")
+	}
+}
+
+func TestProductServiceUpdateSlugifiesSubmittedSlug(t *testing.T) {
+	repo := &productServiceRepo{}
+	raw := "  Whisky / Cask?  "
+
+	_, err := NewService(repo, nil, nil).Update(context.Background(), 42, UpdateProductReq{Slug: &raw})
+	if err != nil {
+		t.Fatalf("update slug: %v", err)
+	}
+	if repo.updateCalls != 1 || repo.updateReq.Slug == nil || *repo.updateReq.Slug != "whisky-cask" {
+		t.Fatalf("update request = %+v", repo.updateReq)
+	}
+}
+
+func TestProductServiceUpdateActivateWithoutSlugRejected(t *testing.T) {
+	active := true
+	repo := &productServiceRepo{adminProduct: &Product{ID: 42, Title: "Draft", IsActive: false}}
+
+	_, err := NewService(repo, nil, nil).Update(context.Background(), 42, UpdateProductReq{IsActive: &active})
+	assertProductSlugValidation(t, err, errMsgActiveProductNeedsSlug)
+	if repo.updateCalls != 0 {
+		t.Fatal("activate without slug reached repository")
+	}
+
+	slug := "existing-slug"
+	okRepo := &productServiceRepo{adminProduct: &Product{ID: 42, Slug: &slug, IsActive: false}}
+	if _, err := NewService(okRepo, nil, nil).Update(context.Background(), 42, UpdateProductReq{IsActive: &active}); err != nil {
+		t.Fatalf("activate with existing slug: %v", err)
+	}
+	if okRepo.updateCalls != 1 {
+		t.Fatalf("update calls = %d; want 1", okRepo.updateCalls)
+	}
+
+	inactive := false
+	draftRepo := &productServiceRepo{}
+	if _, err := NewService(draftRepo, nil, nil).Update(context.Background(), 42, UpdateProductReq{IsActive: &inactive}); err != nil {
+		t.Fatalf("deactivate without slug: %v", err)
+	}
+	if draftRepo.updateCalls != 1 {
+		t.Fatalf("deactivate update calls = %d; want 1", draftRepo.updateCalls)
+	}
+}
+
+func TestProductServiceUpdateRejectsEmptySlug(t *testing.T) {
+	empty := "   "
+	repo := &productServiceRepo{}
+
+	_, err := NewService(repo, nil, nil).Update(context.Background(), 42, UpdateProductReq{Slug: &empty})
+	assertProductSlugValidation(t, err, errMsgInvalidPublicSlug)
+	if repo.updateCalls != 0 {
+		t.Fatal("empty slug reached repository")
+	}
+}
+
+func assertProductSlugValidation(t *testing.T, err error, want string) {
+	t.Helper()
+	if !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("error = %v; want ErrValidation", err)
+	}
+	fields, ok := apperr.Fields(err)
+	if !ok || len(fields["slug"]) == 0 || fields["slug"][0] != want {
+		t.Fatalf("slug fields = %#v; want %q", fields, want)
 	}
 }
 

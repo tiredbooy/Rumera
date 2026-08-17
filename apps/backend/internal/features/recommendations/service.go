@@ -23,6 +23,10 @@ const (
 
 type Service interface {
 	RecordInteraction(ctx context.Context, userID int64, req *InteractionReq) error
+	// RecordPurchasesForOrder writes a purchase signal per distinct order-line
+	// product after payments.Confirm. Missing products are skipped; query
+	// failures are returned (never collapsed to an empty success).
+	RecordPurchasesForOrder(ctx context.Context, userID, orderID int64) error
 
 	Trending(ctx context.Context, q RecommendationQuery) ([]*RecommendationItem, error)
 	Similar(ctx context.Context, productID int64, q RecommendationQuery) ([]*RecommendationItem, error)
@@ -44,15 +48,17 @@ type Service interface {
 }
 
 type service struct {
-	repo Repository
+	repo  Repository
+	taste TasteProfileReader
 }
 
-func NewService(repo Repository) Service {
-	return &service{repo: repo}
+func NewService(repo Repository, taste TasteProfileReader) Service {
+	return &service{repo: repo, taste: taste}
 }
 
 // RecordInteraction logs an implicit-feedback signal, applying the configured
-// weight for the interaction type.
+// weight for the interaction type. Unknown product_id is 404 so we never
+// insert against a missing catalogue row (FK would 500).
 func (s *service) RecordInteraction(ctx context.Context, userID int64, req *InteractionReq) error {
 	if userID <= 0 || req == nil {
 		return apperr.ErrInvalidRequest
@@ -60,11 +66,56 @@ func (s *service) RecordInteraction(ctx context.Context, userID int64, req *Inte
 	if !req.InteractionType.Valid() || req.ProductID <= 0 {
 		return apperr.ErrInvalidRequest
 	}
-	weight := req.InteractionType.WeightFor()
-	if err := s.repo.RecordInteraction(ctx, userID, req, weight); err != nil {
+	exists, err := s.repo.ProductExists(ctx, req.ProductID)
+	if err != nil {
 		return fmt.Errorf("service.RecordInteraction: %w", err)
 	}
-	metrics.IncRecommendationInteraction(string(req.InteractionType))
+	if !exists {
+		return apperr.ErrNotFound
+	}
+	weight := req.InteractionType.WeightFor()
+	inserted, err := s.repo.RecordInteraction(ctx, userID, req, weight)
+	if err != nil {
+		return fmt.Errorf("service.RecordInteraction: %w", err)
+	}
+	if inserted {
+		metrics.IncRecommendationInteraction(string(req.InteractionType))
+	}
+	return nil
+}
+
+const purchaseSource = "payments.confirm"
+
+// RecordPurchasesForOrder inserts one purchase interaction per distinct
+// product on the paid order. Idempotent per order_id (and per UTC day).
+func (s *service) RecordPurchasesForOrder(ctx context.Context, userID, orderID int64) error {
+	if userID <= 0 || orderID <= 0 {
+		return apperr.ErrInvalidRequest
+	}
+	ids, err := s.repo.OrderProductIDs(ctx, orderID)
+	if err != nil {
+		return fmt.Errorf("service.RecordPurchasesForOrder: %w", err)
+	}
+	src := purchaseSource
+	for _, pid := range ids {
+		if pid <= 0 {
+			continue
+		}
+		err := s.RecordInteraction(ctx, userID, &InteractionReq{
+			ProductID:       pid,
+			InteractionType: InteractionPurchase,
+			Source:          &src,
+			Metadata:        map[string]any{"order_id": fmt.Sprintf("%d", orderID)},
+		})
+		if errors.Is(err, apperr.ErrNotFound) {
+			slog.Warn("recommendations: skip purchase, product missing",
+				"user_id", userID, "order_id", orderID, "product_id", pid)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -107,8 +158,9 @@ func (s *service) FrequentlyBoughtTogether(ctx context.Context, productID int64,
 }
 
 // ForYou serves personalized recommendations. It lazily builds the profile on a
-// cache miss and always backfills to trending so the response is never empty —
-// crucial for a storefront homepage.
+// cache miss, overlays an explicit taste-quiz profile when one exists, and
+// always backfills to trending so the response is never empty — crucial for a
+// storefront homepage.
 func (s *service) ForYou(ctx context.Context, userID int64, q RecommendationQuery) ([]*RecommendationItem, error) {
 	if userID <= 0 {
 		return nil, apperr.ErrInvalidRequest
@@ -127,7 +179,9 @@ func (s *service) ForYou(ctx context.Context, userID int64, q RecommendationQuer
 		}
 	}
 
-	// Cold user with no signal → pure trending.
+	s.blendTaste(ctx, userID, profile)
+
+	// Cold user with no behavioural or quiz signal → pure trending.
 	if !profile.HasSignal() {
 		return s.Trending(ctx, q)
 	}
@@ -201,6 +255,29 @@ func (s *service) RefreshActiveProfiles(ctx context.Context, windowDays, maxUser
 func (s *service) logRefreshSkip(userID int64, err error) {
 	slog.Warn("recommendation profile refresh: skipping user",
 		"user_id", userID, "err", err)
+}
+
+// blendTaste resolves quiz category/flavor/occasion strings to catalogue ids
+// and adds them to the in-memory affinity profile. Lookup failures are logged
+// and skipped so ForYou still serves behavioural (or trending) results. Taste
+// is never written back to user_recommendation_profiles.
+func (s *service) blendTaste(ctx context.Context, userID int64, profile *UserRecommendationProfile) {
+	prefs := s.loadTaste(ctx, userID)
+	if !tasteHasPrefs(prefs) {
+		return
+	}
+
+	catIDs, err := s.repo.LookupCategoryIDs(ctx, prefs.Categories)
+	if err != nil {
+		slog.Warn("for-you: taste category lookup failed", "user_id", userID, "err", err)
+		catIDs = nil
+	}
+	tagIDs, err := s.repo.LookupTagIDs(ctx, tasteTagNames(prefs))
+	if err != nil {
+		slog.Warn("for-you: taste tag lookup failed", "user_id", userID, "err", err)
+		tagIDs = nil
+	}
+	applyTaste(profile, catIDs, tagIDs)
 }
 
 func (s *service) OpsStats(ctx context.Context, windowDays int) (*RecommendationOpsStats, error) {

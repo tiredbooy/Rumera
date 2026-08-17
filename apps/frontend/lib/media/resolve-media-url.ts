@@ -197,6 +197,8 @@ export function mediaTransformUrl(
   }
 
   const search = new URLSearchParams();
+  // Omit `f` unless a caller asked for a specific format so the backend can
+  // content-negotiate AVIF. Never default to webp here.
   if (params.f) search.set("f", params.f);
   if (params.q != null) search.set("q", String(params.q));
   if (params.w != null) search.set("w", String(params.w));

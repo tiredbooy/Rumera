@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, CircleAlert, Copy, Loader2 } from "lucide-react";
 import { Controller, type Control } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,8 @@ export function FormHeaderBar({
   hasPendingRetry,
   savePhase,
   hasUnsavedChanges,
+  canWrite = true,
+  duplicateHref,
   onCancel,
 }: {
   mode: "create" | "edit";
@@ -32,6 +35,8 @@ export function FormHeaderBar({
   hasPendingRetry: boolean;
   savePhase: ProductSavePhase;
   hasUnsavedChanges: boolean;
+  canWrite?: boolean;
+  duplicateHref?: string;
   onCancel: () => void;
 }) {
   const status = productSaveStatus(savePhase, mode, hasUnsavedChanges);
@@ -75,7 +80,7 @@ export function FormHeaderBar({
                   id="is_active_header"
                   checked={field.value}
                   onCheckedChange={field.onChange}
-                  disabled={isLocked}
+                  disabled={isLocked || !canWrite}
                   aria-label="وضعیت انتشار محصول"
                 />
               </>
@@ -83,19 +88,28 @@ export function FormHeaderBar({
           />
         </div>
 
+        {duplicateHref ? (
+          <Button type="button" variant="ghost" size="sm" asChild>
+            <Link href={duplicateHref}>
+              <Copy className="size-4" aria-hidden />
+              تکثیر
+            </Link>
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          disabled={isSubmitting}
           onClick={onCancel}
         >
           انصراف
         </Button>
-        <Button type="submit" size="sm" disabled={isSubmitting}>
-          {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
-          {productSaveAction(savePhase, hasPendingRetry)}
-        </Button>
+        {canWrite ? (
+          <Button type="submit" size="sm" disabled={isSubmitting}>
+            {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+            {productSaveAction(savePhase, hasPendingRetry)}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

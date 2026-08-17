@@ -13,8 +13,8 @@ tags: [journey, account, money]
 ## Happy path
 
 1. Customer opens `/account/wallet` → presets / custom amount
-2. `POST /wallet/topup` + `Idempotency-Key` → pending payment `wtop-…`
-3. UI pending panel (copy tx id); pay gateway with `transaction_id`
+2. `POST /wallet/topup` + `Idempotency-Key` (store [[BFF Proxies]] forwards the header) → pending payment `wtop-…` + `payment_url`
+3. Storefront shows «پرداخت در درگاه» when `payment_url` is non-empty (same window; PR-030c · [[Account FE]]). Empty URL (dev, env unset) keeps pending copy only — not paid; FE does not invent a start URL.
 4. Webhook `succeeded` → Confirm credits wallet (`topup_txid=` ledger)
 5. Customer refreshes balance / ledger
 

@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { History, UserCog } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { ListPagination } from "@/components/list-pagination";
 import type {
   AdminUserAuditAction,
   AdminUserAuditEvent,
@@ -184,43 +183,16 @@ export function UserAuditHistory({
         </ol>
       )}
 
-      {pagination.has_prev || pagination.has_next ? (
-        <nav
-          className="mt-4 flex items-center justify-end gap-2"
-          aria-label="صفحه‌بندی تاریخچهٔ مدیریتی"
-        >
-          {pagination.has_prev ? (
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="h-11 cursor-pointer"
-            >
-              <Link
-                href={userAuditPageHref(userID, pagination.page - 1)}
-                rel="prev"
-              >
-                رویدادهای جدیدتر
-              </Link>
-            </Button>
-          ) : null}
-          {pagination.has_next ? (
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="h-11 cursor-pointer"
-            >
-              <Link
-                href={userAuditPageHref(userID, pagination.page + 1)}
-                rel="next"
-              >
-                رویدادهای قدیمی‌تر
-              </Link>
-            </Button>
-          ) : null}
-        </nav>
-      ) : null}
+      <ListPagination
+        page={pagination.page}
+        totalPages={pagination.total_pages}
+        hasPrev={pagination.has_prev}
+        hasNext={pagination.has_next}
+        prevHref={userAuditPageHref(userID, pagination.page - 1)}
+        nextHref={userAuditPageHref(userID, pagination.page + 1)}
+        ariaLabel="صفحه‌بندی تاریخچهٔ مدیریتی"
+        className="mt-4"
+      />
     </section>
   );
 }

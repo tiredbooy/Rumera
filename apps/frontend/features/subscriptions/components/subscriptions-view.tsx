@@ -21,7 +21,10 @@ import {
   type PendingSubscriptionAction,
 } from "./subscription-action-dialog";
 import { SubscriptionCreatePanel } from "./subscription-create-panel";
-import { actionSuccessMessage } from "./subscription-display-helpers";
+import {
+  actionSuccessMessage,
+  addressChangeSuccessMessage,
+} from "./subscription-display-helpers";
 import { SubscriptionsPanel } from "./subscriptions-panel";
 
 export function SubscriptionsView() {
@@ -86,6 +89,21 @@ export function SubscriptionsView() {
     );
   }
 
+  function changeAddress(id: number, addressId: number) {
+    setBusyId(id);
+    update.mutate(
+      { id, address_id: addressId },
+      {
+        onSuccess: () => toast.success(addressChangeSuccessMessage()),
+        onError: (err) => {
+          const t = apiErrorToast(err, "تغییر آدرس ناموفق بود");
+          toast.error(t.title, { description: t.description });
+        },
+        onSettled: () => setBusyId(null),
+      },
+    );
+  }
+
   // Surface everything — including paused & cancelled history.
   const ordered = React.useMemo(() => {
     const rank: Record<SubscriptionStatus, number> = {
@@ -110,6 +128,7 @@ export function SubscriptionsView() {
       />
       <SubscriptionsPanel
         subscriptions={ordered}
+        addresses={addressList}
         addressById={addressById}
         busyId={busyId}
         isLoading={isLoading}
@@ -119,6 +138,7 @@ export function SubscriptionsView() {
         onResume={(id) => run(id, "resume")}
         onRequestPause={(id) => setConfirm({ id, action: "pause" })}
         onRequestCancel={(id) => setConfirm({ id, action: "cancel" })}
+        onChangeAddress={changeAddress}
       />
       <SubscriptionActionDialog
         target={confirm}

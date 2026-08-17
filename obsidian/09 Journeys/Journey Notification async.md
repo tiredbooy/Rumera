@@ -8,7 +8,7 @@ tags: [journey, notifications]
 
 # Journey: Notification async
 
-1. Handler calls Dispatcher with `NOTIFICATIONS_MODE=async`
+1. Handler or cron (alert / box renewal) calls Dispatcher with `NOTIFICATIONS_MODE=async`
 2. Outbox row (same TX when possible) → [[Term outbox]]
 3. `notification-worker` relay → Kafka
 4. Consume → SMS/email · delivery ledger idempotency

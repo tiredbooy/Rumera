@@ -96,17 +96,17 @@ type MeiliProduct struct {
 	Code  *string `json:"code,omitempty"`
 	Slug  *string `json:"slug,omitempty"`
 	// Description is optional long text; may be large — still indexed for discovery.
-	Description   *string  `json:"description,omitempty"`
-	BrandID       *int64   `json:"brand_id,omitempty"`
-	BrandTitle    *string  `json:"brand_title,omitempty"`
-	CategoryID    *int64   `json:"category_id,omitempty"`
-	CategoryTitle *string  `json:"category_title,omitempty"`
-	Tags          []string `json:"tags,omitempty"` // tag titles
-	MetaTags      []string `json:"meta_tags,omitempty"`
-	MinPrice      float64  `json:"min_price"`
-	MaxPrice      float64  `json:"max_price"`
-	IsActive      bool     `json:"is_active"`
-	CountryOfOrigin *string `json:"country_of_origin,omitempty"`
+	Description     *string  `json:"description,omitempty"`
+	BrandID         *int64   `json:"brand_id,omitempty"`
+	BrandTitle      *string  `json:"brand_title,omitempty"`
+	CategoryID      *int64   `json:"category_id,omitempty"`
+	CategoryTitle   *string  `json:"category_title,omitempty"`
+	Tags            []string `json:"tags,omitempty"` // tag titles
+	MetaTags        []string `json:"meta_tags,omitempty"`
+	MinPrice        float64  `json:"min_price"`
+	MaxPrice        float64  `json:"max_price"`
+	IsActive        bool     `json:"is_active"`
+	CountryOfOrigin *string  `json:"country_of_origin,omitempty"`
 
 	// Normalized search fields (primary searchableAttributes in Meili settings).
 	TitleSearch       string `json:"title_search"`

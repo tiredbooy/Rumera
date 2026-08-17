@@ -47,6 +47,7 @@ export interface UserListItem {
   email: string;
   phone?: string;
   role: AdminUserRole;
+  /** Count from GET /admin/users. Orders list filter is numeric internal id, not `user_id`. */
   total_orders: number;
   is_active: boolean;
   is_banned: boolean;

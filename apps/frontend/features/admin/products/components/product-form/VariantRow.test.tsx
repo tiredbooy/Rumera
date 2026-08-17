@@ -42,7 +42,6 @@ describe("VariantRow responsive layout", () => {
           register={register}
           control={control}
           setValue={setValue}
-          errors={{}}
           optionTypes={[]}
           defaultOpen
           onRemove={vi.fn()}
@@ -128,7 +127,6 @@ describe("VariantRow responsive layout", () => {
             register={register}
             control={control}
             setValue={setValue}
-            errors={{}}
             optionTypes={optionTypes}
             availableStock={3}
             isPersisted
@@ -162,5 +160,45 @@ describe("VariantRow responsive layout", () => {
     expect(
       screen.getByRole("switch", { name: "فعال بودن تنوع 1" }),
     ).toBeChecked();
+  });
+
+  it("asks before removing a variant row", () => {
+    const onRemove = vi.fn();
+    function Harness() {
+      const { register, control, setValue } = useForm<ProductFormValues>({
+        defaultValues: {
+          variants: [
+            {
+              sku: "BLUE",
+              price: "10",
+              compare_at_price: "",
+              is_active: true,
+              option_value_ids: [],
+            },
+          ],
+        },
+      });
+      return (
+        <VariantRow
+          index={0}
+          fieldId="variant-1"
+          register={register}
+          control={control}
+          setValue={setValue}
+          optionTypes={[]}
+          defaultOpen
+          onRemove={onRemove}
+        />
+      );
+    }
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "حذف تنوع 1" }));
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("حذف تنوع؟");
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("BLUE");
+
+    fireEvent.click(screen.getByRole("button", { name: "حذف تنوع" }));
+    expect(onRemove).toHaveBeenCalledWith(0);
   });
 });

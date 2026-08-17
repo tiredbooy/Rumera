@@ -9,13 +9,52 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { focusFormControl } from "@/components/ui/field";
-import { resetPassword } from "@/features/auth/api/client";
+import { resetPassword, validateResetToken } from "@/features/auth/api/client";
 import { passwordFitsBcrypt } from "@/features/auth/password";
+
+export const RESET_LINK_INVALID = "لینک بازیابی نامعتبر یا منقضی شده است.";
+export const RESET_LINK_SERVER_ERROR = "ارتباط با سرور برقرار نشد.";
+
+type TokenState = "checking" | "valid" | "invalid" | "error";
 
 export function ResetPasswordForm({ token }: { token: string }) {
   const router = useRouter();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [tokenState, setTokenState] = React.useState<TokenState>(
+    token ? "checking" : "invalid",
+  );
+
+  React.useEffect(() => {
+    if (!token) {
+      setTokenState("invalid");
+      return;
+    }
+
+    let cancelled = false;
+    setTokenState("checking");
+    setError(null);
+
+    validateResetToken(token)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.valid) {
+          setTokenState("valid");
+          return;
+        }
+        setTokenState("invalid");
+        setError(RESET_LINK_INVALID);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTokenState("error");
+        setError(RESET_LINK_SERVER_ERROR);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -33,11 +72,17 @@ export function ResetPasswordForm({ token }: { token: string }) {
       focusFormControl(formElement, "confirm");
       return;
     }
+    if (tokenState !== "valid") {
+      setError(
+        tokenState === "error" ? RESET_LINK_SERVER_ERROR : RESET_LINK_INVALID,
+      );
+      return;
+    }
     setLoading(true);
     try {
       await resetPassword({ token, new_password: password });
     } catch {
-      setError("لینک بازیابی نامعتبر یا منقضی شده است.");
+      setError(RESET_LINK_INVALID);
       setLoading(false);
       focusFormControl(formElement, "password");
       return;
@@ -45,15 +90,18 @@ export function ResetPasswordForm({ token }: { token: string }) {
     router.push("/login");
   }
 
-  if (!token) {
+  if (!token || tokenState === "invalid") {
     return (
       <div className="text-center">
         <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive ring-1 ring-destructive/20">
           <ShieldX className="size-6" />
         </div>
         <h1 className="font-serif text-2xl">لینک نامعتبر</h1>
-        <p className="mx-auto mt-2 max-w-xs text-sm text-muted-foreground">
-          این لینک بازیابی معتبر نیست. دوباره درخواست دهید.
+        <p
+          role="alert"
+          className="mx-auto mt-2 max-w-xs text-sm text-muted-foreground"
+        >
+          {RESET_LINK_INVALID} دوباره درخواست دهید.
         </p>
         <Button asChild variant="outline" className="mt-6 h-11 w-full">
           <Link href="/forgot-password">درخواست لینک جدید</Link>
@@ -61,6 +109,26 @@ export function ResetPasswordForm({ token }: { token: string }) {
       </div>
     );
   }
+
+  if (tokenState === "checking") {
+    return (
+      <div>
+        <span className="eyebrow">بازیابی حساب</span>
+        <h1 className="mt-2 font-serif text-3xl">گذرواژهٔ جدید</h1>
+        <p role="status" className="mt-1.5 text-sm text-muted-foreground">
+          در حال بررسی لینک بازیابی…
+        </p>
+        <div className="mt-6 flex justify-center">
+          <Loader2
+            className="size-6 animate-spin text-muted-foreground"
+            aria-hidden
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const submitDisabled = loading || tokenState !== "valid";
 
   return (
     <div>
@@ -117,7 +185,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
           type="submit"
           size="lg"
           className="mt-1 h-11"
-          disabled={loading}
+          disabled={submitDisabled}
         >
           {loading ? <Loader2 className="animate-spin" /> : null}
           ذخیرهٔ گذرواژه

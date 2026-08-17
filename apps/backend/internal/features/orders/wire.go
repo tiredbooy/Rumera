@@ -22,10 +22,15 @@ type Deps struct {
 	Inventory     inventory.Service
 	Payment       *payments.Service
 	GiftConfig    giftConfigLookup
+	Clawback      orderEarnClawback
 	Users         *users.Service
 	Notifications *notifications.Dispatcher
 	Mail          notify.Mailer
 	Validator     *validator.Validator
+	Wallet        WalletPurchaser // *wallet.Service — PurchaseTx + Refund via WalletRefunder
+	// Events emits order.paid.v1 on the wallet-settle transaction. Nil keeps
+	// the legacy in-request receipt path.
+	Events OrderPaidEmitter
 }
 
 // NewRepos constructs the order repositories used by payments before the
@@ -40,8 +45,16 @@ func New(db *pgxpool.Pool, d Deps) (h *Handler, svc Service) {
 	svc = NewService(
 		repo, items, d.Cart, d.Coupons, d.CouponUsage,
 		d.Shipping, d.Addresses, d.Inventory, d.Payment, d.GiftConfig,
+		d.Clawback, d.Wallet,
 	)
-	h = NewHandler(svc, d.Users, d.Notifications, d.Mail, d.Validator)
+	if d.Events != nil {
+		AttachEventPublisher(svc, d.Events)
+	}
+	receipt := NewReceiptSender(svc, d.Notifications, d.Mail)
+	if d.Payment != nil {
+		d.Payment.WithPaidOrderReceipt(receipt)
+	}
+	h = NewHandler(svc, receipt, d.Validator)
 	return h, svc
 }
 
@@ -50,7 +63,15 @@ func NewWithRepos(repo Repository, items ItemRepository, d Deps) (h *Handler, sv
 	svc = NewService(
 		repo, items, d.Cart, d.Coupons, d.CouponUsage,
 		d.Shipping, d.Addresses, d.Inventory, d.Payment, d.GiftConfig,
+		d.Clawback, d.Wallet,
 	)
-	h = NewHandler(svc, d.Users, d.Notifications, d.Mail, d.Validator)
+	if d.Events != nil {
+		AttachEventPublisher(svc, d.Events)
+	}
+	receipt := NewReceiptSender(svc, d.Notifications, d.Mail)
+	if d.Payment != nil {
+		d.Payment.WithPaidOrderReceipt(receipt)
+	}
+	h = NewHandler(svc, receipt, d.Validator)
 	return h, svc
 }

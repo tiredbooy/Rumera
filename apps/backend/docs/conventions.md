@@ -132,6 +132,8 @@ Request bodies are validated with struct tags ([go-playground/validator](https:/
 
 All request bodies are JSON. Send `Content-Type: application/json`. Responses are JSON and gzip-compressed when the client sends `Accept-Encoding: gzip`.
 
+Browser CORS preflight (`OPTIONS`) allows `Authorization`, `Content-Type`, `X-Webhook-Signature`, and `Idempotency-Key` (`Access-Control-Allow-Headers`). Money POSTs that send `Idempotency-Key` from an allowed origin will not fail preflight on that header.
+
 ---
 
 ## Models ownership (feature slices)
@@ -214,5 +216,6 @@ pre-map. Use `httpx.HandleError` as the single sanctioned path for new code.
 - `FromAppError` keeps registry **status/code**; prefers `AppError.Message` when set.
 - **Bug fixed:** `INSUFFICIENT_FUNDS` no longer maps to `PAYMENT_FAILED`.
 - Wallet shortfall → `INSUFFICIENT_FUNDS`; loyalty points shortfall → `INSUFFICIENT_POINTS`;
-  gift redeem → `GIFT_CARD_INVALID`; disabled login → `ACCOUNT_DISABLED`.
+  loyalty programme off → `LOYALTY_DISABLED`; gift redeem → `GIFT_CARD_INVALID`;
+  disabled login → `ACCOUNT_DISABLED`.
 - Full catalogue + client guidance: [architecture/error-messages.md](./architecture/error-messages.md).

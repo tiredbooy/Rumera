@@ -12,6 +12,19 @@ Shipping zones, methods, and checkout rate estimation. Orders authorize a
 selected method via `Service.AuthorizeCheckoutMethod` so quote preview and
 persisted shipping amounts share one policy.
 
+## Region matching (PR-020e)
+
+`GetByRegionCode`, `GET /shipping/available`, and `AuthorizeCheckoutMethod`
+resolve a delivery region as:
+
+- **Exact** — `IR-TEH` matches only zones whose `region_codes` contain `IR-TEH`
+- **Country fallback** — `IR` matches zones that list `IR` **or** any `IR-*`
+  subdivision (admin + tests store Tehran as `IR-TEH`)
+
+Exact containment is preferred in result order. The same zone is never returned
+twice. CreateOrder still passes `strings.ToUpper(address.Country)` (`IR`);
+shipping accepts that without an orders change.
+
 ## Package (feature slice)
 
 ```text

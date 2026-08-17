@@ -5,6 +5,7 @@ import {
   Banknote,
   CheckCircle2,
   Copy,
+  ExternalLink,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { parseAsciiNumber, toAsciiDigits } from "@/lib/normalize-digits";
 import { faNum, formatPrice } from "@/lib/products";
 import { apiErrorToast } from "@/lib/api/user-facing-error";
 
@@ -22,6 +24,7 @@ import { useWalletTopUp } from "./hooks";
 import type { WalletTopUpIntent } from "./types";
 import {
   isValidTopUpAmount,
+  usablePaymentUrl,
   WALLET_TOPUP_MAX,
   WALLET_TOPUP_MIN,
   WALLET_TOPUP_PRESETS,
@@ -50,7 +53,7 @@ export function WalletTopUp({
 
   const selected =
     custom.trim() !== ""
-      ? Number(custom.replace(/,/g, ""))
+      ? parseAsciiNumber(toAsciiDigits(custom).replace(/,/g, ""))
       : (amount ?? 0);
 
   function pickPreset(value: number) {
@@ -104,6 +107,7 @@ export function WalletTopUp({
   }
 
   if (phase === "pending" && intent) {
+    const payHref = usablePaymentUrl(intent.payment_url);
     return (
       <div
         className="border-hairline rounded-3xl bg-card p-6 ring-1 ring-foreground/5"
@@ -145,13 +149,22 @@ export function WalletTopUp({
           </div>
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          پرداخت را در درگاه با همین شناسه تکمیل کنید. سپس «بروزرسانی موجودی» را
-          بزنید.
+          {payHref
+            ? "برای تکمیل پرداخت، «پرداخت در درگاه» را بزنید. سپس «بروزرسانی موجودی» را بزنید."
+            : "پرداخت را در درگاه با همین شناسه تکمیل کنید. سپس «بروزرسانی موجودی» را بزنید."}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
+          {payHref ? (
+            <Button asChild variant="default" className="h-11 cursor-pointer">
+              <a href={payHref} data-testid="wallet-topup-pay">
+                <ExternalLink className="size-4" />
+                پرداخت در درگاه
+              </a>
+            </Button>
+          ) : null}
           <Button
             type="button"
-            variant="default"
+            variant={payHref ? "outline" : "default"}
             className="h-11 cursor-pointer"
             onClick={() => onSettledRefresh?.()}
           >

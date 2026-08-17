@@ -10,6 +10,8 @@ type WalletOverviewProps = {
   balance: number;
   creditedThisMonth: number;
   spentThisMonth: number;
+  /** Loaded ledger window — not a complete calendar-month total. */
+  summaryWindow: string;
   isBalanceLoading: boolean;
   isBalanceError: boolean;
   isSummaryLoading: boolean;
@@ -39,7 +41,7 @@ function SummaryCard({
           className={cn(
             "size-3.5",
             tone === "credit"
-              ? "text-emerald-600 dark:text-emerald-400"
+              ? "text-success"
               : "text-muted-foreground",
           )}
           aria-hidden
@@ -57,7 +59,7 @@ function SummaryCard({
           className={cn(
             "mt-1.5 text-lg font-semibold tabular-nums",
             tone === "credit"
-              ? "text-emerald-600 dark:text-emerald-400"
+              ? "text-success"
               : "text-foreground",
           )}
           dir="ltr"
@@ -74,6 +76,7 @@ export function WalletOverview({
   balance,
   creditedThisMonth,
   spentThisMonth,
+  summaryWindow,
   isBalanceLoading,
   isBalanceError,
   isSummaryLoading,
@@ -132,13 +135,13 @@ export function WalletOverview({
         }
         aria-label={
           isSummaryLoading
-            ? "در حال دریافت خلاصهٔ تراکنش‌های این ماه"
+            ? "در حال دریافت خلاصهٔ تراکنش‌های بارگذاری‌شده"
             : undefined
         }
         className="mb-6 grid gap-3 sm:grid-cols-2"
       >
         <SummaryCard
-          label="واریزی این ماه"
+          label={`واریزی این ماه · ${summaryWindow}`}
           value={creditedThisMonth}
           icon={TrendingUp}
           tone="credit"
@@ -146,7 +149,7 @@ export function WalletOverview({
           error={isSummaryError}
         />
         <SummaryCard
-          label="هزینهٔ این ماه"
+          label={`هزینهٔ این ماه · ${summaryWindow}`}
           value={spentThisMonth}
           icon={TrendingDown}
           tone="debit"

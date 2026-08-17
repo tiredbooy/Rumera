@@ -3,10 +3,18 @@ import { formatPrice, faNum } from "@/lib/products";
 import { StatCard } from "@/features/dashboard/components/stat-card";
 import { fetchRevenueToday } from "@/features/analytics/api";
 import type { DailyRevenueStats } from "@/features/analytics/types";
+import { can } from "@/lib/rbac/can";
+import { PERMISSIONS, type Permission } from "@/lib/rbac/permissions";
 
 import { AnalyticsErrorState } from "./AnalyticsErrorState";
 
-export async function RevenueCards() {
+export async function RevenueCards({
+  permissions,
+}: {
+  permissions: Permission[];
+}) {
+  if (!can({ permissions }, PERMISSIONS.ANALYTICS_READ)) return null;
+
   let today: DailyRevenueStats | null = null;
   let failed = false;
   try {

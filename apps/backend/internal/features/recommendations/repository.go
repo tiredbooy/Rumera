@@ -16,7 +16,9 @@ import (
 // Everything is computed against the live catalogue in the main DB so results
 // always reflect real prices, availability, and relationships.
 type Repository interface {
-	RecordInteraction(ctx context.Context, userID int64, req *InteractionReq, weight float64) error
+	RecordInteraction(ctx context.Context, userID int64, req *InteractionReq, weight float64) (inserted bool, err error)
+	ProductExists(ctx context.Context, productID int64) (bool, error)
+	OrderProductIDs(ctx context.Context, orderID int64) ([]int64, error)
 
 	Trending(ctx context.Context, q RecommendationQuery) ([]*RecommendationItem, error)
 	Similar(ctx context.Context, productID int64, q RecommendationQuery) ([]*RecommendationItem, error)
@@ -26,6 +28,12 @@ type Repository interface {
 	GetProfile(ctx context.Context, userID int64) (*UserRecommendationProfile, error)
 	ComputeProfile(ctx context.Context, userID int64) (*UserRecommendationProfile, error)
 	PurchasedProductIDs(ctx context.Context, userID int64) ([]int64, error)
+
+	// LookupCategoryIDs / LookupTagIDs resolve taste-quiz strings (title or slug,
+	// case-insensitive) to catalogue ids. Category matches include descendants
+	// so "Wine" also covers red/white children. Unknown names are dropped.
+	LookupCategoryIDs(ctx context.Context, names []string) ([]int64, error)
+	LookupTagIDs(ctx context.Context, names []string) ([]int64, error)
 
 	// ActiveUserIDs returns the IDs of users who produced a fresh signal — an
 	// interaction or a non-cancelled order — within the last sinceDays, most
@@ -83,21 +91,77 @@ func scanCards(rows pgx.Rows) ([]*RecommendationItem, error) {
 
 // ── Interactions ────────────────────────────────────────────────────────────────
 
-func (r *repository) RecordInteraction(ctx context.Context, userID int64, req *InteractionReq, weight float64) error {
+func (r *repository) ProductExists(ctx context.Context, productID int64) (bool, error) {
+	var n int
+	err := r.db.QueryRow(ctx, `SELECT 1 FROM products WHERE id = $1`, productID).Scan(&n)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("checking product exists: %w", err)
+	}
+	return true, nil
+}
+
+// OrderProductIDs returns distinct parent product IDs on an order. A query
+// failure is returned; an order with no lines is an empty slice, not an error.
+func (r *repository) OrderProductIDs(ctx context.Context, orderID int64) ([]int64, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT DISTINCT product_id
+		 FROM order_items
+		 WHERE order_id = $1 AND product_id > 0
+		 ORDER BY product_id`,
+		orderID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying order product ids: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning order product id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func (r *repository) RecordInteraction(ctx context.Context, userID int64, req *InteractionReq, weight float64) (bool, error) {
 	metadata := req.Metadata
 	if metadata == nil {
 		metadata = map[string]any{}
 	}
-	_, err := r.db.Exec(ctx,
+	// purchase / add_to_cart: one row per user+product+type per UTC day so FE
+	// retries and the server-side Confirm/AddItem hooks do not double-weight.
+	// purchase with metadata.order_id is also unique across days (webhook replay).
+	tag, err := r.db.Exec(ctx,
 		`INSERT INTO user_product_interactions
 		 (user_id, product_id, interaction_type, weight, source, metadata)
-		 VALUES ($1,$2,$3,$4,$5,$6)`,
+		 SELECT $1, $2, $3, $4, $5, $6
+		 WHERE EXISTS (SELECT 1 FROM products WHERE id = $2)
+		   AND NOT EXISTS (
+			 SELECT 1 FROM user_product_interactions
+			 WHERE user_id = $1
+			   AND product_id = $2
+			   AND interaction_type = $3
+			   AND $3 IN ('purchase', 'add_to_cart')
+			   AND NOT ($3 = 'purchase' AND $6 ? 'order_id')
+			   AND (created_at AT TIME ZONE 'UTC')::date
+			       = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date
+		   )
+		 ON CONFLICT DO NOTHING`,
 		userID, req.ProductID, string(req.InteractionType), weight, req.Source, metadata,
 	)
 	if err != nil {
-		return fmt.Errorf("recording interaction: %w", err)
+		return false, fmt.Errorf("recording interaction: %w", err)
 	}
-	return nil
+	return tag.RowsAffected() > 0, nil
 }
 
 func (r *repository) PurchasedProductIDs(ctx context.Context, userID int64) ([]int64, error) {
@@ -348,6 +412,63 @@ func (r *repository) ForUser(ctx context.Context, profile *UserRecommendationPro
 		return nil, fmt.Errorf("querying personalized recommendations: %w", err)
 	}
 	return scanCards(rows)
+}
+
+func (r *repository) LookupCategoryIDs(ctx context.Context, names []string) ([]int64, error) {
+	keys := normalizeNames(names)
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	const q = `
+		WITH RECURSIVE matched AS (
+			SELECT id FROM categories
+			WHERE lower(slug) = ANY($1::text[])
+			   OR lower(title) = ANY($1::text[])
+			UNION
+			SELECT c.id
+			FROM categories c
+			JOIN matched m ON c.parent_id = m.id
+		)
+		SELECT id FROM matched`
+	ids, err := r.scanIDs(ctx, q, keys)
+	if err != nil {
+		return nil, fmt.Errorf("looking up taste categories: %w", err)
+	}
+	return ids, nil
+}
+
+func (r *repository) LookupTagIDs(ctx context.Context, names []string) ([]int64, error) {
+	keys := normalizeNames(names)
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	const q = `
+		SELECT id FROM tags
+		WHERE lower(slug) = ANY($1::text[])
+		   OR lower(title) = ANY($1::text[])`
+	ids, err := r.scanIDs(ctx, q, keys)
+	if err != nil {
+		return nil, fmt.Errorf("looking up taste tags: %w", err)
+	}
+	return ids, nil
+}
+
+func (r *repository) scanIDs(ctx context.Context, query string, keys []string) ([]int64, error) {
+	rows, err := r.db.Query(ctx, query, keys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning catalogue id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func splitAffinity(items []AffinityScore) ([]int64, []float64) {

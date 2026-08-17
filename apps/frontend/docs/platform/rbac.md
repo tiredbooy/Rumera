@@ -111,8 +111,11 @@ consume that live role and capability grants (see `architecture/rbac.md`).
 `POST/PATCH/DELETE /admin/users` operations are transactional and audited.
 Self-demotion, self-deactivation, and self-delete are rejected (**403**).
 Demoting or deactivating the **last active admin** is rejected (**409 CONFLICT**
-— PH-021b). FE surfaces a clear Persian message. Existing ban state is visible
-but read-only; the UI does not imply that reactivation clears a ban.
+— PH-021b). FE surfaces a clear Persian message. Ban / unban is
+`POST /admin/users/:id/ban|unban` behind **`customers:ban`** only
+(PR-040e / PR-064b). The customer detail action is hidden without that
+cap and never offered for the signed-in operator. Reactivation still
+does not clear a ban.
 
 **Mid-session capability revoke:** Auth rehydrates role/status every request;
 `RequirePermission` reads live grants. Staff whose grants were cleared get 403
@@ -122,12 +125,88 @@ The legacy `roles`, `permissions`, `user_roles`, and `role_permissions` tables
 remain in the schema to preserve deployed data. Runtime authorization does not
 read them, and migrations do not silently rewrite or drop them.
 
+## Tags, coupons, shipping page gates
+
+`requireTagAdmin` / `requireCouponAdmin` / `requireShippingAdmin` are thin
+wrappers around `requirePermission` with `tags:manage` / `coupons:manage` /
+`shipping:manage`. They do **not** check `session.role === "admin"`.
+
+Seed staff defaults (`STAFF_DEFAULTS`) and sidebar nav already grant those
+capabilities; the Go write routes use the same IDs. A staff operator with the
+grant can open `/admin/tags`, `/admin/coupons`, and `/admin/shipping`. Admin
+superuser still passes because `can()` / live permissions give admin the full
+catalogue. Staff without the grant (or any non-panel role) still lands on
+`/forbidden`.
+
+Page imports keep the `require*Admin` names so existing routes stay valid.
+
+## Product editor write gate
+
+`/admin/products/[id]` stays on `requirePermission(PRODUCTS_READ)` so staff who
+can list the catalogue can still **open** the editor. The page computes
+`canWrite = can(session, PRODUCTS_WRITE)` the same way as the product list and
+passes it into `ProductEditView` → `ProductForm`.
+
+- Create (`/admin/products/new`) still requires `PRODUCTS_WRITE` at the page
+  guard; `ProductCreateView` always passes `canWrite`.
+- When `canWrite` is false the form is view-only: submit is hidden, image
+  upload and variant generators that mutate are disabled, and
+  `saveProductAggregate` is not called. A short Persian status explains the
+  read-only mode.
+- Do **not** 403 the whole edit page for readers. Backend write routes still
+  require `products:write` — hiding the button is UX, not the security
+  boundary.
+
+## Category and recipe editor write gates
+
+Same pattern as the product editor (PR-061d).
+
+- `/admin/categories/[id]` stays on `requirePermission(PRODUCTS_READ)` so
+  catalogue readers can **open** the editor. The page computes
+  `canWrite = can(session, PRODUCTS_WRITE)` and passes it into
+  `CategoryEditView` → `CategoryForm`.
+- `/admin/recipes/[id]` stays on `requirePermission(RECIPES_READ)`.
+  `canWrite = can(session, RECIPES_WRITE)` flows into
+  `RecipeEditView` → `RecipeForm`.
+- Create (`/admin/categories/new`, `/admin/recipes/new`) still requires
+  write at the page guard; create views always pass `canWrite`.
+- When `canWrite` is false the form is view-only: submit (and recipe
+  delete) is hidden, image upload is disabled, and create/update/delete
+  clients are not called. A short Persian “فقط مشاهده” status explains
+  the mode.
+- List boards already hide create / delete without write. Do **not** 403
+  the edit page for readers. Backend write routes remain the security
+  boundary.
+
+## Journal detail and options list write gates
+
+Same pattern as the product editor (PR-061e).
+
+- `/admin/journal/[id]` is `requirePermission(JOURNAL_READ)` so journal
+  readers can **open** a post. The page computes
+  `canWrite = can(session, JOURNAL_WRITE)` and passes it into
+  `JournalEditView` → `JournalForm`.
+- `/admin/options` is `requirePermission(PRODUCTS_READ)`.
+  `canWrite = can(session, PRODUCTS_WRITE)` flows into `OptionsBoard`.
+  `/admin/options/[id]` stays on `PRODUCTS_READ` and passes `canWrite`
+  into `OptionTypeForm`.
+- Create (`/admin/journal/new`, `/admin/options/new`) still requires
+  write at the page guard; create views always pass `canWrite`.
+- When `canWrite` is false the journal form is view-only: submit is
+  hidden, image upload is disabled, and create/update clients are not
+  called. The options list hides create / edit / delete. Option values
+  cannot be added or removed. A short Persian “فقط مشاهده” status
+  explains the mode.
+- Do **not** 403 journal detail or the options list for readers.
+  Backend write routes remain the security boundary.
+
 ## Navigation
 
 `ADMIN_NAV` declares each admin route once and `filterNav()` removes entries whose
-frontend capability is absent. Since only `admin` reaches the shell today, this
-primarily keeps page guards, navigation, and future backend capability work using
-the same identifiers.
+frontend capability is absent. Both `admin` and `staff` reach the shell via
+`requireStaff()`; nav and page guards then use the same capability IDs. Do not
+re-check `role === "admin"` on a module that already has a capability (see tags /
+coupons / shipping above).
 
 `ACCOUNT_NAV` is separate and permission-free for authenticated account pages.
 
@@ -136,7 +215,8 @@ the same identifiers.
 For a new admin module:
 
 1. Add or reuse a frontend capability in `permissions.ts`.
-2. Gate the nav item and server page with that capability.
+2. Gate the nav item and server page with `requirePermission` (or a thin named
+   wrapper). Never use `session.role === "admin"` as the page gate.
 3. Add the backend route under the existing admin group or introduce explicit
    backend capability enforcement.
 4. Add live authorization, route, and API tests.

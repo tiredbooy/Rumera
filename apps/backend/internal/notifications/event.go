@@ -13,14 +13,17 @@ import (
 
 // CloudEvents-ish types — keep wire format stable; bump suffix on breaking changes.
 const (
-	TypeOTPV1              = "notification.otp.v1"
-	TypePasswordResetV1    = "notification.password_reset.v1"
-	TypeOrderConfirmedV1   = "notification.order_confirmed.v1"
-	SourceAPI              = "rumera/api"
-	TopicOTP               = "rumera.notification.otp.v1"
-	TopicEmail             = "rumera.notification.email.v1"
-	TopicOTPDLQ            = "rumera.notification.otp.v1.dlq"
-	TopicEmailDLQ          = "rumera.notification.email.v1.dlq"
+	TypeOTPV1                 = "notification.otp.v1"
+	TypePasswordResetV1       = "notification.password_reset.v1"
+	TypeOrderConfirmedV1      = "notification.order_confirmed.v1"
+	TypeGiftPurchasedV1       = "notification.gift_purchased.v1"
+	TypeAlertV1               = "notification.alert.v1"
+	TypeSubscriptionRenewalV1 = "notification.subscription_renewal.v1"
+	SourceAPI                 = "rumera/api"
+	TopicOTP                  = "rumera.notification.otp.v1"
+	TopicEmail                = "rumera.notification.email.v1"
+	TopicOTPDLQ               = "rumera.notification.otp.v1.dlq"
+	TopicEmailDLQ             = "rumera.notification.email.v1.dlq"
 )
 
 // Envelope is the versioned message written to the outbox and Kafka.
@@ -87,7 +90,8 @@ func TopicForEvent(eventType string) (string, error) {
 	switch eventType {
 	case TypeOTPV1:
 		return TopicOTP, nil
-	case TypePasswordResetV1, TypeOrderConfirmedV1:
+	case TypePasswordResetV1, TypeOrderConfirmedV1, TypeGiftPurchasedV1,
+		TypeAlertV1, TypeSubscriptionRenewalV1:
 		return TopicEmail, nil
 	default:
 		return "", fmt.Errorf("notifications: unknown event type %q", eventType)
@@ -114,7 +118,8 @@ func PartitionKey(eventType string, data json.RawMessage) string {
 		if json.Unmarshal(data, &d) == nil && d.Phone != "" {
 			return d.Phone
 		}
-	case TypePasswordResetV1, TypeOrderConfirmedV1:
+	case TypePasswordResetV1, TypeOrderConfirmedV1, TypeGiftPurchasedV1,
+		TypeAlertV1, TypeSubscriptionRenewalV1:
 		var d EmailData
 		if json.Unmarshal(data, &d) == nil && d.To != "" {
 			return d.To

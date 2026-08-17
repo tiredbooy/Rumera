@@ -1,7 +1,7 @@
 // Package auth is the vertical slice for authentication and session lifecycle.
 //
 // Ownership:
-//   - handler.go / otp.go / tokens.go — login, register, OTP, refresh, logout, /me
+//   - handler.go / otp.go / tokens.go — login, register, OTP, refresh, logout, /me, phone-change OTP (PR-040i)
 //   - password_reset_* — forgot/reset token flow
 //   - routes.go — RegisterPublic / RegisterCustomer / RegisterAdmin
 //

@@ -1,8 +1,0 @@
-1. in Product Form When you want to select a brand or tag its not fetching it its empty even tho i have it
-
-2. after creating or editing product in admin dashboard its must navigate user to admin dashboard products page after the operation was successfull
-
-3. the Customer Loyality Service Backend and frontend should get complete speically frontend in admin dashboard
-
-
-4. add to cart button on the product cards gives error ({"error":{"code":"INTERNAL_ERROR","message":"an unexpected error occurred"}}) its code 500

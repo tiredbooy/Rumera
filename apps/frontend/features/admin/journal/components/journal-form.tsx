@@ -5,11 +5,22 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
-import { FileText, ImageIcon, Loader2, SearchCheck } from "lucide-react";
+import { FileText, ImageIcon, SearchCheck } from "lucide-react";
 import { toast } from "sonner";
 
+import { ContentPreview } from "@/components/admin/content-preview";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import { SmartImage } from "@/components/smart-image";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { fieldErrorId } from "@/components/ui/field";
@@ -37,6 +48,7 @@ import {
   JournalApiError,
   updateJournalPost,
 } from "@/features/journal/api/client";
+import { JOURNAL_STATUS_FA } from "@/features/journal/labels";
 import type {
   JournalCategory,
   JournalDetail,
@@ -50,19 +62,35 @@ import {
   toUpdateJournalPostInput,
   type JournalPostFormValues,
 } from "@/features/journal/validations";
+import { JalaliDateTimeInput } from "@/components/ui/jalali-datetime-input";
+import {
+  EXCERPT_LIMIT,
+  editorialExcerptHint,
+  editorialSlugHint,
+} from "@/features/admin/shared/editorial-fields";
+import { EditorActions } from "@/features/admin/shared/editor-actions";
+import {
+  PUBLICATION_KIND_FA,
+  PUBLICATION_KIND_HINT,
+  publicationKind,
+  shouldConfirmUnpublish,
+} from "@/features/admin/shared/publication";
+import {
+  SearchSnippetPreview,
+  SeoCharCount,
+  SEO_DESCRIPTION_LIMIT,
+  SEO_TITLE_LIMIT,
+} from "@/features/admin/shared/seo-fields";
+import { apiErrorMessage, localizeApiText } from "@/lib/api/user-facing-error";
 import { faDate } from "@/lib/utils/date";
 
 import { JournalFormField, JournalFormSection } from "./form-field";
 import {
-  JournalProductPicker,
-  type JournalProductOption,
-} from "./journal-product-picker";
+  ProductPicker,
+  type ProductPickerOption,
+} from "@/features/admin/shared/product-picker";
 
-const STATUS_LABELS: Record<JournalStatus, string> = {
-  draft: "پیش‌نویس",
-  published: "منتشرشده",
-  archived: "بایگانی‌شده",
-};
+
 
 const FORM_FIELDS = new Set<keyof JournalPostFormValues>([
   "title",
@@ -73,6 +101,7 @@ const FORM_FIELDS = new Set<keyof JournalPostFormValues>([
   "image_alt",
   "time_to_read",
   "status",
+  "published_at",
   "is_featured",
   "meta_title",
   "meta_description",
@@ -140,12 +169,14 @@ export function JournalForm({
   categories,
   tags,
   initialProducts,
+  canWrite = true,
 }: {
   mode: "create" | "edit";
   post?: JournalDetail;
   categories: JournalCategory[];
   tags: Tag[];
-  initialProducts: JournalProductOption[];
+  initialProducts: ProductPickerOption[];
+  canWrite?: boolean;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -154,6 +185,9 @@ export function JournalForm({
   const [previewURL, setPreviewURL] = React.useState(post?.image_url ?? "");
   const [slugTouched, setSlugTouched] = React.useState(mode === "edit");
   const [formError, setFormError] = React.useState<string | null>(null);
+  const [pendingUnpublish, setPendingUnpublish] =
+    React.useState<JournalPostFormValues | null>(null);
+  const skipUnpublishConfirm = React.useRef(false);
   const {
     register,
     handleSubmit,
@@ -169,6 +203,13 @@ export function JournalForm({
   const slug = useWatch({ control, name: "slug" });
   const imageAlt = useWatch({ control, name: "image_alt" });
   const status = useWatch({ control, name: "status" });
+  const publishedAt = useWatch({ control, name: "published_at" });
+  const excerpt = useWatch({ control, name: "excerpt" }) ?? "";
+  const metaTitle = useWatch({ control, name: "meta_title" }) ?? "";
+  const metaDescription = useWatch({ control, name: "meta_description" }) ?? "";
+  const kind = publicationKind(status, publishedAt);
+  // CE-1: the same string the public page renders, live and unsaved.
+  const previewContent = useWatch({ control, name: "content" }) ?? "";
 
   React.useEffect(() => {
     if (slugTouched) return;
@@ -176,28 +217,36 @@ export function JournalForm({
   }, [setValue, slugTouched, title]);
 
   function applyServerError(error: unknown) {
+    const fallback = "ذخیرهٔ نوشته ناموفق بود";
     if (error instanceof JournalApiError) {
       let focused = false;
       for (const [key, messages] of Object.entries(error.fields ?? {})) {
         if (!FORM_FIELDS.has(key as keyof JournalPostFormValues)) continue;
+        const raw = messages[0];
+        if (!raw) continue;
         setError(
           key as keyof JournalPostFormValues,
-          { message: messages[0] },
+          { message: localizeApiText(raw) || raw },
           { shouldFocus: !focused },
         );
         focused = true;
       }
-      setFormError(error.message);
-      toast.error(error.message);
-      return;
     }
-    const message =
-      error instanceof Error ? error.message : "ذخیرهٔ نوشته ناموفق بود";
+    const message = apiErrorMessage(error, fallback);
     setFormError(message);
     toast.error(message);
   }
 
   async function onSubmit(values: JournalPostFormValues) {
+    if (!canWrite) return;
+    if (
+      !skipUnpublishConfirm.current &&
+      shouldConfirmUnpublish(post?.status, post?.published_at, values.status)
+    ) {
+      setPendingUnpublish(values);
+      return;
+    }
+    skipUnpublishConfirm.current = false;
     setFormError(null);
     if (mode === "edit" && !normalizeJournalSlug(values.slug)) {
       setError(
@@ -289,13 +338,32 @@ export function JournalForm({
     }
   }
 
+  function onFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (!canWrite) {
+      event.preventDefault();
+      return;
+    }
+    void handleSubmit(onSubmit)(event);
+  }
+
+  const editorLocked = isSubmitting || !canWrite;
+
   return (
+    <>
     <form
-      onSubmit={(event) => void handleSubmit(onSubmit)(event)}
+      onSubmit={onFormSubmit}
       aria-busy={isSubmitting || undefined}
       className="grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"
       noValidate
     >
+      {canWrite ? null : (
+        <p
+          role="status"
+          className="rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground ring-1 ring-border/60 lg:col-span-2"
+        >
+          فقط مشاهده — ذخیره و بارگذاری تصویر به مجوز نوشتن ژورنال نیاز دارد.
+        </p>
+      )}
       <div className="flex min-w-0 flex-col gap-6">
         {formError ? (
           <p
@@ -319,7 +387,7 @@ export function JournalForm({
             <Input
               id="title"
               autoComplete="off"
-              disabled={isSubmitting}
+              disabled={editorLocked}
               {...register("title")}
             />
           </JournalFormField>
@@ -327,18 +395,14 @@ export function JournalForm({
             id="slug"
             label="نامک"
             error={errors.slug?.message}
-            hint={
-              mode === "create"
-                ? "در صورت خالی‌بودن، سرور یک نامک یکتا می‌سازد."
-                : "تغییر نامک، نشانی عمومی نوشته را تغییر می‌دهد."
-            }
+            hint={editorialSlugHint(mode)}
             full
           >
             <Input
               id="slug"
               dir="auto"
               autoComplete="off"
-              disabled={isSubmitting}
+              disabled={editorLocked}
               value={slug}
               {...register("slug", { onChange: () => setSlugTouched(true) })}
             />
@@ -347,15 +411,18 @@ export function JournalForm({
             id="excerpt"
             label="خلاصه"
             error={errors.excerpt?.message}
-            hint="در کارت‌ها و نتایج جستجو نمایش داده می‌شود."
+            hint={editorialExcerptHint()}
             full
           >
-            <Textarea
-              id="excerpt"
-              rows={4}
-              disabled={isSubmitting}
-              {...register("excerpt")}
-            />
+            <div className="space-y-1.5">
+              <Textarea
+                id="excerpt"
+                rows={4}
+                disabled={editorLocked}
+                {...register("excerpt")}
+              />
+              <SeoCharCount value={excerpt} limit={EXCERPT_LIMIT} />
+            </div>
           </JournalFormField>
           <JournalFormField
             id="time_to_read"
@@ -366,7 +433,7 @@ export function JournalForm({
               id="time_to_read"
               inputMode="numeric"
               dir="ltr"
-              disabled={isSubmitting}
+              disabled={editorLocked}
               {...register("time_to_read")}
             />
           </JournalFormField>
@@ -391,7 +458,7 @@ export function JournalForm({
               <RichTextEditor
                 id="content"
                 inputRef={field.ref}
-                disabled={isSubmitting}
+                disabled={editorLocked}
                 value={field.value}
                 onChange={field.onChange}
                 ariaLabel="محتوای نوشتهٔ ژورنال"
@@ -412,6 +479,10 @@ export function JournalForm({
               {errors.content.message}
             </p>
           ) : null}
+          <ContentPreview
+            content={previewContent}
+            emptyMessage="متن این نوشته هنوز ثبت نشده است."
+          />
         </section>
 
         <JournalFormSection
@@ -433,7 +504,7 @@ export function JournalForm({
                   }))}
                   value={field.value}
                   onChange={field.onChange}
-                  disabled={isSubmitting}
+                  disabled={editorLocked}
                 />
               )}
             />
@@ -450,7 +521,7 @@ export function JournalForm({
                   }))}
                   value={field.value}
                   onChange={field.onChange}
-                  disabled={isSubmitting}
+                  disabled={editorLocked}
                   emptyLabel="برچسبی برای انتخاب در دسترس نیست."
                 />
               )}
@@ -462,11 +533,11 @@ export function JournalForm({
               control={control}
               name="product_ids"
               render={({ field }) => (
-                <JournalProductPicker
+                <ProductPicker
                   value={field.value}
                   initialOptions={initialProducts}
                   onChange={field.onChange}
-                  disabled={isSubmitting}
+                  disabled={editorLocked}
                 />
               )}
             />
@@ -475,33 +546,53 @@ export function JournalForm({
 
         <JournalFormSection
           title="سئو"
-          description="عنوان و توضیح اختصاصی موتور جستجو اختیاری است؛ در صورت خالی‌بودن از محتوای نوشته استفاده می‌شود."
+          description="عنوان و توضیح اختصاصی موتور جستجو اختیاری است؛ در صورت خالی‌بودن از عنوان و خلاصهٔ نوشته استفاده می‌شود."
         >
           <JournalFormField
             id="meta_title"
             label="عنوان سئو"
             error={errors.meta_title?.message}
+            hint={`خالی = عنوان نوشته. گوگل حدود ${SEO_TITLE_LIMIT} نویسه نشان می‌دهد.`}
             full
           >
-            <Input
-              id="meta_title"
-              disabled={isSubmitting}
-              {...register("meta_title")}
-            />
+            <div className="space-y-1.5">
+              <Input
+                id="meta_title"
+                disabled={editorLocked}
+                {...register("meta_title")}
+              />
+              <SeoCharCount value={metaTitle} limit={SEO_TITLE_LIMIT} />
+            </div>
           </JournalFormField>
           <JournalFormField
             id="meta_description"
             label="توضیح سئو"
             error={errors.meta_description?.message}
+            hint={`خالی = خلاصهٔ نوشته. گوگل حدود ${SEO_DESCRIPTION_LIMIT} نویسه نشان می‌دهد.`}
             full
           >
-            <Textarea
-              id="meta_description"
-              rows={4}
-              disabled={isSubmitting}
-              {...register("meta_description")}
-            />
+            <div className="space-y-1.5">
+              <Textarea
+                id="meta_description"
+                rows={4}
+                disabled={editorLocked}
+                {...register("meta_description")}
+              />
+              <SeoCharCount
+                value={metaDescription}
+                limit={SEO_DESCRIPTION_LIMIT}
+              />
+            </div>
           </JournalFormField>
+          <div className="sm:col-span-2">
+            <SearchSnippetPreview
+              metaTitle={metaTitle}
+              fallbackTitle={title}
+              metaDescription={metaDescription}
+              descriptionFallbacks={[excerpt]}
+              path={`/journal/${encodeURIComponent(slug.trim() || "…")}`}
+            />
+          </div>
         </JournalFormSection>
       </div>
 
@@ -556,7 +647,7 @@ export function JournalForm({
                     onAltBlur={altField.onBlur}
                     hidePreview
                     onPreviewChange={setPreviewURL}
-                    disabled={isSubmitting}
+                    disabled={editorLocked}
                   />
                 )}
               />
@@ -574,6 +665,20 @@ export function JournalForm({
         </div>
 
         <div className="border-hairline space-y-5 rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
+          <p
+            role="status"
+            className={
+              kind === "published"
+                ? "rounded-xl bg-success/12 px-3 py-2 text-xs font-medium text-success ring-1 ring-success/25"
+                : kind === "scheduled"
+                  ? "rounded-xl bg-info/12 px-3 py-2 text-xs font-medium text-info ring-1 ring-info/25"
+                  : kind === "archived"
+                    ? "rounded-xl bg-warning/12 px-3 py-2 text-xs font-medium text-warning ring-1 ring-warning/25"
+                    : "rounded-xl bg-muted px-3 py-2 text-xs font-medium text-muted-foreground ring-1 ring-border/60"
+            }
+          >
+            {PUBLICATION_KIND_FA[kind]} — {PUBLICATION_KIND_HINT[kind]}
+          </p>
           <div>
             <Label htmlFor="status">وضعیت انتشار</Label>
             <Controller
@@ -583,16 +688,16 @@ export function JournalForm({
                 <Select
                   value={field.value}
                   onValueChange={field.onChange}
-                  disabled={isSubmitting}
+                  disabled={editorLocked}
                 >
                   <SelectTrigger id="status" className="mt-2 min-h-11 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(STATUS_LABELS) as JournalStatus[]).map(
+                    {(Object.keys(JOURNAL_STATUS_FA) as JournalStatus[]).map(
                       (value) => (
                         <SelectItem key={value} value={value}>
-                          {STATUS_LABELS[value]}
+                          {JOURNAL_STATUS_FA[value]}
                         </SelectItem>
                       ),
                     )}
@@ -601,6 +706,27 @@ export function JournalForm({
               )}
             />
           </div>
+          {status === "published" ? (
+            <div>
+              <Label htmlFor="published_at">زمان انتشار (شمسی)</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                خالی یعنی انتشار فوری. تاریخ آینده یعنی زمان‌بندی.
+              </p>
+              <Controller
+                control={control}
+                name="published_at"
+                render={({ field }) => (
+                  <JalaliDateTimeInput
+                    id="published_at"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    disabled={editorLocked}
+                  />
+                )}
+              />
+            </div>
+          ) : null}
           <div className="flex items-center justify-between gap-3">
             <div>
               <Label htmlFor="is_featured">نوشتهٔ ویژه</Label>
@@ -617,7 +743,7 @@ export function JournalForm({
                   className="after:-inset-y-3"
                   checked={field.value}
                   onCheckedChange={field.onChange}
-                  disabled={isSubmitting}
+                  disabled={editorLocked}
                 />
               )}
             />
@@ -645,29 +771,50 @@ export function JournalForm({
           </p>
         </div>
 
-        <Button type="submit" size="lg" disabled={isSubmitting}>
-          {isSubmitting ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-          ) : null}
-          {mode === "create" ? "ساخت نوشته" : "ذخیرهٔ تغییرات"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="lg"
-          disabled={isSubmitting}
-          onClick={() => router.push("/admin/journal")}
-        >
-          انصراف
-        </Button>
-        <p className="px-1 text-center text-xs text-muted-foreground">
-          {status === "published"
-            ? "نوشته پس از ذخیره در ژورنال عمومی دیده می‌شود."
-            : status === "archived"
-              ? "نوشته از ژورنال عمومی پنهان می‌شود."
-              : "نوشته به‌صورت پیش‌نویس باقی می‌ماند."}
-        </p>
+        <EditorActions
+          submitLabel={mode === "create" ? "ساخت نوشته" : "ذخیرهٔ تغییرات"}
+          isSubmitting={isSubmitting}
+          onCancel={() => router.push("/admin/journal")}
+          hint={PUBLICATION_KIND_HINT[kind]}
+          canWrite={canWrite}
+        />
       </aside>
     </form>
+    <AlertDialog
+      open={pendingUnpublish !== null}
+      onOpenChange={(open) => {
+        if (!open && !isSubmitting) setPendingUnpublish(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>برداشتن از انتشار</AlertDialogTitle>
+          <AlertDialogDescription>
+            «{post?.title}» الان روی ژورنال دیده می‌شود. با این ذخیره از سایت
+            برداشته می‌شود. ادامه می‌دهید؟
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel size="lg" disabled={isSubmitting}>
+            انصراف
+          </AlertDialogCancel>
+          <AlertDialogAction
+            size="lg"
+            disabled={isSubmitting}
+            onClick={(event) => {
+              event.preventDefault();
+              const next = pendingUnpublish;
+              if (!next) return;
+              skipUnpublishConfirm.current = true;
+              setPendingUnpublish(null);
+              void onSubmit(next);
+            }}
+          >
+            تأیید برداشتن از انتشار
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

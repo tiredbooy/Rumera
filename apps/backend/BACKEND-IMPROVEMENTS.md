@@ -88,7 +88,7 @@ A weak/copied JWT secret = full auth forgery. Default `*` CORS ships open. Missi
 
 **API/layering:** `GetProduct` does 4 serial service calls in the handler — move to `Product.GetDetail` service method (`product.go:87-119`); webhook does inventory orchestration inline (move to service); no OpenAPI spec + ~7 undocumented route groups (hero-slides, gift-cards, referrals, subscriptions, loyalty, taste-profile, alerts).
 
-**Concurrency/hygiene:** subscription renewal advances even when the email fails (`corn/subscription_renewal_job.go:46`); cron batch limits hardcoded at 500 with no loop; loyalty/referral errors on paid orders silently swallowed (`payment_svc.go:157,161`); `pgx.ErrNoRows` translated inconsistently (some use `==` not `errors.Is`); package dir typo `internal/corn` → `cron`; lifecycle log typos (`main.go:18`, `app.go:148`).
+**Concurrency/hygiene:** cron batch limits hardcoded at 500 with no loop; loyalty/referral errors on paid orders silently swallowed (`payment_svc.go:157,161`); `pgx.ErrNoRows` translated inconsistently (some use `==` not `errors.Is`); package dir typo `internal/corn` → `cron`; lifecycle log typos (`main.go:18`, `app.go:148`).
 
 **Caching:** `pkg/cache` (redis + circuit breaker) only used by media — add read-through caching for product/recipe detail, coupon-by-code, shipping methods, with write-time invalidation.
 

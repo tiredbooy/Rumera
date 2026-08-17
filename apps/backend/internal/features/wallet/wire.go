@@ -7,7 +7,8 @@ import (
 )
 
 // New wires repository → service → HTTP handler.
-// Service is returned for loyalty redemptions and gift-card credits.
+// Service is returned for loyalty redemptions, gift-card credits, and
+// orders.WalletPurchaser (PurchaseTx on wallet checkout).
 func New(db *pgxpool.Pool, usersSvc *users.Service, v *validator.Validator) (h *Handler, svc *Service) {
 	svc = NewService(NewRepository(db))
 	h = NewHandler(svc, usersSvc, v)

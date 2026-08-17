@@ -13,5 +13,8 @@ runner := cron.NewRunner()
 runner.Register("0 0 1 * * *", "product-stats", productStatsJob.Run)  // 1:00 AM UTC
 runner.Register("0 15 1 * * *", "revenue-stats", revenueJob.Run)      // 1:15 AM UTC
 runner.Register("0 30 1 * * *", "search-summary", searchJob.Run)      // 1:30 AM UTC
+// PR-020c: unpaid reservation TTL (pending > 30m → payment_failed + release stock).
+// Hardcoded in bootstrap/container.go — no CRON_* env.
+runner.Register("0 */5 * * * *", "reservation_ttl", reservationTTLJob.Run)
 runner.Start()
 defer runner.Stop()

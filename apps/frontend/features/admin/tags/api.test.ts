@@ -129,4 +129,24 @@ describe("tag admin API", () => {
       fetchMock.mock.calls.every(([url]) => String(url).includes("/tags?")),
     ).toBe(true);
   });
+
+  it("treats a missing pagination envelope as a single page", async () => {
+    const tag = {
+      id: 3,
+      title: "هدیه",
+      slug: "gift",
+      created_at: "2026-08-16T00:00:00Z",
+      updated_at: "2026-08-16T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ results: [tag] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listAllTags()).resolves.toEqual([tag]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

@@ -22,15 +22,15 @@ Share-a-code growth loop:
 
 | Case | Behavior |
 |------|----------|
-| Unknown code | Claim is silent no-op |
-| Self-referral | No-op |
-| Already referred | No-op |
-| Valid claim | Pending referral row with reward points |
-| First paid order | Complete + award referrer + referee (idempotent) |
+| Unknown / blank code | `400 INVALID_REQUEST` (PR-054a) |
+| Self-referral | `400 INVALID_REQUEST` |
+| Already referred | `400 INVALID_REQUEST` |
+| Valid claim | `200 {claimed: true}` + pending row with reward points |
+| First paid order | Award referrer + referee (idempotent per referral id) **then** Complete |
 
 Award goes through [[Loyalty Wallet Gift Cards|LoyaltyService.Award]] with reason keys `referral` / `referral_welcome`.
 
-Triggered from [[Payments Backend]] `Confirm` → `referral.OnPaidOrder` (best-effort).
+Triggered from [[Payments Backend]] `Confirm` → `referral.OnPaidOrder` (retried with the earn intent; Award errors are not swallowed — payment still does not roll back).
 
 ## Code map
 
@@ -38,7 +38,7 @@ Triggered from [[Payments Backend]] `Confirm` → `referral.OnPaidOrder` (best-e
 |-------|------|
 | Feature slice | `apps/backend/internal/features/referral/` |
 | FE | `apps/frontend/features/referral/` · often surfaced in rewards UI |
-| Wire | `GET referrals/me` · `POST referrals/claim` |
+| Wire | `GET referrals/me` · `POST referrals/claim` (`claimed:true` or 400) |
 
 ## Related
 

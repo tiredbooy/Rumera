@@ -19,8 +19,11 @@
 ## Top-up UX (PH-041b)
 
 1. Customer picks a **preset** or custom amount (10 000 … 50 000 000 IRT).
-2. `POST /wallet/topup` with `Idempotency-Key` → **pending** intent (`transaction_id`).
-3. UI shows pending state (copy tx id). Balance does **not** increase yet.
+2. `POST /wallet/topup` with `Idempotency-Key` → store BFF forwards the header
+   unchanged → **pending** intent (`transaction_id` + optional `payment_url`).
+3. Pending UI copies the tx id. If `payment_url` is non-empty, primary **پرداخت
+   در درگاه** uses that absolute URL as-is (same window). Empty/missing URL
+   keeps the pending copy only — FE never invents a start URL (PR-030c).
 4. After gateway payment + webhook, customer taps **بروزرسانی موجودی** to refresh
    balance + ledger.
 

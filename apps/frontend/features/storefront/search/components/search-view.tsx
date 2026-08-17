@@ -1,48 +1,95 @@
 import Link from "next/link";
 import { ArrowLeft, Search, SearchX, Sparkles } from "lucide-react";
 
+import { redirect } from "next/navigation";
+
+import { EmptyState } from "@/components/empty-state";
+import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import { listCategories } from "@/features/catalog/categories/api";
 import { listProducts } from "@/features/catalog/products/api/public";
+import { CatalogueLoadError } from "@/features/catalog/products/components/catalogue-load-error";
 import {
   ProductCard,
   PRODUCT_CARD_GRID_CLASS,
 } from "@/features/catalog/products/components/product-card";
 import type { ProductListItem } from "@/features/catalog/products/types";
 import { SearchResultProductCard } from "@/features/storefront/search/components/search-result-product-card";
+import type { Paginated, Pagination } from "@/lib/api/types";
 import { faNum } from "@/lib/products";
 
+export const SEARCH_PAGE_SIZE = 24;
+
 type SearchViewProps = {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; page?: string }>;
 };
 
+type SettledProductList =
+  | { ok: true; results: ProductListItem[]; pagination: Pagination | null }
+  | { ok: false };
+
+const EMPTY_PAGE: SettledProductList = {
+  ok: true,
+  results: [],
+  pagination: null,
+};
+
+function parseSearchPage(raw?: string): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : 1;
+}
+
+export function searchPageHref(query: string, page: number): string {
+  const params = new URLSearchParams();
+  params.set("q", query);
+  if (page > 1) params.set("page", String(page));
+  return `/search?${params.toString()}`;
+}
+
 async function settleProducts(
-  promise: Promise<{ results: ProductListItem[] }>,
-): Promise<ProductListItem[]> {
+  promise: Promise<Paginated<ProductListItem>>,
+): Promise<SettledProductList> {
   try {
     const page = await promise;
-    return page.results ?? [];
+    return {
+      ok: true,
+      results: page.results ?? [],
+      pagination: page.pagination ?? null,
+    };
   } catch {
-    return [];
+    return { ok: false };
   }
 }
 
 export async function SearchView({ searchParams }: SearchViewProps) {
-  const { q = "" } = await searchParams;
+  const { q = "", page: rawPage } = await searchParams;
   const query = q.trim();
+  const page = parseSearchPage(rawPage);
 
-  const [results, categories, suggestions] = await Promise.all([
+  const [searchPage, categories, suggestionsPage] = await Promise.all([
     query
-      ? settleProducts(listProducts({ search: query, limit: 24 }))
-      : Promise.resolve([] as ProductListItem[]),
+      ? settleProducts(
+          listProducts({ search: query, page, limit: SEARCH_PAGE_SIZE }),
+        )
+      : Promise.resolve(EMPTY_PAGE),
     listCategories().catch(() => []),
-    // Soft suggestions when idle or zero hits — catalogue first page.
     settleProducts(listProducts({ page: 1, limit: 4 })),
   ]);
 
-  const showZero = Boolean(query) && results.length === 0;
-  const showHits = Boolean(query) && results.length > 0;
-  const showSuggestions = !showHits && suggestions.length > 0;
+  const searchFailed = Boolean(query) && !searchPage.ok;
+  const results = searchPage.ok ? searchPage.results : [];
+  const pagination = searchPage.ok ? searchPage.pagination : null;
+  const totalItems = pagination?.total_items ?? results.length;
+  const totalPages = Math.max(1, pagination?.total_pages ?? 1);
+
+  if (query && pagination && page > totalPages && totalItems > 0) {
+    redirect(searchPageHref(query, totalPages));
+  }
+
+  const suggestions = suggestionsPage.ok ? suggestionsPage.results : [];
+  const showZero = Boolean(query) && !searchFailed && totalItems === 0;
+  const showHits = Boolean(query) && !searchFailed && results.length > 0;
+  const showSuggestions = !showHits && !searchFailed && suggestions.length > 0;
 
   return (
     <>
@@ -62,7 +109,7 @@ export async function SearchView({ searchParams }: SearchViewProps) {
               type="search"
               name="q"
               defaultValue={query}
-              placeholder="نام محصول، برند یا دسته…"
+              placeholder="نام، توضیحات، برند، دسته، کد، SKU یا برچسب…"
               aria-label="جستجوی فروشگاه"
               className="shadow-e2 h-14 w-full rounded-full border border-border/70 bg-background/80 ps-12 pe-28 text-base outline-none backdrop-blur-sm transition-[border-color,box-shadow] placeholder:text-muted-foreground/80 focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20"
             />
@@ -80,7 +127,7 @@ export async function SearchView({ searchParams }: SearchViewProps) {
         {showHits ? (
           <>
             <p className="text-muted-foreground">
-              {`${faNum(results.length)} نتیجه برای «`}
+              {`${faNum(totalItems)} نتیجه برای «`}
               <span className="font-medium text-foreground">{query}</span>
               {"»"}
             </p>
@@ -93,23 +140,36 @@ export async function SearchView({ searchParams }: SearchViewProps) {
                 />
               ))}
             </div>
+            {pagination ? (
+              <ListPagination
+                page={pagination.page}
+                totalPages={totalPages}
+                hasPrev={pagination.has_prev}
+                hasNext={pagination.has_next}
+                prevHref={searchPageHref(query, pagination.page - 1)}
+                nextHref={searchPageHref(query, pagination.page + 1)}
+                ariaLabel="صفحه‌بندی نتایج جستجو"
+                className="mt-12"
+              />
+            ) : null}
           </>
         ) : null}
 
+        {searchFailed ? (
+          <CatalogueLoadError
+            title="جستجو انجام نشد"
+            description="بارگذاری نتایج با خطا روبه‌رو شد. این به‌معنای صفر نتیجه نیست — دوباره تلاش کنید."
+          />
+        ) : null}
+
         {showZero ? (
-          <div className="border-hairline mx-auto flex max-w-lg flex-col items-center rounded-3xl bg-card/40 px-6 py-14 text-center ring-1 ring-foreground/5">
-            <span className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-              <SearchX className="size-7" aria-hidden />
-            </span>
-            <h2 className="font-serif text-2xl">
-              نتیجه‌ای برای «{query}» پیدا نشد
-            </h2>
-            <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-              املا را چک کنید یا کلمه‌ای کوتاه‌تر بزنید. فعلاً جستجو روی{" "}
-              <strong className="font-medium text-foreground">نام محصول</strong>{" "}
-              است — از دسته‌ها یا پیشنهادهای زیر هم می‌توانید شروع کنید.
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <EmptyState
+            icon={SearchX}
+            title={`نتیجه‌ای برای «${query}» پیدا نشد`}
+            description="املا را چک کنید یا کلمه‌ای کوتاه‌تر بزنید. جستجو روی نام محصول، توضیحات، برند، دسته، کد، SKU و برچسب است — از دسته‌ها یا پیشنهادهای زیر هم می‌توانید شروع کنید."
+            className="mx-auto max-w-lg"
+          >
+            <div className="flex flex-wrap justify-center gap-2">
               <Button asChild>
                 <Link href="/products">
                   مرور فروشگاه <ArrowLeft className="size-4" aria-hidden />
@@ -119,7 +179,7 @@ export async function SearchView({ searchParams }: SearchViewProps) {
                 <Link href="/search">پاک کردن جستجو</Link>
               </Button>
             </div>
-          </div>
+          </EmptyState>
         ) : null}
 
         {!query && !showHits ? (

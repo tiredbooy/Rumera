@@ -210,6 +210,7 @@ helpers use `Intl` with the `fa-IR` locale — do not hand-roll digit conversion
 | Helper | Where | Output | Use |
 |---|---|---|---|
 | `faNum(value: number)` | [`lib/products.ts`](../../lib/products.ts) | `Intl.NumberFormat("fa-IR")` → e.g. `۱۸٬۹۰۰` | Any displayed integer/decimal (ratings, counts, ABV, volume) |
+| `faTick` / `faMoneyTick` | [`lib/charts/format.ts`](../../lib/charts/format.ts) | `faNum` tick; millions + «م» (e.g. `۱۸م`) | Admin chart axes (import from `@/lib/charts`) |
 | `formatPrice(value: number)` | [`lib/products.ts`](../../lib/products.ts) | `«۱۸٬۹۰۰٬۰۰۰ تومان»` (0 fraction digits) | Prices |
 | `faDate(iso: string)` | [`lib/catalog/labels.ts`](../../lib/catalog/labels.ts) | `Intl.DateTimeFormat("fa-IR", {dateStyle:"medium"})`, falls back to the raw string on error | Order/blog dates |
 
@@ -239,30 +240,28 @@ Primitives live in [`components/ui/`](../../components/ui) (alias `@/components/
 Radix-backed (`radix-ui`), styled with the OKLCH tokens above, and use the **`cva` + `cn`**
 pattern with `data-slot` / `data-variant` / `data-size` attributes for styling hooks.
 
-Available primitives:
+Available primitives (imported; unused shadcn copies were removed in PR-090i):
 
 ```
-accordion        breadcrumb     command        field          menubar
-alert            button         context-menu   hover-card     native-select
-alert-dialog     button-group   dialog         input          navigation-menu
-aspect-ratio     calendar       direction      input-group    pagination
-avatar           card           drawer         input-otp      popover
-badge            carousel       dropdown-menu  item           progress
-                 chart          empty          kbd            radio-group
-                 checkbox                       label          resizable
-                 collapsible                    scroll-area    select
-                 combobox                       separator      sheet
-                                                sidebar        skeleton
-                                                slider         sonner (toaster)
-                                                spinner        switch
-                                                table          tabs
-                                                textarea       toggle / toggle-group
-                                                tooltip
+accordion        checkbox       input-otp                 separator
+alert-dialog     collapsible    jalali-datetime-input     sheet
+avatar           command        label                     skeleton
+badge            dialog         native-select             sonner (toaster)
+button           direction      popover                   switch
+card             dropdown-menu  progress                  table
+                 field          select                    tabs
+                 input          textarea
+                 input-group    toggle / toggle-group
 ```
 
 `components/ui/direction.tsx` re-exports Radix's `DirectionProvider`/`useDirection` and is the
 RTL backbone. `components/ui/sonner.tsx` is the toast surface (`<Toaster>` mounted in the root
 layout, `position="bottom-left" dir="rtl"`).
+
+Admin analytics charts import **TanStack Charts** from `@/lib/charts` (`RumeraChart`).
+Orders use blue `oklch(0.62 0.16 250)`; revenue uses gold `oklch(0.72 0.15 75)`.
+Tick/tooltip numerals stay `faNum`.
+See [admin-console.md](../features/admin-console.md#analytics-charts).
 
 ### `cn()` and variants
 

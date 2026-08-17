@@ -2,9 +2,11 @@ package product
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tiredbooy/internal/analytics"
 	"github.com/tiredbooy/internal/middlewares"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/platform/httpx"
@@ -71,6 +73,12 @@ func (h *Handler) ListProducts(c *gin.Context) {
 		return
 	}
 	filter.Defaults()
+	// CF-2: a non-numeric id is a 400, not an empty page that reads as "no such
+	// products". Checked on both lists — they share ProductFilter.
+	if _, err := filter.ValidIDs(); err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
 	// The storefront must never surface inactive/draft products — force the
 	// filter regardless of any client-supplied is_active value.
 	active := true
@@ -78,8 +86,13 @@ func (h *Handler) ListProducts(c *gin.Context) {
 
 	items, total, err := h.Product.GetAll(c.Request.Context(), filter)
 	if err != nil {
+		// Fail the request. Do not invent an empty page or results_count=0.
 		httpx.HandleError(c, err)
 		return
+	}
+	// Storefront search is GET /products?search= (there is no GET /search).
+	if q := strings.TrimSpace(filter.Search); q != "" {
+		c.Set(middlewares.AnalyticsPayloadKey, analytics.SearchPayload(q, total))
 	}
 	response.Paginated(c, items, httpx.Paginate(filter.Page, filter.Limit, total))
 }
@@ -94,6 +107,12 @@ func (h *Handler) ListAdminProducts(c *gin.Context) {
 		return
 	}
 	filter.Defaults()
+	// CF-2: a non-numeric id is a 400, not an empty page that reads as "no such
+	// products". Checked on both lists — they share ProductFilter.
+	if _, err := filter.ValidIDs(); err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
 
 	items, total, err := h.Product.GetAll(c.Request.Context(), filter)
 	if err != nil {

@@ -28,7 +28,14 @@ vi.mock("next-auth/react", () => ({
 
 vi.mock("@/features/auth/api/client", () => ({
   AuthClientError: class AuthClientError extends Error {
-    status = 400;
+    constructor(
+      public status = 400,
+      public code = "UNKNOWN",
+      message = "error",
+    ) {
+      super(message);
+      this.name = "AuthClientError";
+    }
   },
   requestOtp: mocks.requestOtp,
 }));
@@ -50,6 +57,7 @@ beforeEach(() => {
       disconnect() {}
     },
   );
+  document.elementFromPoint = () => null;
   mocks.requestOtp.mockResolvedValue(undefined);
 });
 
@@ -82,5 +90,58 @@ describe("PhoneLoginForm responsive OTP", () => {
     // still terminate with an unhandled React state update.
     unmount();
     await act(() => new Promise((resolve) => setTimeout(resolve, 75)));
+  });
+});
+
+describe("PhoneLoginForm sign-in errors", () => {
+  async function reachCodeStep() {
+    const view = render(<PhoneLoginForm callbackUrl="/account" />);
+    fireEvent.change(screen.getByLabelText("شمارهٔ موبایل"), {
+      target: { value: "09123456789" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ارسال کد تأیید" }));
+    await screen.findByRole("heading", { name: "تأیید شماره" });
+    return view;
+  }
+
+  it.each([
+    [
+      "RateLimited",
+      "تعداد درخواست‌ها زیاد است. کمی بعد دوباره تلاش کنید.",
+    ],
+    ["AuthServiceError", "ارتباط با سرور برقرار نشد."],
+    [
+      "Inactive",
+      "این حساب غیرفعال است. در صورت نیاز با پشتیبانی تماس بگیرید.",
+    ],
+    ["credentials", "کد واردشده نادرست یا منقضی شده است."],
+  ] as const)("maps OTP %s to distinct Persian copy", async (code, copy) => {
+    const { unmount } = await reachCodeStep();
+    mocks.signIn.mockResolvedValue({
+      error: "CredentialsSignin",
+      code,
+    });
+    fireEvent.change(screen.getByLabelText("کد تأیید"), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ورود" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(copy);
+    unmount();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 75)));
+  });
+
+  it("keeps request-OTP 429 distinct from an invalid phone number", async () => {
+    const { AuthClientError } = await import("@/features/auth/api/client");
+    mocks.requestOtp.mockRejectedValueOnce(
+      new AuthClientError(429, "TOO_MANY_REQUESTS", "slow down"),
+    );
+    render(<PhoneLoginForm callbackUrl="/account" />);
+    fireEvent.change(screen.getByLabelText("شمارهٔ موبایل"), {
+      target: { value: "09123456789" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ارسال کد تأیید" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "تعداد درخواست‌ها زیاد است. کمی بعد دوباره تلاش کنید.",
+    );
   });
 });

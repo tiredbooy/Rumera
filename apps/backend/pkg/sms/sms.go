@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
+	"strings"
 
 	config "github.com/tiredbooy/configs"
 	"go.uber.org/zap"
@@ -33,10 +33,11 @@ func New(cfg *config.Config, log *zap.Logger) Sender {
 			return &logSender{log: log}
 		}
 		return &kavenegarSender{
-			apiKey: cfg.SMSAPIKey,
-			sender: cfg.SMSSender,
-			log:    log,
-			http:   &http.Client{Timeout: 8 * time.Second},
+			apiKey:  cfg.SMSAPIKey,
+			sender:  cfg.SMSSender,
+			baseURL: strings.TrimRight(cfg.SMSBaseURL, "/"),
+			log:     log,
+			http:    &http.Client{Timeout: cfg.SMSTimeout},
 		}
 	default:
 		log.Info("sms: no provider configured, using log sender")
@@ -55,17 +56,18 @@ func (s *logSender) Send(_ context.Context, to, message string) error {
 }
 
 // ── Kavenegar implementation ────────────────────────────────────────────────
-// Simple REST call: GET https://api.kavenegar.com/v1/{KEY}/sms/send.json
+// Simple REST call: POST {SMS_BASE_URL}/{KEY}/sms/send.json
 
 type kavenegarSender struct {
-	apiKey string
-	sender string
-	log    *zap.Logger
-	http   *http.Client
+	apiKey  string
+	sender  string
+	baseURL string
+	log     *zap.Logger
+	http    *http.Client
 }
 
 func (s *kavenegarSender) Send(ctx context.Context, to, message string) error {
-	endpoint := fmt.Sprintf("https://api.kavenegar.com/v1/%s/sms/send.json", url.PathEscape(s.apiKey))
+	endpoint := fmt.Sprintf("%s/%s/sms/send.json", s.baseURL, url.PathEscape(s.apiKey))
 
 	q := url.Values{}
 	q.Set("receptor", to)

@@ -19,10 +19,15 @@ tags: [playbook, money, reliability]
 ## FE / BFF first checks
 
 1. Does the client send **`Idempotency-Key`** on money POSTs?
-   - `POST /orders`, `/gift-cards/redeem`, `/loyalty/redeem`, admin wallet credit
+   - `POST /orders`, `/gift-cards/redeem`, admin wallet credit
+   - `POST /loyalty/redeem` **requires** the header (or body `idempotency_key`); domain `ref_id` is `{userID}:idem:{key}`
 2. Is the key **stable for one user intent** (UUID once per click) and resent on retry?
 3. Did the body change under the same key? → **409 body mismatch** — new key required.
 4. Does the BFF **forward** the header unchanged to Go?
+   Store (`/api/store/*`) and admin (`/api/admin/*`) copy incoming
+   `Idempotency-Key` via `pickIdempotencyKeyHeader` when present. They do
+   **not** invent a key. If Go never sees the header, inspect the BFF map
+   first — do not log the key.
 
 Admin credit also needs body `idempotency_key` (required by service). Prefer same value in header + body.
 

@@ -1,11 +1,12 @@
 "use client";
 
 import { ImageIcon, Loader2, Trash2 } from "lucide-react";
-import { Controller, type Control, type FieldErrors } from "react-hook-form";
+import { Controller, useWatch, type Control, type FieldErrors } from "react-hook-form";
 import type { Ref } from "react";
 
 import { OptimizedImage } from "@/components/optimized-image";
 import { Button } from "@/components/ui/button";
+import { JalaliDateTimeInput } from "@/components/ui/jalali-datetime-input";
 import { Label } from "@/components/ui/label";
 import { fieldErrorId } from "@/components/ui/field";
 import {
@@ -21,7 +22,13 @@ import type {
   ImageUploaderHandle,
   UploadedImage,
 } from "@/features/image-uploader/types";
+import { EditorActions } from "@/features/admin/shared/editor-actions";
 import { MultiTagPicker } from "@/features/admin/shared/multi-tag-picker";
+import {
+  PUBLICATION_KIND_FA,
+  PUBLICATION_KIND_HINT,
+  type PublicationKind,
+} from "@/features/admin/shared/publication";
 import type { Tag } from "@/features/catalog/tags/types";
 import type { RecipeStatus } from "@/features/recipes/types";
 import type { RecipeFormValues } from "@/features/recipes/validations";
@@ -121,15 +128,43 @@ function ImageCard({
   );
 }
 
-function PublicationCard({ control }: { control: Control<RecipeFormValues> }) {
+function PublicationCard({
+  control,
+  kind,
+  disabled,
+}: {
+  control: Control<RecipeFormValues>;
+  kind: PublicationKind;
+  disabled?: boolean;
+}) {
+  const status = useWatch({ control, name: "status" });
   return (
     <div className="border-hairline flex flex-col gap-4 rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
+      <p
+        role="status"
+        className={cn(
+          "rounded-xl px-3 py-2 text-xs font-medium ring-1",
+          kind === "published" &&
+            "bg-success/12 text-success ring-success/25",
+          kind === "scheduled" &&
+            "bg-info/12 text-info ring-info/25",
+          kind === "draft" && "bg-muted text-muted-foreground ring-border/60",
+          kind === "archived" &&
+            "bg-warning/12 text-warning ring-warning/25",
+        )}
+      >
+        {PUBLICATION_KIND_FA[kind]} — {PUBLICATION_KIND_HINT[kind]}
+      </p>
       <Field id="status" label="وضعیت انتشار">
         <Controller
           control={control}
           name="status"
           render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange}>
+            <Select
+              value={field.value}
+              onValueChange={field.onChange}
+              disabled={disabled}
+            >
               <SelectTrigger id="status" className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -144,6 +179,28 @@ function PublicationCard({ control }: { control: Control<RecipeFormValues> }) {
           )}
         />
       </Field>
+
+      {status === "published" ? (
+        <Field
+          id="published_at"
+          label="زمان انتشار (شمسی)"
+          hint="خالی یعنی انتشار فوری. تاریخ آینده یعنی زمان‌بندی."
+        >
+          <Controller
+            control={control}
+            name="published_at"
+            render={({ field }) => (
+              <JalaliDateTimeInput
+                id="published_at"
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                disabled={disabled}
+              />
+            )}
+          />
+        </Field>
+      ) : null}
 
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -161,6 +218,7 @@ function PublicationCard({ control }: { control: Control<RecipeFormValues> }) {
               checked={field.value}
               onCheckedChange={field.onChange}
               aria-label="دستور ویژه"
+              disabled={disabled}
             />
           )}
         />
@@ -172,9 +230,11 @@ function PublicationCard({ control }: { control: Control<RecipeFormValues> }) {
 function TagsCard({
   control,
   tags,
+  disabled,
 }: {
   control: Control<RecipeFormValues>;
   tags: Tag[];
+  disabled?: boolean;
 }) {
   return (
     <div className="border-hairline flex flex-col gap-2.5 rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04]">
@@ -187,6 +247,7 @@ function TagsCard({
             value={field.value}
             onChange={field.onChange}
             emptyLabel="برچسبی برای انتخاب در دسترس نیست."
+            disabled={disabled}
           />
         )}
       />
@@ -195,39 +256,34 @@ function TagsCard({
 }
 
 function FormActions({
-  status,
+  kind,
   submitLabel,
   isSubmitting,
   onCancel,
   onDelete,
   isDeleting,
   canDelete,
+  canWrite = true,
 }: {
-  status: RecipeStatus;
+  kind: PublicationKind;
   submitLabel: string;
   isSubmitting: boolean;
   onCancel: () => void;
   onDelete?: () => void;
   isDeleting?: boolean;
   canDelete?: boolean;
+  canWrite?: boolean;
 }) {
   const busy = isSubmitting || Boolean(isDeleting);
   return (
-    <div className="flex flex-col gap-2">
-      <Button type="submit" size="lg" disabled={busy}>
-        {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
-        {submitLabel}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="lg"
-        disabled={busy}
-        onClick={onCancel}
-      >
-        انصراف
-      </Button>
-      {canDelete && onDelete ? (
+    <EditorActions
+      submitLabel={submitLabel}
+      isSubmitting={busy}
+      onCancel={onCancel}
+      hint={canWrite ? PUBLICATION_KIND_HINT[kind] : undefined}
+      canWrite={canWrite}
+    >
+      {canWrite && canDelete && onDelete ? (
         <Button
           type="button"
           variant="destructive"
@@ -244,14 +300,7 @@ function FormActions({
           {isDeleting ? "در حال حذف…" : "حذف دستور"}
         </Button>
       ) : null}
-      <p className="px-1 text-center text-xs text-muted-foreground">
-        {status === "published"
-          ? "این دستور پس از ذخیره منتشر می‌شود."
-          : status === "archived"
-            ? "این دستور بایگانی و از سایت پنهان می‌شود."
-            : "این دستور به‌صورت پیش‌نویس ذخیره می‌شود."}
-      </p>
-    </div>
+    </EditorActions>
   );
 }
 
@@ -262,13 +311,14 @@ export function RecipeSidebar({
   title,
   imageUrl,
   imageAlt,
-  status,
+  publicationKind: kind,
   submitLabel,
   isSubmitting,
   ownerId,
   mediaRef,
   onPreviewChange,
   disabled,
+  canWrite = true,
   onCancel,
   onDelete,
   isDeleting,
@@ -280,13 +330,14 @@ export function RecipeSidebar({
   title: string;
   imageUrl: string;
   imageAlt: string;
-  status: RecipeStatus;
+  publicationKind: PublicationKind;
   submitLabel: string;
   isSubmitting: boolean;
   ownerId?: number | null;
   mediaRef: Ref<ImageUploaderHandle<UploadedImage | null>>;
   onPreviewChange: (url: string) => void;
   disabled?: boolean;
+  canWrite?: boolean;
   onCancel: () => void;
   onDelete?: () => void;
   isDeleting?: boolean;
@@ -306,16 +357,17 @@ export function RecipeSidebar({
           onPreviewChange={onPreviewChange}
           disabled={disabled}
         />
-        <PublicationCard control={control} />
-        <TagsCard control={control} tags={tags} />
+        <PublicationCard control={control} kind={kind} disabled={disabled} />
+        <TagsCard control={control} tags={tags} disabled={disabled} />
         <FormActions
-          status={status}
+          kind={kind}
           submitLabel={submitLabel}
           isSubmitting={isSubmitting}
           onCancel={onCancel}
           onDelete={onDelete}
           isDeleting={isDeleting}
           canDelete={canDelete}
+          canWrite={canWrite}
         />
       </div>
     </aside>

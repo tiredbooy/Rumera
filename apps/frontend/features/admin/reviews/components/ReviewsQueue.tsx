@@ -1,22 +1,33 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Check,
-  ChevronLeft,
-  ChevronRight,
   Loader2,
   Star,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  parseReviewQueuePage,
+  parseReviewQueueTab,
+  reviewsQueueHref,
+} from "@/features/admin/reviews/reviews-queue-params";
+import {
+  AdminFilterBar,
+  AdminPage,
+} from "@/features/dashboard/components/admin-page";
 import {
   useAdminReviews,
   useModerateReview,
 } from "@/features/reviews/hooks";
+import { REVIEW_STATUS_FA } from "@/features/reviews/labels";
 import { ReviewStatusBadge } from "@/features/reviews/review-status-badge";
 import type {
   AdminReview,
@@ -48,20 +59,40 @@ function Stars({ rating }: { rating: number }) {
 
 const TABS: { value: ReviewStatus | "all"; label: string }[] = [
   { value: "all", label: "همه" },
-  { value: "pending", label: "در انتظار بازبینی" },
-  { value: "approved", label: "تأییدشده" },
-  { value: "rejected", label: "ردشده" },
+  { value: "pending", label: REVIEW_STATUS_FA.pending },
+  { value: "approved", label: REVIEW_STATUS_FA.approved },
+  { value: "rejected", label: REVIEW_STATUS_FA.rejected },
 ];
 
 const PAGE_SIZE = 20;
+
+type ReviewProductFields = {
+  product_title?: string | null;
+  product_slug?: string | null;
+};
+
+function reviewProductLabel(review: AdminReview): string {
+  const extra = review as AdminReview & ReviewProductFields;
+  const title = extra.product_title?.trim();
+  if (title) {
+    return title;
+  }
+  const slug = extra.product_slug?.trim();
+  if (slug) {
+    return slug;
+  }
+  return `محصول #${faNum(review.product_id)}`;
+}
 
 export function ReviewsQueue({
   canModerate,
 }: {
   canModerate: boolean;
 }) {
-  const [tab, setTab] = React.useState<ReviewStatus | "all">("pending");
-  const [page, setPage] = React.useState(1);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tab = parseReviewQueueTab(searchParams.get("status"));
+  const page = parseReviewQueuePage(searchParams.get("page"));
   const reviewsQuery = useAdminReviews({
     page,
     limit: PAGE_SIZE,
@@ -71,6 +102,7 @@ export function ReviewsQueue({
   });
   const moderate = useModerateReview();
   const rows = reviewsQuery.data?.results ?? [];
+  const showInitialLoading = reviewsQuery.isLoading && !reviewsQuery.data;
 
   async function changeStatus(review: AdminReview, status: ReviewStatus) {
     try {
@@ -85,60 +117,74 @@ export function ReviewsQueue({
     }
   }
 
-  if (reviewsQuery.isLoading) {
-    return (
-      <div
-        className="border-hairline flex min-h-64 items-center justify-center rounded-2xl bg-card text-muted-foreground"
-        role="status"
-      >
-        <Loader2 className="me-2 size-5 animate-spin" aria-hidden />
-        در حال دریافت دیدگاه‌ها…
-      </div>
-    );
-  }
-
-  if (reviewsQuery.isError) {
-    return (
-      <div
-        className="border-hairline flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-16 text-center text-sm text-destructive"
-        role="alert"
-        aria-busy={reviewsQuery.isFetching}
-      >
-        <p>خطا در دریافت دیدگاه‌ها.</p>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={reviewsQuery.isFetching}
-          onClick={() => void reviewsQuery.refetch()}
-        >
-          {reviewsQuery.isFetching ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-          ) : null}
-          {reviewsQuery.isFetching ? "در حال تلاش…" : "تلاش دوباره"}
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-5">
-      <Tabs
-        value={tab}
-        onValueChange={(value) => {
-          setTab(value as ReviewStatus | "all");
-          setPage(1);
-        }}
-      >
-        <TabsList>
-          {TABS.map((item) => (
-            <TabsTrigger key={item.value} value={item.value}>
-              {item.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      {rows.length === 0 ? (
+    <AdminPage
+      title="دیدگاه‌ها"
+      description="بازبینی و تأیید نظرهای مشتریان."
+      filters={
+        <AdminFilterBar
+          id="reviews-filter-title"
+          title="فیلتر دیدگاه‌ها"
+          hasFilters={tab !== "all"}
+          resetHref={reviewsQueueHref("all", 1, pathname)}
+        >
+          <Tabs value={tab}>
+            <TabsList>
+              {TABS.map((item) => (
+                <TabsTrigger key={item.value} value={item.value} asChild>
+                  <Link href={reviewsQueueHref(item.value, 1, pathname)}>
+                    {item.label}
+                  </Link>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </AdminFilterBar>
+      }
+      pagination={
+        reviewsQuery.data ? (
+          <ListPagination
+            page={reviewsQuery.data.pagination.page}
+            totalPages={reviewsQuery.data.pagination.total_pages}
+            hasPrev={reviewsQuery.data.pagination.has_prev}
+            hasNext={reviewsQuery.data.pagination.has_next}
+            prevHref={reviewsQueueHref(tab, page - 1, pathname)}
+            nextHref={reviewsQueueHref(tab, page + 1, pathname)}
+            disabled={reviewsQuery.isFetching}
+            ariaLabel="صفحه‌بندی دیدگاه‌ها"
+          />
+        ) : null
+      }
+    >
+      <div className="flex flex-col gap-5">
+      {showInitialLoading ? (
+        <div
+          className="border-hairline flex min-h-64 items-center justify-center rounded-2xl bg-card text-muted-foreground"
+          role="status"
+        >
+          <Loader2 className="me-2 size-5 animate-spin" aria-hidden />
+          در حال دریافت دیدگاه‌ها…
+        </div>
+      ) : reviewsQuery.isError && !reviewsQuery.data ? (
+        <div
+          className="border-hairline flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-16 text-center text-sm text-destructive"
+          role="alert"
+          aria-busy={reviewsQuery.isFetching}
+        >
+          <p>خطا در دریافت دیدگاه‌ها.</p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={reviewsQuery.isFetching}
+            onClick={() => void reviewsQuery.refetch()}
+          >
+            {reviewsQuery.isFetching ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            ) : null}
+            {reviewsQuery.isFetching ? "در حال تلاش…" : "تلاش دوباره"}
+          </Button>
+        </div>
+      ) : rows.length === 0 ? (
         <div className="border-hairline flex flex-col items-center justify-center gap-3 rounded-2xl border-dashed bg-card/40 py-16 text-center">
           <span className="flex size-12 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground ring-1 ring-border/60">
             <Star className="size-5" aria-hidden />
@@ -161,9 +207,12 @@ export function ReviewsQueue({
                     <p className="font-medium">
                       {review.user_full_name.trim() || "کاربر"}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      محصول #{faNum(review.product_id)}
-                    </p>
+                    <Link
+                      href={`/admin/products/${review.product_id}`}
+                      className="text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {reviewProductLabel(review)}
+                    </Link>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -188,7 +237,7 @@ export function ReviewsQueue({
                         variant="outline"
                         size="sm"
                         disabled={moderate.isPending}
-                        className="text-emerald-600 hover:text-emerald-600 dark:text-emerald-400"
+                        className="text-success hover:text-success"
                         onClick={() => changeStatus(review, "approved")}
                       >
                         {moderate.isPending ? (
@@ -216,37 +265,7 @@ export function ReviewsQueue({
           ))}
         </ul>
       )}
-      {reviewsQuery.data && reviewsQuery.data.pagination.total_pages > 1 ? (
-        <nav
-          className="flex items-center justify-center gap-2"
-          aria-label="صفحه‌بندی دیدگاه‌ها"
-        >
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={
-              !reviewsQuery.data.pagination.has_prev || reviewsQuery.isFetching
-            }
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
-          >
-            <ChevronRight className="size-4" aria-hidden /> قبلی
-          </Button>
-          <span className="px-2 text-sm text-muted-foreground" aria-live="polite">
-            صفحهٔ {faNum(reviewsQuery.data.pagination.page)} از{" "}
-            {faNum(reviewsQuery.data.pagination.total_pages)}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={
-              !reviewsQuery.data.pagination.has_next || reviewsQuery.isFetching
-            }
-            onClick={() => setPage((current) => current + 1)}
-          >
-            بعدی <ChevronLeft className="size-4" aria-hidden />
-          </Button>
-        </nav>
-      ) : null}
-    </div>
+      </div>
+    </AdminPage>
   );
 }

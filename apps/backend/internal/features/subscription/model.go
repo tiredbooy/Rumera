@@ -41,9 +41,17 @@ type CreateSubscriptionReq struct {
 	AddressID *int64              `json:"address_id" validate:"omitempty,min=1"`
 }
 
-// UpdateSubscriptionReq drives lifecycle actions from the account UI.
+// UpdateSubscriptionReq is a PATCH body. action is required only for a
+// lifecycle change; address_id may be sent alone or together with action.
+// Address-book ownership is enforced in Service (caller-owned GetByID).
 type UpdateSubscriptionReq struct {
-	Action SubscriptionAction `json:"action" validate:"required,oneof=pause resume cancel skip"`
+	Action    SubscriptionAction `json:"action"     validate:"omitempty,oneof=pause resume cancel skip"`
+	AddressID *int64             `json:"address_id" validate:"omitempty,min=1"`
+}
+
+// HasPatch reports whether the body has a lifecycle action and/or a ship-to id.
+func (r UpdateSubscriptionReq) HasPatch() bool {
+	return r.Action != "" || r.AddressID != nil
 }
 
 type SubscriptionResponse struct {

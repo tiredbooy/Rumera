@@ -3,6 +3,9 @@ package reviews
 import (
 	"context"
 	"errors"
+	"net/url"
+	"strings"
+	"unicode"
 
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/apperr"
@@ -110,6 +113,10 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*Review, error) {
 		return nil, apperr.ErrInternal
 	}
 
+	if err := s.hydrateImages(ctx, review); err != nil {
+		return nil, apperr.ErrInternal
+	}
+
 	return review, nil
 }
 
@@ -120,6 +127,10 @@ func (s *Service) GetAll(ctx context.Context, filter ReviewFilter) ([]*Review, i
 
 	reviews, total, err := s.reviewRepo.GetAll(ctx, filter)
 	if err != nil {
+		return nil, 0, apperr.ErrInternal
+	}
+
+	if err := s.hydrateImages(ctx, reviews...); err != nil {
 		return nil, 0, apperr.ErrInternal
 	}
 
@@ -217,6 +228,21 @@ func (s *Service) React(ctx context.Context, id int64, userID int64, like bool) 
 	return nil
 }
 
+func (s *Service) Unlike(ctx context.Context, id int64, userID int64) error {
+	if id <= 0 || userID <= 0 {
+		return apperr.ErrInvalidRequest
+	}
+
+	if err := s.reviewRepo.Unlike(ctx, id, userID); err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
+		return apperr.ErrInternal
+	}
+
+	return nil
+}
+
 func (s *Service) HasReviewed(ctx context.Context, userID int64, productID int64) (bool, error) {
 	if userID <= 0 || productID <= 0 {
 		return false, apperr.ErrInvalidRequest
@@ -263,9 +289,11 @@ func (s *Service) AddImage(ctx context.Context, reviewID int64, userID int64, re
 	if reviewID <= 0 || userID <= 0 {
 		return nil, apperr.ErrInvalidRequest
 	}
-	if req.ImageURL == "" {
-		return nil, apperr.ErrInvalidRequest
+	imageURL, err := normalizeReviewImageURL(req.ImageURL)
+	if err != nil {
+		return nil, err
 	}
+	req.ImageURL = imageURL
 
 	// Ownership check: a user may only attach images to their OWN review.
 	// Without this, any authenticated caller could POST images onto any review
@@ -307,9 +335,11 @@ func (s *Service) AddImages(ctx context.Context, reviewID int64, reqs []*ReviewI
 	}
 
 	for _, req := range reqs {
-		if req.ImageURL == "" {
-			return nil, apperr.ErrInvalidRequest
+		imageURL, err := normalizeReviewImageURL(req.ImageURL)
+		if err != nil {
+			return nil, err
 		}
+		req.ImageURL = imageURL
 		req.ReviewID = reviewID
 	}
 
@@ -355,6 +385,41 @@ func (s *Service) DeleteImage(ctx context.Context, id int64) error {
 	return nil
 }
 
+// hydrateImages attaches review_images in one batch query. Missing keys become [].
+func (s *Service) hydrateImages(ctx context.Context, reviews ...*Review) error {
+	ids := make([]int64, 0, len(reviews))
+	for _, review := range reviews {
+		if review == nil {
+			continue
+		}
+		if review.Images == nil {
+			review.Images = []ReviewImage{}
+		}
+		if review.ID > 0 {
+			ids = append(ids, review.ID)
+		}
+	}
+	if s.reviewImageRepo == nil || len(ids) == 0 {
+		return nil
+	}
+
+	byReview, err := s.reviewImageRepo.GetImagesByReviewIDs(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for _, review := range reviews {
+		if review == nil {
+			continue
+		}
+		images := byReview[review.ID]
+		if images == nil {
+			images = []ReviewImage{}
+		}
+		review.Images = images
+	}
+	return nil
+}
+
 // ── private validators ────────────────────────────────────────────────────────
 
 func validateReviewContent(rating int, title, content string) error {
@@ -365,4 +430,46 @@ func validateReviewContent(rating int, title, content string) error {
 		return apperr.ErrInvalidRequest
 	}
 	return nil
+}
+
+// Review images render on the public PDP. Allow https hosts, /media/{key},
+// and other origin-independent root-relative media paths. Reject javascript:,
+// data:, http:, and protocol-relative hosts.
+func normalizeReviewImageURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 2048 {
+		return "", apperr.ErrInvalidRequest
+	}
+	decoded, err := url.PathUnescape(value)
+	if err != nil || strings.ContainsRune(value, '#') || strings.ContainsRune(decoded, '\\') {
+		return "", apperr.ErrInvalidRequest
+	}
+	for _, r := range decoded {
+		if unicode.IsControl(r) {
+			return "", apperr.ErrInvalidRequest
+		}
+	}
+
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || parsed.User != nil || parsed.Fragment != "" {
+		return "", apperr.ErrInvalidRequest
+	}
+
+	if strings.HasPrefix(value, "/") {
+		if strings.HasPrefix(decoded, "//") || parsed.Scheme != "" || parsed.Host != "" {
+			return "", apperr.ErrInvalidRequest
+		}
+		if strings.HasPrefix(value, "/media/") {
+			key := strings.TrimPrefix(value, "/media/")
+			if key == "" || strings.Contains(decoded, "..") {
+				return "", apperr.ErrInvalidRequest
+			}
+		}
+		return value, nil
+	}
+
+	if parsed.Scheme != "https" || parsed.Hostname() == "" {
+		return "", apperr.ErrInvalidRequest
+	}
+	return value, nil
 }

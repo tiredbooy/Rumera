@@ -9,12 +9,38 @@ export interface GiftCardRedemption {
   amount: string;
 }
 
-/** Admin projection returned by POST /admin/gift-cards. */
+/** Admin projection returned by POST /admin/gift-cards (issue batch). */
 export interface AdminGiftCard {
   code: string;
   initial_amount: string;
   status: GiftCardStatus;
   created_at: string;
+}
+
+/**
+ * Staff ledger row from GET /admin/gift-cards and POST /admin/gift-cards/:id/void.
+ * `id` is the void target — the issue batch response does not include it.
+ */
+export interface AdminGiftCardRow {
+  id: number;
+  code: string;
+  initial_amount: string;
+  status: GiftCardStatus;
+  purchaser_user_id?: number;
+  purchase_txid?: string;
+  redeemed_by?: number;
+  redeemed_at?: string;
+  created_at: string;
+}
+
+/** Query accepted by GET /admin/gift-cards. */
+export interface AdminGiftCardListQuery {
+  page?: number;
+  limit?: number;
+  status?: GiftCardStatus;
+  search?: string;
+  sortBy?: "created_at" | "initial_amount" | "status";
+  orderBy?: "asc" | "desc";
 }
 
 export interface CreateGiftCardsInput {
@@ -35,6 +61,19 @@ export interface GiftCardPurchaseIntent {
   amount: string;
   currency: string;
   status: string;
+  /** Absolute gateway start URL from the API. Empty when env is unset. */
+  payment_url?: string;
+}
+
+/**
+ * Non-empty API `payment_url` only. Never invent a start URL from
+ * `transaction_id` or a default host.
+ */
+export function usablePaymentUrl(
+  url?: string | null,
+): string | undefined {
+  const trimmed = typeof url === "string" ? url.trim() : "";
+  return trimmed ? trimmed : undefined;
 }
 
 /** GET /gift-cards/mine — codes the caller purchased (self-delivery). */

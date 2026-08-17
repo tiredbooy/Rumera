@@ -8,7 +8,7 @@ tags: [backend, settings, content]
 
 # Site Settings Backend
 
-Singleton storefront configuration document (store identity, contact, social, shipping copy, SEO defaults, maintenance).
+Singleton storefront configuration document (store identity, contact, social, shipping copy, SEO defaults, maintenance). Admin PUT is last-write-wins-safe: `expected_updated_at` must match the row or the write is `409`.
 
 ## Package (feature slice)
 
@@ -21,7 +21,7 @@ apps/backend/internal/features/site_settings/
 |--------|------|-------|
 | GET | `/api/v1/settings` | Public; Redis read-through + singleflight |
 | GET | `/api/v1/admin/settings` | Admin full document |
-| PUT | `/api/v1/admin/settings` | Partial group replace; invalidates cache |
+| PUT | `/api/v1/admin/settings` | Partial group replace; requires `expected_updated_at` (admin GET `updatedAt`); stale revision → `409 CONFLICT`; invalidates cache |
 
 ## Related
 

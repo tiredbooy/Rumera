@@ -1,8 +1,10 @@
 import "server-only";
 
-const API =
-  process.env.API_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:8080";
+import { resolveApiBase, resolveApiOrigin } from "./origin";
 
-export const API_BASE = `${API.replace(/\/$/, "")}/api/v1`;
+/**
+ * Server-only view of the backend origin. The precedence chain lives in
+ * `./origin` so the browser-safe surface and this one can never drift.
+ */
+export const API_ORIGIN = resolveApiOrigin();
+export const API_BASE = resolveApiBase();

@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, PackageOpen } from "lucide-react";
 
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import type { ProductListItem } from "@/features/catalog/products/types";
 import { CatalogProductRail } from "@/features/home/components/catalog-product-rail";
@@ -19,7 +20,7 @@ interface CatalogSectionProps {
 }
 
 /**
- * Homepage catalogue strip — real ProductCards in a horizontal Swiper rail.
+ * Homepage catalogue strip — real ProductCards in a CSS scroll-snap rail.
  * Chips deep-link into category/product routes; “all products” stays primary.
  */
 export function CatalogSection({ filterChips, products }: CatalogSectionProps) {
@@ -81,16 +82,14 @@ export function CatalogSection({ filterChips, products }: CatalogSectionProps) {
       {products.length > 0 ? (
         <CatalogProductRail products={products} />
       ) : (
-        <div className="border-hairline mt-10 flex flex-col items-center gap-3 rounded-3xl bg-card/40 px-6 py-16 text-center ring-1 ring-foreground/[0.04]">
-          <p className="font-serif text-xl">هنوز محصول منتخبی نمایش داده نمی‌شود</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            پس از افزودن محصولات فعال، اینجا کارت‌های فروشگاهی با قیمت و موجودی
-            واقعی ظاهر می‌شوند.
-          </p>
-          <Button variant="outline" asChild className="mt-2">
-            <Link href="/products">رفتن به کاتالوگ</Link>
-          </Button>
-        </div>
+        <EmptyState
+          icon={PackageOpen}
+          title="هنوز محصول منتخبی نمایش داده نمی‌شود"
+          description="پس از افزودن محصولات فعال، اینجا کارت‌های فروشگاهی با قیمت و موجودی واقعی ظاهر می‌شوند."
+          actionLabel="رفتن به کاتالوگ"
+          actionHref="/products"
+          className="mt-10"
+        />
       )}
 
       <div className="mt-10 flex flex-wrap items-center justify-center gap-3">

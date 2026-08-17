@@ -7,8 +7,6 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
-  ChevronLeft,
-  ChevronRight,
   Inbox,
   X,
 } from "lucide-react"
@@ -16,7 +14,7 @@ import {
 import { cn } from "@/lib/utils"
 import { faNum } from "@/lib/products"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
+import { ListPagination } from "@/components/list-pagination"
 import {
   Select,
   SelectContent,
@@ -68,6 +66,8 @@ export function DataTable<T>({
   pageSize = 8,
   rowHref,
   toolbarExtra,
+  toolbarHint,
+  resultCountLabel,
   emptyMessage = "موردی یافت نشد.",
 }: {
   rows: T[]
@@ -79,6 +79,9 @@ export function DataTable<T>({
   pageSize?: number
   rowHref?: (row: T) => string
   toolbarExtra?: React.ReactNode
+  /** Clarifies that facets only cover the in-memory `rows` (e.g. this page). */
+  toolbarHint?: string
+  resultCountLabel?: (filtered: number, total: number) => React.ReactNode
   emptyMessage?: string
 }) {
   const [query, setQuery] = React.useState("")
@@ -186,19 +189,24 @@ export function DataTable<T>({
             </Select>
           ))}
 
-          <div className="ms-auto flex items-center gap-3">
+          <div className="ms-auto flex flex-wrap items-center justify-end gap-3">
+            {toolbarHint ? (
+              <p className="text-xs text-muted-foreground">{toolbarHint}</p>
+            ) : null}
             {toolbarExtra}
             <span className="rounded-md bg-muted/60 px-2 py-1 text-xs font-medium tabular-nums text-muted-foreground">
-              {faNum(filtered.length)} مورد
+              {resultCountLabel
+                ? resultCountLabel(filtered.length, rows.length)
+                : `${faNum(filtered.length)} مورد`}
             </span>
           </div>
         </div>
       ) : null}
 
-      <div className="border-hairline overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-border/60 bg-muted/30 hover:bg-muted/30">
+      <div className="border-hairline max-h-[min(70dvh,calc(100dvh-16rem))] overflow-auto rounded-2xl bg-card ring-1 ring-foreground/[0.04]">
+        <Table containerClassName="overflow-visible">
+          <TableHeader className="sticky top-0 z-10">
+            <TableRow className="border-border/60 bg-muted/95 hover:bg-muted/95">
               {columns.map((col) => {
                 const active = sort?.id === col.id
                 const alignCls =
@@ -218,7 +226,7 @@ export function DataTable<T>({
                         : undefined
                     }
                     className={cn(
-                      "h-10 text-xs font-medium text-muted-foreground",
+                      "sticky top-0 z-10 h-10 bg-muted text-xs font-medium text-muted-foreground backdrop-blur-sm",
                       alignCls,
                       col.className
                     )}
@@ -306,34 +314,16 @@ export function DataTable<T>({
         </Table>
       </div>
 
-      {pageCount > 1 ? (
-        <div className="flex items-center justify-between px-1">
-          <p className="text-xs text-muted-foreground">
-            صفحهٔ <span className="font-medium text-foreground tabular-nums">{faNum(current + 1)}</span> از{" "}
-            <span className="tabular-nums">{faNum(pageCount)}</span>
-          </p>
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-11 gap-1"
-              disabled={current === 0}
-              onClick={() => setPage(current - 1)}
-            >
-              <ChevronRight className="size-4" /> قبلی
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-11 gap-1"
-              disabled={current >= pageCount - 1}
-              onClick={() => setPage(current + 1)}
-            >
-              بعدی <ChevronLeft className="size-4" />
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <ListPagination
+        page={current + 1}
+        totalPages={pageCount}
+        hasPrev={current > 0}
+        hasNext={current < pageCount - 1}
+        onPrev={() => setPage(current - 1)}
+        onNext={() => setPage(current + 1)}
+        ariaLabel="صفحه‌بندی جدول"
+        className="px-1"
+      />
     </div>
   )
 }

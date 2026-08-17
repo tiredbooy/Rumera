@@ -15,33 +15,22 @@ import { GiftCardPurchase } from "@/features/gift-cards/gift-card-purchase";
 import { giftCardKeys } from "@/features/gift-cards/hooks";
 import { GiftCardRedeem } from "@/features/wallet/gift-card-redeem";
 import { useWallet, useWalletTransactions } from "@/features/wallet/hooks";
-import { isCreditTransaction } from "@/features/wallet/types";
 import { WalletTopUp } from "@/features/wallet/wallet-topup";
-import { WalletOverview } from "./wallet-overview";
 import {
-  WalletTransactions,
+  filterLedgerPage,
+  ledgerWindowLabel,
+  monthSummaryFromRows,
+  WALLET_LEDGER_PAGE_SIZE,
   type WalletTransactionDirection,
-} from "./wallet-transactions";
-
-const PAGE_SIZE = 8;
-// Fetch a generous window so the date-range filter and the month summary stay
-// accurate; the ledger is then filtered + paged client-side.
-const FETCH_LIMIT = 100;
-
-/** A read-only ISO date (yyyy-mm-dd) → start/end-of-day millis, or null. */
-function dayBound(value: string, end = false): number | null {
-  if (!value) return null;
-  const d = new Date(`${value}T${end ? "23:59:59.999" : "00:00:00.000"}`);
-  const t = d.getTime();
-  return Number.isFinite(t) ? t : null;
-}
+} from "../ledger-window";
+import { WalletOverview } from "./wallet-overview";
+import { WalletTransactions } from "./wallet-transactions";
 
 export function WalletView() {
   const queryClient = useQueryClient();
   const wallet = useWallet();
-  const txs = useWalletTransactions({ limit: FETCH_LIMIT });
 
-  // URL-shareable filter state (nuqs).
+  // URL-shareable filter + server page (nuqs).
   const [direction, setDirection] = useQueryState(
     "dir",
     parseAsStringEnum<WalletTransactionDirection>([
@@ -56,44 +45,30 @@ export function WalletView() {
   });
   const [page, setPage] = useQueryState("page", parseAsInteger.withDefault(1));
 
-  const all = React.useMemo(() => txs.data?.results ?? [], [txs.data]);
+  const requestedPage = Math.max(1, page);
+  const txs = useWalletTransactions({
+    page: requestedPage,
+    limit: WALLET_LEDGER_PAGE_SIZE,
+  });
+
+  const loaded = React.useMemo(() => txs.data?.results ?? [], [txs.data]);
+  const pagination = txs.data?.pagination;
   const transactionsUnavailable = txs.isError && txs.data === undefined;
 
-  const fromMs = dayBound(from);
-  const toMs = dayBound(to, true);
-
-  // Apply direction + date-range filters client-side over the fetched window.
-  const filtered = React.useMemo(() => {
-    return all.filter((t) => {
-      if (direction === "credit" && !isCreditTransaction(t)) return false;
-      if (direction === "debit" && isCreditTransaction(t)) return false;
-      const ts = new Date(t.created_at).getTime();
-      if (fromMs !== null && ts < fromMs) return false;
-      if (toMs !== null && ts > toMs) return false;
-      return true;
-    });
-  }, [all, direction, fromMs, toMs]);
-
-  // This-month summary (always over the full fetched window, not the filter).
-  const monthSummary = React.useMemo(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    let credited = 0;
-    let spent = 0;
-    for (const t of all) {
-      if (new Date(t.created_at).getTime() < start) continue;
-      if (isCreditTransaction(t)) credited += Number(t.amount);
-      else spent += Number(t.amount);
-    }
-    return { credited, spent };
-  }, [all]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(Math.max(1, page), totalPages);
-  const pageRows = filtered.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE,
+  // Dir/date are display filters on this server page — not a full-ledger query.
+  const filtered = React.useMemo(
+    () => filterLedgerPage(loaded, { direction, from, to }),
+    [loaded, direction, from, to],
   );
+
+  const monthSummary = React.useMemo(
+    () => monthSummaryFromRows(loaded),
+    [loaded],
+  );
+
+  const totalPages = Math.max(1, pagination?.total_pages ?? 1);
+  const safePage = pagination?.page ?? requestedPage;
+  const ledgerTotal = pagination?.total_items ?? loaded.length;
 
   const hasActiveFilter = direction !== "all" || from !== "" || to !== "";
 
@@ -127,17 +102,19 @@ export function WalletView() {
   }
 
   function showPreviousPage() {
-    setPage(safePage - 1);
+    setPage(Math.max(1, safePage - 1));
   }
 
   function showNextPage() {
     setPage(safePage + 1);
   }
 
-  // Keep the page in range when filters shrink the result set.
   React.useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages, setPage]);
+    if (!pagination) return;
+    if (pagination.total_items > 0 && requestedPage > pagination.total_pages) {
+      setPage(pagination.total_pages);
+    }
+  }, [pagination, requestedPage, setPage]);
 
   return (
     <>
@@ -145,6 +122,7 @@ export function WalletView() {
         balance={Number(wallet.data?.balance ?? 0)}
         creditedThisMonth={monthSummary.credited}
         spentThisMonth={monthSummary.spent}
+        summaryWindow={ledgerWindowLabel(pagination)}
         isBalanceLoading={wallet.isLoading}
         isBalanceError={wallet.isError}
         isSummaryLoading={txs.isLoading}
@@ -176,8 +154,9 @@ export function WalletView() {
         direction={direction}
         from={from}
         to={to}
-        rows={pageRows}
-        transactionCount={filtered.length}
+        rows={filtered}
+        ledgerTotal={ledgerTotal}
+        loadedCount={loaded.length}
         totalPages={totalPages}
         safePage={safePage}
         hasActiveFilter={hasActiveFilter}

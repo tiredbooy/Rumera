@@ -11,6 +11,7 @@ tags: [brain, connect]
 
 - [[Backend API]]
 - [[Backend Domain Map]]
+- [[Users Backend]]
 - [[Addresses Backend]]
 - [[Wishlist Backend]]
 - [[Wallet Backend]]

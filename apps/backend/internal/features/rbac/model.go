@@ -24,6 +24,9 @@ const (
 	PermCustomersRead  = "customers:read"
 	PermCustomersWrite = "customers:write"
 	PermCustomersBan   = "customers:ban"
+	// PermWalletCredit mints ledger money via POST /admin/users/:id/wallet/credit.
+	// Isolated from customers:write so the default staff seed cannot print money (PR-040c).
+	PermWalletCredit   = "wallet:credit"
 	PermReviewsRead    = "reviews:read"
 	PermReviewsMod     = "reviews:moderate"
 	PermRecipesRead    = "recipes:read"
@@ -49,7 +52,7 @@ func AllKnownPermissions() []string {
 		PermInventoryRead, PermInventoryWrite,
 		PermOrdersRead, PermOrdersWrite, PermOrdersRefund,
 		PermPaymentsRead, PermCouponsManage, PermShippingManage, PermGiftCardsIssue,
-		PermCustomersRead, PermCustomersWrite, PermCustomersBan,
+		PermCustomersRead, PermCustomersWrite, PermCustomersBan, PermWalletCredit,
 		PermReviewsRead, PermReviewsMod,
 		PermRecipesRead, PermRecipesWrite,
 		PermJournalRead, PermJournalWrite,

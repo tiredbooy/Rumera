@@ -22,6 +22,7 @@ export interface Review {
   user_id: number;
   user_full_name: string;
   product_id: number;
+  product_title?: string;
   like_count: number;
   images: ReviewImage[];
   dislike_count: number;

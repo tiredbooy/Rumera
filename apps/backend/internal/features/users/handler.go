@@ -1,6 +1,8 @@
 package users
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/platform/httpx"
 	"github.com/tiredbooy/pkg/response"
@@ -31,12 +33,20 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	}
 	req := MapToUpdateUserReq(input)
 
-	user, err := h.Service.Update(c.Request.Context(), id, req)
+	result, err := h.Service.Update(c.Request.Context(), id, req)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
 	}
-	response.OK(c, MapToUserResponse(user))
+	body := MapToUserResponse(result.User)
+	if result.PendingPhone != nil {
+		response.Success(c, http.StatusAccepted, ProfileUpdateResponse{
+			UserResponse: *body,
+			PendingPhone: result.PendingPhone,
+		})
+		return
+	}
+	response.OK(c, body)
 }
 
 // GetAdminRoles — GET /admin/roles
@@ -134,6 +144,42 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 		return
 	}
 	response.NoContent(c)
+}
+
+// BanUser — POST /admin/users/:userID/ban
+func (h *Handler) BanUser(c *gin.Context) {
+	targetUserID, ok := httpx.ParamUUID(c, "userID")
+	if !ok {
+		return
+	}
+	actorUserID, ok := httpx.UserUUID(c)
+	if !ok {
+		return
+	}
+	user, err := h.Service.AdminBan(c.Request.Context(), actorUserID, targetUserID)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.OK(c, MapToAdminUser(user))
+}
+
+// UnbanUser — POST /admin/users/:userID/unban
+func (h *Handler) UnbanUser(c *gin.Context) {
+	targetUserID, ok := httpx.ParamUUID(c, "userID")
+	if !ok {
+		return
+	}
+	actorUserID, ok := httpx.UserUUID(c)
+	if !ok {
+		return
+	}
+	user, err := h.Service.AdminUnban(c.Request.Context(), actorUserID, targetUserID)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.OK(c, MapToAdminUser(user))
 }
 
 // GetUserAudit — GET /admin/users/:userID/audit

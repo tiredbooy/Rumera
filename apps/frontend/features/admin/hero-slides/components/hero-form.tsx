@@ -25,6 +25,7 @@ import {
   heroSlideFormSchema,
   type HeroSlideFormValues,
 } from "@/features/hero-slides/validations";
+import { parseAsciiNumber } from "@/lib/normalize-digits";
 import { HeroAppearanceFields } from "./hero-form/appearance-fields";
 import { HeroContentFields } from "./hero-form/content-fields";
 import { HeroCtaFields } from "./hero-form/cta-fields";
@@ -138,7 +139,8 @@ export function HeroForm({
       mode === "edit" &&
       slide &&
       v.ends_at === heroDateTimeInputValue(slide.ends_at);
-    const sortOrder = v.sort_order.trim() === "" ? 0 : Number(v.sort_order);
+    const sortOrder =
+      v.sort_order.trim() === "" ? 0 : parseAsciiNumber(v.sort_order);
     const sortOrderUnchanged =
       mode === "edit" && slide && sortOrder === slide.sort_order;
 

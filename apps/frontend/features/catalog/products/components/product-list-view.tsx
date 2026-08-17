@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, ArrowRight, PackageOpen } from "lucide-react";
 
 import { JsonLd } from "@/components/json-ld";
+import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import {
   getBrand,
@@ -15,6 +16,7 @@ import {
   ProductCard,
   PRODUCT_CARD_GRID_CLASS,
 } from "@/features/catalog/products/components/product-card";
+import { CatalogueLoadError } from "@/features/catalog/products/components/catalogue-load-error";
 import { ProductSort } from "@/features/catalog/products/components/product-sort";
 import {
   parseProductListRouteQuery,
@@ -23,7 +25,7 @@ import {
   PRODUCT_LIST_PAGE_SIZE,
   type ProductListSearchParamsRecord,
 } from "@/features/catalog/products/list-routing";
-import { Placeholder } from "@/features/dashboard/components/placeholder";
+import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import { faNum } from "@/lib/products";
 import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld";
@@ -31,6 +33,9 @@ import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld";
 type ProductListViewProps = {
   searchParams: Promise<ProductListSearchParamsRecord>;
 };
+
+const FILTER_CHIP_CLASS =
+  "inline-flex min-h-8 items-center rounded-full border px-4 py-1.5 text-sm [@media(any-pointer:coarse)]:min-h-11";
 
 export async function ProductListView({ searchParams }: ProductListViewProps) {
   const raw = await searchParams;
@@ -55,32 +60,46 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
     redirect(productListHref(query, query.page));
   }
 
-  const [data, categories, brandsPage, selectedBrand] = await Promise.all([
-    listProducts({
-      page: query.page,
-      limit: PRODUCT_LIST_PAGE_SIZE,
-      search: query.search,
-      brand: query.brand,
-      sortBy: query.sortBy,
-      orderBy: query.orderBy,
-    }),
-    listCategories(),
-    listBrands({ limit: 24, sortBy: "title", orderBy: "asc" }).catch(() => ({
-      results: [] as Awaited<ReturnType<typeof listBrands>>["results"],
-      pagination: {
-        page: 1,
-        limit: 24,
+  const [productsResult, categories, brandsPage, selectedBrand] =
+    await Promise.all([
+      listProducts({
+        page: query.page,
+        limit: PRODUCT_LIST_PAGE_SIZE,
+        search: query.search,
+        brand: query.brand,
+        sortBy: query.sortBy,
+        orderBy: query.orderBy,
+      })
+        .then((page) => ({ ok: true as const, page }))
+        .catch(() => ({ ok: false as const })),
+      listCategories(),
+      listBrands({ limit: 24, sortBy: "title", orderBy: "asc" }).catch(() => ({
+        results: [] as Awaited<ReturnType<typeof listBrands>>["results"],
+        pagination: {
+          page: 1,
+          limit: 24,
+          total_items: 0,
+          total_pages: 0,
+          has_next: false,
+          has_prev: false,
+        },
+      })),
+      query.brand
+        ? getBrandBySlug(query.brand).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+  const loadError = !productsResult.ok;
+  const results = productsResult.ok ? productsResult.page.results : [];
+  const pagination = productsResult.ok
+    ? productsResult.page.pagination
+    : {
+        page: query.page,
+        limit: PRODUCT_LIST_PAGE_SIZE,
         total_items: 0,
         total_pages: 0,
         has_next: false,
         has_prev: false,
-      },
-    })),
-    query.brand
-      ? getBrandBySlug(query.brand).catch(() => null)
-      : Promise.resolve(null),
-  ]);
-  const { results, pagination } = data;
+      };
   const brands = brandsPage.results ?? [];
   const activeBrand =
     selectedBrand ?? brands.find((brand) => brand.slug === query.brand);
@@ -107,10 +126,14 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
             { name: "خانه", path: "/" },
             { name: "فروشگاه", path: "/products" },
           ]),
-          productListLd(
-            activeBrand ? `برند ${activeBrand.title}` : "همهٔ بطری‌ها",
-            results,
-          ),
+          ...(loadError
+            ? []
+            : [
+                productListLd(
+                  activeBrand ? `برند ${activeBrand.title}` : "همهٔ بطری‌ها",
+                  results,
+                ),
+              ]),
         ]}
       />
 
@@ -120,9 +143,11 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
           {activeBrand ? activeBrand.title : "فروشگاه بطری‌ها"}
         </h1>
         <p className="mt-3 max-w-xl text-muted-foreground">
-          {activeBrand
-            ? `${faNum(pagination.total_items)} محصول از این برند — برای دیدن همهٔ فروشگاه فیلتر را بردارید.`
-            : `${faNum(pagination.total_items)} محصول — بر اساس دسته یا برند مرور کنید.`}
+          {loadError
+            ? "فعلاً فهرست محصولات در دسترس نیست."
+            : activeBrand
+              ? `${faNum(pagination.total_items)} محصول از این برند — برای دیدن همهٔ فروشگاه فیلتر را بردارید.`
+              : `${faNum(pagination.total_items)} محصول — بر اساس دسته یا برند مرور کنید.`}
         </p>
 
         <div className="mt-6 flex flex-wrap gap-2">
@@ -148,7 +173,7 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
 
         {categories.length ? (
           <div className="mt-8 flex flex-wrap gap-2" aria-label="دسته‌بندی‌ها">
-            <span className="shadow-e1 rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground">
+            <span className={cn(FILTER_CHIP_CLASS, "shadow-e1 border-transparent bg-primary font-medium text-primary-foreground")}>
               همهٔ دسته‌ها
             </span>
             {categories.map((category) => {
@@ -159,7 +184,7 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
                 return (
                   <span
                     key={category.id}
-                    className="rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground"
+                    className={cn(FILTER_CHIP_CLASS, "border-border text-muted-foreground")}
                   >
                     {category.title}
                   </span>
@@ -169,7 +194,10 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
                 <Link
                   key={category.id}
                   href={href}
-                  className="rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                  className={cn(
+                    FILTER_CHIP_CLASS,
+                    "border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground",
+                  )}
                 >
                   {category.title}
                 </Link>
@@ -193,7 +221,8 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
                     active ? allProductsHref : productListBrandHref(brand.slug)
                   }
                   className={cn(
-                    "rounded-full border px-4 py-1.5 text-sm transition-colors",
+                    FILTER_CHIP_CLASS,
+                    "transition-colors",
                     active
                       ? "border-primary/40 bg-primary/10 font-medium text-foreground"
                       : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
@@ -207,7 +236,14 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
           </div>
         ) : null}
 
-        {results.length ? (
+        {loadError ? (
+          <div className="mt-10">
+            <CatalogueLoadError
+              title="فهرست محصولات بارگذاری نشد"
+              description="دریافت کاتالوگ با خطا روبه‌رو شد. این به‌معنای خالی بودن فروشگاه نیست — دوباره تلاش کنید."
+            />
+          </div>
+        ) : results.length ? (
           <>
             <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-6">
               <p className="text-sm text-muted-foreground">
@@ -222,53 +258,29 @@ export async function ProductListView({ searchParams }: ProductListViewProps) {
               ))}
             </div>
 
-            {pagination.total_pages > 1 ? (
-              <div className="mt-12 flex items-center justify-center gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!pagination.has_prev}
-                  asChild={pagination.has_prev}
-                >
-                  {pagination.has_prev ? (
-                    <Link href={pageHref(query.page - 1)}>
-                      <ArrowRight className="size-4" /> قبلی
-                    </Link>
-                  ) : (
-                    <span>
-                      <ArrowRight className="size-4" /> قبلی
-                    </span>
-                  )}
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  صفحهٔ {faNum(pagination.page)} از{" "}
-                  {faNum(pagination.total_pages)}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!pagination.has_next}
-                  asChild={pagination.has_next}
-                >
-                  {pagination.has_next ? (
-                    <Link href={pageHref(query.page + 1)}>
-                      بعدی <ArrowLeft className="size-4" />
-                    </Link>
-                  ) : (
-                    <span>
-                      بعدی <ArrowLeft className="size-4" />
-                    </span>
-                  )}
-                </Button>
-              </div>
-            ) : null}
+            <ListPagination
+              page={pagination.page}
+              totalPages={pagination.total_pages}
+              hasPrev={pagination.has_prev}
+              hasNext={pagination.has_next}
+              prevHref={pageHref(query.page - 1)}
+              nextHref={pageHref(query.page + 1)}
+              ariaLabel="صفحه‌بندی محصولات"
+              className="mt-12"
+            />
           </>
         ) : (
           <div className="mt-10">
-            <Placeholder
+            <EmptyState
               icon={PackageOpen}
               title="محصولی برای نمایش نیست"
-              description="در حال حاضر محصولی یافت نشد. اگر سرویس در دسترس نیست، بعداً دوباره تلاش کنید."
+              description={
+                query.search
+                  ? "برای این جستجو محصولی پیدا نشد. عبارت دیگری را امتحان کنید یا فیلتر را بردارید."
+                  : query.brand
+                    ? "محصولی از این برند برای نمایش نیست. فیلتر برند را بردارید تا همهٔ فروشگاه را ببینید."
+                    : "هنوز محصول منتشرشده‌ای در فروشگاه نیست."
+              }
             />
           </div>
         )}

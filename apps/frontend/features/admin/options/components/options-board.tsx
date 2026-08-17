@@ -30,7 +30,7 @@ import {
   useOptionCatalog,
 } from "@/features/admin/options/api";
 import type { ProductOptionGroup } from "@/features/admin/products/types";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import { AdminPage } from "@/features/dashboard/components/admin-page";
 import { faNum } from "@/lib/products";
 
 function LoadingCards() {
@@ -56,11 +56,13 @@ function LoadingCards() {
 
 function OptionTypeCard({
   group,
+  canWrite,
   deleting,
   mutationPending,
   onDelete,
 }: {
   group: ProductOptionGroup;
+  canWrite: boolean;
   deleting: boolean;
   mutationPending: boolean;
   onDelete: () => void;
@@ -104,36 +106,38 @@ function OptionTypeCard({
         <p className="text-xs text-muted-foreground">
           {faNum(group.values.length)} مقدار
         </p>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="icon" asChild>
-            <Link
-              href={`/admin/options/${group.id}`}
-              aria-label={`ویرایش ${group.display_name}`}
+        {canWrite ? (
+          <div className="flex gap-1">
+            <Button variant="ghost" size="icon" asChild>
+              <Link
+                href={`/admin/options/${group.id}`}
+                aria-label={`ویرایش ${group.display_name}`}
+              >
+                <Pencil className="size-4" />
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-destructive hover:text-destructive"
+              disabled={mutationPending}
+              aria-label={`حذف ${group.display_name}`}
+              onClick={onDelete}
             >
-              <Pencil className="size-4" />
-            </Link>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-destructive hover:text-destructive"
-            disabled={mutationPending}
-            aria-label={`حذف ${group.display_name}`}
-            onClick={onDelete}
-          >
-            {deleting ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Trash2 className="size-4" />
-            )}
-          </Button>
-        </div>
+              {deleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </article>
   );
 }
 
-export function OptionsBoard() {
+export function OptionsBoard({ canWrite }: { canWrite: boolean }) {
   const catalog = useOptionCatalog();
   const deleteType = useDeleteOptionType();
   const [pendingDelete, setPendingDelete] =
@@ -155,36 +159,36 @@ export function OptionsBoard() {
   }
 
   return (
-    <>
-      <PageHeader
-        title="ویژگی‌های تنوع"
-        description="یک‌بار تعریف کنید (مثل حجم یا رنگ) و در همهٔ محصولات دوباره استفاده کنید — نیازی به ساخت مجدد نیست."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11"
-              disabled={catalog.isFetching}
-              onClick={() => catalog.refetch()}
-            >
-              {catalog.isFetching ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RotateCw className="size-4" />
-              )}
-              تازه‌سازی
-            </Button>
-            <Button asChild className="h-11">
+    <AdminPage
+      title="ویژگی‌های تنوع"
+      description="یک‌بار تعریف کنید (مثل حجم یا رنگ) و در همهٔ محصولات دوباره استفاده کنید — نیازی به ساخت مجدد نیست."
+      action={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={catalog.isFetching}
+            onClick={() => catalog.refetch()}
+          >
+            {catalog.isFetching ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RotateCw className="size-4" />
+            )}
+            تازه‌سازی
+          </Button>
+          {canWrite ? (
+            <Button size="sm" asChild>
               <Link href="/admin/options/new">
                 <Plus className="size-4" />
                 ویژگی جدید
               </Link>
             </Button>
-          </div>
-        }
-      />
-
+          ) : null}
+        </>
+      }
+    >
       {catalog.isLoading ? <LoadingCards /> : null}
 
       {catalog.isError ? (
@@ -209,9 +213,11 @@ export function OptionsBoard() {
             مثلاً «حجم» با مقادیر ۷۵۰ml و ۱L بسازید. بعد در فرم محصول همان‌ها را
             برای هر SKU انتخاب می‌کنید.
           </p>
-          <Button asChild className="mt-6 h-11">
-            <Link href="/admin/options/new">ساخت اولین ویژگی</Link>
-          </Button>
+          {canWrite ? (
+            <Button asChild className="mt-6 h-11">
+              <Link href="/admin/options/new">ساخت اولین ویژگی</Link>
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -221,6 +227,7 @@ export function OptionsBoard() {
             <OptionTypeCard
               key={group.id}
               group={group}
+              canWrite={canWrite}
               deleting={
                 deleteType.isPending &&
                 deleteType.variables === group.id
@@ -260,6 +267,6 @@ export function OptionsBoard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </AdminPage>
   );
 }

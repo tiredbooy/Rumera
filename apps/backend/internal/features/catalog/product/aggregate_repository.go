@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/tiredbooy/internal/features/inventory"
 	"github.com/tiredbooy/internal/models"
 )
 
@@ -322,6 +323,9 @@ func replaceAggregateVariantsTx(
 		}
 	}
 	if len(deletedIDs) > 0 {
+		if err := inventory.DropEmptyForVariantsTx(ctx, tx, deletedIDs); err != nil {
+			return nil, err
+		}
 		if _, err := tx.Exec(ctx,
 			`DELETE FROM product_variants WHERE product_id = $1 AND id = ANY($2)`,
 			productID, deletedIDs,
@@ -367,6 +371,9 @@ func replaceAggregateVariantsTx(
 					fmt.Sprintf("variants.%d.id", i), "variant does not belong to this product", models.ErrInvalidState,
 				)
 			}
+		}
+		if err := inventory.EnsureForVariantTx(ctx, tx, variantIDs[i]); err != nil {
+			return nil, fmt.Errorf("ensure inventory for aggregate variant %d: %w", i, err)
 		}
 	}
 

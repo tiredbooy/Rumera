@@ -13,7 +13,9 @@ This is a **Backend-for-Frontend (BFF)** pattern. It exists because:
 - Routing through the Next.js server means the same client code works
   identically in **local dev, Docker, and prod** — no CORS, no exposed backend.
 - The **access token never reaches the browser**; it lives in the encrypted
-  next-auth session cookie and is read server-side per request.
+  Auth.js JWT cookie. Server BFF / `apiFetch` read it with `getToken`
+  (`next-auth/jwt`). `GET /api/auth/session` and `useSession()` must not
+  include it.
 
 > Backend conventions referenced here (the `{ data }` / `{ error: { code, message } }`
 > envelope, token TTLs, refresh rotation) live in
@@ -101,17 +103,60 @@ const ALLOW = new Set([
   "subscriptions",
   "recommendations",
   "me",
+  "payments",
 ]);
 ```
 
 `auth` is allowlisted only so the **self-service profile** routes
 (`GET`/`PATCH /auth/me`) can be proxied; the backend still guards every
-`/auth/*` route itself. `me` covers authenticated personalization routes. The
-proxy uses the Auth.js route wrapper, then attaches
-`Authorization: Bearer <session.accessToken>`. Every segment passes through the
-shared traversal-safe target builder before the allowlist check. Consumed via
-`storeRequest()` in `lib/api/store-client.ts`, which returns the backend body
-verbatim and throws a typed `ApiClientError` from the `{ error }` envelope.
+`/auth/*` route itself. `me` covers authenticated personalization routes.
+`payments` covers customer start/status under `/payments/*` so a
+`payment_url` (PR-005a) can be fetched through the BFF. It is **not** the
+admin board: `/admin/payments` is first-segment `admin` on `/api/admin`,
+never `/api/store`.
+
+The proxy uses the Auth.js route wrapper, then reads the Go JWT from the
+encrypted Auth.js cookie (`getToken`) and attaches
+`Authorization: Bearer <accessToken>`. Every segment passes through the
+shared traversal-safe target builder before the allowlist check. Consumed
+via `storeRequest()` in `lib/api/store-client.ts`, which returns the
+backend body verbatim and throws a typed `ApiClientError` from the
+`{ error }` envelope.
+
+#### Cart is login-gated (intended, PR-004c)
+
+`cart` sits on this store allowlist, not on `/api/public`. With no session (or
+a session error) the proxy returns `401` `{ error: { code: "SESSION_EXPIRED",
+message: "sign in required" } }` and **does not** call Go. When a session
+exists, Go still requires `Authorization: Bearer` and returns `401
+UNAUTHORIZED` for missing/invalid tokens — see
+`apps/backend/docs/api/cart.md` (**Auth-only**; guests are `401`; there is no
+guest / anonymous cart).
+
+There is no cookie or anonymous basket in the BFF, and no merge of guest lines
+into the user cart on login. A guest `401` is expected. This is a **product
+decision** (no guest/cookie cart unless product asks), not a hole to fill in
+this program.
+
+The founder add-to-cart **500 after a successful login** was PR-004a (`UNIQUE
+NOT NULL` on `carts.user_id` so `GetOrCreate` can `ON CONFLICT (user_id)`),
+not a missing guest cart. Storefront UX for guests is a login toast / wall
+(`AddToCartButton`, `CartView`, `CartButton`); see
+[storefront-commerce.md](../features/storefront-commerce.md) § Cart.
+
+Both authenticated proxies also copy incoming **`Idempotency-Key`** onto the
+upstream request when the client sent one (`pickIdempotencyKeyHeader` in
+`lib/api/forward-headers.ts`). Loyalty redeem, wallet top-up, gift
+purchase/redeem, and admin wallet credit depend on this so Go money
+middleware can replay instead of double-spending. The BFF never invents a
+key and must not log it.
+
+The **store** proxy additionally copies incoming analytics **`sid` / `did`**
+cookies upstream (`pickAnalyticsCookieHeader`) and passes matching
+`Set-Cookie` lines back (`pickAnalyticsSetCookies`). Cookie names only —
+no other cookies, and no invented IDs. Go capture middleware persists those
+cookies (HttpOnly, SameSite=Lax, Secure in prod) so session conversion
+joins can work. The allowlist is unchanged.
 
 ### Admin proxy — `/api/admin/*`
 
@@ -171,7 +216,8 @@ cookies but cannot write them. Rumera therefore uses one rule:
 
 - bare `auth()` calls in server rendering return `RefreshRequired` when the
   access token approaches expiry and never consume the refresh token;
-- edge proxy redirects protected page requests to
+- edge proxy reads expiry from `getToken()` (not the public session) and
+  redirects protected page requests to
   `/api/auth/refresh-session?callbackUrl=…`, preserving the exact path;
 - that route and both authenticated BFFs use the Auth.js route wrapper, where
   rotation can append `Set-Cookie` to the outgoing response;
@@ -194,7 +240,7 @@ can run on the **Edge runtime** (no Node-only code):
 
 | File                                    | Runtime            | Contents                                                                                                                    |
 | --------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `lib/auth/auth.config.ts`               | Edge + Node        | `pages`, `session` strategy, the `session()` callback, no providers                                                         |
+| `lib/auth/auth.config.ts`               | Edge + Node        | `pages`, `session` strategy, the `session()` callback (no access token), `getToken` helper, no providers                    |
 | `lib/auth/auth.ts`                      | Node only          | Request-aware Credentials config, persisted rotation, and backend revocation on Auth.js sign-out                           |
 | `lib/auth/access-token.ts`              | Edge + Node        | Expiry inspection used by protected-route edge proxy                                                                        |
 | `lib/auth/session.ts`                   | Node (server-only) | server guards: `requireUser`, `requireStaff`, `requirePermission`                                                           |
@@ -214,6 +260,11 @@ backend and returning a token pair:
 The access token is a backend-signed JWT; `authorize()` **decodes (does not
 verify)** its payload to read `role` and `exp` — it's trusted because it arrived
 over the wire directly from our own API in response to a credential exchange.
+
+`authorize` maps backend failures to Auth.js `CredentialsSignin` codes
+(`RateLimited`, `Inactive`, `CredentialsSignin`, `AuthServiceError`) instead of
+returning `null` for every error. Login/OTP forms show distinct Persian copy;
+429 is never “wrong password”. See [auth.md](../features/auth.md).
 
 ### JWT callback & proactive refresh
 
@@ -245,14 +296,16 @@ the browser session.
 
 ### Session shape
 
-The `session()` callback in `auth.config.ts` projects the token onto the session.
-Augmented by `lib/auth/types.ts`:
+The `session()` callback in `auth.config.ts` projects **public** fields onto the
+session. The Go access JWT stays on the encrypted Auth.js token (`token.accessToken`
+in the `jwt` callback). BFF routes, `apiFetch`, `getLiveAccount` callers, and
+the edge proxy read it with `getToken` from `next-auth/jwt` — never from
+`session.accessToken`. Augmented by `lib/auth/types.ts`:
 
 ```ts
 interface Session {
   role: Role; // from the token (backend access JWT), defaults "customer"
   permissions: Permission[]; // DERIVED from role via permissionsForRole()
-  accessToken?: string; // for the BFF proxies / apiFetch — NOT the refresh token
   error?: "RefreshRequired" | "RefreshAccessTokenError";
   user: { id?: string } & DefaultSession["user"];
 }
@@ -260,8 +313,9 @@ interface Session {
 
 `permissions` is derived from `role` **here**, so every consumer (server guards,
 middleware, client) reads the same resolved set. `role` rides on the JWT;
-`permissions` is not stored on the token. Notably the session **never carries
-the refresh token** — only `accessToken`.
+`permissions` is not stored on the token. The public session **never carries
+the access token or the refresh token**. `GET /api/auth/session` and
+`useSession()` therefore cannot leak the Go JWT to XSS.
 
 > Roles → capabilities live in `lib/rbac/roles.ts`. The supported roles are
 > `customer`, `vendor`, and `admin`; only `admin` is staff. These capabilities
@@ -349,7 +403,7 @@ Next.js route handler — app/api/admin/[...path]/route.ts  (Node runtime)
   │  ① ALLOW.has("admin")?                     ── no  → 403 FORBIDDEN_PATH
   │  ② Auth.js wrapper rotates if needed and persists Set-Cookie
   │  ③ live /auth/me returns role=admin?         ── no  → 403 FORBIDDEN
-  │  ④ build Bearer header from session.accessToken
+  │  ④ build Bearer header from getToken().accessToken
   │  fetch POST {API_BASE}/admin/uploads        (= /api/v1/admin/uploads)
   ▼
 Go backend

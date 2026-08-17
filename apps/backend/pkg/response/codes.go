@@ -87,6 +87,7 @@ var (
 	ErrInvalidShipping    = AppCode{"INVALID_SHIPPING_METHOD", http.StatusBadRequest, "shipping method is invalid or unavailable for this address"}
 	ErrInsufficientFunds  = AppCode{"INSUFFICIENT_FUNDS", http.StatusConflict, "insufficient wallet balance"}
 	ErrInsufficientPoints = AppCode{"INSUFFICIENT_POINTS", http.StatusConflict, "insufficient loyalty points"}
+	ErrLoyaltyDisabled    = AppCode{"LOYALTY_DISABLED", http.StatusConflict, "loyalty programme is disabled"}
 	ErrWalletNotFound     = AppCode{"WALLET_NOT_FOUND", http.StatusNotFound, "wallet not found"}
 	ErrGiftCardInvalid    = AppCode{"GIFT_CARD_INVALID", http.StatusNotFound, "gift card code is invalid or already redeemed"}
 	ErrPaymentFailed      = AppCode{"PAYMENT_FAILED", http.StatusPaymentRequired, "payment processing failed"}
@@ -139,6 +140,7 @@ var registry = map[string]AppCode{
 	// Wallet / loyalty / gift
 	"INSUFFICIENT_FUNDS":  ErrInsufficientFunds,
 	"INSUFFICIENT_POINTS": ErrInsufficientPoints,
+	"LOYALTY_DISABLED":    ErrLoyaltyDisabled,
 	"WALLET_NOT_FOUND":    ErrWalletNotFound,
 	"GIFT_CARD_INVALID":   ErrGiftCardInvalid,
 

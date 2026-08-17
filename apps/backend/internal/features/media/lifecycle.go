@@ -208,14 +208,14 @@ type ReconcileSummary struct {
 }
 
 type ReconcileReport struct {
-	RunID     string                 `json:"run_id"`
-	Mode      string                 `json:"mode"`
-	StartedAt time.Time              `json:"started_at"`
-	Cutoff    time.Time              `json:"cutoff"`
-	Objects   []ReconcileObject `json:"objects"`
-	Missing   []MissingMediaObject   `json:"missing"`
-	Warnings  []string               `json:"warnings,omitempty"`
-	Summary   ReconcileSummary  `json:"summary"`
+	RunID     string               `json:"run_id"`
+	Mode      string               `json:"mode"`
+	StartedAt time.Time            `json:"started_at"`
+	Cutoff    time.Time            `json:"cutoff"`
+	Objects   []ReconcileObject    `json:"objects"`
+	Missing   []MissingMediaObject `json:"missing"`
+	Warnings  []string             `json:"warnings,omitempty"`
+	Summary   ReconcileSummary     `json:"summary"`
 }
 
 // Reconcile inventories originals against every live DB media reference. It is

@@ -111,6 +111,16 @@ func TestTopicAndDLQRouting(t *testing.T) {
 	if err != nil || topic != notifications.TopicEmail {
 		t.Fatalf("topic=%s err=%v", topic, err)
 	}
+	for _, typ := range []string{
+		notifications.TypeAlertV1,
+		notifications.TypeSubscriptionRenewalV1,
+		notifications.TypeGiftPurchasedV1,
+	} {
+		got, err := notifications.TopicForEvent(typ)
+		if err != nil || got != notifications.TopicEmail {
+			t.Fatalf("type %s topic=%s err=%v", typ, got, err)
+		}
+	}
 	if notifications.DLQTopic(notifications.TopicEmail) != notifications.TopicEmailDLQ {
 		t.Fatal("dlq mapping")
 	}
@@ -142,5 +152,33 @@ func TestEmailDispatch(t *testing.T) {
 	done, err := h.Handle(ctx, notifications.TopicEmail, rows[0].Payload)
 	if err != nil || !done || mail.sends != 1 {
 		t.Fatalf("done=%v err=%v sends=%d", done, err, mail.sends)
+	}
+}
+
+func TestAlertAndRenewalEmailDispatch(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for _, typ := range []string{notifications.TypeAlertV1, notifications.TypeSubscriptionRenewalV1} {
+		mail := &stubMail{}
+		h := &notifications.DeliveryHandler{
+			Deliveries: notifications.NewMemoryDeliveries(),
+			Mail:       mail,
+		}
+		env, err := notifications.NewEnvelope(
+			typ,
+			typ+":idem",
+			"c",
+			notifications.EmailData{To: "a@b.c", Subject: "s", Template: "<p>ok</p>"},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		outbox := notifications.NewMemoryOutbox()
+		_ = notifications.EnqueueEnvelope(ctx, outbox, env)
+		rows, _ := outbox.ClaimUnpublished(ctx, 1)
+		done, err := h.Handle(ctx, notifications.TopicEmail, rows[0].Payload)
+		if err != nil || !done || mail.sends != 1 {
+			t.Fatalf("type %s done=%v err=%v sends=%d", typ, done, err, mail.sends)
+		}
 	}
 }

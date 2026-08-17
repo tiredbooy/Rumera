@@ -20,6 +20,10 @@ import {
 import { useCart } from "@/features/cart/api"
 import { CartLines } from "./cart-lines"
 
+function cartCountName(count: number) {
+  return `سبد خرید، ${faNum(count)} قلم`
+}
+
 /** Header cart control: icon + live count badge + slide-over drawer. */
 export function CartButton() {
   const { status } = useSession()
@@ -27,11 +31,28 @@ export function CartButton() {
   const { data: cart } = useCart(authed)
   const count = cart?.summary.total_items ?? 0
   const [open, setOpen] = React.useState(false)
+  const [announcement, setAnnouncement] = React.useState("")
+  const previousCount = React.useRef<number | null>(null)
+
+  React.useEffect(() => {
+    if (previousCount.current === null) {
+      previousCount.current = count
+      return
+    }
+    if (previousCount.current === count) return
+    previousCount.current = count
+    setAnnouncement(cartCountName(count))
+  }, [count])
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="سبد خرید" className="relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={cartCountName(count)}
+          className="relative"
+        >
           <ShoppingBag />
           {count > 0 ? (
             <Badge className="absolute -top-0.5 -end-0.5 size-4 rounded-full p-0 text-[10px] tabular-nums">
@@ -40,6 +61,9 @@ export function CartButton() {
           ) : null}
         </Button>
       </SheetTrigger>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </span>
       <SheetContent side="left" className="flex w-full flex-col p-0 sm:max-w-md">
         <SheetHeader className="border-b border-border/60 px-5 py-4">
           <SheetTitle className="font-serif text-2xl">سبد خرید</SheetTitle>

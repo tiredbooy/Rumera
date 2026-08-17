@@ -14,6 +14,7 @@ import { fieldErrorId } from "@/components/ui/field";
 import { SearchableIdSelect } from "@/features/admin/shared/searchable-id-select";
 import type { Category } from "@/features/catalog/categories/types";
 import type { Brand } from "@/features/catalog/brands/types";
+import { categorySelectOptions } from "./category-select-options";
 import { FormField, FormSection } from "./FormLayout";
 import type { ProductFormValues } from "../../validations";
 
@@ -86,10 +87,7 @@ export function GeneralInfoSection({
               id="category_id"
               value={field.value || ""}
               onChange={field.onChange}
-              options={categories.map((c) => ({
-                id: c.id,
-                title: c.title,
-              }))}
+              options={categorySelectOptions(categories)}
               placeholder="انتخاب دسته"
               noneLabel="بدون دسته"
               searchPlaceholder="جستجوی دسته‌بندی…"

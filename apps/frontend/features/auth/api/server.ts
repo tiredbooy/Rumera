@@ -1,5 +1,6 @@
 import "server-only";
 
+import { resolveApiOrigin } from "@/lib/api/origin";
 import type { ApiErrorEnvelope, ApiSuccess } from "@/lib/api/types";
 import type {
   AuthResult,
@@ -8,13 +9,6 @@ import type {
   TokenPair,
   VerifyOtpInput,
 } from "../types";
-
-const API_BASE = (
-  process.env.BACKEND_INTERNAL_URL ??
-  process.env.API_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:8080"
-).replace(/\/$/, "");
 
 const AUTH_LOGOUT_TIMEOUT_MS = 5_000;
 
@@ -34,7 +28,7 @@ function authServerPost(
   input: unknown,
   signal?: AbortSignal,
 ): Promise<Response> {
-  return fetch(`${API_BASE}/api/v1/${path}`, {
+  return fetch(`${resolveApiOrigin()}/api/v1/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

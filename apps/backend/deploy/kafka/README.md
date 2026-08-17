@@ -25,8 +25,12 @@ docker compose -f docker-compose.kafka.yml up -d
 
 ### 2. Topics (created by init)
 
+Topics are created by `create-topics.sh` (retention.ms = 720h, matching
+`EVENTS_RETENTION`):
+
 - `rumera.notification.otp.v1`
 - `rumera.notification.email.v1`
+- `rumera.domain.v1`
 - `*.dlq` companions
 
 ### 3. API in async mode

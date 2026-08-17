@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, ArrowRight, BookOpen } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
+import { EmptyState } from "@/components/empty-state";
 import { JsonLd } from "@/components/json-ld";
+import { ListPagination } from "@/components/list-pagination";
 import { ResultsHeading } from "@/components/results-heading";
 import { Button } from "@/components/ui/button";
 import {
@@ -105,7 +107,7 @@ export async function JournalListView({
             <p className="eyebrow mb-4">
               <BookOpen className="size-3.5" aria-hidden="true" /> ژورنال رومرا
             </p>
-            <h1 className="max-w-3xl text-balance font-serif text-4xl leading-[1.05] sm:text-5xl lg:text-6xl">
+            <h1 className="max-w-3xl text-balance font-serif text-4xl leading-[1.3] sm:text-5xl lg:text-6xl">
               خواندنی‌هایی برای کنجکاوها
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground">
@@ -152,25 +154,22 @@ export async function JournalListView({
               این تنها نوشتهٔ منتشرشده در ژورنال است.
             </p>
           ) : (
-            <div className="border-hairline mt-6 flex flex-col items-center gap-3 rounded-3xl bg-card/50 px-6 py-20 text-center ring-1 ring-foreground/5">
-              <BookOpen
-                className="size-10 text-muted-foreground/50"
-                aria-hidden="true"
-              />
-              <p className="font-serif text-2xl">
-                {hasFilters ? "نوشته‌ای پیدا نشد" : "به‌زودی"}
-              </p>
-              <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-                {hasFilters
+            <EmptyState
+              icon={BookOpen}
+              title={hasFilters ? "نوشته‌ای پیدا نشد" : "به‌زودی"}
+              description={
+                hasFilters
                   ? "عبارت یا مرتب‌سازی دیگری را امتحان کنید."
-                  : "هنوز نوشته‌ای منتشر نشده است. به‌زودی سر بزنید."}
-              </p>
+                  : "هنوز نوشته‌ای منتشر نشده است. به‌زودی سر بزنید."
+              }
+              className="mt-6"
+            >
               {hasFilters ? (
-                <Button variant="outline" asChild className="mt-2">
+                <Button variant="outline" asChild>
                   <Link href="/journal">نمایش همهٔ نوشته‌ها</Link>
                 </Button>
               ) : null}
-            </div>
+            </EmptyState>
           )
         ) : (
           <ul
@@ -186,52 +185,16 @@ export async function JournalListView({
         )}
 
         {pagination.total_pages > 1 ? (
-          <nav
-            className="mt-12 flex items-center justify-center gap-3"
-            aria-label="صفحه‌بندی ژورنال"
-          >
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!pagination.has_prev}
-              asChild={pagination.has_prev}
-            >
-              {pagination.has_prev ? (
-                <Link
-                  href={journalPageHref(query, query.page - 1, RESULTS_ID)}
-                  rel="prev"
-                >
-                  <ArrowRight className="size-4" aria-hidden="true" /> قبلی
-                </Link>
-              ) : (
-                <span>
-                  <ArrowRight className="size-4" aria-hidden="true" /> قبلی
-                </span>
-              )}
-            </Button>
-            <span className="text-sm text-muted-foreground" aria-current="page">
-              صفحهٔ {faNum(query.page)} از {faNum(finalPage)}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!pagination.has_next}
-              asChild={pagination.has_next}
-            >
-              {pagination.has_next ? (
-                <Link
-                  href={journalPageHref(query, query.page + 1, RESULTS_ID)}
-                  rel="next"
-                >
-                  بعدی <ArrowLeft className="size-4" aria-hidden="true" />
-                </Link>
-              ) : (
-                <span>
-                  بعدی <ArrowLeft className="size-4" aria-hidden="true" />
-                </span>
-              )}
-            </Button>
-          </nav>
+          <ListPagination
+            page={query.page}
+            totalPages={finalPage}
+            hasPrev={pagination.has_prev}
+            hasNext={pagination.has_next}
+            prevHref={journalPageHref(query, query.page - 1, RESULTS_ID)}
+            nextHref={journalPageHref(query, query.page + 1, RESULTS_ID)}
+            ariaLabel="صفحه‌بندی ژورنال"
+            className="mt-12"
+          />
         ) : null}
       </section>
     </>

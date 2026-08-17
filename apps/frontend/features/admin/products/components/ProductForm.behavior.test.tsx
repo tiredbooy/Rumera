@@ -26,11 +26,16 @@ const mocks = vi.hoisted(() => ({
   discardPrepared: vi.fn(),
   commit: vi.fn(),
   push: vi.fn(),
+  replace: vi.fn(),
   refresh: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }),
+  useRouter: () => ({
+    push: mocks.push,
+    replace: mocks.replace,
+    refresh: mocks.refresh,
+  }),
 }));
 
 vi.mock("sonner", () => ({
@@ -55,16 +60,20 @@ vi.mock("./product-form/sidebar/FormHeaderBar", () => ({
   FormHeaderBar: ({
     savePhase,
     onCancel,
+    isSubmitting,
   }: {
     savePhase: string;
     onCancel: () => void;
+    isSubmitting?: boolean;
   }) => (
     <>
       <output data-testid="save-phase">{savePhase}</output>
       <button type="button" onClick={onCancel}>
         انصراف
       </button>
-      <button type="submit">ذخیره محصول</button>
+      <button type="submit" disabled={isSubmitting}>
+        ذخیره محصول
+      </button>
     </>
   ),
 }));
@@ -152,6 +161,7 @@ import { ProductForm } from "./ProductForm";
 const product: AdminProductDetail = {
   id: 42,
   title: "محصول موجود",
+  slug: "existing-product",
   is_active: true,
   updated_at: "2026-07-27T08:00:00Z",
   tags: [],
@@ -220,6 +230,25 @@ describe("ProductForm production behavior", () => {
     fireEvent.click(screen.getByRole("button", { name: "خروج بدون ذخیره" }));
 
     expect(mocks.push).toHaveBeenCalledWith("/admin/products");
+  });
+
+  it("scrolls to a section jump instead of warning on a dirty form", () => {
+    render(
+      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
+    );
+    fireEvent.change(screen.getByLabelText("نام محصول"), {
+      target: { value: "محصول ویرایش‌شده" },
+    });
+
+    fireEvent.click(screen.getByRole("link", { name: /سئو/ }));
+
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: /سئو/ })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
   });
 
   it("includes deferred gallery edits in the unsaved-change boundary", async () => {
@@ -303,7 +332,47 @@ describe("ProductForm production behavior", () => {
     await waitFor(() =>
       expect(screen.getByTestId("save-phase")).toHaveTextContent("saved"),
     );
-    expect(mocks.push).toHaveBeenCalledWith("/admin/products/77");
+    expect(mocks.replace).toHaveBeenCalledWith("/admin/products/77");
+    expect(mocks.push).not.toHaveBeenCalledWith("/admin/products");
+  });
+
+  it("stays on the editor after an existing product is saved", async () => {
+    render(
+      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("save-phase")).toHaveTextContent("saved"),
+    );
+    expect(mocks.saveProductAggregate).toHaveBeenCalledWith(
+      42,
+      expect.any(Object),
+    );
+    expect(mocks.replace).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  it("keeps fields editable and cancel available while images prepare", async () => {
+    const preparation = deferred<[]>();
+    mocks.prepare.mockReturnValueOnce(preparation.promise);
+    render(<ProductForm mode="create" categories={[]} brands={[]} />);
+    fireEvent.change(screen.getByLabelText("نام محصول"), {
+      target: { value: "محصول تازه" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("save-phase")).toHaveTextContent("preparing"),
+    );
+
+    expect(screen.getByLabelText("نام محصول")).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "ذخیره محصول" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "انصراف" })).not.toBeDisabled();
+
+    await act(async () => preparation.resolve([]));
   });
 
   it("blocks app-link exit while an aggregate save is unresolved", async () => {
@@ -400,5 +469,28 @@ describe("ProductForm production behavior", () => {
         screen.getByRole("button", { name: "قیمت‌گذاری و تنوع‌ها" }),
       ).toHaveFocus(),
     );
+  });
+
+  it("does not submit when canWrite is false", async () => {
+    render(
+      <ProductForm
+        mode="edit"
+        product={product}
+        categories={[]}
+        brands={[]}
+        canWrite={false}
+      />,
+    );
+
+    expect(
+      screen.getByText(/فقط مشاهده — ذخیره، بارگذاری تصویر و تغییر تنوع‌ها/),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("نام محصول"), {
+      target: { value: "محصول ویرایش‌شده" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
+
+    expect(mocks.saveProductAggregate).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 });

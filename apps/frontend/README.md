@@ -81,7 +81,7 @@ description, socials) and consumed across the metadata APIs so it never drifts.
 |---------|------|-------|
 | Title/description, OpenGraph, Twitter card, robots, canonical, `metadataBase` | `app/layout.tsx` | Driven by `lib/site.ts` |
 | `theme-color`, color scheme | `app/layout.tsx` (`viewport`) | Light/dark aware |
-| **Structured data (JSON-LD)** | `components/structured-data.tsx` | `Organization` + `WebSite` (with `SearchAction`) + `ItemList` of products → rich results, zero client JS |
+| **Structured data (JSON-LD)** | `components/structured-data.tsx` | Home: `Organization` + `WebSite` (with `SearchAction`) from live `siteConfig` — no mock product ItemList |
 | `sitemap.xml` | `app/sitemap.ts` | Home + every category + every product |
 | `robots.txt` | `app/robots.ts` | Allows all, points at the sitemap |
 | Web manifest | `app/manifest.ts` | Installable / PWA metadata |

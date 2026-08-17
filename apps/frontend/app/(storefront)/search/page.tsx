@@ -12,7 +12,7 @@ export const metadata: Metadata = buildMetadata({
 export default function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; page?: string }>;
 }) {
   return <SearchView searchParams={searchParams} />;
 }

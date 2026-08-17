@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
+import { requirePaymentAdmin } from "@/features/admin/payments/admin-only";
 import { PaymentDetailView } from "@/features/admin/payments/components/payment-detail-view";
-import { requireStaff } from "@/lib/auth/session";
 
 export default async function AdminPaymentDetailPage({
   params,
@@ -13,6 +13,6 @@ export default async function AdminPaymentDetailPage({
   const id = Number(rawID);
   if (!Number.isSafeInteger(id)) notFound();
 
-  await requireStaff(`/admin/payments/${id}`);
+  await requirePaymentAdmin(`/admin/payments/${id}`);
   return <PaymentDetailView paymentID={id} />;
 }

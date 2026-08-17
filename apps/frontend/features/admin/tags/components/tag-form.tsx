@@ -7,6 +7,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Hash, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { apiErrorMessage } from "@/lib/api/user-facing-error";
+
 import { Button } from "@/components/ui/button";
 import {
   FieldControl,
@@ -115,8 +117,9 @@ export function TagForm({ mode, tag }: { mode: "create" | "edit"; tag?: Tag }) {
         );
         focused = true;
       }
-      setFormError(error.message);
-      toast.error(error.message);
+      const message = apiErrorMessage(error, "ذخیرهٔ برچسب ناموفق بود");
+      setFormError(message);
+      toast.error(message);
       return;
     }
     setFormError("ذخیرهٔ برچسب ناموفق بود");

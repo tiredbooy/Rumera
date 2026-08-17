@@ -24,9 +24,9 @@ access, streaming entitlements, or seat-based SaaS.
 |-------|--------|
 | Plan | fixed `cellar-box` only (`PlanCellarBox`) |
 | Cadence | `monthly` · `quarterly` |
-| Status | `active` · `paused` · `cancelled` |
+| Status | `active` · `paused` · `cancelled` — **one `active` cellar-box per customer** (PR-057b) |
 | Actions | `pause` · `resume` · `cancel` · `skip` |
-| Address | optional `address_id` |
+| Address | optional `address_id` (create + `PATCH`; must be caller-owned) |
 | Next window | `next_renewal_at` |
 
 ### Lifecycle matrix
@@ -34,11 +34,23 @@ access, streaming entitlements, or seat-based SaaS.
 | Action | From | Effect |
 |--------|------|--------|
 | pause | active | → paused |
-| resume | paused / cancelled | → active |
+| resume | paused / cancelled | → active. `CONFLICT` if another row is already active |
 | cancel | active / paused | → cancelled |
 | skip | active | push `next_renewal_at` by one cadence |
 
 Invalid transitions → `INVALID_REQUEST`.
+
+One active box (PR-057b): `POST /subscriptions` while the caller already has
+`status=active` → `CONFLICT` (409). Paused / cancelled do not occupy the
+slot; a second create is allowed then. Resume of a paused/cancelled row
+while another is active is also `CONFLICT`.
+
+`PATCH /subscriptions/:id` also accepts `address_id` (≥ 1) **without** a
+lifecycle action (PR-005c). Combined bodies apply action then ship-to. No
+charge. Address-book ownership is enforced on **create and PATCH** via
+[[Addresses Backend]] `GetByID(id, userID)` (same as checkout). Missing /
+other-user → `NOT_FOUND`.
+Storefront picker (PR-035b) is on [[Account FE]] / [[Journey Manage cellar box]].
 
 ## What “contents” means
 
@@ -48,11 +60,13 @@ Do not invent `items[]` without a product decision.
 
 ## Renewal (truth)
 
-Cron (`subscription_renewal_job`):
+Cron (`subscription_renewal_job` → `subscription.ProcessDueRenewals`):
 
 1. Due active rows  
 2. Persian “box ready” email + link to `/account/subscriptions`  
-3. Advance `next_renewal_at` (even if email fails)
+3. Advance `next_renewal_at` **only after dispatch/send succeeds** (PR-057a /
+   PR-055a). Prefers [[Notifications]] dispatcher (period-scoped outbox key);
+   inline mailer is the fallback. Both unset or send failure leaves the row due.
 
 **No auto-charge** (PH-043c **closed** — [[ADR Box auto-charge declined]]).  
 No order creation. No inventory reservation from this table.  

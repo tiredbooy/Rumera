@@ -192,6 +192,23 @@ func (h *Handler) React(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// Unlike — DELETE /reviews/:id/react
+func (h *Handler) Unlike(c *gin.Context) {
+	userID, ok := httpx.UID(c)
+	if !ok {
+		return
+	}
+	id, ok := httpx.ParamInt64(c, "id")
+	if !ok {
+		return
+	}
+	if err := h.Reviews.Unlike(c.Request.Context(), id, userID); err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.NoContent(c)
+}
+
 // Images — GET /reviews/:id/images
 func (h *Handler) Images(c *gin.Context) {
 	userID, ok := httpx.UID(c)

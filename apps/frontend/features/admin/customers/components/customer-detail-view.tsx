@@ -29,14 +29,20 @@ export async function CustomerDetailView({
   currentUserId,
   currentUserEmail,
   auditPage,
+  canWrite = false,
   canCreditWallet = false,
+  canBan = false,
 }: {
   id: string;
   currentUserId?: string;
   currentUserEmail?: string | null;
   auditPage: number;
-  /** customers:write — wallet top-up affordance */
+  /** customers:write — create / edit / deactivate */
+  canWrite?: boolean;
+  /** wallet:credit — ledger mint; not customers:write (PR-040c) */
   canCreditWallet?: boolean;
+  /** customers:ban — POST ban/unban; not customers:write (PR-040e) */
+  canBan?: boolean;
 }) {
   let user: AdminUser;
   try {
@@ -112,11 +118,13 @@ export async function CustomerDetailView({
         description={user.email}
         actions={
           <div className="flex items-center gap-2">
-            <Button size="sm" asChild className="h-11 cursor-pointer">
-              <Link href={`/admin/customers/${user.user_id}/edit`}>
-                <Pencil className="size-4" aria-hidden /> ویرایش کاربر
-              </Link>
-            </Button>
+            {canWrite ? (
+              <Button size="sm" asChild className="h-11 cursor-pointer">
+                <Link href={`/admin/customers/${user.user_id}/edit`}>
+                  <Pencil className="size-4" aria-hidden /> ویرایش کاربر
+                </Link>
+              </Button>
+            ) : null}
             {backButton}
           </div>
         }
@@ -184,7 +192,9 @@ export async function CustomerDetailView({
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               {user.is_banned
-                ? "این حساب مسدود است و حتی در حالت فعال امکان ورود ندارد. رفع مسدودی در قرارداد فعلی مدیریت کاربران پشتیبانی نمی‌شود."
+                ? canBan
+                  ? "این حساب مسدود است و حتی در حالت فعال امکان ورود ندارد. رفع مسدودی در همین صفحه و پس از تأیید انجام می‌شود."
+                  : "این حساب مسدود است و حتی در حالت فعال امکان ورود ندارد. رفع مسدودی نیازمند مجوز مسدودسازی است."
                 : "غیرفعال‌سازی دسترسی ورود را متوقف می‌کند، اما حساب، جزئیات و تاریخچه را حذف نمی‌کند. حساب غیرفعال در همین صفحه قابل مشاهده و فعال‌سازی دوباره است."}
             </p>
           </div>
@@ -194,6 +204,8 @@ export async function CustomerDetailView({
             isActive={user.is_active}
             isBanned={user.is_banned}
             isSelf={isSelf}
+            canWrite={canWrite}
+            canBan={canBan}
           />
         </section>
       </div>

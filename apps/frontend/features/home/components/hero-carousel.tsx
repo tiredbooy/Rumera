@@ -318,7 +318,7 @@ function HeroSlideView({
 
             <h2
               className={cn(
-                "font-serif text-5xl leading-[1.06] sm:text-6xl lg:text-7xl",
+                "font-serif text-5xl leading-[1.3] sm:text-6xl lg:text-7xl",
                 lightText
                   ? "text-white [text-shadow:0_2px_24px_rgba(0,0,0,0.45)]"
                   : "text-stone-950 [text-shadow:0_1px_20px_rgba(255,255,255,0.7)]",

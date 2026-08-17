@@ -10,8 +10,55 @@ import type {
   BulkAddCartInput,
   BulkAddCartResult,
   Cart,
+  CartItem,
   UpdateCartItemInput,
 } from "./types";
+
+type CartMutationContext = {
+  previous?: Cart;
+};
+
+function summarizeItems(
+  items: CartItem[],
+  discount_total: number,
+): Cart["summary"] {
+  return {
+    total_items: items.reduce((sum, item) => sum + item.quantity, 0),
+    unique_items: items.length,
+    subtotal: items.reduce((sum, item) => sum + item.line_total, 0),
+    discount_total,
+  };
+}
+
+function cartWithQuantity(
+  cart: Cart,
+  itemId: number,
+  quantity: number,
+): Cart {
+  const items = cart.items.map((item) =>
+    item.id === itemId
+      ? {
+          ...item,
+          quantity,
+          line_total: item.current_price * quantity,
+        }
+      : item,
+  );
+  return {
+    ...cart,
+    items,
+    summary: summarizeItems(items, cart.summary.discount_total),
+  };
+}
+
+function cartWithoutItem(cart: Cart, itemId: number): Cart {
+  const items = cart.items.filter((item) => item.id !== itemId);
+  return {
+    ...cart,
+    items,
+    summary: summarizeItems(items, cart.summary.discount_total),
+  };
+}
 
 function assertAddCartInput(input: AddCartItemInput): AddCartItemInput {
   const product_variant_id = Number(input.product_variant_id);
@@ -107,7 +154,25 @@ export function useUpdateCartItem() {
   return useMutation({
     mutationFn: ({ itemId, ...input }: UpdateCartItemInput & { itemId: number }) =>
       updateCartItem(itemId, input),
+    onMutate: async ({ itemId, quantity }): Promise<CartMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.cart });
+      const previous = queryClient.getQueryData<Cart>(queryKeys.cart);
+      if (previous) {
+        queryClient.setQueryData<Cart>(
+          queryKeys.cart,
+          cartWithQuantity(previous, itemId, quantity),
+        );
+      }
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.cart, context.previous);
+      }
+    },
     onSuccess: (cart) => queryClient.setQueryData(queryKeys.cart, cart),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.cart }),
   });
 }
 
@@ -115,7 +180,25 @@ export function useRemoveCartItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: removeCartItem,
+    onMutate: async (itemId): Promise<CartMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.cart });
+      const previous = queryClient.getQueryData<Cart>(queryKeys.cart);
+      if (previous) {
+        queryClient.setQueryData<Cart>(
+          queryKeys.cart,
+          cartWithoutItem(previous, itemId),
+        );
+      }
+      return { previous };
+    },
+    onError: (_error, _itemId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.cart, context.previous);
+      }
+    },
     onSuccess: (cart) => queryClient.setQueryData(queryKeys.cart, cart),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.cart }),
   });
 }
 

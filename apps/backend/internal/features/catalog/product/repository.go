@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/features/catalog/tag"
+	"github.com/tiredbooy/internal/features/inventory"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/searchtext"
 )
@@ -167,6 +168,9 @@ func insertVariantTx(ctx context.Context, tx pgx.Tx, productID int64, req catvar
 	if err := catvariant.EnsureUniqueVariantCombinationTx(ctx, tx, productID, variantID); err != nil {
 		return fmt.Errorf("validate combination: %w", err)
 	}
+	if err := inventory.EnsureForVariantTx(ctx, tx, variantID); err != nil {
+		return fmt.Errorf("ensure inventory: %w", err)
+	}
 
 	return nil
 }
@@ -235,7 +239,8 @@ func (r *repository) GetBySlug(ctx context.Context, slug string) (*Product, erro
 // ─────────────────────────────────────────────────────────────
 // GetAll  (paginated + filtered)
 // Price filters are applied via correlated EXISTS subqueries against
-// product_variants, keeping the products query free of aggregates and joins.
+// active product_variants (pv.is_active), keeping the products query free of
+// aggregates and joins. Inactive variants never satisfy min_price/max_price.
 // (A prior version put MIN/MAX(pv.price) in the WHERE clause against an
 // unjoined `pv` alias — invalid SQL that 500'd every price-faceted request.)
 // ─────────────────────────────────────────────────────────────
@@ -251,13 +256,23 @@ func buildProductFilterSQL(f ProductFilter) productFilterSQL {
 	args := pgx.NamedArgs{}
 	categoryScope := ""
 
-	// PH-030a: Persian-aware free-text. Query + column text both pass through
-	// rumera_search_normalize / searchtext.Normalize (ك/ي→ک/ی, ZWNJ, whitespace).
-	// Match title, description, brand title, category title — storefront discovery.
+	// CF-2: label an existing selection by fetching exactly those products.
+	// Validated by the handler; re-parsed here so a bad value can never reach the
+	// query regardless of caller.
+	if ids, err := f.ValidIDs(); err == nil && len(ids) > 0 {
+		where = append(where, "p.id = ANY(@ids)")
+		args["ids"] = ids
+	}
+
+	// PH-030a / PR-070e: Persian-aware free-text. Query + column text both pass
+	// through rumera_search_normalize / searchtext.Normalize (ك/ي→ک/ی, ZWNJ,
+	// whitespace). Match title, description, code, brand title, category title,
+	// variant SKU, and tag titles. No GET /search; no extra trgm indexes.
 	if pattern := searchtext.LikeContains(f.Search); pattern != "" {
 		where = append(where, `(
 			rumera_search_normalize(p.title) ILIKE @search ESCAPE E'\\'
 			OR rumera_search_normalize(p.description) ILIKE @search ESCAPE E'\\'
+			OR rumera_search_normalize(p.code) ILIKE @search ESCAPE E'\\'
 			OR EXISTS (
 				SELECT 1 FROM brands search_brand
 				WHERE search_brand.id = p.brand_id
@@ -267,6 +282,17 @@ func buildProductFilterSQL(f ProductFilter) productFilterSQL {
 				SELECT 1 FROM categories search_cat
 				WHERE search_cat.id = p.category_id
 				  AND rumera_search_normalize(search_cat.title) ILIKE @search ESCAPE E'\\'
+			)
+			OR EXISTS (
+				SELECT 1 FROM product_variants search_sku
+				WHERE search_sku.product_id = p.id
+				  AND rumera_search_normalize(search_sku.sku) ILIKE @search ESCAPE E'\\'
+			)
+			OR EXISTS (
+				SELECT 1 FROM product_tags search_pt
+				INNER JOIN tags search_tag ON search_tag.id = search_pt.tag_id
+				WHERE search_pt.product_id = p.id
+				  AND rumera_search_normalize(search_tag.title) ILIKE @search ESCAPE E'\\'
 			)
 		)`)
 		args["search"] = pattern
@@ -308,17 +334,20 @@ func buildProductFilterSQL(f ProductFilter) productFilterSQL {
 		)`)
 		args["tag_id"] = *f.TagID
 	}
+	// Price bands consider only active variants so a retired SKU cannot pull
+	// a product into a storefront/admin price facet (PR-070a). Combined
+	// min+max is still two EXISTS; each independently requires pv.is_active.
 	if f.MinPrice != nil {
 		where = append(where, `EXISTS (
 			SELECT 1 FROM product_variants pv
-			WHERE pv.product_id = p.id AND pv.price >= @min_price
+			WHERE pv.product_id = p.id AND pv.is_active AND pv.price >= @min_price
 		)`)
 		args["min_price"] = *f.MinPrice
 	}
 	if f.MaxPrice != nil {
 		where = append(where, `EXISTS (
 			SELECT 1 FROM product_variants pv
-			WHERE pv.product_id = p.id AND pv.price <= @max_price
+			WHERE pv.product_id = p.id AND pv.is_active AND pv.price <= @max_price
 		)`)
 		args["max_price"] = *f.MaxPrice
 	}
@@ -329,7 +358,6 @@ func buildProductFilterSQL(f ProductFilter) productFilterSQL {
 		args:          args,
 	}
 }
-
 
 // productListSortExpr maps allowlisted ProductFilter.SortBy values to a stable
 // SQL ORDER BY expression. Unknown values fall back to created_at (never

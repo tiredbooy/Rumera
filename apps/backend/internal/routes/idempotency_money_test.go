@@ -225,17 +225,19 @@ func TestFeatureRegister_MoneyIdemWiring(t *testing.T) {
 	orders.RegisterCustomer(cust, &orders.Handler{}, moneyIdem)
 	giftcard.RegisterCustomer(cust, &giftcard.Handler{}, moneyIdem)
 	loyalty.RegisterCustomer(cust, &loyalty.Handler{}, moneyIdem)
+	loyalty.RegisterAdmin(admin, admin, &loyalty.Handler{}, moneyIdem)
 	wallet.RegisterCustomer(cust, &wallet.Handler{}, moneyIdem)
-	wallet.RegisterAdmin(admin, &wallet.Handler{}, moneyIdem)
+	wallet.RegisterAdmin(admin, admin, &wallet.Handler{}, moneyIdem)
 
 	want := map[string]bool{
-		"POST /api/v1/webhooks/payment":                  false,
-		"POST /api/v1/orders":                            false,
-		"POST /api/v1/gift-cards/redeem":                 false,
-		"POST /api/v1/gift-cards/purchase":               false,
-		"POST /api/v1/loyalty/redeem":                    false,
-		"POST /api/v1/wallet/topup":                      false,
-		"POST /api/v1/admin/users/:userID/wallet/credit": false,
+		"POST /api/v1/webhooks/payment":                   false,
+		"POST /api/v1/orders":                             false,
+		"POST /api/v1/gift-cards/redeem":                  false,
+		"POST /api/v1/gift-cards/purchase":                false,
+		"POST /api/v1/loyalty/redeem":                     false,
+		"POST /api/v1/wallet/topup":                       false,
+		"POST /api/v1/admin/users/:userID/wallet/credit":  false,
+		"POST /api/v1/admin/users/:userID/loyalty/adjust": false,
 	}
 	for _, route := range r.Routes() {
 		key := route.Method + " " + route.Path

@@ -109,12 +109,14 @@ export async function listAllTags(): Promise<Tag[]> {
     orderBy: "asc",
   } as const;
   const first = await listAdminTags(query);
-  if (first.pagination.total_pages <= 1) return first.results;
+  const results = first.results ?? [];
+  const totalPages = first.pagination?.total_pages ?? 1;
+  if (totalPages <= 1) return results;
 
-  const tags = [...first.results];
-  for (let page = 2; page <= first.pagination.total_pages; page += 1) {
+  const tags = [...results];
+  for (let page = 2; page <= totalPages; page += 1) {
     const response = await listAdminTags({ ...query, page });
-    tags.push(...response.results);
+    tags.push(...(response.results ?? []));
   }
   return tags;
 }

@@ -45,7 +45,7 @@ The `Blog` object:
 | `is_featured` | bool | surface on featured shelves |
 | `meta_title` | string \| null | SEO |
 | `meta_description` | string \| null | SEO |
-| `published_at` | string (date-time) \| null | stamped automatically the first time a post goes live |
+| `published_at` | string (date-time) \| null | first-publish stamp, or a **schedule**. Public list/detail hide a `published` post until `published_at` is null or `<= now`. Admin still sees scheduled posts. |
 | `created_at` | string (date-time) | |
 | `updated_at` | string (date-time) | |
 
@@ -71,8 +71,11 @@ GET /blogs
 
 The public listing is **always published-only** — the handler forces
 `status=published`, so drafts and archived posts are never exposed on the
-storefront. Results are **paginated** and return the lightweight `BlogListItem`
-card (no full `content` body).
+storefront. It also treats `published_at` as a **schedule**: posts whose
+`published_at` is in the future are omitted (counts and pagination match). A
+`published` row with a null `published_at` stays visible (legacy). Admin
+`GET /admin/blogs` does **not** apply this window. Results are **paginated**
+and return the lightweight `BlogListItem` card (no full `content` body).
 
 **Query parameters** (plus standard pagination/sorting — `page`, `limit`, `sortBy`,
 `orderBy` — see [Conventions](../conventions.md)). Default sort is `published_at`.
@@ -82,7 +85,7 @@ card (no full `content` body).
 | `is_featured` | bool | Only featured posts |
 | `category_id` | int64 | Only posts assigned to this blog category |
 | `exclude_id` | int64 | Exclude one separately rendered editorial lead from stable pagination |
-| `search` | string | Literal title/excerpt search (`%`, `_`, and `\` are not wildcards) |
+| `search` | string | Title/excerpt via `rumera_search_normalize` (Arabic-yeh/kaf match Persian; `%`, `_`, and `\` are not wildcards) |
 
 > `status` is accepted on the filter but is **overridden to `published`** on this
 > public route — you cannot list drafts here. Admin status filtering is done via
@@ -129,7 +132,12 @@ card (no full `content` body).
 GET /blogs/:slug
 ```
 
-Fetches a single published blog by its `slug`. Each successful fetch **records a read asynchronously** — the read counter is incremented in a background goroutine that is detached from the request, so it never blocks or delays the response.
+Fetches a single published, already-live blog by its `slug`. A `published` post
+whose `published_at` is still in the future is **not** returned (`404
+NOT_FOUND`), the same as a draft. Admin `GET /admin/blogs/:id` still returns
+scheduled posts. Each successful fetch **records a read asynchronously** — the
+read counter is incremented in a background goroutine that is detached from the
+request, so it never blocks or delays the response.
 
 **Response** `200 OK` — a single `BlogDetail` object inside `data`. It extends `Blog` with its category list and related id arrays:
 
@@ -198,11 +206,11 @@ Authorization: Bearer <access_token>
 ```
 
 Returns the same paginated `BlogListItem[]` shape as `GET /blogs`, but does not
-force `status=published`. Omit `status` to include every publication state, or
-send `status=draft`, `status=published`, or `status=archived` to filter it. The
-other list query parameters (`page`, `limit`, `sortBy`, `orderBy`, `search`,
-`is_featured`, `category_id`, and `exclude_id`) have the same semantics as the
-public list.
+force `status=published` and does **not** hide future `published_at` schedules.
+Omit `status` to include every publication state, or send `status=draft`,
+`status=published`, or `status=archived` to filter it. The other list query
+parameters (`page`, `limit`, `sortBy`, `orderBy`, `search`, `is_featured`,
+`category_id`, and `exclude_id`) have the same semantics as the public list.
 
 **Errors:** `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `400 INVALID_PARAMS`.
 
@@ -254,7 +262,9 @@ Authorization: Bearer <access_token>
 >
 > **Status & publishing.** Omitting `status` creates a **draft**. If a post is
 > created with `status=published` and no `published_at`, the server stamps
-> `published_at` to now. Slug collisions never fail creation — when `slug` is
+> `published_at` to now. Sending a future `published_at` with `status=published`
+> **schedules** the post: the storefront hides it until that instant; admin
+> reads still return it. Slug collisions never fail creation — when `slug` is
 > omitted a unique one is derived from the title (with a numeric suffix if needed).
 > Slugs remain reserved after soft deletion so public links are never silently
 > reassigned to different content.
@@ -309,7 +319,8 @@ All fields optional; only supplied fields are updated (`BlogUpdateReq`).
 
 > **Auto-stamp.** Setting `status=published` on a post that has never been
 > published (no existing `published_at`) and not sending `published_at` causes the
-> server to stamp `published_at` to now.
+> server to stamp `published_at` to now. A future `published_at` is honored as a
+> schedule on public list/detail; admin still sees the row.
 >
 > **Nullable fields.** For `excerpt`, `image_url`, `image_alt`, `meta_title`,
 > `meta_description`, and `published_at`: omit the field to leave it unchanged,

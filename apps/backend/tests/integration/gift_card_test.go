@@ -3,9 +3,9 @@
 package integration
 
 import (
-	"github.com/tiredbooy/internal/features/giftcard"
 	"context"
 	"errors"
+	"github.com/tiredbooy/internal/features/giftcard"
 	"testing"
 
 	"github.com/shopspring/decimal"

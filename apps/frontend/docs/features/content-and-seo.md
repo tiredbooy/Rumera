@@ -23,7 +23,12 @@ CMS, or machine-readable SEO surfaces.
 `HomeView` loads surfaces in parallel and **soft-fails** catalogue/category
 sections if the API is offline so `next build` and partial outages do not take
 down the entire page. Hero/brands/trending already ship fallbacks inside their
-API modules.
+API modules. `CategoryGrid` returns nothing when featured categories are `[]`
+— no empty heading and no invented categories (PR-080j).
+
+Home emits Organization + WebSite JSON-LD (`HomeStructuredData` →
+`organizationLd()` / `websiteLd()` from live `siteConfig`). No mock product
+ItemList (PR-080k).
 
 ---
 
@@ -83,10 +88,24 @@ Public list falls back to static slides if the API fails (homepage resilience).
 `lib/seo/metadata.ts` — `buildMetadata({ title, description, path, images, … })`
 used by list/detail routes.
 
+`/products` uses `generateMetadata` (PR-080l). The clean catalogue is
+indexable at `/products`. Search (`search=`), brand (`brand=`), non-default
+sort, `page>1`, and malformed query variants are `noindex, nofollow` and
+keep the canonical on clean `/products`. Journal/recipes still
+self-canonicalize clean paginated pages; the product list does not.
+
 ### JSON-LD
 
 `lib/seo/jsonld.ts` — Product, Recipe, Article, list helpers. Image URLs go
 through `resolveMediaUrl` so structured data matches visible media.
+
+Journal detail (`journalArticleLd` → `BlogPosting`) sets `publisher` to the
+site `Organization` with a `logo` `ImageObject`. The logo URL is
+`absoluteUrl(siteConfig.logo)` — the same shipped mark as `organizationLd`
+(`lib/site.ts` → `brandPaths.iconPng`). Do not invent a second brand mark
+(PR-080m). Home (`HomeView` → `HomeStructuredData`) emits Organization +
+WebSite (`SearchAction`) from the same `siteConfig` — not a mock product
+ItemList (PR-080k). About still mounts Organization on `/about`.
 
 ### Machine surfaces
 

@@ -23,6 +23,7 @@ type PurchaseIntentView struct {
 	Amount        float64
 	Currency      string
 	Status        string
+	PaymentURL    string
 }
 
 type Handler struct {
@@ -85,6 +86,7 @@ func (h *Handler) Purchase(c *gin.Context) {
 		Amount:        fmt.Sprintf("%.2f", intent.Amount),
 		Currency:      intent.Currency,
 		Status:        intent.Status,
+		PaymentURL:    intent.PaymentURL,
 	})
 }
 
@@ -116,4 +118,33 @@ func (h *Handler) Issue(c *gin.Context) {
 		return
 	}
 	response.Created(c, cards)
+}
+
+// ListAdmin — GET /admin/gift-cards (paginated {results, pagination}).
+func (h *Handler) ListAdmin(c *gin.Context) {
+	var filter AdminFilter
+	if !httpx.BindQuery(c, h.Validator, &filter) {
+		return
+	}
+	filter.Defaults()
+	cards, total, err := h.Service.ListAdmin(c.Request.Context(), filter)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.Paginated(c, cards, httpx.Paginate(filter.Page, filter.Limit, total))
+}
+
+// Void — POST /admin/gift-cards/:id/void. Active → disabled; no wallet move.
+func (h *Handler) Void(c *gin.Context) {
+	id, ok := httpx.ParamInt64(c, "id")
+	if !ok {
+		return
+	}
+	card, err := h.Service.Void(c.Request.Context(), id)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.OK(c, card)
 }

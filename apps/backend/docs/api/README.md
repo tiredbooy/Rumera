@@ -24,10 +24,12 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | [Tags](./tags.md) | Tags |
 | [Orders](./orders.md) | Checkout, order history, admin fulfilment |
 | [Wishlist](./wishlist.md) | 🔒 Customer wishlist |
+| [Alerts](./alerts.md) | 🔒 Restock / price-drop subscriptions |
 | [Wallet](./wallet.md) | 🔒 Customer wallet & 🛡️ admin credit |
 | [Gift cards](./gift-cards.md) | Redeem (+ admin issue) |
 | [Subscriptions](./subscriptions.md) | 🔒 Cellar box create/list/lifecycle (PH-043a) |
 | [Loyalty](./loyalty.md) | Points + redeem; earn rules [architecture/loyalty.md](../architecture/loyalty.md) (PH-040a) |
+| [Referrals](./referrals.md) | 🔒 Share code; claim as referee (`claimed` or 400) |
 | [Reviews](./reviews.md) | Product reviews, reactions, images, moderation |
 | [Shipping](./shipping.md) | Zones, methods, checkout rates |
 | [Payments](./payments.md) | 🛡️ Payment transaction records |
@@ -103,7 +105,9 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | GET | `/wallet/transactions` | 🔒 |
 | POST | `/gift-cards/redeem` | 🔒 (Idempotency-Key recommended) |
 | GET | `/loyalty` · `/loyalty/transactions` | 🔒 |
-| POST | `/loyalty/redeem` | 🔒 (Idempotency-Key recommended) |
+| POST | `/loyalty/redeem` | 🔒 (`Idempotency-Key` required) |
+| GET | `/referrals/me` | 🔒 |
+| POST | `/referrals/claim` | 🔒 (`200 {claimed:true}` or `400`) |
 | POST·GET | `/orders` | 🔒 (`POST` Idempotency-Key recommended) |
 | GET | `/orders/:id` | 🔒 |
 | POST | `/orders/:id/cancel` | 🔒 |
@@ -114,6 +118,8 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | GET | `/recommendations/for-you` | 🔒 |
 | POST | `/recommendations/interactions` | 🔒 |
 | GET·POST | `/recommendations/profile` · `/recommendations/profile/recompute` | 🔒 |
+| GET·POST | `/alerts` | 🔒 |
+| DELETE | `/alerts/:id` | 🔒 |
 
 ### Admin — `/admin` (requires role `admin`)
 | Method | Path | Tier |
@@ -121,6 +127,7 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | GET | `/admin/roles` | 🛡️ |
 | GET·POST | `/admin/users` | 🛡️ |
 | GET·PATCH·DELETE | `/admin/users/:userID` | 🛡️ |
+| POST | `/admin/users/:userID/ban` · `/unban` | 🛡️ `customers:ban` |
 | GET | `/admin/users/:userID/audit` | 🛡️ |
 | GET·POST·PATCH·DELETE | `/admin/products` … | 🛡️ |
 | POST·PUT | `/admin/products/aggregate` · `/admin/products/:id/aggregate` | 🛡️ |
@@ -147,6 +154,7 @@ All conventions (response envelope, errors, pagination, validation) are describe
 | GET·POST·PATCH·DELETE | `/admin/recipes` · `/admin/recipes/:id` | 🛡️ |
 | GET·POST·PUT·PATCH·DELETE | `/admin/hero-slides` · `/admin/hero-slides/order` · `/admin/hero-slides/:id` | 🛡️ |
 | GET·PUT | `/admin/settings` | 🛡️ |
+| GET·PUT | `/admin/loyalty/programme` | 🛡️ (`customers:read` / `customers:write`) |
 | GET | `/admin/analytics/...` | 🛡️ |
 
 > The full, exact list of admin routes is documented on each resource page.

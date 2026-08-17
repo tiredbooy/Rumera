@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { toAsciiDigits } from "@/lib/normalize-digits";
 import { cn } from "@/lib/utils";
 import type {
   Brand,
@@ -50,7 +51,11 @@ import { BRANDS_QUERY_KEY } from "@/features/admin/brands/components/BrandsTable
 // ── Validation (string fields coerced to the API shape on submit) ─────────────
 
 const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null);
-const numOrNull = (v?: string) => (v && v.trim() !== "" ? Number(v) : null);
+const numOrNull = (v?: string) => {
+  if (!v) return null;
+  const n = toAsciiDigits(v).trim();
+  return n !== "" ? Number(n) : null;
+};
 
 function defaults(brand?: Brand): BrandFormValues {
   return {

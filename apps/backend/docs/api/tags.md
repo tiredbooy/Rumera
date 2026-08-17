@@ -8,11 +8,15 @@ Legend: 🌐 public · 🔒 customer · 🛡️ admin
 
 | Method | Path | Tier | Description |
 |--------|------|------|-------------|
-| GET | `/tags` | 🌐 public | List tags (paginated) |
+| GET | `/tags` | 🌐 public | List tags (paginated; also the admin typeahead list) |
 | GET | `/tags/:id` | 🌐 public | Get a single tag |
 | POST | `/admin/tags` | 🛡️ admin | Create a tag |
 | PATCH | `/admin/tags/:id` | 🛡️ admin | Update a tag |
 | DELETE | `/admin/tags/:id` | 🛡️ admin | Delete a tag |
+
+> **No `GET /admin/tags`.** There is no staff-only tag list. Admin typeahead,
+> the product-form tag picker, and the admin tags board all call public
+> `GET /tags` with `limit` ≤ `100`. Writes stay `POST` / `PATCH` / `DELETE /admin/tags`.
 
 ---
 
@@ -22,7 +26,15 @@ Legend: 🌐 public · 🔒 customer · 🛡️ admin
 GET /tags
 ```
 
-**Query parameters:** standard pagination/sorting only — `page`, `limit`, `sortBy`, `orderBy`, `search` (see [Conventions](../conventions.md)). Default sort is `created_at` `desc`.
+This is the only tag list. Storefront and admin clients share it.
+
+**Query parameters:** standard pagination/sorting only — `page`, `limit`
+(max `100`), `sortBy`, `orderBy`, `search` (see [Conventions](../conventions.md)).
+Default sort is `created_at` `desc`. Supported `sortBy` values: `created_at`,
+`updated_at`, `title`, `slug`. `limit` above `100` is `400 INVALID_QUERY`.
+
+Admin typeahead typically requests `GET /tags?limit=100&sortBy=title&orderBy=asc`
+and pages when `pagination.total_pages` is greater than 1.
 
 **Response** `200 OK` — paginated list of `Tag`:
 

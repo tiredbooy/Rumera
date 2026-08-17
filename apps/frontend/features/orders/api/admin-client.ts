@@ -69,3 +69,10 @@ export function updateAdminOrderStatusClient(
     body: JSON.stringify(data),
   });
 }
+
+/** POST /admin/orders/:id/refund — money command, not a status PATCH (PR-020d / PR-062b). */
+export function refundAdminOrderClient(id: number): Promise<OrderListItem> {
+  return adminOrderRequest<OrderListItem>(`/${id}/refund`, {
+    method: "POST",
+  });
+}

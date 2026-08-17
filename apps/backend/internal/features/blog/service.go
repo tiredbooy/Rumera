@@ -11,14 +11,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiredbooy/internal/models"
-		"github.com/tiredbooy/pkg/apperr"
+	"github.com/tiredbooy/pkg/apperr"
 )
 
 // MediaCleaner is the subset of media lifecycle used when blog images change.
 type MediaCleaner interface {
 	CleanupURLs(ctx context.Context, values ...*string)
 }
-
 
 // ── Blog Category Service ─────────────────────────────────────────────────────
 
@@ -127,7 +126,8 @@ func (s *service) GetAll(ctx context.Context) ([]*Blog, error) {
 }
 
 // List returns a paginated, filtered slice of blogs plus the total count. The
-// public handler forces status='published'; admin callers may pass any status.
+// public handler forces status='published' and LiveOnly (hide future
+// published_at); admin callers may pass any status and still see schedules.
 func (s *service) List(ctx context.Context, filter BlogFilter) ([]*Blog, int64, error) {
 	blogs, total, err := s.repo.List(ctx, filter)
 	if err != nil {
@@ -149,13 +149,21 @@ func (s *service) GetBySlug(ctx context.Context, slug string) (*BlogDetailRespon
 	})
 }
 
-// GetPublishedBySlug is the public storefront read: unpublished posts 404.
+// GetPublishedBySlug is the public storefront read: unpublished or not-yet-
+// scheduled posts 404.
 func (s *service) GetPublishedBySlug(ctx context.Context, slug string) (*BlogDetailResponse, error) {
 	if slug == "" {
 		return nil, apperr.ErrInvalidRequest
 	}
 	return s.hydrate(ctx, func() (*Blog, error) {
-		return s.repo.GetPublishedBySlug(ctx, slug)
+		blog, err := s.repo.GetPublishedBySlug(ctx, slug)
+		if err != nil {
+			return nil, err
+		}
+		if !isPubliclyLive(blog.Status, blog.PublishedAt, time.Now().UTC()) {
+			return nil, models.ErrNotFound
+		}
+		return blog, nil
 	})
 }
 

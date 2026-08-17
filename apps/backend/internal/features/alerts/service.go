@@ -10,17 +10,27 @@ import (
 	"github.com/tiredbooy/pkg/apperr"
 )
 
+// variantFinder is the catalogue surface Create needs to snapshot price.
+type variantFinder interface {
+	GetByID(ctx context.Context, id int64) (*variant.ProductVariant, error)
+}
+
+// inventoryFinder is the stock surface restock create uses to confirm OOS.
+type inventoryFinder interface {
+	GetByVariantID(ctx context.Context, variantID int64) (*inventory.Inventory, error)
+}
+
 // Service manages a customer's back-in-stock / price-drop subscriptions.
 type Service struct {
 	alertRepo     Repository
-	variantRepo   variant.Repository
-	inventoryRepo inventory.Repository
+	variantRepo   variantFinder
+	inventoryRepo inventoryFinder
 }
 
 func NewService(
 	alertRepo Repository,
-	variantRepo variant.Repository,
-	inventoryRepo inventory.Repository,
+	variantRepo variantFinder,
+	inventoryRepo inventoryFinder,
 ) *Service {
 	return &Service{alertRepo: alertRepo, variantRepo: variantRepo, inventoryRepo: inventoryRepo}
 }
@@ -44,12 +54,18 @@ func (s *Service) Create(ctx context.Context, userID int64, req CreateProductAle
 	}
 
 	// A restock alert only makes sense for an out-of-stock variant; otherwise the
-	// checker would fire it immediately. Reject when stock is currently available.
+	// checker would fire it immediately. Missing inventory is not treated as OOS
+	// (PR-053c): fail closed with conflict rather than creating a live alert.
 	if req.AlertType == AlertRestock {
-		if inv, err := s.inventoryRepo.GetByVariantID(ctx, req.ProductVariantID); err == nil {
-			if inv.StockOnHand-inv.CommittedStock > 0 {
+		inv, err := s.inventoryRepo.GetByVariantID(ctx, req.ProductVariantID)
+		if err != nil {
+			if errors.Is(err, models.ErrNotFound) {
 				return nil, apperr.ErrConflict
 			}
+			return nil, apperr.ErrInternal
+		}
+		if inv.StockOnHand-inv.CommittedStock > 0 {
+			return nil, apperr.ErrConflict
 		}
 	}
 
@@ -99,5 +115,8 @@ func toProductAlertResponse(a *ProductAlert) *ProductAlertResponse {
 		TargetPrice:      a.TargetPrice,
 		NotifiedAt:       a.NotifiedAt,
 		CreatedAt:        a.CreatedAt,
+		ProductTitle:     a.ProductTitle,
+		ProductSlug:      a.ProductSlug,
+		CurrentPrice:     a.CurrentPrice,
 	}
 }

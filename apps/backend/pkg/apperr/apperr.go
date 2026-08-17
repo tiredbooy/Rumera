@@ -59,6 +59,7 @@ var (
 	// Wallet / loyalty / gift
 	ErrInsufficientFunds  = New("INSUFFICIENT_FUNDS", "insufficient wallet balance")
 	ErrInsufficientPoints = New("INSUFFICIENT_POINTS", "insufficient loyalty points")
+	ErrLoyaltyDisabled    = New("LOYALTY_DISABLED", "loyalty programme is disabled")
 	ErrWalletNotFound     = New("WALLET_NOT_FOUND", "wallet not found")
 	ErrGiftCardInvalid    = New("GIFT_CARD_INVALID", "gift card code is invalid or already redeemed")
 

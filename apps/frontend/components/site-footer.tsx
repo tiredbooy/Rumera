@@ -3,17 +3,24 @@ import {
   Send,
   AtSign,
   Camera,
-  Rss,
+  Play,
+  Briefcase,
+  MessageCircle,
   ShieldCheck,
   Truck,
   BadgeCheck,
   Phone,
   Mail,
+  type LucideIcon,
 } from "lucide-react";
 
 import { RumeraBrandMark } from "@/components/brand/rumera-brand-mark";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { getPublicSiteSettingsOrNull } from "@/features/settings/api/server";
+import {
+  toStorefrontChromeSettings,
+  type ChromeSocialKey,
+} from "@/features/storefront/navigation/chrome-settings";
 
 const columns: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -52,12 +59,17 @@ const columns: { title: string; links: { label: string; href: string }[] }[] = [
   },
 ];
 
-const socials: { Icon: typeof Camera; label: string; href: string }[] = [
-  { Icon: Camera, label: "اینستاگرام", href: "#" },
-  { Icon: AtSign, label: "تردز", href: "#" },
-  { Icon: Send, label: "تلگرام", href: "#" },
-  { Icon: Rss, label: "خوراک خبری", href: "#" },
-];
+const SOCIAL_ICONS: Record<ChromeSocialKey, LucideIcon> = {
+  instagram: Camera,
+  telegram: Send,
+  whatsapp: MessageCircle,
+  twitter: AtSign,
+  youtube: Play,
+  linkedin: Briefcase,
+};
+
+const FALLBACK_FOOTER_BLURB =
+  "فروشگاهی منتخب برای هر سلیقه — از نوشیدنی‌های اصل تا لوازم خانه و آشپزخانه، با ضمانت اصالت و ارسالی مطمئن به سراسر کشور.";
 
 const trust = [
   { Icon: ShieldCheck, label: "پرداخت امن" },
@@ -65,48 +77,61 @@ const trust = [
   { Icon: Truck, label: "ارسال سریع" },
 ];
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const chrome = toStorefrontChromeSettings(
+    await getPublicSiteSettingsOrNull(),
+  );
+  const { storeName, description, socials, contact } = chrome;
+  const hasContact =
+    Boolean(contact.supportEmail) ||
+    Boolean(contact.supportPhone) ||
+    Boolean(contact.workingHours);
+
   return (
     <footer className="relative border-t border-border/60 bg-card/40">
       {/* Gold hairline crowning the footer — ties it back to the brand foil. */}
       <div aria-hidden className="rule-gold absolute inset-x-0 top-0" />
       <div className="container-px mx-auto max-w-7xl py-16">
         <div className="grid gap-12 lg:grid-cols-[1.4fr_2fr]">
-          {/* Brand + newsletter */}
+          {/* Brand + honest newsletter stub — no subscribe API yet. */}
           <div>
-            <RumeraBrandMark variant="full" size="md" href="/" />
+            <RumeraBrandMark
+              variant="full"
+              size="md"
+              href="/"
+              aria-label={`${storeName} — خانه`}
+            />
             <p className="mt-4 max-w-sm text-sm text-muted-foreground">
-              فروشگاهی منتخب برای هر سلیقه — از نوشیدنی‌های اصل تا لوازم خانه و
-              آشپزخانه، با ضمانت اصالت و ارسالی مطمئن به سراسر کشور.
+              {description ?? FALLBACK_FOOTER_BLURB}
             </p>
-            <form className="mt-6 flex max-w-sm items-center gap-2">
-              <Input
-                type="email"
-                required
-                dir="ltr"
-                placeholder="ایمیل برای دسترسی زودهنگام"
-                className="h-10 text-start"
-              />
-              <Button type="submit" className="h-10 shrink-0">
-                عضویت <Send />
-              </Button>
-            </form>
-            <div className="mt-6 flex items-center gap-2">
-              {socials.map(({ Icon, label, href }) => (
-                <Button
-                  key={label}
-                  variant="outline"
-                  size="icon"
-                  aria-label={label}
-                  asChild
-                  className="rounded-full transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
-                >
-                  <Link href={href}>
-                    <Icon />
-                  </Link>
-                </Button>
-              ))}
-            </div>
+            <p className="mt-6 max-w-sm text-sm text-muted-foreground">
+              خبرنامه به‌زودی — فعلاً ایمیلی دریافت نمی‌شود.
+            </p>
+            {socials.length > 0 ? (
+              <div className="mt-6 flex items-center gap-2">
+                {socials.map(({ key, label, href }) => {
+                  const Icon = SOCIAL_ICONS[key];
+                  return (
+                    <Button
+                      key={key}
+                      variant="outline"
+                      size="icon"
+                      aria-label={label}
+                      asChild
+                      className="rounded-full transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                    >
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Icon />
+                      </a>
+                    </Button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
 
           {/* Link columns */}
@@ -131,26 +156,45 @@ export function SiteFooter() {
               </div>
             ))}
 
-            {/* Contact */}
-            <div className="col-span-2 sm:col-span-3">
-              <div className="mt-2 flex flex-col gap-3 border-t border-border/60 pt-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:gap-8">
-                <a
-                  href="tel:+982100000000"
-                  dir="ltr"
-                  className="inline-flex items-center gap-2 transition-colors hover:text-primary"
-                >
-                  <Phone className="size-4 text-primary" /> +۹۸ ۲۱ ۰۰۰۰ ۰۰۰۰
-                </a>
-                <a
-                  href="mailto:hello@rumera.example"
-                  dir="ltr"
-                  className="inline-flex items-center gap-2 transition-colors hover:text-primary"
-                >
-                  <Mail className="size-4 text-primary" /> hello@rumera.example
-                </a>
-                <span>پشتیبانی همه‌روزه ۹ تا ۲۱</span>
+            {hasContact ? (
+              <div className="col-span-2 sm:col-span-3">
+                <div className="mt-2 flex flex-col gap-3 border-t border-border/60 pt-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:gap-8">
+                  {contact.supportPhone ? (
+                    contact.supportPhone.href ? (
+                      <a
+                        href={contact.supportPhone.href}
+                        dir="ltr"
+                        className="inline-flex items-center gap-2 transition-colors hover:text-primary"
+                      >
+                        <Phone className="size-4 text-primary" />{" "}
+                        {contact.supportPhone.value}
+                      </a>
+                    ) : (
+                      <span
+                        dir="ltr"
+                        className="inline-flex items-center gap-2"
+                      >
+                        <Phone className="size-4 text-primary" />{" "}
+                        {contact.supportPhone.value}
+                      </span>
+                    )
+                  ) : null}
+                  {contact.supportEmail ? (
+                    <a
+                      href={contact.supportEmail.href}
+                      dir="ltr"
+                      className="inline-flex items-center gap-2 transition-colors hover:text-primary"
+                    >
+                      <Mail className="size-4 text-primary" />{" "}
+                      {contact.supportEmail.value}
+                    </a>
+                  ) : null}
+                  {contact.workingHours ? (
+                    <span>{contact.workingHours}</span>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
         </div>
 
@@ -170,7 +214,7 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-border/60 pt-8 text-xs text-muted-foreground sm:flex-row">
-          <p>© ۱۴۰۴ رومرا. تمامی حقوق محفوظ است.</p>
+          <p>© ۱۴۰۴ {storeName}. تمامی حقوق محفوظ است.</p>
           <div className="flex items-center gap-5">
             <Link href="/privacy" className="hover:text-foreground">
               حریم خصوصی

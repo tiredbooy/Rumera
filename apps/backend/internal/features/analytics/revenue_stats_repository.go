@@ -1,9 +1,9 @@
 package analytics
 
 import (
-	"errors"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 

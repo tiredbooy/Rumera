@@ -3,15 +3,15 @@
 package integration
 
 import (
-	"github.com/tiredbooy/internal/features/inventory"
-	"github.com/tiredbooy/internal/features/catalog/variant"
-	catproduct "github.com/tiredbooy/internal/features/catalog/product"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/tiredbooy/internal/features/catalog/option"
+	catproduct "github.com/tiredbooy/internal/features/catalog/product"
 	"github.com/tiredbooy/internal/features/catalog/tag"
+	"github.com/tiredbooy/internal/features/catalog/variant"
+	"github.com/tiredbooy/internal/features/inventory"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,6 +23,32 @@ import (
 	"github.com/tiredbooy/pkg/validator"
 	"go.uber.org/zap"
 )
+
+func TestProductCreateEnsuresZeroInventoryForInlineVariants(t *testing.T) {
+	requireDB(t)
+	resetTables(t, "products")
+	ctx := context.Background()
+	productRepo := catproduct.NewRepository(testPool)
+
+	skuA, skuB := "LEGACY-A", "LEGACY-B"
+	created, err := productRepo.Create(ctx, catproduct.CreateProductReq{
+		Title: "Legacy variants",
+		Variants: []variant.CreateVariantReq{
+			{SKU: &skuA, Price: 40},
+			{SKU: &skuB, Price: 55},
+		},
+	})
+	if err != nil {
+		t.Fatalf("create product with inline variants: %v", err)
+	}
+	variants, err := productRepo.GetVariants(ctx, created.ID)
+	if err != nil || len(variants) != 2 {
+		t.Fatalf("inline variants = %+v, %v; want 2", variants, err)
+	}
+	for _, v := range variants {
+		assertInventoryRow(t, v.ID, 0, 0)
+	}
+}
 
 func TestProductAdminCreateEditAndReadDraftWithTags(t *testing.T) {
 	requireDB(t)

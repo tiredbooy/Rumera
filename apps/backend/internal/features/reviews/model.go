@@ -25,6 +25,8 @@ type Review struct {
 	DislikeCount     int           `db:"dislike_count"`
 	Images           []ReviewImage `db:"-" json:"images"`
 	UserFullName     string        `db:"user_full_name" json:"-"`
+	ProductTitle     string        `db:"product_title" json:"-"`
+	ProductSlug      *string       `db:"product_slug" json:"-"`
 	VerifiedPurchase bool          `db:"verified_purchase"`
 	Status           ReviewStatus  `db:"status"`
 	CreatedAt        time.Time     `db:"created_at"`
@@ -80,8 +82,10 @@ type ReviewResponse struct {
 
 type ReviewAdminResponse struct {
 	ReviewResponse
-	DeletedAt *time.Time `json:"deleted_at,omitempty"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ProductTitle string     `json:"product_title"`
+	ProductSlug  *string    `json:"product_slug,omitempty"`
+	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 type AccountReviewResponse struct {

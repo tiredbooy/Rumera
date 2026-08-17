@@ -95,6 +95,7 @@ INDEX idx_idempotency_keys_created_at (created_at)
 | Mechanism | Where | Protection |
 | --- | --- | --- |
 | Admin wallet credit key | `wallet.Service.AdminCredit` | Body/header key embedded in ledger description `idem=<key>`; lookup before deposit |
+| Admin loyalty adjust | `loyalty.Service.Adjust` | Body/header key as ledger `ref_id` (`admin_adjust` / `admin` / `{key}`); lookup before award/clawback |
 | Loyalty award | `loyalty.Service.AwardForOrder` | Idempotent per **order id** (ledger / award key) |
 | Gift-card redeem | `giftcard.RedeemAndCredit` | Card row lock + status transition; one credit per code |
 | Payment Confirm/Fail | `payments` service | Only transitions **pending** rows → no double deduct on already-settled |
@@ -128,11 +129,12 @@ admin under JWT + RBAC.
 | 2 | `POST /orders` | Order + items + coupon usage + **inventory reserve** + pending payment | **HTTP** money policy (optional `Idempotency-Key`, no auto) + atomic TX | FE must send keys for replay safety; RequireKey later | P0 |
 | 3 | `POST /orders/:id/cancel` | Cancel + release stock | Domain state machine | Optional HTTP key later | P1 |
 | 4 | `POST /admin/users/:userID/wallet/credit` | Wallet deposit + ledger | **HTTP** money policy **+** service-level ledger `idem=<key>` | Keep both layers | P0 |
+| 4b | `POST /admin/users/:userID/loyalty/adjust` | Points grant/clawback + ledger | **HTTP** money policy **+** ledger `admin_adjust` / `admin` / `{key}` | Keep both layers | P1 |
 | 5 | `POST /gift-cards/redeem` | Burn card + wallet credit (one TX) | **HTTP** money policy + natural key (code status) | Natural key remains ultimate | P0 |
 | 6 | `POST /admin/gift-cards` | Issue N codes | None at HTTP | Optional middleware for double-click issue | P2 |
 | 7 | `POST /subscriptions` | Create cellar-box subscription row | None | HTTP middleware (customer-scoped) | P1 |
 | 8 | `PATCH /subscriptions/:id` | Pause/resume/cancel/skip | Domain state | Domain guards sufficient unless action is non-idempotent | P2 |
-| 9 | `POST /loyalty/redeem` | Spend points | **HTTP** money policy + domain `idem:{key}` when header present (PH-040b) | Prefer always send key | P0 |
+| 9 | `POST /loyalty/redeem` | Spend points | **HTTP** money policy + domain `{userID}:idem:{key}` (PR-003g; key required) | Missing key → `400` | P0 |
 | 10 | `POST /referrals/claim` | Attach referral | Domain uniqueness likely | Confirm uniqueness; add key if claim can double-reward | P1 |
 | 11 | `POST /coupons/validate` | Read-only validate | n/a | Out of platform (no money write) | Out |
 | 12 | `POST /wallet/withdraw` | **410 Gone** | Removed | Stay gone; no re-open free cash | Out |
@@ -158,6 +160,7 @@ features:
   giftcard.RegisterCustomer(c, h, moneyIdem)            → POST /gift-cards/redeem
   loyalty.RegisterCustomer(c, h, moneyIdem)             → POST /loyalty/redeem
   wallet.RegisterAdmin(a, h, moneyIdem)                 → POST /admin/users/:userID/wallet/credit
+  loyalty.RegisterAdmin(read, write, h, moneyIdem)      → POST /admin/users/:userID/loyalty/adjust
 ```
 
 **Coupon apply at checkout** is inside `POST /orders` (FOR UPDATE under order TX) —
@@ -329,7 +332,12 @@ Expose counters (Prometheus or existing metrics path — no CI scrape required):
 6. On **2xx replay**, treat as success (same order id / same credit result).
 
 BFF (`apps/frontend` API routes) must **forward** `Idempotency-Key` to the Go
-API unchanged.
+API unchanged. Store (`app/api/store/[...path]`) and admin
+(`app/api/admin/[...path]`) copy the incoming header when present via
+`pickIdempotencyKeyHeader` and never invent a key. Do not log the value.
+The public BFF has no money mutations and does not forward this header.
+CORS `Access-Control-Allow-Headers` includes `Idempotency-Key` so a
+browser-direct call from an allowed origin can pass preflight (PR-040f).
 
 ---
 

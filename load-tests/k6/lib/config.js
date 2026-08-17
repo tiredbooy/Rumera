@@ -104,8 +104,8 @@ function durationMs(value) {
   return Number(match[1]) * units[match[2]];
 }
 
-export function loadProfile() {
-  const name = __ENV.PROFILE || "stress";
+export function loadProfile(defaultName = "stress") {
+  const name = __ENV.PROFILE || defaultName;
   const definition = PROFILE_DEFINITIONS[name];
   if (!definition) {
     throw new Error(

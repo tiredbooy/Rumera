@@ -1,16 +1,10 @@
-
-import { JsonLd } from "@/components/json-ld"
-import { organizationLd, websiteLd, itemListLd } from "@/lib/seo/jsonld"
+import { JsonLd } from "@/components/json-ld";
+import { organizationLd, websiteLd } from "@/lib/seo/jsonld";
 
 /**
- * Home-page JSON-LD: Organization + WebSite + ItemList. Lets search engines and
- * AI assistants understand the brand, wire up the sitelinks search box, and
- * surface products with rich snippets. Builders live in `lib/seo/jsonld.ts`.
-//  */
-// export function HomeStructuredData() {
-//   return (
-//     <JsonLd
-//       data={[organizationLd(), websiteLd(), itemListLd("بطری‌های منتخب", products)]}
-//     />
-//   )
-// }
+ * Home-page JSON-LD: Organization + WebSite (SearchAction). Live `siteConfig`
+ * only — no mock product ItemList. Builders live in `lib/seo/jsonld.ts`.
+ */
+export function HomeStructuredData() {
+  return <JsonLd data={[organizationLd(), websiteLd()]} />;
+}

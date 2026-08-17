@@ -1,6 +1,9 @@
 import { z } from "zod";
 
+import { normalizeEditorialSlug } from "@/features/admin/shared/editorial-fields";
+import { datetimeLocalToIso, isoToDatetimeLocal } from "@/features/admin/shared/publication";
 import { validateImageURL } from "@/features/image-uploader/constants";
+import { parseAsciiNumber } from "@/lib/normalize-digits";
 import type {
   CreateJournalCategoryInput,
   CreateJournalPostInput,
@@ -13,11 +16,7 @@ import type {
 const slugPattern = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u;
 
 export function normalizeJournalSlug(value: string): string {
-  return value
-    .trim()
-    .toLocaleLowerCase("fa")
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
-    .replace(/^-|-$/g, "");
+  return normalizeEditorialSlug(value);
 }
 
 function containsRichText(value: string): boolean {
@@ -63,10 +62,11 @@ export const journalPostFormSchema = z
     image_url: imageURL,
     image_alt: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
     time_to_read: z.string().refine((value) => {
-      const number = Number(value);
+      const number = parseAsciiNumber(value);
       return Number.isInteger(number) && number >= 1;
     }, "زمان مطالعه باید یک عدد صحیح و حداقل ۱ دقیقه باشد"),
     status: z.enum(["draft", "published", "archived"]),
+    published_at: z.string(),
     is_featured: z.boolean(),
     meta_title: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
     meta_description: z.string().trim().max(500, "حداکثر ۵۰۰ نویسه"),
@@ -105,6 +105,7 @@ export function journalPostFormDefaults(
     image_alt: post?.image_alt ?? "",
     time_to_read: String(post?.time_to_read ?? 1),
     status: post?.status ?? "draft",
+    published_at: isoToDatetimeLocal(post?.published_at),
     is_featured: post?.is_featured ?? false,
     meta_title: post?.meta_title ?? "",
     meta_description: post?.meta_description ?? "",
@@ -130,8 +131,11 @@ function journalPostPayload(
     excerpt: nullableText(values.excerpt),
     image_url: nullableText(values.image_url),
     image_alt: nullableText(values.image_alt),
-    time_to_read: Number(values.time_to_read),
+    time_to_read: parseAsciiNumber(values.time_to_read),
     status: values.status,
+    ...(values.status === "published" && datetimeLocalToIso(values.published_at)
+      ? { published_at: datetimeLocalToIso(values.published_at) }
+      : {}),
     is_featured: values.is_featured,
     meta_title: nullableText(values.meta_title),
     meta_description: nullableText(values.meta_description),

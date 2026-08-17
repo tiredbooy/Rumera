@@ -5,6 +5,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiClientError } from "@/lib/api/store-client";
 import type { BulkAddCartResult } from "@/features/cart/types";
 import type { Wishlist } from "@/features/wishlist/types";
 
@@ -199,4 +200,31 @@ describe("WishlistView bulk actions", () => {
     );
     expect(screen.getAllByText("افزودن ناموفق بود")).toHaveLength(2);
   });
+});
+
+describe("WishlistView add-to-cart errors", () => {
+  it.each([
+    ["OUT_OF_STOCK", "موجودی کافی نیست"],
+    ["PRODUCT_UNAVAILABLE", "این گزینه فعلاً قابل خرید نیست"],
+  ] as const)(
+    "surfaces %s from a rejected add instead of a generic failure",
+    async (code, copy) => {
+      mocks.addCart.mockRejectedValue(new ApiClientError(409, code, "x"));
+
+      render(<WishlistView />);
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "افزودن محصول اول به سبد خرید",
+        }),
+      );
+
+      await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(1));
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        copy,
+        expect.objectContaining({ description: "محصول اول" }),
+      );
+      expect(screen.getByText(copy)).toBeInTheDocument();
+      expect(screen.queryByText("افزودن ناموفق بود")).not.toBeInTheDocument();
+    },
+  );
 });

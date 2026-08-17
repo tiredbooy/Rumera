@@ -117,6 +117,28 @@ describe("StockAdjustmentPopover", () => {
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
+  it("records breakage as a damage movement", async () => {
+    render(<StockAdjustmentPopover inventory={inventory} compact />);
+    const input = await openAdjustment();
+    fireEvent.change(input, { target: { value: "−۲" } });
+    fireEvent.change(screen.getByLabelText("دلیل کاهش"), {
+      target: { value: "damage" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ذخیرهٔ موجودی" }));
+
+    await waitFor(() =>
+      expect(mocks.adjust).toHaveBeenCalledWith({
+        variantID: 14,
+        input: {
+          quantity: -2,
+          type: "damage",
+          note: "ضایعات / شکستگی از پنل مدیریت",
+        },
+      }),
+    );
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("applies quick restock chips", async () => {
     render(<StockAdjustmentPopover inventory={inventory} compact />);
     await openAdjustment();

@@ -335,7 +335,7 @@ describe("category detail composition", () => {
     ).rejects.toBe(failure);
   });
 
-  it("treats a category missing from the public tree as an operational inconsistency", async () => {
+  it("uses not-found when the slug category is missing from the public tree", async () => {
     mocks.getCategoryTree.mockResolvedValue([]);
 
     await expect(
@@ -343,7 +343,21 @@ describe("category detail composition", () => {
         params: Promise.resolve({ category: "whisky" }),
         searchParams: Promise.resolve({}),
       }),
-    ).rejects.toThrow("missing from the public tree");
+    ).rejects.toThrow("not-found");
+    expect(mocks.notFound).toHaveBeenCalled();
+    expect(mocks.listProducts).not.toHaveBeenCalled();
+
+    mocks.notFound.mockClear();
+    mocks.getCategoryTree.mockResolvedValue([
+      { ...root, children: [{ ...child }] },
+    ]);
+    await expect(
+      CategoryDetailView({
+        params: Promise.resolve({ category: "whisky" }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toThrow("not-found");
+    expect(mocks.notFound).toHaveBeenCalled();
     expect(mocks.listProducts).not.toHaveBeenCalled();
   });
 });

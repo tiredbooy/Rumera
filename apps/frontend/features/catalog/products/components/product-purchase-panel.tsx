@@ -358,18 +358,27 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
           ) : null}
 
           <div className="flex flex-wrap items-center gap-3">
-            <AddToCartButton
-              productVariantId={selected.id}
-              productId={product.id}
-              quantity={safeQty}
-              disabled={!isAvailable}
-              label={isAvailable ? "افزودن به سبد" : "ناموجود"}
-              className="hidden flex-1 lg:inline-flex lg:flex-none"
-            />
-            <AlertButton
-              productVariantId={selected.id}
-              isAvailable={isAvailable}
-            />
+            {isAvailable ? (
+              <AddToCartButton
+                productVariantId={selected.id}
+                productId={product.id}
+                quantity={safeQty}
+                label="افزودن به سبد"
+                className="hidden flex-1 lg:inline-flex lg:flex-none"
+              />
+            ) : (
+              <AlertButton
+                productVariantId={selected.id}
+                isAvailable={false}
+                className="hidden min-w-0 flex-1 lg:flex"
+              />
+            )}
+            {isAvailable ? (
+              <AlertButton
+                productVariantId={selected.id}
+                isAvailable
+              />
+            ) : null}
             <WishlistToggle
               inWishlist={inWishlist}
               pending={wishPending}
@@ -411,14 +420,23 @@ export function ProductPurchasePanel({ product }: { product: ProductDetail }) {
                   disabled={!selected}
                   variantLabel={selectedLabel}
                 />
-                <AddToCartButton
-                  productVariantId={selected?.id}
-                  productId={product.id}
-                  quantity={safeQty}
-                  disabled={!selected || !isAvailable}
-                  label={isAvailable ? "افزودن به سبد" : "ناموجود"}
-                  className="flex-[1.4]"
-                />
+                {isAvailable ? (
+                  <AddToCartButton
+                    productVariantId={selected?.id}
+                    productId={product.id}
+                    quantity={safeQty}
+                    disabled={!selected}
+                    label="افزودن به سبد"
+                    className="flex-[1.4]"
+                  />
+                ) : (
+                  <AlertButton
+                    productVariantId={selected?.id}
+                    isAvailable={false}
+                    layout="bar"
+                    className="flex-[1.4]"
+                  />
+                )}
               </div>
             </div>,
             document.body,

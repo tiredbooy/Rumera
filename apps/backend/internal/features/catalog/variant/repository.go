@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/tiredbooy/internal/features/inventory"
 	"github.com/tiredbooy/internal/models"
 )
 
@@ -196,6 +197,9 @@ func (r *repository) Delete(ctx context.Context, id int64) error {
 		return fmt.Errorf("repository.Delete product lock: %w", err)
 	}
 	if err := touchProductGraphTx(ctx, tx, productID); err != nil {
+		return err
+	}
+	if err := inventory.DropEmptyForVariantsTx(ctx, tx, []int64{id}); err != nil {
 		return err
 	}
 	const q = `DELETE FROM product_variants WHERE id = $1`

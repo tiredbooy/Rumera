@@ -25,8 +25,9 @@ func newRouter(cfg *config.Config, logger *zap.Logger, c *container) *gin.Engine
 
 	// Trust only the configured proxies for X-Forwarded-For, so c.ClientIP() (and
 	// the per-IP rate limiters built on it) can't be spoofed by a forged header.
-	// Empty config leaves Gin's default; set TRUSTED_PROXIES to your ingress range
-	// in production. An invalid value fails loudly rather than silently mis-trusting.
+	// Production Validate() requires a non-empty list (the compose nginx CIDR).
+	// Empty is allowed only in development and leaves Gin's default. An invalid
+	// value fails loudly rather than silently mis-trusting.
 	if len(cfg.TrustedProxies) > 0 {
 		if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 			logger.Fatal("invalid TRUSTED_PROXIES", zap.Error(err))
@@ -127,6 +128,11 @@ func registerReadiness(r *gin.Engine, c *container) {
 		default:
 			deps["cache"] = "up"
 		}
+		// Kafka ingest, same rule as cache: report it, never gate on it. A stopped
+		// consumer must be visible (it was invisible before K-5), but pulling the
+		// whole API out of rotation would turn a fact-delivery delay into an
+		// outage. The supervisor restarts it; event_ingest_up is what to alert on.
+		deps["event_ingest"] = c.events.ingestStatus()
 
 		status := http.StatusOK
 		if !ready {

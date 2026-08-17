@@ -19,15 +19,21 @@ apps/backend/internal/features/loyalty/
   doc.go → routes.go → handler.go → service.go → repository.go → model.go
 ```
 
-Mounted via `RegisterCustomer` from `internal/routes/routes.go`.
+Mounted via `RegisterCustomer` + `RegisterAdmin` from `internal/routes/routes.go`.
 
 | Surface | Path | Notes |
 |---------|------|--------|
-| Customer | `GET /loyalty`, `GET /loyalty/transactions` | Read |
-| Customer | `POST /loyalty/redeem` | Money HTTP middleware (PH-011). Prefer `Idempotency-Key`; domain spend key residual → PH-040b |
+| Customer | `GET /loyalty` | Balance + tier |
+| Customer | `GET /loyalty/transactions` | Paginated `{results, pagination}` · `id` / `ref_*` (PR-003j) |
+| Customer | `POST /loyalty/redeem` | Money HTTP middleware (PH-011). **`Idempotency-Key` required** (or body key) |
 | Award | service only | Never public free credit |
-| Redeem | domain key | `Idempotency-Key` → ledger `idem:{key}` (PH-040b) |
-| Admin | `GET /admin/loyalty/programme` | Env rates snapshot, read-only (PH-040d) |
+| Redeem | domain key | `{userID}:idem:{key}` (PR-003g). Missing key → `400` |
+| Admin | `GET /admin/loyalty/programme` | DB rates + `enabled` (`config_source: db`, PR-003f) |
+| Admin | `PUT /admin/loyalty/programme` | Persist rates/tiers/`enabled` · `customers:write` |
+| Admin | `GET /admin/loyalty/members` | Search (`q`, `tier`) · `{results, pagination}` (PR-003d) |
+| Admin | `GET /admin/loyalty/members/:userID` | Account · `:userID` = public UUID |
+| Admin | `GET /admin/loyalty/members/:userID/transactions` | Paginated ledger with `id` / `ref_*` |
+| Admin | `POST /admin/users/:userID/loyalty/adjust` | Grant (+) / clawback (−) · `customers:write` · header + body key (PR-003e) |
 
 ## Earn catalogue
 
@@ -38,10 +44,10 @@ Mounted via `RegisterCustomer` from `internal/routes/routes.go`.
 | Referral both sides | **live** | `referral*` / `referral` / `{refID}` |
 | Review (verified only) | **live PH-040b** | `review` / `review` / `{reviewID}` |
 | Birthday (Asia/Tehran, once/year) | **live PH-040b** | `birthday` / `user` / `{userID}:{YYYY}` + cron |
-| Admin adjust | **PH-040d** | `admin_adjust` / `admin` / `{key}` |
-| Order clawback | helper ready | `ClawbackOrderEarn` — wire with refund saga |
+| Admin adjust | **live PR-003e** | `admin_adjust` / `admin` / `{key}` (`\|actor=` when it fits) |
+| Order clawback | **live PR-003i** | `ClawbackOrderEarn` on full `refunded` status (balance only; not lifetime) |
 
-Rates: env `LOYALTY_*` (incl. review/birthday); admin read-only programme UI PH-040d.
+Rates: dedicated `loyalty_programme` + `loyalty_programme_tiers` (PR-003f). Env `LOYALTY_*` seeds the first row only. `enabled=false` skips earn and rejects redeem/adjust with `LOYALTY_DISABLED`. See [[Loyalty Wallet Gift Cards]] · [[Journey Admin loyalty member lookup]].
 
 ## Observability (PH-040e)
 
@@ -52,7 +58,8 @@ Rates: env `LOYALTY_*` (incl. review/birthday); admin read-only programme UI PH-
 
 [[Account Domain]] · [[Wallet Backend]] · [[Payments Backend]] · [[Referrals]] ·  
 [[Loyalty Wallet Gift Cards]] · [[Journey Loyalty earn on review]] ·  
-[[Journey Loyalty birthday bonus]] · [[Journey Referral complete on paid order]] ·  
+[[Journey Loyalty birthday bonus]] · [[Journey Admin loyalty member lookup]] ·  
+[[Journey Referral complete on paid order]] ·  
 [[ADR Idempotency platform]] · [[Money and stock rules]]
 
 API: `apps/backend/docs/api/loyalty.md`

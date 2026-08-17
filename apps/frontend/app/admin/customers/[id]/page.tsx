@@ -27,7 +27,9 @@ export default async function AdminCustomerDetailPage({
       currentUserId={session.user?.id}
       currentUserEmail={session.user?.email}
       auditPage={auditPage}
-      canCreditWallet={can(session, PERMISSIONS.CUSTOMERS_WRITE)}
+      canWrite={can(session, PERMISSIONS.CUSTOMERS_WRITE)}
+      canCreditWallet={can(session, PERMISSIONS.WALLET_CREDIT)}
+      canBan={can(session, PERMISSIONS.CUSTOMERS_BAN)}
     />
   );
 }

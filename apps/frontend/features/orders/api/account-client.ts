@@ -41,3 +41,22 @@ export async function getAccountOrderClient(id: number): Promise<Order | null> {
 export function cancelAccountOrderClient(id: number): Promise<void> {
   return storeRequest<void>(`orders/${id}/cancel`, { method: "POST" });
 }
+
+export function newOrderPayIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `opay-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/** Starts or returns a pending gateway intent (PR-020f). Does not invent a URL. */
+export function payAccountOrderClient(
+  id: number,
+  idempotencyKey?: string,
+): Promise<Order> {
+  const key = (idempotencyKey ?? newOrderPayIdempotencyKey()).trim();
+  return storeRequest<ApiSuccess<Order>>(`orders/${id}/pay`, {
+    method: "POST",
+    headers: key ? { "Idempotency-Key": key } : undefined,
+  }).then((body) => body.data);
+}

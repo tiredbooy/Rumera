@@ -149,11 +149,11 @@ Returns the methods deliverable to a region, with `estimated_cost` calculated fr
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `region` | string | ✓ | Region code (storefront: address **country**), e.g. `IR` |
+| `region` | string | ✓ | Region code. Exact subdivision (`IR-TEH`) or country (`IR`). A country code matches zones that list that country **or** any `CC-*` subdivision. Exact containment is preferred; each zone is returned once. Storefront: uppercase `state_province` when it looks like `IR-…`, otherwise address **country**. |
 | `weight` | float | | Package weight in kg (default `0`, must be ≥ 0). Storefront: Σ cart `weight_kg × quantity` (PH-020c). |
 | `subtotal` | float | | Cart subtotal for free-above / percentage rates (default `0`) |
 
-**Storefront truth (PH-020c):** FE passes the summed cart package weight; place-order **re-sums** line weights from catalogue and re-authorizes the method. Methods with `max_weight_kg` below the package are excluded.
+**Storefront truth (PH-020c / PR-020e):** FE passes the summed cart package weight and a region derived from the selected address (`state_province` if it is `IR-…`, else `country`, typically `IR`). Place-order **re-sums** line weights from catalogue and re-authorizes with `address.Country` (`IR`). `AuthorizeCheckoutMethod` uses the same country fallback so a method quoted for `IR-TEH` still authorizes when the order sends `IR`. Methods with `max_weight_kg` below the package are excluded.
 
 **Response** `200 OK` — `data` array of `ShippingMethodResponse` with `estimated_cost` populated:
 

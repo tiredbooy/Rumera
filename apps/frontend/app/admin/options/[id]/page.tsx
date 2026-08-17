@@ -8,6 +8,7 @@ import {
 import { PageHeader } from "@/features/dashboard/components/page-header";
 import { ApiError } from "@/lib/api/client";
 import { requirePermission } from "@/lib/auth/session";
+import { can } from "@/lib/rbac/can";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 
 export default async function AdminOptionEditPage({
@@ -15,7 +16,7 @@ export default async function AdminOptionEditPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requirePermission(PERMISSIONS.PRODUCTS_WRITE);
+  const session = await requirePermission(PERMISSIONS.PRODUCTS_READ);
   const { id: raw } = await params;
   const id = Number(raw);
   if (!Number.isSafeInteger(id) || id <= 0) notFound();
@@ -36,7 +37,11 @@ export default async function AdminOptionEditPage({
         title={option.display_name}
         description={`کد ${option.title} · مقادیر قابل استفاده مجدد در همهٔ محصولات`}
       />
-      <OptionTypeForm mode="edit" option={option} />
+      <OptionTypeForm
+        mode="edit"
+        option={option}
+        canWrite={can(session, PERMISSIONS.PRODUCTS_WRITE)}
+      />
     </>
   );
 }

@@ -1,7 +1,9 @@
-import { Check, Gift, Landmark, Loader2, Tag, Wallet } from "lucide-react";
+import Link from "next/link";
+import { Award, Check, Gift, Landmark, Loader2, Tag, Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { JalaliDateTimeInput } from "@/components/ui/jalali-datetime-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -16,15 +18,29 @@ import {
   CheckoutSelectRow,
 } from "./checkout-step-presentation";
 
-const PAYMENTS: { value: PaymentMethod; label: string; icon: typeof Wallet }[] =
-  [
-    { value: "wallet", label: "کیف پول رومرا", icon: Wallet },
-    {
-      value: "bank_transfer",
-      label: "کارت به کارت / انتقال بانکی",
-      icon: Landmark,
-    },
-  ];
+// PR-030c: place-order response has no payment_url (PR-020f). This step
+// only picks a method. Do not invent a gateway start URL here.
+// PR-030d: no IBAN / account-number API. Bank transfer is offline;
+// the order stays pending until staff mark paid. Do not invent numbers
+// or imply instant pay / already-confirmed. Wallet can settle on
+// place-order (PR-020a) — do not describe it as operator-wait.
+const BANK_TRANSFER_HINT =
+  "واریز را بیرون از سایت انجام دهید. شمارهٔ شبا یا حساب در این صفحه نیست و سفارش تا ثبت پرداخت توسط کارکنان در انتظار می‌ماند.";
+
+const PAYMENTS: {
+  value: PaymentMethod;
+  label: string;
+  hint?: string;
+  icon: typeof Wallet;
+}[] = [
+  { value: "wallet", label: "کیف پول رومرا", icon: Wallet },
+  {
+    value: "bank_transfer",
+    label: "کارت به کارت / انتقال بانکی",
+    hint: BANK_TRANSFER_HINT,
+    icon: Landmark,
+  },
+];
 
 export function CheckoutPaymentStep({
   payment,
@@ -47,6 +63,8 @@ export function CheckoutPaymentStep({
   onHidePriceChange,
   deliveryDate,
   onDeliveryDateChange,
+  walletBalance,
+  total,
 }: {
   payment: PaymentMethod;
   onPaymentChange: (payment: PaymentMethod) => void;
@@ -68,7 +86,23 @@ export function CheckoutPaymentStep({
   onHidePriceChange: (hidePrice: boolean) => void;
   deliveryDate: string;
   onDeliveryDateChange: (date: string) => void;
+  /** null/undefined = not known (guest, or the wallet request failed). */
+  walletBalance?: number | null;
+  total?: number;
 }) {
+  // U-1: wallet is the preselected method and the balance was never shown, so
+  // the first thing a customer with an empty wallet learned was a 409 at submit,
+  // after filling in the whole checkout.
+  //
+  // Only ever claim a shortfall, never sufficiency: `total` is the client-side
+  // figure and the server adds tax on top (orders/service.go), so this is a lower
+  // bound on what the wallet must cover. Short here means definitely short; not
+  // short here still has to clear the server.
+  const walletShortfall =
+    walletBalance != null && total != null && walletBalance < total
+      ? total - walletBalance
+      : null;
+
   const giftEnabled = giftSettings?.enabled !== false;
   const enabledOptions = (giftSettings?.options ?? []).filter((o) => o.enabled);
   const maxMsg = giftSettings?.messageMaxLength || 500;
@@ -92,12 +126,48 @@ export function CheckoutPaymentStep({
               selected={payment === p.value}
               onClick={() => onPaymentChange(p.value)}
             >
-              <span className="flex items-center gap-2 font-medium">
-                <p.icon className="size-4 text-muted-foreground" /> {p.label}
+              <span className="min-w-0">
+                <span className="flex items-center gap-2 font-medium">
+                  <p.icon className="size-4 text-muted-foreground" /> {p.label}
+                </span>
+                {p.value === "wallet" && walletBalance != null ? (
+                  <span
+                    className="mt-1 block text-xs text-muted-foreground"
+                    data-testid="checkout-wallet-balance"
+                  >
+                    موجودی: {formatPrice(walletBalance)}
+                  </span>
+                ) : null}
+                {p.hint ? (
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {p.hint}
+                  </span>
+                ) : null}
               </span>
             </CheckoutSelectRow>
           ))}
         </CheckoutChoiceGroup>
+        {walletShortfall != null ? (
+          <div
+            className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3"
+            data-testid="checkout-wallet-shortfall"
+          >
+            <p className="text-xs leading-relaxed text-destructive">
+              موجودی کیف پول برای این سفارش کافی نیست — دست‌کم{" "}
+              {formatPrice(walletShortfall)} کم دارید. کیف پول را شارژ کنید یا
+              روش دیگری را انتخاب کنید.
+            </p>
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="mt-2 h-8"
+              data-testid="checkout-wallet-topup-cta"
+            >
+              <Link href="/account/wallet">شارژ کیف پول</Link>
+            </Button>
+          </div>
+        ) : null}
       </CheckoutSection>
 
       <CheckoutSection icon={Tag} title="کد تخفیف">
@@ -129,7 +199,7 @@ export function CheckoutPaymentStep({
           </Button>
         </div>
         {coupon?.is_valid ? (
-          <p id="coupon-success" className="mt-2 inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
+          <p id="coupon-success" className="mt-2 inline-flex items-center gap-1 text-sm text-success">
             <Check className="size-4" /> تخفیف اعمال‌شده:{" "}
             {formatPrice(coupon.discount_amount)}
           </p>
@@ -231,12 +301,10 @@ export function CheckoutPaymentStep({
               <Label htmlFor="delivery_date">
                 تاریخ ترجیحی تحویل (اختیاری)
               </Label>
-              <Input
+              <JalaliDateTimeInput
                 id="delivery_date"
-                type="date"
-                dir="ltr"
                 value={deliveryDate}
-                onChange={(e) => onDeliveryDateChange(e.target.value)}
+                onChange={onDeliveryDateChange}
                 className="max-w-xs"
               />
             </div>
@@ -244,6 +312,17 @@ export function CheckoutPaymentStep({
         ) : null}
       </CheckoutSection>
       ) : null}
+
+      <CheckoutSection icon={Award} title="باشگاه مشتریان">
+        <p className="text-sm text-muted-foreground">
+          امتیاز باشگاه (در صورت تعلق) پس از{" "}
+          <strong className="font-medium text-foreground">تأیید پرداخت</strong>{" "}
+          محاسبه می‌شود — ثبت سفارش به‌تنهایی امتیاز نمی‌دهد.
+        </p>
+        <Button asChild variant="link" className="mt-2 h-auto px-0">
+          <Link href="/account/rewards">مشاهدهٔ باشگاه مشتریان</Link>
+        </Button>
+      </CheckoutSection>
     </>
   );
 }

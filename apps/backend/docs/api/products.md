@@ -10,10 +10,12 @@ Legend: 🌐 public · 🔒 customer · 🛡️ admin
 | Method | Path | Tier | Description |
 |--------|------|------|-------------|
 | GET | `/products` | 🌐 public | List products (paginated, filterable) |
+| GET | `/products/slug/:slug` | 🌐 public | Get a hydrated active product by canonical slug |
 | GET | `/products/:id` | 🌐 public | Get a hydrated product (tags, images, variants) |
 | GET | `/products/:id/tags` | 🌐 public | List a product's tags |
 | GET | `/products/:id/images` | 🌐 public | List a product's images |
 | GET | `/products/:id/variants` | 🌐 public | List a product's variants |
+| GET | `/admin/products` | 🛡️ admin | List products including inactive/drafts |
 | GET | `/admin/products/:id` | 🛡️ admin | Get editable detail, including inactive drafts |
 | POST | `/admin/products/aggregate` | 🛡️ admin | Atomically create the complete editable product graph |
 | PUT | `/admin/products/:id/aggregate` | 🛡️ admin | Atomically replace the complete editable product graph |
@@ -42,9 +44,22 @@ GET /products
 | `brand` | string | Filter by canonical brand slug, e.g. `jack-daniel` |
 | `brand_id` | int | Legacy/admin numeric filter; public links should use `brand` |
 | `tag_id` | int | Filter by tag |
+| `ids` | string | Comma-separated product ids, max 100. Returns exactly those products — for labelling an existing selection (a saved coupon scope, a picker's chosen items). A non-numeric value is a 400. |
 | `is_active` | bool | Filter by active flag |
 | `min_price` | number | Minimum variant price |
 | `max_price` | number | Maximum variant price |
+
+`min_price` and `max_price` match only **active** variants; an inactive SKU cannot pull a product into a price band.
+
+`search` is Persian-normalized `ILIKE` (same `rumera_search_normalize` as the
+query) and matches **any** of: product `title`, `description`, `code`; brand
+title; category title; any variant `sku`; any attached tag title. Description
+is matched but not trigram-indexed.
+
+A non-empty `search` on this public list is captured as `search_performed`
+with payload `query` + unpaginated `results_count` (PR-070d). There is no
+`GET /search`. A failed list does not invent `results_count: 0`. Admin
+`GET /admin/products?search=` is not a shopper search event.
 
 Default sort is `created_at` `desc`. Supported `sortBy` values: `created_at`,
 `title`, `updated_at`, and `price` (minimum active-variant price). Unsupported
@@ -88,7 +103,50 @@ committed stock is subtracted. It is `0` when no active variant has sellable
 stock. Storefronts may use it for truthful low-stock disclosure, but should not
 display high-stock quantities as urgency messaging.
 
-**Errors:** `400 INVALID_QUERY`.
+**Errors:** `400 INVALID_QUERY`. A failed list read is an error envelope, not
+an empty `{results:[]}`.
+
+A non-empty `search` on this public list is recorded as analytics event
+`search_performed` (`query` + unpaginated `results_count`) after a successful
+read. See [search architecture](../architecture/search.md). Admin
+`GET /admin/products?search=` is not a shopper search event.
+
+---
+
+## List products (admin)
+
+```
+GET /admin/products
+Authorization: Bearer <access_token>
+```
+
+Staff catalogue list (`ListAdminProducts`). Same lightweight `ProductListItem`
+projection and `{results, pagination}` envelope as [`GET /products`](#list-products),
+but **does not** force `is_active=true`. Inactive and draft products are included
+so the admin catalogue can manage them.
+
+**Query parameters** — same `ProductFilter` as the public list:
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `category_id` | int | Filter by category |
+| `brand` | string | Filter by canonical brand slug, e.g. `jack-daniel` |
+| `brand_id` | int | Numeric brand filter |
+| `tag_id` | int | Filter by tag |
+| `ids` | string | Comma-separated product ids, max 100. Returns exactly those products — for labelling an existing selection (a saved coupon scope, a picker's chosen items). A non-numeric value is a 400. |
+| `is_active` | bool | Optional. When omitted, active and inactive rows are returned. When set, filters to that flag |
+| `min_price` | number | Minimum variant price |
+| `max_price` | number | Maximum variant price |
+
+Plus standard pagination/sorting — `page`, `limit` (max `100`), `sortBy`,
+`orderBy`, `search` — see [Conventions](../conventions.md). Default sort is
+`created_at` `desc`. Supported `sortBy` values: `created_at`, `title`,
+`updated_at`, and `price`. `limit` above `100` is `400 INVALID_QUERY`.
+
+**Response** `200 OK` — `{results, pagination}` as shown on the public list.
+Each row's `is_active` is the stored flag (may be `false`).
+
+**Errors:** `400 INVALID_QUERY`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`.
 
 ---
 
@@ -169,6 +227,24 @@ no rows exist.
 ```
 
 **Errors:** `400 INVALID_PARAMS`, `404 NOT_FOUND`.
+
+---
+
+## Get product by slug
+
+```
+GET /products/slug/:slug
+```
+
+Public PDP identity. The path segment is slugified the same way as write-time
+normalization (Unicode letters/digits, lowercased, separators collapsed to one
+hyphen) and then matched against an **active** product.
+
+Punctuation-only or blank slugs are `400 INVALID_REQUEST`. Unknown or inactive
+slugs are `404 PRODUCT_NOT_FOUND`. The hydrated `ProductDetail` envelope matches
+[`GET /products/:id`](#get-product) and shares that route's cache key.
+
+**Errors:** `400 INVALID_REQUEST`, `404 PRODUCT_NOT_FOUND`.
 
 ---
 
@@ -313,6 +389,10 @@ exist. Reusing an ID for different content returns `409 CONFLICT` with an
 
 Snapshot rules:
 
+- `slug` is slugified on write (`Highland / Malt` → `highland-malt`). Active
+  products (`is_active=true`) must have a slug after that normalization;
+  otherwise the save is `422 VALIDATION_ERROR` on `slug`. Drafts may omit one
+  (empty slug = no public PDP).
 - Nullable scalar fields are values, not PATCH markers. Send `null` to clear one.
 - `tag_ids`, `variants`, `option_value_ids`, and `images` are authoritative arrays;
   an empty array clears that collection.
@@ -320,7 +400,10 @@ Snapshot rules:
   existing variant requests deletion. Variants with inventory or movement history
   cannot be deleted and return a `variants` conflict.
 - New variants omit `id`. SKUs are globally unique case-insensitively, and each
-  non-empty option combination must be unique within the product.
+  non-empty option combination must be unique within the product. Each new
+  variant receives a **zero-stock inventory row in the same transaction**
+  (`EnsureForVariantTx`). A failed inventory insert rolls the whole save back.
+  Updates of existing variants do not invent stock; ensure is idempotent.
 - Existing images send `id` without a source. A new image sends exactly one of
   `storage_key` (from a staged `/admin/uploads` upload) or `image_url` (external
   HTTPS/root-relative URL). A non-empty gallery has exactly one primary image.
@@ -356,7 +439,7 @@ Authorization: Bearer <access_token>
 |-------|------|----------|------------|
 | `title` | string | ✓ | max 255 |
 | `code` | string | | max 80 |
-| `slug` | string | | |
+| `slug` | string | ✓ | slugified; required because create persists `is_active=true` |
 | `category_id` | int | | min 1 |
 | `description` | string | | |
 | `brand_id` | int | | min 1 |
@@ -373,6 +456,7 @@ Authorization: Bearer <access_token>
 {
   "title": "Highland Single Malt",
   "code": "HSM-12",
+  "slug": "highland-single-malt",
   "category_id": 3,
   "brand_id": 7,
   "country_of_origin": "Scotland",
@@ -386,8 +470,16 @@ Authorization: Bearer <access_token>
 
 **Response** `201 Created` — the created product wrapped in `data`.
 
+Create rows default to `is_active=true`, so a missing or punctuation-only slug
+is `422 VALIDATION_ERROR` (`slug is required when the product is active` /
+`must be a valid public slug`). Submitted slugs are stored in canonical form
+(`Highland / Single--Malt` → `highland-single-malt`). Title-only drafts belong
+on the aggregate route with `is_active=false`.
+
 Submitted `tag_ids` are persisted with the product. Duplicate IDs in one request
-are collapsed.
+are collapsed. Inline `variants` are inserted in the same create transaction and
+each gets a zero-stock inventory row (`EnsureForVariantTx`) so the SKU is
+visible to admin stock tools and checkout.
 
 **Errors:** `422 VALIDATION_ERROR`, `400 INVALID_JSON`, `401 UNAUTHORIZED`, `403 INSUFFICIENT_PERMISSIONS`, `409 CONFLICT`.
 
@@ -406,7 +498,7 @@ All fields optional; only supplied fields are updated.
 |-------|------|------------|
 | `title` | string | max 255 |
 | `code` | string | max 80 |
-| `slug` | string | |
+| `slug` | string | slugified; empty/invalid is `422` |
 | `category_id` | int | min 1 |
 | `description` | string | |
 | `brand_id` | int | min 1 |
@@ -421,7 +513,9 @@ All fields optional; only supplied fields are updated.
 
 Omitting `tag_ids` leaves the current tag set unchanged; sending an empty array
 clears it. Slug and code uniqueness checks exclude the product being edited, so
-resubmitting unchanged values is valid.
+resubmitting unchanged values is valid. A submitted slug is stored in canonical
+form. Activating a product (`is_active=true`) without a stored or submitted slug
+is `422 VALIDATION_ERROR` on `slug` — an active row without a slug has no PDP.
 
 **Response** `200 OK` — the updated product wrapped in `data`.
 

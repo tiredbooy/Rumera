@@ -10,7 +10,7 @@ import {
   PRODUCT_CARD_GRID_CLASS,
 } from "@/features/catalog/products/components/product-card";
 import { getTag } from "@/features/catalog/tags/api/public";
-import { Placeholder } from "@/features/dashboard/components/placeholder";
+import { EmptyState } from "@/components/empty-state";
 import { faNum } from "@/lib/products";
 import { breadcrumbLd, productListLd } from "@/lib/seo/jsonld";
 
@@ -126,7 +126,7 @@ export async function TagDetailView({
             ))}
           </ul>
         ) : (
-          <Placeholder
+          <EmptyState
             icon={PackageOpen}
             title="محصولی با این برچسب نیست"
             description="ممکن است محصولات این مجموعه هنوز منتشر نشده باشند. برچسب دیگری را امتحان کنید یا همهٔ محصولات را ببینید."
@@ -137,7 +137,7 @@ export async function TagDetailView({
             <Button asChild>
               <Link href="/products">همهٔ محصولات</Link>
             </Button>
-          </Placeholder>
+          </EmptyState>
         )}
 
         <TagPagination

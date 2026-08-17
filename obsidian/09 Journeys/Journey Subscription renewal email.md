@@ -25,11 +25,12 @@ System cron + cellar-box subscriber
    - HTML `lang=fa` `dir=rtl`
    - Reminder + no auto-pay honesty
    - CTA «مدیریت باکس در حساب من» → `/account/subscriptions`
-4. Advance `next_renewal_at` by one cadence (`NextRenewal`)
+4. Advance `next_renewal_at` by one cadence (`NextRenewal`) **only after dispatch/send succeeds** (PR-057a / PR-055a). Mail goes through [[Notifications]] dispatcher when wired (`subscription:{id}:renewal:{YYYY-MM-DD}`).
 
 ## Failure branches
 
-- Email fail → logged; **date still advances** (avoids re-spamming the same due set every tick)
+- Dispatcher and mailer unset → logged; **date does not advance**; next tick retries
+- Dispatch/email fail → logged; **date does not advance** for that id; next tick retries
 - Advance SQL fail → logged; row may remain due next tick
 - Paused / cancelled → never selected by `FindDue`
 
@@ -45,7 +46,7 @@ Do not document this journey as “billing ran.”
 ## Related
 
 [[Journeys MOC]] · [[Subscriptions Backend]] · [[Journey Manage cellar box]] ·
-[[Known gaps]] (charging) · project `architecture/box-subscriptions.md` ·
-`internal/corn/subscription_renewal_email.go`
+[[Playbook Debug Subscription renewal email]] · [[Known gaps]] (charging) ·
+project `architecture/box-subscriptions.md` · `subscription.ProcessDueRenewals`
 
 #journey

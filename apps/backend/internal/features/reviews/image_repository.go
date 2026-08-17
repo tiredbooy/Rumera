@@ -11,6 +11,7 @@ import (
 
 type ImageRepository interface {
 	GetImagesByReviewID(ctx context.Context, reviewID int64) ([]*ReviewImage, error)
+	GetImagesByReviewIDs(ctx context.Context, reviewIDs []int64) (map[int64][]ReviewImage, error)
 	CreateReviewImage(ctx context.Context, req *ReviewImageReq) (*ReviewImage, error)
 	CreateReviewImages(ctx context.Context, reqs []*ReviewImageReq) ([]*ReviewImage, error)
 	UpdateReviewImageMeta(ctx context.Context, id int64, altTxt *string, sortOrder *int) (*ReviewImage, error) // metadata only
@@ -145,6 +146,44 @@ func (r *imageRepository) GetImagesByReviewID(ctx context.Context, reviewID int6
 	}
 
 	return images, nil
+}
+
+// GetImagesByReviewIDs loads images for many reviews in one query (public list/detail).
+func (r *imageRepository) GetImagesByReviewIDs(ctx context.Context, reviewIDs []int64) (map[int64][]ReviewImage, error) {
+	out := make(map[int64][]ReviewImage, len(reviewIDs))
+	if len(reviewIDs) == 0 {
+		return out, nil
+	}
+
+	query := `SELECT id, review_id, image_url, alt_text, sort_order, created_at, updated_at
+			  FROM review_images WHERE review_id = ANY($1) ORDER BY sort_order ASC, id ASC`
+
+	rows, err := r.db.Query(ctx, query, reviewIDs)
+	if err != nil {
+		return nil, fmt.Errorf("querying review images by review ids: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var img ReviewImage
+		if err := rows.Scan(
+			&img.ID,
+			&img.ReviewID,
+			&img.ImageURL,
+			&img.AltTxt,
+			&img.SortOrder,
+			&img.CreatedAt,
+			&img.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning review image: %w", err)
+		}
+		out[img.ReviewID] = append(out[img.ReviewID], img)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating review images: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *imageRepository) GetSingleImage(ctx context.Context, imageID int64) (*ReviewImage, error) {

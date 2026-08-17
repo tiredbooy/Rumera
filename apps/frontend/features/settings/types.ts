@@ -74,6 +74,7 @@ export interface SiteSettings extends PublicSiteSettings {
 
 /** Present groups replace the corresponding stored group; omitted/null groups remain unchanged. */
 export interface UpdateSiteSettingsInput {
+  expected_updated_at?: string;
   store?: StoreSettings | null;
   contact?: ContactSettings | null;
   social?: SocialSettings | null;

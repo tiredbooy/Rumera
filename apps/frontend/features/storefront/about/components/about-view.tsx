@@ -19,11 +19,12 @@ import { Reveal } from "@/features/motion/components/reveal";
 import { faNum } from "@/lib/products";
 import { breadcrumbLd, organizationLd } from "@/lib/seo/jsonld";
 
-const stats: [string, string][] = [
-  ["+۱٬۲۰۰", "محصول منتخب"],
-  ["+۸۰", "برند معتبر"],
-  ["۴٫۹", "میانگین رضایت"],
-  ["۳۲", "استان زیر پوشش"],
+/** Qualitative pillars only — do not invent catalogue counts or ratings. */
+const highlights: [string, string][] = [
+  ["دست‌چین", "محصول منتخب"],
+  ["رسمی", "برند ارزیابی‌شده"],
+  ["اصالت", "بررسی پیش از عرضه"],
+  ["سراسر کشور", "ارسال مطمئن"],
 ];
 
 const values = [
@@ -81,12 +82,12 @@ const timeline: { year: string; title: string; desc: string }[] = [
   {
     year: "۱۴۰۲",
     title: "گسترش به سراسر کشور",
-    desc: "شبکهٔ ارسالِ مطمئن با بسته‌بندی ایمن، حالا ۳۲ استان را زیر پوشش می‌گیرد.",
+    desc: "شبکهٔ ارسالِ مطمئن با بسته‌بندی ایمن، سفارش را به مقصد می‌رساند.",
   },
   {
     year: "امروز",
     title: "مجموعه‌ای دست‌چین",
-    desc: "بیش از ۱٬۲۰۰ محصول منتخب از ۸۰ برند معتبر، با همان وسواسِ روز نخست.",
+    desc: "همچنان برندها را با وسواس برمی‌گزینیم و فقط کالای تأییدشده را عرضه می‌کنیم.",
   },
 ];
 
@@ -150,10 +151,10 @@ export function AboutView() {
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Highlights — no invented counts */}
       <section className="border-b border-border/60 bg-card/30">
         <div className="container-px mx-auto grid max-w-7xl grid-cols-2 gap-8 py-12 lg:grid-cols-4">
-          {stats.map(([value, label], i) => (
+          {highlights.map(([value, label], i) => (
             <Reveal key={label} delay={i * 0.06}>
               <div className="text-center">
                 <p className="font-serif text-4xl text-foil sm:text-5xl">

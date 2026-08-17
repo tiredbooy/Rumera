@@ -25,6 +25,7 @@ import {
 import { faNum } from "@/lib/products";
 import { faDateTime } from "@/lib/utils/date";
 
+import { adminCustomerHref } from "../customer-href";
 import { PaymentStatusBadge } from "./payment-status-badge";
 
 function DetailItem({
@@ -123,6 +124,7 @@ export function PaymentDetailView({ paymentID }: { paymentID: number }) {
 
   const data = payment.data;
   const decodedRawResponse = decodePaymentRawResponse(data.raw_response);
+  const customerHref = adminCustomerHref(data.user_id);
 
   return (
     <>
@@ -217,9 +219,15 @@ export function PaymentDetailView({ paymentID }: { paymentID: number }) {
                 </span>
               )}
             </DetailItem>
-            <DetailItem label="شناسهٔ داخلی کاربر">
-              {data.user_id ? (
-                <span dir="ltr">#{data.user_id}</span>
+            <DetailItem label="کاربر">
+              {customerHref ? (
+                <Link
+                  href={customerHref}
+                  className="break-all rounded-md underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  dir="ltr"
+                >
+                  {data.user_id}
+                </Link>
               ) : (
                 <span className="text-muted-foreground">ثبت نشده</span>
               )}

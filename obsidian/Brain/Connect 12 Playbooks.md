@@ -17,6 +17,10 @@ tags: [brain, connect]
 - [[Playbook Debug Session loop]]
 - [[Playbook Debug Stale storefront cache]]
 - [[Playbook Wishlist stock honesty]]
+- [[Playbook Confirmation status copy]]
+- [[Playbook Debug Product alert notify]]
+- [[Playbook Debug Subscription renewal email]]
+- [[Playbook Debug Coupon validate]]
 - [[Playbook Incident first response]]
 - [[Playbook Add frontend domain]]
 - [[Playbook Add backend endpoint]]
@@ -24,6 +28,7 @@ tags: [brain, connect]
 - [[Playbook Run seed and verify home]]
 - [[Playbook Document a change]]
 - [[Playbook Idempotency debug]]
+- [[Playbook Change cellar box address]]
 
 ## Role
 

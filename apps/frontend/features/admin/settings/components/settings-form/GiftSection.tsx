@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { SiteSettingsFormValues } from "@/features/settings/validations";
+import { toAsciiDigits } from "@/lib/normalize-digits";
 import { faNum, formatPrice } from "@/lib/products";
 import { cn } from "@/lib/utils";
 import { Panel } from "./FormLayout";
@@ -317,7 +318,7 @@ function PriceHint({
       name={`giftOptions.${index}.price`}
       control={control}
       render={({ field }) => {
-        const raw = String(field.value ?? "").trim();
+        const raw = toAsciiDigits(String(field.value ?? "")).trim();
         if (raw === "" || !/^\d+$/.test(raw)) {
           return (
             <p className="text-xs text-muted-foreground">

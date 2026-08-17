@@ -44,5 +44,9 @@ describe("MobileNavDrawer responsive shell", () => {
     expect(dialog.className).toContain(
       "[padding-bottom:env(safe-area-inset-bottom)]",
     );
+
+    const header = dialog.querySelector("[data-slot='sheet-header']");
+    expect(header?.className).toContain("pe-16");
+    expect(header?.className).not.toContain("pr-16");
   });
 });

@@ -10,8 +10,8 @@ tags: [journey, payments]
 
 1. Gateway POSTs signed body to `/webhooks/payment`
 2. HMAC with `CRYPTO_WEBHOOK_KEY` ([[Payments Backend]])
-3. `succeeded` → Confirm TX: payment + order paid + inventory deduct
-4. Best-effort: loyalty, referral, (order email)
+3. `succeeded` → Confirm TX: payment + order paid (`MarkAsPaid` stamps `paid_at`, PR-020h) + inventory deduct + `payment_loyalty_awards` intent
+4. After commit: retry `AwardForOrder` + `OnPaidOrder` (PR-003h). Leave the intent pending if still failing; **do not** roll back the payment. Then paid receipt email (PR-020o; log on failure — does not undo payment).
 5. `failed` → Fail + release stock
 
 Idempotent layers (PH-011a–d): HTTP middleware + **UNIQUE** `transaction_id` +

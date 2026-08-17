@@ -80,3 +80,32 @@ export async function resetPassword(input: ResetPasswordInput): Promise<void> {
     body: JSON.stringify(input),
   });
 }
+
+function isUnusableResetToken(error: AuthClientError): boolean {
+  return (
+    error.status === 400 ||
+    error.status === 401 ||
+    error.code === "INVALID_QUERY" ||
+    error.code === "INVALID_TOKEN" ||
+    error.code === "EXPIRED_TOKEN"
+  );
+}
+
+/** GET /auth/password/validate — does not consume the token. */
+export async function validateResetToken(
+  token: string,
+): Promise<{ valid: boolean }> {
+  try {
+    const data = await authPublicRequest<{ valid?: boolean }>(
+      `auth/password/validate?token=${encodeURIComponent(token)}`,
+      { method: "GET", cache: "no-store" },
+    );
+    return { valid: data?.valid === true };
+  } catch (error) {
+    // Invalid and expired must look the same — do not leak which it was.
+    if (error instanceof AuthClientError && isUnusableResetToken(error)) {
+      return { valid: false };
+    }
+    throw error;
+  }
+}

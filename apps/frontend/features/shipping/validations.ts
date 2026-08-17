@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { parseAsciiNumber, toAsciiDigits } from "@/lib/normalize-digits";
+
 import type {
   CreateShippingMethodInput,
   CreateShippingZoneInput,
@@ -29,14 +31,14 @@ type ShippingMethodRuleField =
   | "max_weight_kg";
 
 function optionalNumber(value: string): number | undefined {
-  const trimmed = value.trim();
+  const trimmed = toAsciiDigits(value).trim();
   if (!trimmed) return undefined;
   const number = Number(trimmed);
   return Number.isFinite(number) ? number : Number.NaN;
 }
 
 function hasTwoDecimalScale(value: string): boolean {
-  return /^-?(?:\d+|\d*\.\d{1,2})$/.test(value.trim());
+  return /^-?(?:\d+|\d*\.\d{1,2})$/.test(toAsciiDigits(value).trim());
 }
 
 export function parseRegionCodes(value: string): string[] {
@@ -245,18 +247,18 @@ export function toCreateShippingMethodInput(
     carrier: values.carrier.trim() || null,
     description: values.description.trim() || null,
     rate_type: values.rate_type as ShippingRateType,
-    base_rate: Number(values.base_rate),
+    base_rate: parseAsciiNumber(values.base_rate),
     free_above_amount: values.free_above_amount.trim()
-      ? Number(values.free_above_amount)
+      ? parseAsciiNumber(values.free_above_amount)
       : null,
     min_delivery_days: values.min_delivery_days.trim()
-      ? Number(values.min_delivery_days)
+      ? parseAsciiNumber(values.min_delivery_days)
       : null,
     max_delivery_days: values.max_delivery_days.trim()
-      ? Number(values.max_delivery_days)
+      ? parseAsciiNumber(values.max_delivery_days)
       : null,
     max_weight_kg: values.max_weight_kg.trim()
-      ? Number(values.max_weight_kg)
+      ? parseAsciiNumber(values.max_weight_kg)
       : null,
     is_active: values.is_active,
   };

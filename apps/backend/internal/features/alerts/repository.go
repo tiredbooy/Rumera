@@ -52,7 +52,7 @@ func (r *alertRepository) Create(ctx context.Context, a ProductAlert) (*ProductA
 	if err != nil {
 		return nil, fmt.Errorf("alertRepository.Create: %w", err)
 	}
-	alert, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[ProductAlert])
+	alert, err := pgx.CollectOneRow(rows, pgx.RowToStructByNameLax[ProductAlert])
 	if err != nil {
 		return nil, fmt.Errorf("alertRepository.Create scan: %w", err)
 	}
@@ -61,11 +61,17 @@ func (r *alertRepository) Create(ctx context.Context, a ProductAlert) (*ProductA
 
 func (r *alertRepository) ListByUser(ctx context.Context, userID int64) ([]ProductAlert, error) {
 	const q = `
-		SELECT id, user_id, product_variant_id, alert_type, target_price,
-		       reference_price, notified_at, created_at
-		FROM product_alerts
-		WHERE user_id = $1
-		ORDER BY created_at DESC`
+		SELECT a.id, a.user_id, a.product_variant_id, a.alert_type, a.target_price,
+		       a.reference_price, a.notified_at, a.created_at,
+		       p.title AS product_title,
+		       p.slug  AS product_slug,
+		       v.price AS current_price
+		FROM product_alerts a
+		JOIN product_variants v ON v.id = a.product_variant_id
+		JOIN products p         ON p.id = v.product_id
+		WHERE a.user_id = $1
+		ORDER BY a.created_at DESC
+		LIMIT 100`
 
 	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {

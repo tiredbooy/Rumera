@@ -8,7 +8,7 @@
 // payments, refunds, gift/loyalty redemption, or admin credit.
 //
 // Dependents (call Service methods): loyalty redemption, gift-card (constructor
-// signature), future checkout purchase.
+// signature), orders checkout via PurchaseTx (same TX as mark paid + deduct).
 //
 // Read order: doc.go → routes.go → handler.go → service.go → repository.go.
 //

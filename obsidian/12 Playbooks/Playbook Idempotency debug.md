@@ -18,10 +18,12 @@ Canonical depth: repo
 ## Quick checks
 
 1. Did the client send `Idempotency-Key`? (orders / redeem / admin credit)
-2. Query `idempotency_keys` for scoped key `cust:{uid}:POST:…`
-3. In-flight (`response_code=0`) older than **2m** → reclaim on next claim
-4. Webhook: HMAC + UNIQUE `transaction_id` + terminal **200 replayed**
-5. Metrics: `idempotency_missing_key_total`, `idempotency_conflict_total`
+2. Did store/admin BFF **forward** it? (`pickIdempotencyKeyHeader` — no invented key)
+3. Browser-direct Go call: did CORS preflight allow `Idempotency-Key`? ([[BFF Proxies]] · [[ADR Idempotency platform]])
+4. Query `idempotency_keys` for scoped key `cust:{uid}:POST:…`
+5. In-flight (`response_code=0`) older than **2m** → reclaim on next claim
+6. Webhook: HMAC + UNIQUE `transaction_id` + terminal **200 replayed**
+7. Metrics: `idempotency_missing_key_total`, `idempotency_conflict_total`
 
 ## Related
 

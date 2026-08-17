@@ -16,6 +16,8 @@ type UsageRepository interface {
 
 	GetByCouponID(ctx context.Context, couponID int64) ([]*CouponUsage, error)
 	GetByUserID(ctx context.Context, userID int64) ([]*CouponUsage, error)
+	// DeleteByOrderTx removes usage for this order (unpaid cancel). 0 rows is OK.
+	DeleteByOrderTx(ctx context.Context, tx pgx.Tx, orderID int64) error
 }
 
 type usageRepository struct {
@@ -40,6 +42,16 @@ func (r *usageRepository) Record(ctx context.Context, tx pgx.Tx, couponID int64,
 
 	if _, err := tx.Exec(ctx, q, args); err != nil {
 		return fmt.Errorf("couponUsageRepository.Record: %w", err)
+	}
+	return nil
+}
+
+func (r *usageRepository) DeleteByOrderTx(ctx context.Context, tx pgx.Tx, orderID int64) error {
+	if orderID <= 0 {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM coupon_usages WHERE order_id = $1`, orderID); err != nil {
+		return fmt.Errorf("couponUsageRepository.DeleteByOrderTx: %w", err)
 	}
 	return nil
 }

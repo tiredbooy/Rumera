@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import { Layers, PackagePlus, Plus } from "lucide-react";
 import { useWatch } from "react-hook-form";
 import type {
@@ -16,10 +18,37 @@ import type {
 import { Button } from "@/components/ui/button";
 import type { ProductOptionGroup } from "@/features/admin/products/types";
 import type { AdminProductVariant } from "@/features/admin/products/types";
-import type { ProductFormValues } from "../../validations";
+import type {
+  ProductFormValues,
+  VariantFormValues,
+} from "../../validations";
 import { BulkVariantGenerator } from "./BulkVariantGenerator";
 import { FormSection } from "./FormLayout";
 import { VariantRow } from "./VariantRow";
+
+function WatchedBulkVariantGenerator({
+  control,
+  optionTypes,
+  disabled,
+  onGenerate,
+}: {
+  control: Control<ProductFormValues>;
+  optionTypes: ProductOptionGroup[];
+  disabled?: boolean;
+  onGenerate: (generated: VariantFormValues[]) => void;
+}) {
+  const variants = useWatch({ control, name: "variants" }) ?? [];
+  return (
+    <BulkVariantGenerator
+      optionTypes={optionTypes}
+      existingCombinations={variants.map(
+        (variant) => variant.option_value_ids ?? [],
+      )}
+      disabled={disabled}
+      onGenerate={onGenerate}
+    />
+  );
+}
 
 export function VariantsSection({
   register,
@@ -30,6 +59,7 @@ export function VariantsSection({
   append,
   remove,
   optionTypes,
+  optionCatalogError = null,
   productVariants = [],
   error,
   disabled,
@@ -42,12 +72,14 @@ export function VariantsSection({
   append: UseFieldArrayAppend<ProductFormValues, "variants">;
   remove: UseFieldArrayRemove;
   optionTypes: ProductOptionGroup[];
+  optionCatalogError?: string | null;
   productVariants?: AdminProductVariant[];
   error?: string | null;
   disabled?: boolean;
 }) {
-  const variants = useWatch({ control, name: "variants" }) ?? [];
-  const hasError = Boolean(errors.variants || error);
+  const router = useRouter();
+  const [isRetrying, startRetry] = useTransition();
+  const hasError = Boolean(errors.variants || error || optionCatalogError);
 
   return (
     <FormSection
@@ -68,6 +100,25 @@ export function VariantsSection({
           >
             {error}
           </p>
+        ) : null}
+
+        {optionCatalogError ? (
+          <div
+            role="alert"
+            className="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive ring-1 ring-destructive/20"
+          >
+            <p>{optionCatalogError}</p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="mt-2 h-10"
+              disabled={isRetrying}
+              onClick={() => startRetry(() => router.refresh())}
+            >
+              {isRetrying ? "در حال تلاش…" : "تلاش دوباره"}
+            </Button>
+          </div>
         ) : null}
 
         {optionTypes.length === 0 ? (
@@ -94,11 +145,9 @@ export function VariantsSection({
           </p>
         )}
 
-        <BulkVariantGenerator
+        <WatchedBulkVariantGenerator
+          control={control}
           optionTypes={optionTypes}
-          existingCombinations={variants.map(
-            (variant) => variant.option_value_ids ?? [],
-          )}
           disabled={disabled}
           onGenerate={(generated) => append(generated, { shouldFocus: false })}
         />
@@ -149,7 +198,6 @@ export function VariantsSection({
             register={register}
             control={control}
             setValue={setValue}
-            errors={errors}
             optionTypes={optionTypes}
             images={
               f._id
@@ -166,7 +214,7 @@ export function VariantsSection({
             isPersisted={Boolean(f._id)}
             defaultOpen={!f._id && fields.length <= 3}
             disabled={disabled}
-            onRemove={() => remove(i)}
+            onRemove={remove}
           />
         ))}
 

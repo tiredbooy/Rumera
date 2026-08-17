@@ -7,16 +7,51 @@ import { fetchLowStockInventory } from "@/features/inventory/api";
 import type { InventoryItem } from "@/features/inventory/types";
 import { getInventoryStatus } from "@/features/inventory/utils";
 
+import { can } from "@/lib/rbac/can";
+import { PERMISSIONS, type Permission } from "@/lib/rbac/permissions";
+
 import { AnalyticsErrorState } from "./AnalyticsErrorState";
 
-export async function LowStockList() {
+/** Prefer live product title; never invent a name when the API omitted one. */
+export function lowStockRowTitle(
+  row: Pick<InventoryItem, "product_title" | "sku" | "product_variant_id">,
+): string {
+  const title =
+    typeof row.product_title === "string" ? row.product_title.trim() : "";
+  if (title) return title;
+
+  const sku = row.sku?.trim();
+  if (sku) return sku;
+
+  return `#${faNum(row.product_variant_id)}`;
+}
+
+/** `GET /admin/inventory/low-stock` is paginated; a raw array is still accepted. */
+export function lowStockRowsFromFetch(payload: unknown): InventoryItem[] {
+  if (Array.isArray(payload)) return payload as InventoryItem[];
+  if (
+    payload !== null &&
+    typeof payload === "object" &&
+    Array.isArray((payload as { results?: unknown }).results)
+  ) {
+    return (payload as { results: InventoryItem[] }).results;
+  }
+  throw new Error("low-stock inventory missing results");
+}
+
+export async function LowStockList({
+  permissions,
+}: {
+  permissions: Permission[];
+}) {
+  if (!can({ permissions }, PERMISSIONS.INVENTORY_READ)) return null;
+
   let rows: InventoryItem[] | null = null;
   let error = false;
 
   try {
-    rows = await fetchLowStockInventory();
-    // limit to first 10 for display
-    if (rows && rows.length > 10) rows = rows.slice(0, 10);
+    rows = lowStockRowsFromFetch(await fetchLowStockInventory());
+    if (rows.length > 10) rows = rows.slice(0, 10);
   } catch {
     error = true;
   }
@@ -53,7 +88,7 @@ export async function LowStockList() {
             >
               <div className="min-w-0 flex-1 leading-tight">
                 <p className="truncate text-sm font-medium">
-                  متغیر #{faNum(row.product_variant_id)}
+                  {lowStockRowTitle(row)}
                 </p>
                 <p className="text-xs text-muted-foreground tabular-nums">
                   موجودی قابل فروش: {faNum(row.available_stock)}

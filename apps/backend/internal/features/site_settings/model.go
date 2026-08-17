@@ -196,14 +196,19 @@ type UpdateGiftReq struct {
 
 // UpdateSiteSettingsReq is the PUT /admin/settings body. Each group is a pointer:
 // nil = leave that group unchanged; present = replace that group wholesale.
+//
+// ExpectedUpdatedAt is the optimistic revision (admin GET `updatedAt`). It is
+// required so two editors cannot last-write-win the JSONB document (gift prices
+// included). JSON key is snake_case to match the product-aggregate lock field.
 type UpdateSiteSettingsReq struct {
-	Store       *UpdateStoreReq       `json:"store"       validate:"omitempty"`
-	Contact     *UpdateContactReq     `json:"contact"     validate:"omitempty"`
-	Social      *UpdateSocialReq      `json:"social"      validate:"omitempty"`
-	Shipping    *UpdateShippingReq    `json:"shipping"    validate:"omitempty"`
-	SEO         *UpdateSEOReq         `json:"seo"         validate:"omitempty"`
-	Maintenance *UpdateMaintenanceReq `json:"maintenance" validate:"omitempty"`
-	Gift        *UpdateGiftReq        `json:"gift"        validate:"omitempty"`
+	ExpectedUpdatedAt *time.Time            `json:"expected_updated_at" validate:"required"`
+	Store             *UpdateStoreReq       `json:"store"       validate:"omitempty"`
+	Contact           *UpdateContactReq     `json:"contact"     validate:"omitempty"`
+	Social            *UpdateSocialReq      `json:"social"      validate:"omitempty"`
+	Shipping          *UpdateShippingReq    `json:"shipping"    validate:"omitempty"`
+	SEO               *UpdateSEOReq         `json:"seo"         validate:"omitempty"`
+	Maintenance       *UpdateMaintenanceReq `json:"maintenance" validate:"omitempty"`
+	Gift              *UpdateGiftReq        `json:"gift"        validate:"omitempty"`
 }
 
 // Apply merges the non-nil groups of the request onto the current settings,

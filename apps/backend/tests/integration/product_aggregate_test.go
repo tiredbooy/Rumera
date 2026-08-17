@@ -3,16 +3,16 @@
 package integration
 
 import (
-	"github.com/tiredbooy/internal/features/inventory"
-	"github.com/tiredbooy/internal/features/catalog/variant"
-	"github.com/tiredbooy/internal/features/catalog/product"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/tiredbooy/internal/features/catalog/option"
+	"github.com/tiredbooy/internal/features/catalog/product"
 	"github.com/tiredbooy/internal/features/catalog/tag"
+	"github.com/tiredbooy/internal/features/catalog/variant"
+	"github.com/tiredbooy/internal/features/inventory"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -68,12 +68,14 @@ func TestProductAggregateIsAtomicRecoverableAndReplayable(t *testing.T) {
 	assertRowCount(t, "product_variants", 1)
 	assertRowCount(t, "product_images", 1)
 	assertRowCount(t, "product_aggregate_operations", 1)
+	assertInventoryRow(t, singleVariantID(t, productRepo, created.ID), 0, 0)
 
 	failedOperationID := uuid.NewString()
 	failedReq := product.SaveProductAggregateReq{
 		OperationID:       failedOperationID,
 		ExpectedUpdatedAt: &created.UpdatedAt,
 		Title:             "Must roll back",
+		Slug:              stringPointer("aggregate-product"),
 		IsActive:          true,
 		TagIDs:            []int64{createdTag.ID + 1000},
 		Variants: []product.SaveProductVariantReq{{
@@ -262,6 +264,7 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 		OperationID:       uuid.NewString(),
 		ExpectedUpdatedAt: &created.UpdatedAt,
 		Title:             "Stale overwrite",
+		Slug:              stringPointer("stale-overwrite"),
 		IsActive:          true,
 		Variants: []product.SaveProductVariantReq{
 			{ID: &redVariant.ID, SKU: stringPointer("SWAP-BLUE"), Price: 120, IsActive: false, OptionValueIDs: []int64{blue.ID}},
@@ -314,6 +317,50 @@ func TestProductAggregateSwapsGraphAndPreservesInventory(t *testing.T) {
 	}
 }
 
+func TestProductAggregateCreateAndAddedVariantGetZeroInventory(t *testing.T) {
+	requireDB(t)
+	resetTables(t, "product_aggregate_operations", "products")
+	ctx := context.Background()
+	productRepo := product.NewRepository(testPool)
+	service := product.NewService(productRepo, nil, nil)
+
+	created, err := service.SaveAggregate(ctx, 0, product.SaveProductAggregateReq{
+		OperationID: uuid.NewString(),
+		Title:       "Ensure inventory product",
+		IsActive:    false,
+		Variants: []product.SaveProductVariantReq{{
+			SKU: stringPointer("ENS-ONE"), Price: 80, IsActive: true,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("create aggregate: %v", err)
+	}
+	firstID := singleVariantID(t, productRepo, created.ID)
+	assertInventoryRow(t, firstID, 0, 0)
+
+	updated, err := service.SaveAggregate(ctx, created.ID, product.SaveProductAggregateReq{
+		OperationID:       uuid.NewString(),
+		ExpectedUpdatedAt: &created.UpdatedAt,
+		Title:             created.Title,
+		IsActive:          false,
+		Variants: []product.SaveProductVariantReq{
+			{ID: &firstID, SKU: stringPointer("ENS-ONE"), Price: 80, IsActive: true},
+			{SKU: stringPointer("ENS-TWO"), Price: 90, IsActive: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("add variant via aggregate: %v", err)
+	}
+	variants, err := productRepo.GetVariants(ctx, updated.ID)
+	if err != nil || len(variants) != 2 {
+		t.Fatalf("variants after add = %+v, %v; want 2", variants, err)
+	}
+	for _, v := range variants {
+		assertInventoryRow(t, v.ID, 0, 0)
+	}
+	assertRowCount(t, "inventory", 2)
+}
+
 func TestProductAggregatePreparedMediaCleanupDoesNotBreakReplay(t *testing.T) {
 	requireDB(t)
 	resetTables(t, "product_aggregate_operations", "products")
@@ -352,6 +399,7 @@ func TestProductAggregatePreparedMediaCleanupDoesNotBreakReplay(t *testing.T) {
 	createReq := product.SaveProductAggregateReq{
 		OperationID: uuid.NewString(),
 		Title:       "Prepared media product",
+		Slug:        stringPointer("prepared-media-product"),
 		IsActive:    true,
 		Images: []product.SaveProductImageReq{{
 			StorageKey: &upload.Key,
@@ -372,6 +420,7 @@ func TestProductAggregatePreparedMediaCleanupDoesNotBreakReplay(t *testing.T) {
 		OperationID:       uuid.NewString(),
 		ExpectedUpdatedAt: &created.UpdatedAt,
 		Title:             "Prepared media removed",
+		Slug:              stringPointer("prepared-media-product"),
 		IsActive:          true,
 	})
 	if err != nil {
@@ -469,6 +518,7 @@ func TestGranularGraphWritesInvalidateAggregateRevision(t *testing.T) {
 	created, err := aggregateService.SaveAggregate(ctx, 0, product.SaveProductAggregateReq{
 		OperationID: uuid.NewString(),
 		Title:       "Revision product",
+		Slug:        stringPointer("revision-product"),
 		IsActive:    true,
 		Variants: []product.SaveProductVariantReq{{
 			SKU: stringPointer("REVISION-SKU"), Price: 100, IsActive: true,

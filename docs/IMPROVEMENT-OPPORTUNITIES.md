@@ -147,8 +147,7 @@ The recommended first slice (below) shipped right after this sweep:
 **5.7 Three account hooks call backend endpoints that don't exist** · *contract-drift + FE quality*
 `account-hooks.ts:151` bare `recommendations`, `:190` `reviews/mine`, `:200` `reviews/pending` (all tagged `TODO(api): confirm`) → `NoRoute` 404. "My Reviews", "Reviews to write", and the account recommendation widget always error/empty. Add the routes or repoint at existing ones; also fix the `RecommendedProduct.id` vs backend `product_id` shape drift by adopting the already-correct `RecommendationItem` type. · **M**
 
-**5.8 Server analytics middleware writes an empty `Payload` → all search-analytics reports are empty** · *feature-gaps*
-`middlewares/analytics.go:69` sets `Payload: map[string]any{}` and never populates it, but `corn/search_job.go` reads `payload->>'query'/'results_count'/'product_id'/'filter_name'`. Even once the admin UI is wired (2.1), top-terms/zero-result/top-converting/filter-breakdown stay empty. Populate the payload in `buildEvent` for search/PDP/filter requests. · **M**
+~~**5.8 Server analytics middleware writes an empty `Payload` → all search-analytics reports are empty**~~ — **done PR-070d**. `GET /products?search=` is `search_performed` with `query` + `results_count`. There is no `GET /search`. List errors do not invent zero hits.
 
 **5.9 Site-settings admin update is read-modify-write with no row lock** · *BE security*
 `site_settings_svc.go:39-52` Get→merge-in-Go→Update with no `FOR UPDATE`/version check; two concurrent admin saves clobber each other. Lock the singleton row or add optimistic-concurrency. · **S**
@@ -163,11 +162,9 @@ The recommended first slice (below) shipped right after this sweep:
 **5.13 Prod backend has no compose healthcheck; frontend waits on `service_started`** · *DevOps*
 `docker-compose.prod.yml` backend has no `healthcheck`; frontend `depends_on: { condition: service_started }`, so it comes up before the backend can reach Postgres/Redis/Meili → 5xx flapping every deploy. The new deep `/health/ready` probe is wired into zero healthchecks. Add a `/health/ready` healthcheck + `service_healthy`. · **S**
 
-**5.14 nginx prod edge: no security headers, `server_tokens` on, no rate limit, TLS commented out** · *DevOps*
-`infra/nginx/nginx.prod.conf` leaks nginx version, ships no HSTS/X-Frame-Options/X-Content-Type-Options on `/api/v1`/`/media`, no L7 rate limit on auth/OTP, plaintext only. Add `server_tokens off`, `limit_req`, security headers, and a real 443 block. · **M**
+~~**5.14 nginx prod edge: no security headers, `server_tokens` on, no rate limit**~~ — **done PR-090l** (`server_tokens off`, nosniff / SAMEORIGIN / Referrer-Policy on the edge including `/api/v1`+`/media`, prod `limit_req` on `/api/v1/auth/` + `/api/public/auth/`). Residual: TLS 443 block still commented (no HSTS on HTTP). · **M**
 
-**5.15 `@sentry/nextjs` declared but completely unwired** · *DevOps*
-No `instrumentation*.ts`, no `withSentryConfig`, no `Sentry` references — FE errors are unobserved in prod and the SDK ships dead. Wire it (Next 16 `instrumentation`) or remove. · **M**
+~~**5.15 `@sentry/nextjs` declared but completely unwired**~~ — **done PR-090d** (removed unused SDK; no `SENTRY_DSN` in env).
 
 **5.16 Account overview fires 6 client queries on mount with no server prefetch** · *FE perf*
 `account-overview.tsx:64-70` calls 6 hooks post-hydration; zero `HydrationBoundary`/`dehydrate` in the repo. The page is already a server component — prefetch + `HydrationBoundary` (PDP reviews are the template). · **M**
@@ -175,8 +172,9 @@ No `instrumentation*.ts`, no `withSentryConfig`, no `Sentry` references — FE e
 **5.17 `components/ui/table.tsx` is `"use client"`; recharts not code-split** · *FE perf*
 The table primitive is purely presentational yet forces the whole admin subtree to client-render — delete line 1. recharts is eagerly bundled (`grep next/dynamic` = 0 hits repo-wide); wrap chart components in `next/dynamic`. Admin-only blast radius. · **S / M**
 
-**5.18 `images.remotePatterns` allows `hostname:"**"`** · *FE perf/security*
-`next.config.ts:46` lets the image optimizer proxy any HTTPS origin (SSRF / open-proxy surface). Restrict to the concrete media/CDN hosts. · **S**
+~~**5.18 `images.remotePatterns` allows `hostname:"**"`**~~ — **done PR-090c**.
+Allow-list is `NEXT_PUBLIC_MEDIA_BASE_URL` / `NEXT_PUBLIC_API_URL` hostnames
+(empty when same-origin `/media`).
 
 **5.19 Personalization starved: `purchase`(10) and `add_to_cart`(4) signals never recorded** · *feature-gaps*
 FE records only `view` + `wishlist`; the engine ranks by a score dominated by the two highest-weight edges that the UI never creates. Fire `add_to_cart` in `add-to-cart-button.tsx` onSuccess and `purchase` on order-confirmation. Cheap, directly powers the now-live rails. · **S**
@@ -192,7 +190,7 @@ FE records only `view` + `wishlist`; the engine ranks by a score dominated by th
 ## 🟢 Low / polish
 
 - **6.1 Product-card wishlist heart missing** · *feature-gaps* — wishlist CRUD only reachable from the PDP panel (`catalog/product-card.tsx` has no heart). Biggest place wishlisting drives return visits. Add a heart using `useHasWishlistItem`/`useAdd/Remove`. · **M**
-- **6.2 ⚑ Dead npm deps** · *FE perf + FE quality* — axios, qs, uploadthing, lodash-es, zustand, nanoid, @tanstack/react-virtual, react-day-picker, vaul, cmdk, react-resizable-panels (+ dead shadcn primitives) all have zero importers; posthog-js/@sentry installed-not-initialized. Remove after a final grep. · **M**
+- **6.2 ⚑ Dead npm deps** · *FE perf + FE quality* — axios, qs, uploadthing, lodash-es, zustand, nanoid, @tanstack/react-virtual, react-day-picker, vaul, cmdk, react-resizable-panels (+ dead shadcn primitives) all have zero importers; posthog-js installed-not-initialized (`@sentry/nextjs` removed in PR-090d). Remove after a final grep. · **M**
 - ~~**6.3 `/wallet/withdraw` free-ish debit**~~ — **done PH-041a** (withdraw **410**; gateway top-up is the fund path).
 - **6.4 `isBusinessError` uses `==` not `errors.Is`** (`inventory_svc.go:217-225`); **`search_summary_repo` compares `pgx.ErrNoRows` with `==`** — latent landmines on the money path; switch to `errors.Is`. · **S**
 - **6.5 ⚑ Inconsistent error path** — 122 `response.HandleError` vs 70 `h.handleError` call-sites, mixed within single files. Make `h.handleError` the only sanctioned path + a grep-based CI ban. · **M**
@@ -201,13 +199,13 @@ FE records only `view` + `wishlist`; the engine ranks by a score dominated by th
 - **6.8 Per-user lists unbounded** — `subscription_repo`/`alert_repo` `ListByUser` have no LIMIT. Add `LIMIT 100`. · **S**
 - **6.9 Admin user list: no index on `role`/`created_at`, `SELECT *` + positional 18-col Scan** (`user_repo.go:156-247`) — column-order fragile + full scan on the new customers page. Add indexes, explicit column list. · **S**
 - **6.10 DB pool sizing hardcoded** (`db.go:28-29` maxConns 25); surface `DB_MAX_CONNS`/`DB_MIN_CONNS`. · **S**
-- **6.11 ⚑ Storefront home "featured" rail + its JSON-LD render 8 hardcoded mock bottles** (`page.tsx:32,76,208` → mock `lib/products.ts`; `structured-data.tsx`) while the page renders live data elsewhere — Google structured-data mismatch risk. Two same-named `ProductCard` exports with incompatible props. Switch to live catalog + the server `catalog/product-card`. · **M**
+- ~~**6.11 ⚑ Storefront home "featured" rail + its JSON-LD render 8 hardcoded mock bottles**~~ — **catalog live**; **JSON-LD done PR-080k**. Home mounts Organization + WebSite from `siteConfig` (`HomeStructuredData`). No mock product ItemList. · **M**
 - **6.12 `/checkout` indexable** (missing from `robots.ts` + no page noindex); **skip-to-content link** never shipped; **manifest** has only `favicon.ico` (no 192/512/maskable). · **S each**
 - **6.13 Dialog/Sheet close buttons use physical `right-4` + English `sr-only "Close"`** in an RTL Persian app; latent physical-prop RTL bugs in unused primitives (carousel/button-group/alert). Use logical `end-*`, translate to "بستن". · **S**
 - **6.14 Admin DataTable rows are mouse-only** (`data-table.tsx:261-268` `<tr onClick>` with no `role`/`tabIndex`/keydown); **image reorder is drag-only** (no keyboard/touch path — hero-slides-board already solved this with up/down buttons). · **S each**
 - **6.15 Default icon button is 32px** (`button.tsx:29`) — below the 44px touch target across 19 components incl. destructive address delete. Bump the touch hit area. · **M**
 - **6.16 Wishlist "add all to cart" reports success unconditionally** and fires N uncoordinated POSTs — use `useBulkAddCartItems` + report the real count. · **S**
-- **6.17 BlogPosting publisher has no `logo`** (`journal/[slug]/page.tsx:83`); reuse `organizationLd`'s logo. · **S**
+- ~~**6.17 BlogPosting publisher has no `logo`**~~ — **done PR-080m**. `journalArticleLd` publisher `logo` is an `ImageObject` at `absoluteUrl(siteConfig.logo)` (same URL as `organizationLd`).
 - **6.18 `getProductBySlug` does search-then-find** with `?? results[0]` fallback — a valid slug can render the wrong product. Add a real slug lookup / drop the fallback. · **S**
 - **6.19 `auth.ts:37` logs the backend base URL on every boot** (no env guard); add FE `typecheck`/`test` scripts + `no-console` lint; no pre-commit hooks. · **S**
 - **6.20 No DB backup strategy** (no `pg_dump`/sidecar/runbook); **floating `timescaledb:latest-pg17` tag** defeats reproducible deploys; **Dockerfile.dev `GOSUMDB=off`** weakens supply chain. · **S–M**

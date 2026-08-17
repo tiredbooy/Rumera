@@ -272,12 +272,17 @@ func (s *Service) GetAvailableForCheckout(ctx context.Context, regionCode string
 	if err != nil {
 		return nil, apperr.ErrInternal
 	}
-	if len(zones) == 0 {
-		return []*ShippingMethodQuote{}, nil
-	}
 
 	quotes := make([]*ShippingMethodQuote, 0)
+	seenZones := make(map[int64]struct{})
 	for _, zone := range zones {
+		if zone == nil || !zoneCoversRegion(zone, regionCode) {
+			continue
+		}
+		if _, dup := seenZones[zone.ID]; dup {
+			continue
+		}
+		seenZones[zone.ID] = struct{}{}
 		methods, err := s.methodRepo.GetAvailable(ctx, zone.ID, weightKg)
 		if err != nil {
 			return nil, apperr.ErrInternal
@@ -371,11 +376,33 @@ func (s *Service) AuthorizeCheckoutMethod(
 	return method, CalculateShippingCost(method, weightKg, subtotal), nil
 }
 
+// zoneCoversRegion reports whether a zone delivers to regionCode. Exact codes
+// match only themselves (IR-TEH). A country code (IR) also matches any IR-*
+// subdivision stored on the zone, so CreateOrder's address.Country fallback
+// authorizes methods that operators configured as IR-TEH.
 func zoneCoversRegion(zone *ShippingZone, regionCode string) bool {
+	if zone == nil {
+		return false
+	}
 	for _, code := range zone.RegionCodes {
-		if strings.EqualFold(strings.TrimSpace(code), regionCode) {
+		if regionCodeMatches(code, regionCode) {
 			return true
 		}
+	}
+	return false
+}
+
+func regionCodeMatches(stored, requested string) bool {
+	stored = strings.ToUpper(strings.TrimSpace(stored))
+	if stored == "" || requested == "" {
+		return false
+	}
+	if stored == requested {
+		return true
+	}
+	// Country fallback: IR matches IR-TEH. Subdivision requests stay exact.
+	if !strings.Contains(requested, "-") && strings.HasPrefix(stored, requested+"-") {
+		return true
 	}
 	return false
 }

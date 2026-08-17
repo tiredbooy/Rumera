@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { DashboardErrorState } from "@/features/dashboard/components/async-state";
 import { useShippingMethods } from "@/features/shipping/api";
+import { parseAsciiNumber } from "@/lib/normalize-digits";
 import { faNum, formatPrice } from "@/lib/products";
 
 const RATE_TYPE_FA: Record<string, string> = {
@@ -53,8 +54,8 @@ export function ShippingQuoteSimulator({
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     const regionCode = region.trim().toUpperCase();
-    const weightKg = Number(weight);
-    const subtotalAmount = Number(subtotal);
+    const weightKg = parseAsciiNumber(weight);
+    const subtotalAmount = parseAsciiNumber(subtotal);
     if (
       !regionCode ||
       !Number.isFinite(weightKg) ||
@@ -86,8 +87,8 @@ export function ShippingQuoteSimulator({
             شبیه‌ساز هزینهٔ ارسال
           </h2>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            همان API تسویه حساب (`/shipping/available`) فراخوانی می‌شود — نه
-            تخمین محلی. منطقه باید با یکی از کدهای پوشش منطقهٔ فعال جور باشد.
+            همان نرخ‌های زندهٔ تسویه حساب فروشگاه خوانده می‌شود، نه تخمین محلی.
+            منطقه باید با یکی از کدهای پوشش منطقهٔ فعال جور باشد.
           </p>
         </div>
       </div>
@@ -154,7 +155,7 @@ export function ShippingQuoteSimulator({
           {query.isError ? (
             <DashboardErrorState
               title="دریافت نرخ ارسال ناموفق بود"
-              description="API در دسترس نیست یا پارامترها نامعتبرند. اتصال را بررسی کنید."
+              description="اتصال برقرار نشد یا پارامترها نامعتبرند. اتصال را بررسی کنید و دوباره تلاش کنید."
               onRetry={() => void query.refetch()}
               isRetrying={query.isFetching}
               className="min-h-32"

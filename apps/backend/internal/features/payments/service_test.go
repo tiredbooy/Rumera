@@ -77,6 +77,14 @@ func (r *createRepoStub) Fail(context.Context, FailPaymentReq) (*PaymentTransact
 	return nil, models.ErrNotFound
 }
 
+func (r *createRepoStub) InsertEarnIntent(context.Context, pgx.Tx, OrderEarnIntent) error {
+	return nil
+}
+func (r *createRepoStub) ListPendingEarnIntents(context.Context, int) ([]OrderEarnIntent, error) {
+	return nil, nil
+}
+func (r *createRepoStub) MarkEarnAwarded(context.Context, int64) error { return nil }
+
 func TestService_Create_UniqueTransactionID_Conflict(t *testing.T) {
 	repo := &createRepoStub{createErr: models.ErrConflict}
 	svc := NewService(repo, nil, nil, nil, nil, nil, nil)
@@ -95,6 +103,40 @@ func TestService_Create_UniqueTransactionID_Conflict(t *testing.T) {
 	if repo.tx == nil || !repo.tx.RolledBack {
 		// RollbackOnErr should roll back on create failure before commit.
 		// Some helpers only set err for deferred rollback — either path is fine.
+	}
+}
+
+func TestService_CreateTx_UsesCallerTx(t *testing.T) {
+	repo := &createRepoStub{createPT: &PaymentTransaction{
+		ID: 9, Status: PaymentStatusPending, TransactionID: "tx-in-tx",
+	}}
+	svc := NewService(repo, nil, nil, nil, nil, nil, nil).
+		WithStartBaseURL("https://pay.example.com/start")
+	caller := &fakeTx{}
+	oid := int64(5)
+	pt, err := svc.CreateTx(context.Background(), caller, CreatePaymentTransactionReq{
+		OrderID:       &oid,
+		UserID:        1,
+		Amount:        1000,
+		Currency:      "IRT",
+		PaymentMethod: "gateway",
+		TransactionID: "tx-in-tx",
+	})
+	if err != nil {
+		t.Fatalf("CreateTx: %v", err)
+	}
+	if repo.tx != nil {
+		t.Fatal("CreateTx must not begin its own TX")
+	}
+	if caller.Committed || caller.RolledBack {
+		t.Fatal("CreateTx must not commit or roll back the caller TX")
+	}
+	if pt.ID != 9 {
+		t.Fatalf("id = %d; want 9", pt.ID)
+	}
+	want := "https://pay.example.com/start?transaction_id=tx-in-tx"
+	if pt.PaymentURL != want {
+		t.Fatalf("payment_url = %q; want %q", pt.PaymentURL, want)
 	}
 }
 
@@ -133,6 +175,115 @@ func TestService_CreateWalletTopUp_Bounds(t *testing.T) {
 	}
 }
 
+func TestService_CreateWalletTopUp_PaymentURL_WhenBaseSet(t *testing.T) {
+	repo := &createRepoStub{createPT: &PaymentTransaction{
+		ID: 3, Status: PaymentStatusPending, TransactionID: "wtop-abc",
+		Amount: 25_000, Currency: "IRT",
+	}}
+	svc := NewService(repo, nil, nil, nil, nil, nil, nil).
+		WithStartBaseURL("https://pay.example.com/start")
+	intent, err := svc.CreateWalletTopUp(context.Background(), 1, 25_000)
+	if err != nil {
+		t.Fatalf("CreateWalletTopUp: %v", err)
+	}
+	want := "https://pay.example.com/start?transaction_id=wtop-abc"
+	if intent.PaymentURL != want {
+		t.Fatalf("payment_url = %q; want %q", intent.PaymentURL, want)
+	}
+}
+
+func TestService_CreateWalletTopUp_PaymentURL_EmptyWhenUnset(t *testing.T) {
+	repo := &createRepoStub{createPT: &PaymentTransaction{
+		ID: 3, Status: PaymentStatusPending, TransactionID: "wtop-abc",
+		Amount: 25_000, Currency: "IRT",
+	}}
+	svc := NewService(repo, nil, nil, nil, nil, nil, nil)
+	intent, err := svc.CreateWalletTopUp(context.Background(), 1, 25_000)
+	if err != nil {
+		t.Fatalf("CreateWalletTopUp: %v", err)
+	}
+	if intent.PaymentURL != "" {
+		t.Fatalf("payment_url = %q; want empty when base unset", intent.PaymentURL)
+	}
+}
+
+func TestService_CreateGiftCardPurchase_PaymentURL_WhenBaseSet(t *testing.T) {
+	repo := &createRepoStub{createPT: &PaymentTransaction{
+		ID: 4, Status: PaymentStatusPending, TransactionID: "gbuy-xyz",
+		Amount: 100_000, Currency: "IRT",
+	}}
+	svc := NewService(repo, nil, nil, nil, nil, nil, nil).
+		WithStartBaseURL("https://pay.example.com/start")
+	intent, err := svc.CreateGiftCardPurchase(context.Background(), 1, 100_000)
+	if err != nil {
+		t.Fatalf("CreateGiftCardPurchase: %v", err)
+	}
+	want := "https://pay.example.com/start?transaction_id=gbuy-xyz"
+	if intent.PaymentURL != want {
+		t.Fatalf("payment_url = %q; want %q", intent.PaymentURL, want)
+	}
+}
+
+func TestService_CreateGiftCardPurchase_PaymentURL_EmptyWhenUnset(t *testing.T) {
+	repo := &createRepoStub{createPT: &PaymentTransaction{
+		ID: 4, Status: PaymentStatusPending, TransactionID: "gbuy-xyz",
+		Amount: 100_000, Currency: "IRT",
+	}}
+	svc := NewService(repo, nil, nil, nil, nil, nil, nil)
+	intent, err := svc.CreateGiftCardPurchase(context.Background(), 1, 100_000)
+	if err != nil {
+		t.Fatalf("CreateGiftCardPurchase: %v", err)
+	}
+	if intent.PaymentURL != "" {
+		t.Fatalf("payment_url = %q; want empty when base unset", intent.PaymentURL)
+	}
+}
+
+func TestService_Create_PaymentURL_WhenBaseSet(t *testing.T) {
+	repo := &createRepoStub{createPT: &PaymentTransaction{
+		ID: 7, Status: PaymentStatusPending, TransactionID: "tx-ok",
+	}}
+	svc := NewService(repo, nil, nil, nil, nil, nil, nil).
+		WithStartBaseURL("https://pay.example.com/start")
+	oid := int64(1)
+	pt, err := svc.Create(context.Background(), CreatePaymentTransactionReq{
+		OrderID:       &oid,
+		UserID:        1,
+		Amount:        5000,
+		Currency:      "IRT",
+		PaymentMethod: "gateway",
+		TransactionID: "tx-ok",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	want := "https://pay.example.com/start?transaction_id=tx-ok"
+	if pt.PaymentURL != want {
+		t.Fatalf("payment_url = %q; want %q", pt.PaymentURL, want)
+	}
+}
+
+func TestBuildPaymentStartURL(t *testing.T) {
+	cases := []struct {
+		name, base, txid, want string
+	}{
+		{"empty base", "", "wtop-1", ""},
+		{"empty txid", "https://pay.example.com/start", "", ""},
+		{"query", "https://pay.example.com/start", "wtop-1", "https://pay.example.com/start?transaction_id=wtop-1"},
+		{"existing query", "https://pay.example.com/start?merchant=r", "gbuy-2", "https://pay.example.com/start?merchant=r&transaction_id=gbuy-2"},
+		{"not http", "ftp://pay.example.com/start", "wtop-1", ""},
+		{"relative", "/start", "wtop-1", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildPaymentStartURL(tc.base, tc.txid)
+			if got != tc.want {
+				t.Fatalf("got %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestService_Confirm_WalletTopUp(t *testing.T) {
 	uid := int64(42)
 	repo := &confirmTopUpRepo{
@@ -142,7 +293,9 @@ func TestService_Confirm_WalletTopUp(t *testing.T) {
 		},
 	}
 	walletStub := &walletCreditStub{}
-	svc := NewService(repo, nil, nil, nil, nil, walletStub, nil)
+	loy := &loyaltyStub{}
+	ref := &referralHookStub{}
+	svc := NewService(repo, nil, nil, loy, ref, walletStub, nil)
 	pt, err := svc.Confirm(context.Background(), ConfirmPaymentReq{TransactionID: "wtop-abc"})
 	if err != nil {
 		t.Fatalf("Confirm top-up: %v", err)
@@ -156,6 +309,9 @@ func TestService_Confirm_WalletTopUp(t *testing.T) {
 	if !repo.tx.Committed {
 		t.Fatal("expected commit")
 	}
+	if loy.calls != 0 || ref.calls != 0 {
+		t.Fatal("wallet top-up must not award loyalty or complete referral")
+	}
 }
 
 func TestService_Confirm_GiftCardPurchase(t *testing.T) {
@@ -168,7 +324,9 @@ func TestService_Confirm_GiftCardPurchase(t *testing.T) {
 	}
 	gc := &giftFulfillStub{}
 	walletStub := &walletCreditStub{}
-	svc := NewService(repo, nil, nil, nil, nil, walletStub, gc)
+	loy := &loyaltyStub{}
+	ref := &referralHookStub{}
+	svc := NewService(repo, nil, nil, loy, ref, walletStub, gc)
 	if _, err := svc.Confirm(context.Background(), ConfirmPaymentReq{TransactionID: "gbuy-xyz"}); err != nil {
 		t.Fatalf("Confirm gift buy: %v", err)
 	}
@@ -177,6 +335,9 @@ func TestService_Confirm_GiftCardPurchase(t *testing.T) {
 	}
 	if walletStub.calls != 0 {
 		t.Fatal("gift purchase must not credit wallet")
+	}
+	if loy.calls != 0 || ref.calls != 0 {
+		t.Fatal("gift purchase must not award loyalty or complete referral")
 	}
 }
 
@@ -238,6 +399,59 @@ func (r *confirmTopUpRepo) Confirm(_ context.Context, _ pgx.Tx, _ ConfirmPayment
 }
 func (r *confirmTopUpRepo) Fail(context.Context, FailPaymentReq) (*PaymentTransaction, error) {
 	return nil, models.ErrNotFound
+}
+func (r *confirmTopUpRepo) InsertEarnIntent(context.Context, pgx.Tx, OrderEarnIntent) error {
+	return nil
+}
+func (r *confirmTopUpRepo) ListPendingEarnIntents(context.Context, int) ([]OrderEarnIntent, error) {
+	return nil, nil
+}
+func (r *confirmTopUpRepo) MarkEarnAwarded(context.Context, int64) error { return nil }
+
+type loyaltyStub struct {
+	calls int
+	failN int
+	err   error
+}
+
+func (l *loyaltyStub) AwardForOrder(context.Context, int64, int64, float64) error {
+	l.calls++
+	if l.failN > 0 {
+		l.failN--
+		if l.err != nil {
+			return l.err
+		}
+		return errors.New("award failed")
+	}
+	if l.err != nil && l.failN < 0 {
+		return l.err
+	}
+	return nil
+}
+
+type alwaysFailLoyalty struct {
+	calls int
+	err   error
+}
+
+func (l *alwaysFailLoyalty) AwardForOrder(context.Context, int64, int64, float64) error {
+	l.calls++
+	if l.err != nil {
+		return l.err
+	}
+	return errors.New("award failed")
+}
+
+type referralHookStub struct {
+	calls  int
+	userID int64
+	err    error
+}
+
+func (r *referralHookStub) OnPaidOrder(_ context.Context, refereeID int64) error {
+	r.calls++
+	r.userID = refereeID
+	return r.err
 }
 
 func TestIsTerminalPaymentStatus(t *testing.T) {

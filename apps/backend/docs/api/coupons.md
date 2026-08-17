@@ -28,16 +28,20 @@ POST /coupons/validate
 Authorization: Bearer <access_token>
 ```
 
-Previews whether a coupon applies to the supplied basket and what discount it yields. The user is taken from the token — any `user_id` in the body is ignored — so per-user usage limits are enforced for the caller.
+Previews whether a coupon applies to the supplied basket and what discount it yields. The user is taken from the token — any `user_id` in the body is ignored — so per-user usage limits are enforced for the caller. Validate never records usage; redemption happens under lock at order creation.
+
+When `product_ids` and `category_ids` are both omitted (empty) and/or `order_subtotal` is `0` or omitted, the server loads the authenticated user's cart (`GetOrCreate` + `GetItems`) and derives those fields from cart line `product_id`, `category_id`, and `line_total`. Checkout may send `{code, order_subtotal}` only; scoped coupons then preview the same basket `CreateOrder` will redeem against.
+
+An empty cart is validated as an empty basket (`is_valid: false` for `min_order_amount` / applicability). Cart lookup failures are `500`; an empty cart is not.
 
 **Request body**
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
 | `code` | string | ✓ | |
-| `order_subtotal` | number | | min `0` |
-| `product_ids` | int[] | | variant/product ids in the basket |
-| `category_ids` | int[] | | categories represented in the basket |
+| `order_subtotal` | number | | min `0`. When `0`/omitted, filled from the caller's cart line totals |
+| `product_ids` | int[] | | product ids in the basket. When both this and `category_ids` are empty, filled from the caller's cart |
+| `category_ids` | int[] | | categories represented in the basket. Same cart fallback as `product_ids` |
 
 ```json
 {
@@ -46,6 +50,12 @@ Previews whether a coupon applies to the supplied basket and what discount it yi
   "product_ids": [7, 12],
   "category_ids": [3]
 }
+```
+
+Minimal checkout body (IDs and/or subtotal loaded from the caller's cart):
+
+```json
+{ "code": "SUMMER10" }
 ```
 
 **Response** `200 OK` — `CouponValidationResult`:
@@ -67,9 +77,9 @@ Previews whether a coupon applies to the supplied basket and what discount it yi
 }
 ```
 
-When the coupon does not apply, `is_valid` is `false`, `discount_amount` is `0`, and `invalid_reason` explains why (e.g. expired, below `min_order_amount`, usage limit reached, or not applicable to these products/categories).
+When the coupon does not apply, `is_valid` is `false`, `discount_amount` is `0`, and `invalid_reason` explains why (e.g. expired, below `min_order_amount`, usage limit reached, not applicable to these products/categories, or empty cart). An unknown code is the same `200` + `is_valid: false` shape, not a 404.
 
-**Errors:** `401 UNAUTHORIZED`, `422 VALIDATION_ERROR`, `404 NOT_FOUND` (unknown code).
+**Errors:** `401 UNAUTHORIZED`, `422 VALIDATION_ERROR`, `500 INTERNAL_ERROR` (cart lookup failed).
 
 ---
 

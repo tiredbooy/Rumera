@@ -7,9 +7,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
 )
+
+// errInvalidAddressID is a missing/invalid addresses.id (FK 23503).
+var errInvalidAddressID = errors.New("invalid address_id")
 
 type Repository interface {
 	Create(ctx context.Context, sub Subscription) (*Subscription, error)
@@ -17,6 +21,7 @@ type Repository interface {
 	Get(ctx context.Context, id, userID int64) (*Subscription, error)
 	UpdateStatus(ctx context.Context, id, userID int64, status SubscriptionStatus) error
 	SetNextRenewal(ctx context.Context, id, userID int64, t time.Time) error
+	UpdateAddress(ctx context.Context, id, userID, addressID int64) error
 	FindDue(ctx context.Context, now time.Time, limit int) ([]DueSubscription, error)
 	AdvanceRenewal(ctx context.Context, id int64, next time.Time) error
 }
@@ -53,7 +58,7 @@ func (r *subscriptionRepository) Create(ctx context.Context, sub Subscription) (
 }
 
 func (r *subscriptionRepository) ListByUser(ctx context.Context, userID int64) ([]Subscription, error) {
-	const q = `SELECT * FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC`
+	const q = `SELECT * FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`
 	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {
 		return nil, fmt.Errorf("subscriptionRepository.ListByUser: %w", err)
@@ -103,6 +108,26 @@ func (r *subscriptionRepository) SetNextRenewal(ctx context.Context, id, userID 
 		return models.ErrNotFound
 	}
 	return nil
+}
+
+func (r *subscriptionRepository) UpdateAddress(ctx context.Context, id, userID, addressID int64) error {
+	const q = `UPDATE subscriptions SET address_id = $3, updated_at = NOW() WHERE id = $1 AND user_id = $2`
+	tag, err := r.db.Exec(ctx, q, id, userID, addressID)
+	if err != nil {
+		if isAddressFKViolation(err) {
+			return errInvalidAddressID
+		}
+		return fmt.Errorf("subscriptionRepository.UpdateAddress: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return models.ErrNotFound
+	}
+	return nil
+}
+
+func isAddressFKViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
 
 func (r *subscriptionRepository) FindDue(ctx context.Context, now time.Time, limit int) ([]DueSubscription, error) {

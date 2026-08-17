@@ -29,6 +29,3 @@ export const productMenuPromotion: ProductMenuPromotion = {
   description: "تازه‌ترین انتخاب‌های فروشگاه را یک‌جا ببینید — یا از برندها شروع کنید.",
   ctaLabel: "همهٔ محصولات",
 };
-
-export const storefrontAnnouncement =
-  "ارسال رایگان برای سفارش‌های بالای ۵٬۰۰۰٬۰۰۰ تومان — با ضمانت اصالت";

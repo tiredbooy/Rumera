@@ -25,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ListPagination } from "@/components/list-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +45,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import {
+  AdminFilterBar,
+  AdminPage,
+} from "@/features/dashboard/components/admin-page";
 import {
   ShippingApiError,
   useAdminShippingZones,
@@ -308,60 +312,88 @@ export function ShippingZonesBoard() {
   }
 
   return (
-    <>
-      <PageHeader
-        title="ارسال و مناطق پوشش"
-        description="محدوده‌های جغرافیایی را جستجو و مرتب کنید و فعال‌بودن گزینه‌های ارسال را مدیریت کنید."
-        actions={
-          <Button size="sm" asChild>
-            <Link href="/admin/shipping/new">
-              <Plus className="size-4" /> منطقهٔ جدید
-            </Link>
-          </Button>
-        }
-      />
-
-      <div className="mb-5 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_11rem_12rem]">
-        <SearchControl
-          key={query}
-          initialValue={query}
-          onCommit={commitSearch}
-        />
-        <Select
-          value={status}
-          onValueChange={(value) =>
-            updateURL({ status: value === "all" ? undefined : value }, true)
-          }
+    <AdminPage
+      title="ارسال و مناطق پوشش"
+      description="محدوده‌های جغرافیایی را جستجو و مرتب کنید و فعال‌بودن گزینه‌های ارسال را مدیریت کنید."
+      action={
+        <Button size="sm" asChild>
+          <Link href="/admin/shipping/new">
+            <Plus className="size-4" /> منطقهٔ جدید
+          </Link>
+        </Button>
+      }
+      filters={
+        <AdminFilterBar
+          id="shipping-zones-filter-title"
+          title="جستجو و فیلتر مناطق"
+          hasFilters={Boolean(query) || status !== "all" || sort !== "newest"}
+          onReset={() => router.push(pathname)}
+          gridClassName="sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_11rem_12rem]"
         >
-          <SelectTrigger className="w-full" aria-label="فیلتر وضعیت منطقه">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">همهٔ وضعیت‌ها</SelectItem>
-            <SelectItem value="active">فعال</SelectItem>
-            <SelectItem value="inactive">غیرفعال</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={sort}
-          onValueChange={(value) =>
-            updateURL({ sort: value === "newest" ? undefined : value }, true)
-          }
-        >
-          <SelectTrigger
-            className="w-full sm:col-span-2 lg:col-span-1"
-            aria-label="ترتیب مناطق"
+          <SearchControl
+            key={query}
+            initialValue={query}
+            onCommit={commitSearch}
+          />
+          <Select
+            value={status}
+            onValueChange={(value) =>
+              updateURL({ status: value === "all" ? undefined : value }, true)
+            }
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="newest">جدیدترین</SelectItem>
-            <SelectItem value="name_asc">نام، صعودی</SelectItem>
-            <SelectItem value="name_desc">نام، نزولی</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
+            <SelectTrigger className="h-11 w-full" aria-label="فیلتر وضعیت منطقه">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">همهٔ وضعیت‌ها</SelectItem>
+              <SelectItem value="active">فعال</SelectItem>
+              <SelectItem value="inactive">غیرفعال</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={sort}
+            onValueChange={(value) =>
+              updateURL({ sort: value === "newest" ? undefined : value }, true)
+            }
+          >
+            <SelectTrigger
+              className="h-11 w-full sm:col-span-2 lg:col-span-1"
+              aria-label="ترتیب مناطق"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">جدیدترین</SelectItem>
+              <SelectItem value="name_asc">نام، صعودی</SelectItem>
+              <SelectItem value="name_desc">نام، نزولی</SelectItem>
+            </SelectContent>
+          </Select>
+        </AdminFilterBar>
+      }
+      pagination={
+        zones.data && zones.data.pagination.total_items > 0 ? (
+          <ListPagination
+            page={zones.data.pagination.page}
+            totalPages={zones.data.pagination.total_pages}
+            hasPrev={zones.data.pagination.has_prev}
+            hasNext={zones.data.pagination.has_next}
+            onPrev={() =>
+              updateURL({ page: page > 2 ? String(page - 1) : undefined })
+            }
+            onNext={() => updateURL({ page: String(page + 1) })}
+            disabled={zones.isFetching}
+            ariaLabel="صفحه‌بندی مناطق ارسال"
+            label={
+              <>
+                {faNum(zones.data.pagination.total_items)} منطقه · صفحهٔ{" "}
+                {faNum(zones.data.pagination.page)} از{" "}
+                {faNum(zones.data.pagination.total_pages)}
+              </>
+            }
+          />
+        ) : null
+      }
+    >
       {actionError ? (
         <p role="alert" className="mb-4 text-sm text-destructive">
           {actionError}
@@ -516,42 +548,6 @@ export function ShippingZonesBoard() {
         </div>
       ) : null}
 
-      {zones.data && zones.data.pagination.total_items > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
-            {faNum(zones.data.pagination.total_items)} منطقه · صفحهٔ{" "}
-            {faNum(zones.data.pagination.page)} از{" "}
-            {faNum(zones.data.pagination.total_pages)}
-            {zones.isFetching ? (
-              <Loader2
-                className="ms-1 inline size-3 animate-spin"
-                aria-hidden
-              />
-            ) : null}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!zones.data.pagination.has_prev || zones.isFetching}
-              onClick={() =>
-                updateURL({ page: page > 2 ? String(page - 1) : undefined })
-              }
-            >
-              قبلی
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!zones.data.pagination.has_next || zones.isFetching}
-              onClick={() => updateURL({ page: String(page + 1) })}
-            >
-              بعدی
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
       <AlertDialog
         open={deleteTarget !== null}
         onOpenChange={(open) =>
@@ -586,6 +582,6 @@ export function ShippingZonesBoard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </AdminPage>
   );
 }

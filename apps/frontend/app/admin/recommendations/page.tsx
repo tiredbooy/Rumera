@@ -2,10 +2,14 @@ import Link from "next/link";
 import { Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { getRecommendationOpsStats } from "@/features/recommendations/admin-api";
-import { getTrending } from "@/features/recommendations/api";
+import {
+  getRecommendationOpsStats,
+  getTrending,
+} from "@/features/recommendations/admin-api";
 import { PageHeader } from "@/features/dashboard/components/page-header";
+import { AdminDataErrorState } from "@/features/dashboard/components/admin-data-error-state";
 import { DashboardErrorState } from "@/features/dashboard/components/async-state";
+import { ApiError } from "@/lib/api/errors";
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { faNum, formatPrice } from "@/lib/products";
@@ -37,10 +41,17 @@ export default async function AdminRecommendationsPage() {
   }
 
   let trending: Awaited<ReturnType<typeof getTrending>> = [];
+  let trendingError: string | null = null;
   try {
     trending = await getTrending({ limit: 5 });
-  } catch {
-    trending = [];
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      throw error;
+    }
+    trendingError = "نمونهٔ محصولات ترند از سرور دریافت نشد.";
   }
 
   const byType = stats?.interactions_by_type ?? {};
@@ -113,9 +124,15 @@ export default async function AdminRecommendationsPage() {
             <Sparkles className="size-5 text-primary" aria-hidden />
             نمونهٔ Trending (زنده)
           </h2>
-          {trending.length === 0 ? (
+          {trendingError ? (
+            <AdminDataErrorState
+              className="mt-3"
+              title="بارگذاری Trending ناموفق بود"
+              description={trendingError}
+            />
+          ) : trending.length === 0 ? (
             <p className="mt-3 text-sm text-muted-foreground">
-              trending خالی است (کاتالوگ سرد یا API در دسترس نیست).
+              trending خالی است (کاتالوگ سرد).
             </p>
           ) : (
             <ul className="mt-3 space-y-2">

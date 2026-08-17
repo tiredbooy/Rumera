@@ -40,9 +40,12 @@ Seed command (`cmd/seed`) writes **only** to the main DB.
 - **Migrations:** `migrations/analytics/*.sql`.
 - **Owns:** raw event tables (hypertables where applicable), daily product
   stats, daily revenue stats, search summary, other rollups.
-- **Write path:** analytics middleware → in-memory queue → worker flush
-  (`internal/analytics/queue.go`). **Never block** the HTTP response on insert
-  failure beyond drop-when-full.
+- **Write path:** analytics middleware resolves `sid`/`did` cookies
+  (`internal/analytics` persist helpers; `Set-Cookie` before the handler)
+  → in-memory queue → worker flush (`internal/analytics/queue.go`).
+  **Never block** the HTTP response on insert failure beyond drop-when-full.
+  Present valid UUIDs are reused; IDs are minted only when the cookie is
+  missing. The store BFF must forward those cookies — it must not invent IDs.
 - **Read path:** admin analytics handlers + cron jobs that aggregate into daily
   tables.
 

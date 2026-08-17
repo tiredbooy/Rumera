@@ -50,9 +50,9 @@ export const PWA_SENSITIVE_QUERY_KEYS = [
 ] as const;
 
 export const PWA_THEME = {
-  backgroundColor: "#2b231c",
-  themeColorDark: "#2b231c",
-  themeColorLight: "#faf8f4",
+  backgroundColor: "#140e0a",
+  themeColorDark: "#140e0a",
+  themeColorLight: "#fdfaf4",
 } as const;
 
 /** Manifest shortcuts — deep links that feel like native home actions. */

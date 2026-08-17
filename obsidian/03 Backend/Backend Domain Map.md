@@ -15,7 +15,7 @@ Capability → packages (mental index). Prefer `features/*` when listed.
 | Capability | Package | Notes |
 |------------|---------|-------|
 | Auth / OTP / tokens | **`features/auth`** | [[Auth and Sessions]] |
-| Users / admin customers | **`features/users`** | RegisterAdmin |
+| Users / admin customers | **`features/users`** | [[Users Backend]] · RegisterAdmin (ban behind `customers:ban`) |
 | Panel RBAC | **`features/rbac`** | [[RBAC]] — package ready |
 | Addresses | **`features/addresses`** | [[Addresses Backend]] |
 | Wishlist | **`features/wishlist`** | [[Wishlist Backend]] |

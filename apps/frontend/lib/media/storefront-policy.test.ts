@@ -14,7 +14,7 @@ describe("storefront media policy", () => {
     expect(policy.width / (policy.height ?? 1)).toBeCloseTo(4 / 3, 5);
     expect(policy.fit).toBe("cover");
     expect(policy.sizes).toContain("100vw");
-    expect(policy.format).toBe("webp");
+    expect(policy.format).toBeUndefined();
   });
 
   it("matches recommendation image sizing to the wide rail breakpoints", () => {

@@ -4,6 +4,26 @@ Read-only admin dashboard queries over pre-aggregated daily revenue, product, an
 
 See [Authentication](../authentication.md) for the token model and trust tiers, and [Conventions](../conventions.md) for the response/error envelope.
 
+## Visitor identity (`sid` / `did`)
+
+Capture middleware persists first-party cookies on every request (not an ingest API):
+
+| Cookie | Meaning | Lifetime |
+|--------|---------|----------|
+| `sid` | Session ID written onto `events.session_id` | 365 days |
+| `did` | Device ID written onto `events.device_id` | 365 days |
+
+Attributes: `HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` in production. Valid incoming UUIDs are reused; missing or malformed cookies are minted once and `Set-Cookie`'d. The store BFF copies incoming `sid`/`did` Cookie values upstream and passes matching `Set-Cookie` lines back. It never invents IDs.
+
+See [data-stores.md](../architecture/data-stores.md) for the write path.
+
+Storefront product search is `GET /products?search=` (there is no `GET /search`).
+A successful public list with a non-empty `search` is captured as
+`search_performed` with payload `query` + unpaginated `results_count`. A failed
+list is an error envelope and does not invent `results_count: 0`. Admin
+`GET /admin/products?search=` is not a shopper search event. Rollups:
+[search architecture](../architecture/search.md).
+
 | Method | Path | Tier | Description |
 |--------|------|------|-------------|
 | GET | `/admin/analytics/revenue/summary` | 🛡️ admin | Aggregated revenue over a range |

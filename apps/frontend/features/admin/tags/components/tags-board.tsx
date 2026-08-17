@@ -24,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,7 +34,10 @@ import {
   useDeleteTag,
 } from "@/features/admin/tags/api";
 import type { Tag, TagListQuery } from "@/features/catalog/tags/types";
-import { PageHeader } from "@/features/dashboard/components/page-header";
+import {
+  AdminFilterBar,
+  AdminPage,
+} from "@/features/dashboard/components/admin-page";
 import { faNum } from "@/lib/products";
 import { faDate } from "@/lib/utils/date";
 
@@ -224,35 +228,65 @@ export function TagsBoard() {
       : "ارتباط با سرور برقرار نشد. دوباره تلاش کنید.";
 
   return (
-    <>
-      <PageHeader
-        title="برچسب‌ها"
-        description="برچسب‌های کاتالوگ و ارتباط آن‌ها با محصولات را مدیریت کنید."
-        actions={
-          <Button size="sm" asChild>
-            <Link href="/admin/tags/new">
-              <Plus className="size-4" /> برچسب جدید
-            </Link>
-          </Button>
-        }
-      />
-
-      <label className="relative mb-4 block max-w-xl">
-        <span className="sr-only">جستجوی برچسب</span>
-        <Search
-          className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
-          aria-hidden
-        />
-        <Input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="جستجو در نام، نامک یا توضیحات…"
-          className="ps-9"
-          disabled={removeTag.isPending}
-        />
-      </label>
-
+    <AdminPage
+      title="برچسب‌ها"
+      description="برچسب‌های کاتالوگ و ارتباط آن‌ها با محصولات را مدیریت کنید."
+      action={
+        <Button size="sm" asChild>
+          <Link href="/admin/tags/new">
+            <Plus className="size-4" /> برچسب جدید
+          </Link>
+        </Button>
+      }
+      filters={
+        <AdminFilterBar
+          id="tags-filter-title"
+          title="جستجوی برچسب"
+          hasFilters={Boolean(query)}
+          onReset={() => router.push(pathname)}
+          gridClassName="max-w-xl"
+        >
+          <label className="relative block">
+            <span className="sr-only">جستجوی برچسب</span>
+            <Search
+              className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="جستجو در نام، نامک یا توضیحات…"
+              className="h-11 ps-9"
+              disabled={removeTag.isPending}
+            />
+          </label>
+        </AdminFilterBar>
+      }
+      pagination={
+        tags.data && tags.data.pagination.total_items > 0 ? (
+          <ListPagination
+            page={tags.data.pagination.page}
+            totalPages={tags.data.pagination.total_pages}
+            hasPrev={tags.data.pagination.has_prev}
+            hasNext={tags.data.pagination.has_next}
+            onPrev={() =>
+              updateURL({ page: page > 2 ? String(page - 1) : undefined })
+            }
+            onNext={() => updateURL({ page: String(page + 1) })}
+            disabled={tags.isFetching}
+            ariaLabel="صفحه‌بندی برچسب‌ها"
+            label={
+              <>
+                {faNum(tags.data.pagination.total_items)} برچسب · صفحهٔ{" "}
+                {faNum(tags.data.pagination.page)} از{" "}
+                {faNum(tags.data.pagination.total_pages)}
+              </>
+            }
+          />
+        ) : null
+      }
+    >
       {mutationError ? (
         <p
           role="alert"
@@ -350,42 +384,6 @@ export function TagsBoard() {
         </div>
       ) : null}
 
-      {tags.data && tags.data.pagination.total_items > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground" aria-live="polite">
-            {faNum(tags.data.pagination.total_items)} برچسب · صفحهٔ{" "}
-            {faNum(tags.data.pagination.page)} از{" "}
-            {faNum(tags.data.pagination.total_pages)}
-            {tags.isFetching ? (
-              <Loader2
-                className="ms-1 inline size-3 animate-spin"
-                aria-hidden
-              />
-            ) : null}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!tags.data.pagination.has_prev || tags.isFetching}
-              onClick={() =>
-                updateURL({ page: page > 2 ? String(page - 1) : undefined })
-              }
-            >
-              قبلی
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!tags.data.pagination.has_next || tags.isFetching}
-              onClick={() => updateURL({ page: String(page + 1) })}
-            >
-              بعدی
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
       <AlertDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
@@ -420,6 +418,6 @@ export function TagsBoard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </AdminPage>
   );
 }

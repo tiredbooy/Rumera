@@ -3,14 +3,14 @@
 package integration
 
 import (
-	"github.com/tiredbooy/internal/features/inventory"
-	"github.com/tiredbooy/internal/features/catalog/variant"
-	"github.com/tiredbooy/internal/features/catalog/product"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tiredbooy/internal/features/catalog/product"
+	"github.com/tiredbooy/internal/features/catalog/variant"
+	"github.com/tiredbooy/internal/features/inventory"
 	"image"
 	"image/color"
 	"image/png"
@@ -21,8 +21,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/internal/features/media"
+	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/imaging"
 	"github.com/tiredbooy/pkg/storage"

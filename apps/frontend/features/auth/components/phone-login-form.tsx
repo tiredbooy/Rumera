@@ -17,6 +17,8 @@ import {
 import { AuthClientError, requestOtp } from "@/features/auth/api/client"
 import type { RequestOtpInput, VerifyOtpInput } from "@/features/auth/types"
 import { safeCallbackUrl } from "@/features/auth/redirects"
+import { signInErrorMessage } from "@/features/auth/components/login-form"
+import { toAsciiDigits } from "@/lib/normalize-digits"
 import { faNum } from "@/lib/products"
 
 const RESEND_SECONDS = 60
@@ -49,7 +51,7 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
     setError(null)
     setLoading(true)
     try {
-      const input: RequestOtpInput = { phone: phone.trim() }
+      const input: RequestOtpInput = { phone: toAsciiDigits(phone).trim() }
       await requestOtp(input)
       setStep("code")
       setCode("")
@@ -59,7 +61,9 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
         error instanceof AuthClientError
           ? error.status === 429
             ? "تعداد درخواست‌ها زیاد است. کمی بعد دوباره تلاش کنید."
-            : "شماره موبایل نامعتبر است."
+            : error.status >= 500
+              ? "ارتباط با سرور برقرار نشد."
+              : "شماره موبایل نامعتبر است."
           : "ارتباط با سرور برقرار نشد.",
       )
       if (formElement) focusFormControl(formElement, "phone")
@@ -73,10 +77,15 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
     const formElement = e.currentTarget
     setError(null)
     setLoading(true)
-    const input: VerifyOtpInput = { phone: phone.trim(), code: code.trim() }
+    const input: VerifyOtpInput = {
+      phone: toAsciiDigits(phone).trim(),
+      code: toAsciiDigits(code).trim(),
+    }
     const res = await signIn("otp", { ...input, redirect: false })
     if (!res || res.error) {
-      setError("کد واردشده نادرست یا منقضی شده است.")
+      setError(
+        signInErrorMessage(res, "کد واردشده نادرست یا منقضی شده است."),
+      )
       setLoading(false)
       focusFormControl(formElement, "code")
       return
@@ -177,7 +186,7 @@ export function PhoneLoginForm({ callbackUrl }: { callbackUrl: string }) {
           dir="ltr"
           value={code}
           onChange={(value) =>
-            setCode(value.replace(/\D/g, "").slice(0, OTP_LENGTH))
+            setCode(toAsciiDigits(value).replace(/\D/g, "").slice(0, OTP_LENGTH))
           }
           aria-invalid={!!error}
           aria-describedby={error ? "code-error" : undefined}

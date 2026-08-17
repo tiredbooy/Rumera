@@ -11,7 +11,7 @@ export default async function AdminNewOptionPage() {
         title="ویژگی جدید"
         description="ویژگی مشترک برای تنوع محصولات (مثل حجم)."
       />
-      <OptionTypeForm mode="create" />
+      <OptionTypeForm mode="create" canWrite />
     </>
   );
 }

@@ -40,7 +40,8 @@ ENV CGO_ENABLED=1 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -trimpath -tags vips -ldflags="-s -w" -o /app/server ./cmd/server/main.go \
- && go build -trimpath -tags vips -ldflags="-s -w" -o /app/media-reconcile ./cmd/media-reconcile
+ && go build -trimpath -tags vips -ldflags="-s -w" -o /app/media-reconcile ./cmd/media-reconcile \
+ && go build -trimpath -tags vips -ldflags="-s -w" -o /app/event-worker ./cmd/event-worker
 
 # ── runner ────────────────────────────────────────────────────────────────────
 FROM alpine:3.21 AS runner
@@ -59,6 +60,8 @@ RUN apk add --no-cache ca-certificates tzdata vips vips-heif \
 # Binary + migrations only. No .env, no source.
 COPY --from=builder --chown=rumera:rumera /app/server ./server
 COPY --from=builder --chown=rumera:rumera /app/media-reconcile ./media-reconcile
+# Same image, different entrypoint: docker-compose.prod.yml runs ./event-worker.
+COPY --from=builder --chown=rumera:rumera /app/event-worker ./event-worker
 COPY --from=builder --chown=rumera:rumera /app/migrations ./migrations
 
 USER rumera

@@ -1,5 +1,6 @@
+import { buildQuery } from "@/lib/api/qs";
 import { storeRequest } from "@/lib/api/store-client";
-import type { ApiSuccess } from "@/lib/api/types";
+import type { ApiSuccess, Paginated, PaginationQuery } from "@/lib/api/types";
 
 import type {
   LoyaltyAccount,
@@ -13,10 +14,13 @@ export function getLoyaltyAccount(): Promise<LoyaltyAccount> {
   );
 }
 
-export function listLoyaltyTransactions(): Promise<LoyaltyTransaction[]> {
-  return storeRequest<ApiSuccess<LoyaltyTransaction[]>>(
-    "loyalty/transactions",
-  ).then((body) => body.data);
+/** Paginated customer ledger. Default page/limit applied by the API (20). */
+export function listLoyaltyTransactions(
+  query: PaginationQuery = {},
+): Promise<Paginated<LoyaltyTransaction>> {
+  return storeRequest<Paginated<LoyaltyTransaction>>(
+    `loyalty/transactions${buildQuery({ ...query })}`,
+  );
 }
 
 /** Stable client key for redeem (HTTP + domain spend idempotency, PH-040b/c). */

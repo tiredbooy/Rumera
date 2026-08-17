@@ -24,7 +24,7 @@ export function PreviewCard({
           className={cn(
             "rounded-full px-2 py-0.5 text-[11px] font-medium",
             isActive
-              ? "bg-emerald-500/10 text-emerald-600"
+              ? "bg-success/12 text-success"
               : "bg-muted text-muted-foreground",
           )}
         >

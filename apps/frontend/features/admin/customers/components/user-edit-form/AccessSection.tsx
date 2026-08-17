@@ -56,7 +56,7 @@ export function AccessSection({
 
       {isSelf ? (
         <div
-          className="mt-4 flex items-start gap-2.5 rounded-xl bg-amber-500/10 px-3.5 py-3 text-amber-700 ring-1 ring-inset ring-amber-500/20 dark:text-amber-400"
+          className="mt-4 flex items-start gap-2.5 rounded-xl bg-warning/12 px-3.5 py-3 text-warning ring-1 ring-inset ring-warning/25"
           role="note"
         >
           <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -123,7 +123,7 @@ export function AccessSection({
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
                 watchedActive
-                  ? "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400"
+                  ? "bg-success/12 text-success ring-success/25"
                   : "bg-destructive/10 text-destructive ring-destructive/20",
               )}
               data-testid="user-status-badge"
@@ -131,7 +131,7 @@ export function AccessSection({
               <span
                 className={cn(
                   "size-1.5 rounded-full",
-                  watchedActive ? "bg-emerald-500" : "bg-destructive",
+                  watchedActive ? "bg-success" : "bg-destructive",
                 )}
                 aria-hidden
               />

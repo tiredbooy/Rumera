@@ -20,6 +20,9 @@ func NewHandler(svc *Service, v *validator.Validator) *Handler {
 
 // Validate previews a coupon for the authenticated user's basket.
 // POST /coupons/validate
+//
+// req.UserID is taken from the token. Omitted product_ids / category_ids
+// (and a zero order_subtotal) are filled from that user's cart in Service.
 func (h *Handler) Validate(c *gin.Context) {
 	userID, ok := httpx.UID(c)
 	if !ok {

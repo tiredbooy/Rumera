@@ -1,5 +1,6 @@
 import { TrendingUp } from "lucide-react";
 
+import { HomeStructuredData } from "@/components/structured-data";
 import { BrandMarquee } from "@/features/catalog/brands/components/brand-marquee";
 import { getFeaturedBrands } from "@/features/catalog/brands/api";
 import { listProducts } from "@/features/catalog/products/api/public";
@@ -11,7 +12,7 @@ import { CatalogSection } from "@/features/home/components/CatalogSection";
 import { CategoryGrid } from "@/features/home/components/CategoryGrid";
 import { ForYouRail } from "@/features/home/components/for-you-rail";
 import { HeroCarousel } from "@/features/home/components/hero-carousel";
-import { NewsletterSection } from "@/features/home/components/NewsletterSection";
+
 import { PerksSection } from "@/features/home/components/PerksSection";
 import { StorySection } from "@/features/home/components/StorySection";
 import { TestimonialSection } from "@/features/home/components/TestimonialSection";
@@ -34,7 +35,7 @@ export async function HomeView() {
       listActiveHeroSlides(),
       getTrending({ limit: 8 }),
       settleHome(getFeaturedCategories(), []),
-      getFeaturedBrands(),
+      settleHome(getFeaturedBrands(), []),
       settleHome(listProducts({ page: 1, limit: 8 }), {
         results: [],
         pagination: {
@@ -59,6 +60,7 @@ export async function HomeView() {
 
   return (
     <>
+      <HomeStructuredData />
       <h1 className="sr-only">فروشگاه رومرا</h1>
       <HeroCarousel slides={heroSlides} />
       <PerksSection />
@@ -111,7 +113,6 @@ export async function HomeView() {
 
       <StorySection />
       <TestimonialSection />
-      <NewsletterSection />
     </>
   );
 }

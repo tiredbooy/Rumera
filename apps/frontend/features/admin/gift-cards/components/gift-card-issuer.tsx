@@ -134,13 +134,18 @@ export function GiftCardIssuer() {
     <>
       <PageHeader
         title="صدور کارت هدیه"
-        description="یک یا چند کد یک‌بارمصرف با مبلغ یکسان صادر کنید. کدها فقط در پاسخ همین عملیات برگردانده می‌شوند."
+        description="یک یا چند کد یک‌بارمصرف با مبلغ یکسان صادر کنید. دستهٔ تازه همین‌جا نمایش داده می‌شود."
         actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/payments">
-              <ReceiptText className="size-4" aria-hidden /> تراکنش‌های پرداخت
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/gift-cards">دفتر کارت‌ها</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/payments">
+                <ReceiptText className="size-4" aria-hidden /> تراکنش‌های پرداخت
+              </Link>
+            </Button>
+          </div>
         }
       />
 

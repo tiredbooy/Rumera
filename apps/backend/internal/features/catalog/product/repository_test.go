@@ -49,8 +49,11 @@ func TestBuildProductFilterSQLScopesCategoryDescendantsInDatabase(t *testing.T) 
 	for _, clause := range []string{
 		"rumera_search_normalize(p.title) ILIKE @search ESCAPE",
 		"rumera_search_normalize(p.description) ILIKE @search ESCAPE",
+		"rumera_search_normalize(p.code) ILIKE @search ESCAPE",
 		"search_brand.title",
 		"search_cat.title",
+		"rumera_search_normalize(search_sku.sku) ILIKE @search ESCAPE",
+		"rumera_search_normalize(search_tag.title) ILIKE @search ESCAPE",
 		"p.brand_id = @brand_id",
 		"filter_brand.slug = @brand_slug",
 		"p.is_active = @is_active",
@@ -107,6 +110,66 @@ func TestBuildProductFilterSQLSkipsEmptyAfterNormalize(t *testing.T) {
 	}
 	if strings.Contains(query.whereSQL, "ILIKE") {
 		t.Fatalf("empty search must not emit ILIKE: %q", query.whereSQL)
+	}
+}
+
+func TestBuildProductFilterSQLPriceBoundsRequireActiveVariants(t *testing.T) {
+	minPrice := 100.0
+	maxPrice := 200.0
+
+	minOnly := buildProductFilterSQL(ProductFilter{MinPrice: &minPrice})
+	if !strings.Contains(minOnly.whereSQL, "pv.is_active") {
+		t.Fatalf("min_price EXISTS omitted pv.is_active: %q", minOnly.whereSQL)
+	}
+	if !strings.Contains(minOnly.whereSQL, "pv.price >= @min_price") {
+		t.Fatalf("min_price bound missing: %q", minOnly.whereSQL)
+	}
+	if strings.Contains(minOnly.whereSQL, "pv.price <= @max_price") {
+		t.Fatalf("min-only filter emitted max_price: %q", minOnly.whereSQL)
+	}
+	if minOnly.args["min_price"] != minPrice {
+		t.Fatalf("min_price arg = %#v", minOnly.args["min_price"])
+	}
+
+	maxOnly := buildProductFilterSQL(ProductFilter{MaxPrice: &maxPrice})
+	if !strings.Contains(maxOnly.whereSQL, "pv.is_active") {
+		t.Fatalf("max_price EXISTS omitted pv.is_active: %q", maxOnly.whereSQL)
+	}
+	if !strings.Contains(maxOnly.whereSQL, "pv.price <= @max_price") {
+		t.Fatalf("max_price bound missing: %q", maxOnly.whereSQL)
+	}
+	if strings.Contains(maxOnly.whereSQL, "pv.price >= @min_price") {
+		t.Fatalf("max-only filter emitted min_price: %q", maxOnly.whereSQL)
+	}
+	if maxOnly.args["max_price"] != maxPrice {
+		t.Fatalf("max_price arg = %#v", maxOnly.args["max_price"])
+	}
+
+	both := buildProductFilterSQL(ProductFilter{MinPrice: &minPrice, MaxPrice: &maxPrice})
+	if got := strings.Count(both.whereSQL, "pv.is_active"); got < 2 {
+		t.Fatalf("combined price filter must require active variants on each EXISTS; got %d in %q", got, both.whereSQL)
+	}
+	if !strings.Contains(both.whereSQL, "pv.price >= @min_price") || !strings.Contains(both.whereSQL, "pv.price <= @max_price") {
+		t.Fatalf("combined price bounds missing: %q", both.whereSQL)
+	}
+	if both.args["min_price"] != minPrice || both.args["max_price"] != maxPrice {
+		t.Fatalf("combined price args = %#v", both.args)
+	}
+
+	// Guard: a price EXISTS without is_active would let retired SKUs match.
+	for name, sql := range map[string]string{
+		"min":  minOnly.whereSQL,
+		"max":  maxOnly.whereSQL,
+		"both": both.whereSQL,
+	} {
+		for _, bound := range []string{"pv.price >= @min_price", "pv.price <= @max_price"} {
+			if !strings.Contains(sql, bound) {
+				continue
+			}
+			if !strings.Contains(sql, "pv.is_active AND "+bound) && !strings.Contains(sql, bound+" AND pv.is_active") {
+				t.Fatalf("%s price EXISTS does not AND pv.is_active with %s: %q", name, bound, sql)
+			}
+		}
 	}
 }
 

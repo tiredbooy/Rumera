@@ -16,7 +16,7 @@ decision**, not a half-built payment rail.
 
 1. Find due active cellar-box subscriptions  
 2. Email a Persian RTL reminder (not a charge receipt)  
-3. Advance `next_renewal_at` by one cadence  
+3. Advance `next_renewal_at` by one cadence **only after the reminder dispatch/send succeeds** (PR-057a / PR-055a)  
 
 **Do not** add tokenized card-on-file, automatic gateway charge, wallet silent
 debit, or order auto-create for box renewals in this program.
@@ -74,7 +74,8 @@ engineering debt.
 
 | Path | Role |
 |------|------|
-| `internal/corn/subscription_renewal_job.go` | Email + advance only |
+| `internal/corn/subscription_renewal_job.go` | Thin cron wrapper; dispatcher-preferred mail; no charge |
+| `internal/features/subscription/renewal.go` | Email + advance only after dispatch/send (PR-057a / PR-055a) |
 | `internal/features/subscription/` | Lifecycle API; no charge fields |
 | `migrations/main/20260615190000_create_subscriptions.sql` | No payment token columns |
 

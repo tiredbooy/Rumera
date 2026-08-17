@@ -12,6 +12,13 @@ export const RECOMMENDATION_CACHE_TAG = "storefront:recommendations";
 export const RECIPE_CACHE_TAG = "storefront:recipes";
 export const JOURNAL_CACHE_TAG = "storefront:journal";
 export const BRAND_CACHE_TAG = "storefront:brands";
+/**
+ * Site settings back the header, footer and — critically — the maintenance kill
+ * switch read in the storefront layout. There is no middleware backstop, so this
+ * tag is what lets an operator close or reopen the shop immediately rather than
+ * waiting out a TTL.
+ */
+export const SETTINGS_CACHE_TAG = "storefront:settings";
 
 /** Per-product detail tag (id or slug). Prefer id when known from admin routes. */
 export function productDetailCacheTag(idOrSlug: string | number): string {

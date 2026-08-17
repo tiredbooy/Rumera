@@ -21,11 +21,16 @@ import type { Category } from "@/features/catalog/categories/types";
 const mocks = vi.hoisted(() => ({
   saveProductAggregate: vi.fn(),
   push: vi.fn(),
+  replace: vi.fn(),
   refresh: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }),
+  useRouter: () => ({
+    push: mocks.push,
+    replace: mocks.replace,
+    refresh: mocks.refresh,
+  }),
 }));
 
 vi.mock("sonner", () => ({
@@ -315,7 +320,8 @@ describe("ProductForm complete authoring journeys", () => {
         ],
       }),
     );
-    expect(mocks.push).toHaveBeenCalledWith("/admin/products/77");
+    expect(mocks.replace).toHaveBeenCalledWith("/admin/products/77");
+    expect(mocks.push).not.toHaveBeenCalledWith("/admin/products");
   },
   15_000,
   );
@@ -360,6 +366,7 @@ describe("ProductForm complete authoring journeys", () => {
     fireEvent.change(screen.getByLabelText(/وزن/), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "هدیه" }));
     fireEvent.click(screen.getByRole("button", { name: "حذف تنوع 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "حذف تنوع" }));
     fireEvent.click(screen.getByRole("button", { name: "حذف تصویر 1" }));
 
     fireEvent.click(screen.getByRole("button", { name: /سئو و متادیتا/ }));
@@ -405,5 +412,40 @@ describe("ProductForm complete authoring journeys", () => {
     await waitFor(() =>
       expect(screen.getByText("همهٔ تغییرات ذخیره شد")).toBeInTheDocument(),
     );
+    expect(mocks.push).not.toHaveBeenCalledWith("/admin/products");
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("keeps brand, category, and tag lookups when the option catalog failed", async () => {
+    render(
+      <ProductForm
+        mode="create"
+        categories={categories}
+        brands={brands}
+        tags={[
+          {
+            id: 9,
+            title: "هدیه",
+            slug: "gift",
+            created_at: "2026-07-27T00:00:00Z",
+            updated_at: "2026-07-27T00:00:00Z",
+          },
+        ]}
+        optionTypes={[]}
+        optionCatalogError="بارگذاری ویژگی‌های تنوع ناموفق بود. دوباره تلاش کنید."
+      />,
+    );
+
+    await chooseOption("دسته‌بندی", "نوشیدنی ویژه");
+    await chooseOption("برند / سازنده", "رومرا");
+    fireEvent.click(screen.getByRole("button", { name: /برچسب‌های فروشگاهی/ }));
+    expect(screen.getByRole("button", { name: "هدیه" })).toBeInTheDocument();
+
+    expect(screen.getByText("هنوز ویژگی مشترکی تعریف نشده")).toBeInTheDocument();
+    expect(
+      screen.getByText("بارگذاری ویژگی‌های تنوع ناموفق بود. دوباره تلاش کنید."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "تلاش دوباره" }));
+    expect(mocks.refresh).toHaveBeenCalledOnce();
   });
 });

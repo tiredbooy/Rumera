@@ -446,3 +446,139 @@ func TestCouponService_Validate_UnknownCode(t *testing.T) {
 		t.Fatalf("unknown code should be invalid; got %+v", res)
 	}
 }
+
+type cartBasketStub struct {
+	items []CartBasketItem
+	err   error
+	calls int
+	user  int64
+}
+
+func (s *cartBasketStub) BasketForUser(_ context.Context, userID int64) ([]CartBasketItem, error) {
+	s.calls++
+	s.user = userID
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.items, nil
+}
+
+func activeScopedCoupon() *Coupon {
+	return &Coupon{
+		ID:             5,
+		Code:           "SCOPED10",
+		DiscountType:   DiscountTypePercentage,
+		DiscountValue:  10,
+		MinOrderAmount: 50,
+		MaxUsesPerUser: 3,
+		IsActive:       true,
+		StartsAt:       time.Now().Add(-time.Hour),
+		ApplicableTo:   &ApplicableTo{ProductIDs: []int64{7}},
+	}
+}
+
+func TestCouponService_Validate_OmittedIDsUsesCart(t *testing.T) {
+	cat := int64(3)
+	cart := &cartBasketStub{
+		items: []CartBasketItem{{ProductID: 7, CategoryID: &cat, LineTotal: 99.80}},
+	}
+	svc := NewService(&couponUpdateRepo{current: activeScopedCoupon()}).WithCart(cart)
+
+	res, err := svc.Validate(context.Background(), ValidateCouponReq{
+		Code:   "scoped10",
+		UserID: 9,
+	})
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if cart.calls != 1 || cart.user != 9 {
+		t.Fatalf("cart calls = %d user = %d; want 1 call for user 9", cart.calls, cart.user)
+	}
+	if res == nil || !res.IsValid {
+		t.Fatalf("expected valid scoped coupon from cart; got %+v", res)
+	}
+	if res.DiscountAmount != 9.98 {
+		t.Fatalf("discount = %v; want 9.98", res.DiscountAmount)
+	}
+}
+
+func TestCouponService_Validate_OmittedIDsEmptyCartInvalid(t *testing.T) {
+	cart := &cartBasketStub{}
+	svc := NewService(&couponUpdateRepo{current: activeScopedCoupon()}).WithCart(cart)
+
+	res, err := svc.Validate(context.Background(), ValidateCouponReq{
+		Code:   "SCOPED10",
+		UserID: 4,
+	})
+	if err != nil {
+		t.Fatalf("empty cart must not 500, got %v", err)
+	}
+	if cart.calls != 1 {
+		t.Fatalf("cart calls = %d; want 1", cart.calls)
+	}
+	if res == nil || res.IsValid {
+		t.Fatalf("empty cart should be invalid; got %+v", res)
+	}
+	if res.InvalidReason == "" {
+		t.Fatal("expected invalid_reason for empty basket")
+	}
+}
+
+func TestCouponService_Validate_ExplicitIDsSkipCart(t *testing.T) {
+	cart := &cartBasketStub{
+		items: []CartBasketItem{{ProductID: 99, LineTotal: 10}},
+	}
+	svc := NewService(&couponUpdateRepo{current: activeScopedCoupon()}).WithCart(cart)
+
+	res, err := svc.Validate(context.Background(), ValidateCouponReq{
+		Code:          "SCOPED10",
+		UserID:        1,
+		OrderSubtotal: 100,
+		ProductIDs:    []int64{7},
+		CategoryIDs:   []int64{3},
+	})
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if cart.calls != 0 {
+		t.Fatalf("cart calls = %d; want 0 when IDs and subtotal supplied", cart.calls)
+	}
+	if res == nil || !res.IsValid {
+		t.Fatalf("expected valid with explicit IDs; got %+v", res)
+	}
+}
+
+func TestCouponService_Validate_ZeroSubtotalFilledFromCart(t *testing.T) {
+	cart := &cartBasketStub{
+		items: []CartBasketItem{{ProductID: 7, LineTotal: 80}},
+	}
+	svc := NewService(&couponUpdateRepo{current: activeScopedCoupon()}).WithCart(cart)
+
+	res, err := svc.Validate(context.Background(), ValidateCouponReq{
+		Code:       "SCOPED10",
+		UserID:     2,
+		ProductIDs: []int64{7},
+	})
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if cart.calls != 1 {
+		t.Fatalf("cart calls = %d; want 1 to fill zero subtotal", cart.calls)
+	}
+	if res == nil || !res.IsValid || res.DiscountAmount != 8 {
+		t.Fatalf("expected 8 from cart subtotal; got %+v", res)
+	}
+}
+
+func TestCouponService_Validate_CartErrorIsInternal(t *testing.T) {
+	cart := &cartBasketStub{err: errors.New("db down")}
+	svc := NewService(&couponUpdateRepo{current: activeScopedCoupon()}).WithCart(cart)
+
+	_, err := svc.Validate(context.Background(), ValidateCouponReq{
+		Code:   "SCOPED10",
+		UserID: 1,
+	})
+	if !errors.Is(err, apperr.ErrInternal) {
+		t.Fatalf("err = %v; want ErrInternal", err)
+	}
+}

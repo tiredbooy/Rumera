@@ -12,7 +12,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useEffect, useRef, useState } from "react";
+import { useForm, type FieldErrors } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,14 +26,22 @@ import {
   defaultsFromSettings,
   mapSettingsFieldErrors,
   normalizeSiteSettings,
-  toSettingsPayload,
 } from "@/features/settings/form-utils";
 import type { SiteSettings } from "@/features/settings/types";
 import {
   siteSettingsFormSchema,
   type SiteSettingsFormValues,
 } from "@/features/settings/validations";
+import { parseAsciiNumber, toAsciiDigits } from "@/lib/normalize-digits";
 import { faNum } from "@/lib/products";
+import { cn } from "@/lib/utils";
+import {
+  firstSettingsTabWithErrors,
+  settingsTabForField,
+  settingsTabsWithErrors,
+  type SettingsTab,
+} from "../settings-tabs";
+import { toAdminSettingsPutBody } from "../to-admin-settings-put";
 import { ContactSection } from "./settings-form/ContactSection";
 import { GiftSection } from "./settings-form/GiftSection";
 import { MaintenanceSection } from "./settings-form/MaintenanceSection";
@@ -53,7 +62,13 @@ const TABS = [
 
 export function SettingsForm({ settings }: { settings: SiteSettings }) {
   const router = useRouter();
+  const [tab, setTab] = useState<SettingsTab>("store");
   const initial = normalizeSiteSettings(settings);
+  const expectedUpdatedAtRef = useRef(initial.updatedAt);
+
+  useEffect(() => {
+    expectedUpdatedAtRef.current = settings.updatedAt ?? "";
+  }, [settings.updatedAt]);
 
   const {
     register,
@@ -73,20 +88,43 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
   const maintenanceEnabled = watch("enabled");
   const freeThreshold = watch("freeThreshold");
   const thresholdPreview =
-    freeThreshold.trim() !== "" && /^\d+$/.test(freeThreshold.trim())
-      ? `معادل ${faNum(Number(freeThreshold))} تومان`
+    freeThreshold.trim() !== "" &&
+    /^\d+$/.test(toAsciiDigits(freeThreshold).trim())
+      ? `معادل ${faNum(parseAsciiNumber(freeThreshold))} تومان`
       : undefined;
+
+  function revealTabForErrors(errs: FieldErrors<SiteSettingsFormValues>) {
+    const next = firstSettingsTabWithErrors(errs);
+    if (!next) return;
+    setTab(next);
+    const firstField = Object.keys(errs).find(
+      (name) => settingsTabForField(name) === next,
+    );
+    if (!firstField) return;
+    queueMicrotask(() => {
+      const el =
+        document.getElementById(firstField) ??
+        document.querySelector<HTMLElement>(`[name="${firstField}"]`);
+      el?.focus();
+    });
+  }
 
   function applyServerErrors(e: unknown) {
     if (e instanceof SettingsApiError) {
       const mapped = mapSettingsFieldErrors(e.fields);
+      const nextErrors = {} as FieldErrors<SiteSettingsFormValues>;
       Object.entries(mapped).forEach(([key, message], index) => {
         setError(
           key as keyof SiteSettingsFormValues,
           { message },
           { shouldFocus: index === 0 },
         );
+        nextErrors[key as keyof SiteSettingsFormValues] = {
+          type: "server",
+          message,
+        };
       });
+      revealTabForErrors(nextErrors);
       toast.error(e.message || "ذخیرهٔ تنظیمات ناموفق بود.");
     } else {
       toast.error("خطای غیرمنتظره رخ داد.");
@@ -95,8 +133,11 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
 
   async function onSubmit(v: SiteSettingsFormValues) {
     try {
-      const updated = await updateSiteSettings(toSettingsPayload(v));
+      const updated = await updateSiteSettings(
+        toAdminSettingsPutBody(v, expectedUpdatedAtRef.current),
+      );
       const normalized = normalizeSiteSettings(updated);
+      expectedUpdatedAtRef.current = normalized.updatedAt;
       toast.success("تنظیمات سایت ذخیره شد.");
       // Re-baseline the form to the server truth (clears the dirty state).
       reset(defaultsFromSettings(normalized));
@@ -108,21 +149,38 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
 
   return (
     <form
-      onSubmit={handleSubmit(onSubmit)}
+      onSubmit={handleSubmit(onSubmit, revealTabForErrors)}
       noValidate
       data-testid="settings-form"
     >
-      <Tabs defaultValue="store">
+      <Tabs
+        value={tab}
+        onValueChange={(next) => setTab(next as SettingsTab)}
+      >
         <TabsList aria-label="بخش‌های تنظیمات" className="w-full">
-          {TABS.map(({ value, label, icon: Icon }) => (
-            <TabsTrigger
-              key={value}
-              value={value}
-              className="shrink-0 cursor-pointer px-3"
-            >
-              <Icon className="size-4" /> {label}
-            </TabsTrigger>
-          ))}
+          {TABS.map(({ value, label, icon: Icon }) => {
+            const invalid = settingsTabsWithErrors(errors).has(value);
+            return (
+              <TabsTrigger
+                key={value}
+                value={value}
+                data-invalid={invalid || undefined}
+                aria-label={invalid ? `${label}، دارای خطا` : undefined}
+                className={cn(
+                  "shrink-0 cursor-pointer px-3",
+                  invalid && "text-destructive data-active:text-destructive",
+                )}
+              >
+                <Icon className="size-4" /> {label}
+                {invalid ? (
+                  <span
+                    className="size-1.5 rounded-full bg-destructive"
+                    aria-hidden
+                  />
+                ) : null}
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         <StoreSection register={register} errors={errors} />

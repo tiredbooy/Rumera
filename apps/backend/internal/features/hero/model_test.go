@@ -1,8 +1,8 @@
 package hero
 
 import (
-	"github.com/tiredbooy/internal/models"
 	"encoding/json"
+	"github.com/tiredbooy/internal/models"
 	"testing"
 	"time"
 )

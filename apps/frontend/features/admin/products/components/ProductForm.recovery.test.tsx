@@ -21,11 +21,16 @@ const mocks = vi.hoisted(() => ({
   preservePrepared: vi.fn(),
   commit: vi.fn(),
   push: vi.fn(),
+  replace: vi.fn(),
   refresh: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }),
+  useRouter: () => ({
+    push: mocks.push,
+    replace: mocks.replace,
+    refresh: mocks.refresh,
+  }),
 }));
 
 vi.mock("sonner", () => ({
@@ -156,7 +161,8 @@ describe("ProductForm aggregate recovery", () => {
         sessionStorage.getItem("rumera:product-aggregate:create:new"),
       ).toBeNull(),
     );
-    expect(mocks.push).toHaveBeenCalledWith("/admin/products/77");
+    expect(mocks.replace).toHaveBeenCalledWith("/admin/products/77");
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 
   it("unfreezes a definitively rejected request for correction", async () => {

@@ -12,6 +12,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { useTransition } from "react";
 
+import { apiErrorMessage, localizeApiText } from "@/lib/api/user-facing-error";
+
 import type { Brand } from "@/features/catalog/brands/types";
 
 import {
@@ -47,6 +49,7 @@ import { TagsSection } from "./product-form/TagsSection";
 import { UnsavedChangesDialog } from "./product-form/UnsavedChangesDialog";
 import type { ProductSavePhase } from "./product-form/sidebar/save-status";
 import type { Category } from "@/features/catalog/categories/types";
+import type { Tag } from "@/features/catalog/tags/types";
 import type {
   PreparedProductImage,
   ProductImageUploaderHandle,
@@ -114,13 +117,19 @@ export function ProductForm({
   product,
   categories,
   brands,
+  tags = [],
   optionTypes = [],
+  optionCatalogError = null,
+  canWrite = true,
 }: {
   mode: "create" | "edit";
   product?: AdminProductDetail;
   categories: Category[];
   brands: Brand[];
+  tags?: Tag[];
   optionTypes?: ProductOptionGroup[];
+  optionCatalogError?: string | null;
+  canWrite?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -189,6 +198,7 @@ export function ProductForm({
   }, [recoveryKey]);
 
   React.useEffect(() => {
+    if (!canWrite) return;
     try {
       const serialized = sessionStorage.getItem(recoveryKey);
       if (!serialized) return;
@@ -222,7 +232,7 @@ export function ProductForm({
         // Ignore malformed recovery state when browser storage is unavailable.
       }
     }
-  }, [mode, product?.id, recoveryKey]);
+  }, [canWrite, mode, product?.id, recoveryKey]);
 
   const {
     register,
@@ -324,6 +334,12 @@ export function ProductForm({
       }
       const destination = new URL(anchor.href, window.location.href);
       if (destination.origin !== window.location.origin) return;
+      if (
+        destination.pathname === window.location.pathname &&
+        destination.search === window.location.search
+      ) {
+        return;
+      }
       const next = `${destination.pathname}${destination.search}${destination.hash}`;
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       if (next === current) return;
@@ -397,7 +413,7 @@ export function ProductForm({
   }
 
   function applyServerErrors(e: unknown, preferredFocusId?: string) {
-    let message = e instanceof Error ? e.message : "خطای غیرمنتظره رخ داد";
+    let message = apiErrorMessage(e, "خطای غیرمنتظره رخ داد");
     let hasFieldError = false;
     let sectionFocusId: string | undefined;
     let shouldDiscardPrepared = false;
@@ -407,7 +423,7 @@ export function ProductForm({
       for (const [path, messages] of details) {
         const rawMessage = messages[0];
         if (!rawMessage) continue;
-        const fieldMessage = localizeProductServerError(rawMessage);
+        const fieldMessage = localizeApiText(rawMessage) || rawMessage;
         firstFieldMessage ??= fieldMessage;
         if (isProductImagePath(path)) {
           setMediaError(fieldMessage);
@@ -444,6 +460,7 @@ export function ProductForm({
     v: ProductFormValues | null,
     uploader: ProductImageUploaderHandle | null,
   ) {
+    if (!canWrite) return;
     setMediaError(null);
     setVariantError(null);
     if (!pendingSaveRef.current) {
@@ -497,11 +514,10 @@ export function ProductForm({
 
         if (mode === "create") {
           toast.success("محصول ایجاد شد");
-          router.push(`/admin/products/${saved.id}`);
-          router.refresh();
-          return;
+          router.replace(`/admin/products/${saved.id}`);
+        } else {
+          toast.success("تغییرات ذخیره شد");
         }
-        toast.success("تغییرات ذخیره شد");
         router.refresh();
       } catch (e) {
         if (
@@ -525,6 +541,10 @@ export function ProductForm({
   }
 
   function onFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (!canWrite) {
+      event.preventDefault();
+      return;
+    }
     const uploader = uploaderRef.current;
     if (pendingSaveRef.current) {
       event.preventDefault();
@@ -541,7 +561,7 @@ export function ProductForm({
     )(event);
   }
 
-  const editorLocked = isPending || hasPendingRetry;
+  const fieldsLocked = !canWrite;
   const displayedSavePhase: ProductSavePhase =
     savePhase === "saved" && (isDirty || mediaDirty) ? "idle" : savePhase;
 
@@ -558,12 +578,28 @@ export function ProductForm({
         title={title}
         control={control}
         isSubmitting={isPending}
-        isLocked={editorLocked}
+        isLocked={fieldsLocked}
         hasPendingRetry={hasPendingRetry}
         savePhase={displayedSavePhase}
         hasUnsavedChanges={hasUnsavedChanges}
+        canWrite={canWrite}
+        duplicateHref={
+          mode === "edit" && canWrite && product?.id
+            ? `/admin/products/new?from=${product.id}`
+            : undefined
+        }
         onCancel={() => requestNavigation("/admin/products")}
       />
+
+      {canWrite ? null : (
+        <p
+          role="status"
+          className="mb-6 rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground ring-1 ring-border/60"
+        >
+          فقط مشاهده — ذخیره، بارگذاری تصویر و تغییر تنوع‌ها به مجوز نوشتن محصول
+          نیاز دارد.
+        </p>
+      )}
 
       {saveError ? (
         <p
@@ -577,7 +613,7 @@ export function ProductForm({
         </p>
       ) : null}
 
-      <fieldset disabled={editorLocked} className="contents">
+      <fieldset disabled={fieldsLocked} className="contents">
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="flex flex-col gap-6">
             <div id="product-section-general" className="scroll-mt-28">
@@ -600,8 +636,9 @@ export function ProductForm({
               <TagsSection
                 control={control}
                 errors={errors}
+                tags={tags}
                 initialTags={product?.tags}
-                disabled={editorLocked}
+                disabled={fieldsLocked}
               />
             </div>
             <div id="product-section-variants" className="scroll-mt-28">
@@ -614,19 +651,20 @@ export function ProductForm({
                 append={append}
                 remove={remove}
                 optionTypes={optionTypes}
-                productVariants={product?.variants}
+                optionCatalogError={optionCatalogError}
+                productVariants={mode === "edit" ? product?.variants : undefined}
                 error={variantError}
-                disabled={editorLocked}
+                disabled={fieldsLocked}
               />
             </div>
 
             <div id="product-section-images" className="scroll-mt-28">
               <ImagesSection
                 uploaderRef={uploaderRef}
-                productId={product?.id ?? null}
+                productId={mode === "edit" ? product?.id ?? null : null}
                 mode={mode}
-                initialImages={product?.images ?? []}
-                disabled={editorLocked}
+                initialImages={mode === "edit" ? product?.images ?? [] : []}
+                disabled={fieldsLocked}
                 error={mediaError}
                 onDirtyChange={setMediaDirty}
                 onGalleryChange={setGallerySnapshot}
@@ -676,7 +714,9 @@ export function ProductForm({
                     id: "product-section-variants",
                     label: "تنوع و قیمت",
                     hint: "SKU و گزینه‌ها",
-                    hasError: Boolean(errors.variants || variantError),
+                    hasError: Boolean(
+                      errors.variants || variantError || optionCatalogError,
+                    ),
                   },
                   {
                     id: "product-section-images",
@@ -701,9 +741,10 @@ export function ProductForm({
       <MobileActionBar
         control={control}
         isSubmitting={isPending}
-        isLocked={editorLocked}
+        isLocked={fieldsLocked}
         hasPendingRetry={hasPendingRetry}
         savePhase={displayedSavePhase}
+        canWrite={canWrite}
         onCancel={() => requestNavigation("/admin/products")}
       />
 
@@ -756,39 +797,4 @@ function isProductFormPath(path: string) {
   );
 }
 
-const PRODUCT_SERVER_ERROR_MESSAGES: Record<string, string> = {
-  "must be greater than price":
-    "قیمت پیش از تخفیف باید بیشتر از قیمت فروش باشد",
-  "staged upload is missing or invalid":
-    "فایل آماده‌شده در دسترس نیست؛ تصویر در تلاش بعدی دوباره بارگذاری می‌شود.",
-  "external image URL is invalid": "نشانی تصویر خارجی معتبر نیست.",
-  "exactly one product image must be primary":
-    "دقیقاً یک تصویر باید به‌عنوان تصویر اصلی انتخاب شود.",
-  "image does not belong to this product": "این تصویر متعلق به محصول نیست.",
-  "image is already attached": "این تصویر قبلاً به محصول متصل شده است.",
-  "one or more removed variants are still in use":
-    "یک یا چند تنوع حذف‌شده دارای موجودی یا سابقهٔ عملیاتی هستند.",
-  "variant does not belong to this product": "این تنوع متعلق به محصول نیست.",
-  "SKU is already used by another variant": "این SKU قبلاً استفاده شده است.",
-  "SKU must be unique": "SKU هر تنوع باید یکتا باشد.",
-  "option combination must be unique": "ترکیب ویژگی هر تنوع باید یکتا باشد.",
-  "option combination is already used by another variant":
-    "این ترکیب ویژگی قبلاً برای تنوع دیگری استفاده شده است.",
-  "only one value from each option type may be selected":
-    "از هر نوع ویژگی فقط یک مقدار انتخاب کنید.",
-  "one or more option values do not exist":
-    "یک یا چند مقدار ویژگی دیگر در دسترس نیست.",
-  "one or more tags do not exist": "یک یا چند برچسب دیگر در دسترس نیست.",
-  "code is already used by another product":
-    "این کد برای محصول دیگری استفاده شده است.",
-  "slug is already used by another product":
-    "این نامک برای محصول دیگری استفاده شده است.",
-  "category does not exist": "دسته‌بندی انتخاب‌شده در دسترس نیست.",
-  "brand does not exist": "برند انتخاب‌شده در دسترس نیست.",
-  "product changed after this editor was loaded":
-    "محصول پس از باز شدن این فرم تغییر کرده است؛ صفحه را تازه‌سازی کنید.",
-};
 
-function localizeProductServerError(message: string) {
-  return PRODUCT_SERVER_ERROR_MESSAGES[message] ?? message;
-}

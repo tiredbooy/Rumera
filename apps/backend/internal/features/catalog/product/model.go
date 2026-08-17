@@ -1,10 +1,14 @@
 package product
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	catvariant "github.com/tiredbooy/internal/features/catalog/variant"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/pkg/apperr"
 )
 
 // ─────────────────────────────────────────────────────────────
@@ -88,6 +92,52 @@ type ProductFilter struct {
 	IsActive           *bool    `query:"is_active"`
 	MinPrice           *float64 `query:"min_price"`
 	MaxPrice           *float64 `query:"max_price"`
+	// IDs restricts the list to specific products, comma-separated (CF-2).
+	//
+	// A picker that saved a scope of product ids has no way to label them again:
+	// nothing in the API returns products by id in one call, and the coupon
+	// response carries bare integers. Without this, an existing scope pointing
+	// outside the first page is invisible in the UI while staying live in the
+	// backend — the operator sees an empty selection over a discount that is
+	// really applied.
+	//
+	// A string, not a slice: the query binder decodes no slice kinds
+	// (httpx/bind.go setField), which is why `statuses` on orders is spelled the
+	// same way.
+	IDs string `query:"ids"`
+}
+
+// maxFilterIDs matches the pagination ceiling — a caller wanting more than a
+// page of products by id should be paging, not widening this.
+const maxFilterIDs = 100
+
+// ValidIDs parses the IDs filter, rejecting anything non-numeric so a typo is a
+// 400 rather than a silently empty result set that reads as "no such products".
+func (f *ProductFilter) ValidIDs() ([]int64, error) {
+	if strings.TrimSpace(f.IDs) == "" {
+		return nil, nil
+	}
+	seen := map[int64]struct{}{}
+	out := make([]int64, 0, maxFilterIDs)
+	for _, raw := range strings.Split(f.IDs, ",") {
+		part := strings.TrimSpace(raw)
+		if part == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(part, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, fmt.Errorf("%w: invalid product id %q", apperr.ErrInvalidRequest, part)
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		if len(out) >= maxFilterIDs {
+			return nil, fmt.Errorf("%w: at most %d ids", apperr.ErrInvalidRequest, maxFilterIDs)
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out, nil
 }
 
 func (f *ProductFilter) Defaults() {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/tiredbooy/internal/events"
 	"github.com/tiredbooy/internal/features/addresses"
 	"github.com/tiredbooy/internal/features/cart"
 	"github.com/tiredbooy/internal/features/coupons"
@@ -18,6 +19,7 @@ import (
 	"github.com/tiredbooy/internal/features/shipping"
 	"github.com/tiredbooy/internal/features/site_settings"
 	"github.com/tiredbooy/internal/models"
+	"github.com/tiredbooy/pkg/apperr"
 	"github.com/tiredbooy/pkg/crypto"
 	"github.com/tiredbooy/pkg/metrics"
 	"github.com/tiredbooy/pkg/tracing"
@@ -26,7 +28,7 @@ import (
 
 // defaultCurrency is the settlement currency for new payment transactions until
 // multi-currency checkout is introduced.
-const defaultCurrency = "USD"
+const defaultCurrency = "IRT"
 
 type Service interface {
 	CreateOrder(ctx context.Context, userID int64, req CreateOrderReq) (*Order, error)
@@ -36,7 +38,10 @@ type Service interface {
 	GetOrderItems(ctx context.Context, orderID int64) ([]OrderItemResponse, error)
 	GetOrderStockLines(ctx context.Context, orderID int64) ([]inventory.StockLine, error)
 	UpdateOrderStatus(ctx context.Context, id int64, req UpdateOrderStatusReq) (*Order, error)
+	RefundOrder(ctx context.Context, id int64) (*Order, error)
+	PayOrder(ctx context.Context, id int64, userID int64) (*Order, error)
 	CancelOrder(ctx context.Context, id int64, userID int64) error
+	AdminCancelOrder(ctx context.Context, id int64) error
 	MarkOrderAsPaid(ctx context.Context, orderID int64) error
 }
 
@@ -61,6 +66,24 @@ type giftConfigLookup interface {
 	GiftCheckout(ctx context.Context) (site_settings.GiftCheckoutSettings, error)
 }
 
+// orderEarnClawback reverses loyalty points granted for a paid order.
+// Implemented by *loyalty.Service. Nil means skip (unit tests).
+type orderEarnClawback interface {
+	ClawbackOrderEarn(ctx context.Context, userID, orderID int64) error
+}
+
+// WalletPurchaser debits a wallet inside a caller-owned transaction.
+// Implemented by *wallet.Service.PurchaseTx. Admin refund type-asserts this
+// value to WalletRefunder (*wallet.Service.Refund) — do not edit wallet.
+type WalletPurchaser interface {
+	PurchaseTx(ctx context.Context, tx pgx.Tx, userID int64, amount float64, orderID int64) error
+}
+
+// walletBalanceReader is an optional cheap peek on WalletPurchaser.
+type walletBalanceReader interface {
+	AvailableBalance(ctx context.Context, userID int64) (float64, error)
+}
+
 type orderService struct {
 	orderRepo       Repository
 	orderItemRepo   ItemRepository
@@ -72,6 +95,30 @@ type orderService struct {
 	inventory       inventory.Service
 	payment         *payments.Service
 	giftConfig      giftConfigLookup
+	clawback        orderEarnClawback
+	wallet          WalletPurchaser
+	// events writes order.paid.v1 on the wallet-settle transaction.
+	events OrderPaidEmitter
+}
+
+// OrderPaidEmitter writes the order.paid fact on the caller's transaction.
+// Implemented by events.Emitter. Nil keeps the legacy behaviour.
+type OrderPaidEmitter interface {
+	OrderPaidTx(ctx context.Context, tx pgx.Tx, data events.OrderPaidData) error
+	Enabled() bool
+}
+
+// AttachEventPublisher wires the domain-fact emitter onto a service built by
+// NewService.
+//
+// A setter rather than a 13th constructor parameter or a new method on the
+// Service interface: both of those would ripple through every existing caller
+// and through the compile-time interface assertions in internal/mocks, for a
+// dependency that is optional by design.
+func AttachEventPublisher(s Service, e OrderPaidEmitter) {
+	if impl, ok := s.(*orderService); ok {
+		impl.events = e
+	}
 }
 
 func NewService(
@@ -85,6 +132,8 @@ func NewService(
 	inventory inventory.Service,
 	payment *payments.Service,
 	giftConfig giftConfigLookup,
+	clawback orderEarnClawback,
+	wallet WalletPurchaser,
 ) Service {
 	return &orderService{
 		orderRepo:       orderRepo,
@@ -97,6 +146,8 @@ func NewService(
 		inventory:       inventory,
 		payment:         payment,
 		giftConfig:      giftConfig,
+		clawback:        clawback,
+		wallet:          wallet,
 	}
 }
 
@@ -154,6 +205,7 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req Create
 	if regionCode == "" {
 		return nil, models.ErrInvalidShippingMethod
 	}
+	req.shipToJSON = encodeShipTo(address)
 
 	shippingMethod, shippingCost, err := s.shipping.AuthorizeCheckoutMethod(
 		ctx, req.ShippingMethodID, regionCode, packageWeightKg, subtotal,
@@ -164,7 +216,8 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req Create
 		}
 		return nil, fmt.Errorf("orderService.CreateOrder: authorize shipping: %w", err)
 	}
-	_ = shippingMethod
+	req.ShippingMethodName = shippingMethod.Name
+	req.ShippingMethodCarrier = shippingMethod.Carrier
 
 	var (
 		discountAmount float64
@@ -220,9 +273,8 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req Create
 		}
 	}
 
-	taxAmount := (subtotal - discountAmount) * models.TaxRate
-
 	// Modular gift add-ons (packaging, card, …) — server-priced from site settings.
+	// Resolved before tax so the paid add-on is in the tax base (PR-020p).
 	var giftFee float64
 	var giftWrap bool
 	giftAddonsJSON := []byte("[]")
@@ -249,6 +301,15 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req Create
 		if !cfg.HidePriceEnabled {
 			req.HidePrice = false
 		}
+	}
+
+	// TaxRate (0.08) applies to post-discount merchandise plus selected gift
+	// add-on fees (IR VAT-style on the paid add-on). Shipping is not taxed.
+	taxAmount := (subtotal - discountAmount + giftFee) * models.TaxRate
+
+	if appliedCoupon != nil {
+		code := appliedCoupon.Code
+		req.AppliedCouponCode = &code
 	}
 
 	order, err = s.orderRepo.Create(ctx, tx, req, userID, subtotal, discountAmount, shippingCost, taxAmount, giftFee, giftAddonsJSON, giftWrap, couponID)
@@ -282,17 +343,118 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req Create
 		return nil, err
 	}
 
+	// Wallet rail settles inside this TX: debit + mark paid + deduct. A shortfall
+	// rolls back the reserve so nothing is committed. Non-wallet stays pending
+	// and inserts the gateway payment on the same TX (fail-closed).
+	if req.PaymentMethod == models.PaymentMethodWallet {
+		if err = s.settleWalletInTx(ctx, tx, userID, order, reservation); err != nil {
+			return nil, err
+		}
+		// The wallet rail is a first-class paid rail, so it emits the SAME fact
+		// as gateway Confirm. Before this it emitted nothing at all: wallet
+		// buyers earned no loyalty points, fired no referral credit and left no
+		// recommendation signal.
+		//
+		// Assigned to the named `err` deliberately — the deferred RollbackOnErr
+		// only unwinds when *err is non-nil, so a `:=` here would leave the
+		// transaction open.
+		if err = s.emitOrderPaid(ctx, tx, userID, order); err != nil {
+			return nil, err
+		}
+	} else if err = s.insertPendingPaymentTx(ctx, tx, order, userID, req.PaymentMethod); err != nil {
+		return nil, err
+	}
+
 	if err = tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("orderService.CreateOrder: commit: %w", err)
 	}
 
 	// ── Post-commit ──────────────────────────────────────────────────────────
-	// Order + stock are durable. Empty the cart (non-fatal on error — a stale
-	// cart is recoverable) and open a pending payment for the gateway/webhook.
+	// Order + stock (+ pending payment) are durable. Empty the cart (non-fatal).
 	_ = s.clearCart(ctx, cart.ID)
-	s.createPendingPayment(ctx, order, userID, req.PaymentMethod)
-
 	return order, nil
+}
+
+// settleWalletInTx debits the wallet, marks the order paid, and deducts the
+// reserved lines on the same TX. Cheap balance peek (when available) fails
+// before PurchaseTx so a short wallet still rolls the reserve back.
+func (s *orderService) settleWalletInTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	userID int64,
+	order *Order,
+	lines []inventory.StockLine,
+) error {
+	if s.wallet == nil {
+		return apperr.ErrInsufficientFunds
+	}
+	if reader, ok := s.wallet.(walletBalanceReader); ok {
+		bal, berr := reader.AvailableBalance(ctx, userID)
+		if berr != nil {
+			if errors.Is(berr, apperr.ErrNotFound) || errors.Is(berr, apperr.ErrInsufficientFunds) {
+				return apperr.ErrInsufficientFunds
+			}
+			return berr
+		}
+		if bal < order.TotalAmount {
+			return apperr.ErrInsufficientFunds
+		}
+	}
+	if order.TotalAmount > 0 {
+		if err := s.wallet.PurchaseTx(ctx, tx, userID, order.TotalAmount, order.ID); err != nil {
+			if errors.Is(err, apperr.ErrNotFound) {
+				return apperr.ErrInsufficientFunds
+			}
+			return err
+		}
+	}
+	if err := s.orderRepo.MarkAsPaid(ctx, tx, order.ID); err != nil {
+		return fmt.Errorf("orderService.CreateOrder: mark paid: %w", err)
+	}
+	if err := s.inventory.DeductForOrderTx(ctx, tx, order.ID, lines); err != nil {
+		return err
+	}
+	order.Status = OrderStatusPaid
+	now := time.Now()
+	order.PaidAt = &now
+	return nil
+}
+
+// IsOrderStillPaid reports whether the order is currently in a paid-like state.
+//
+// Used by the order.paid loyalty consumer. Awarding is asynchronous now, so a
+// refund can overtake it: the clawback runs before any points exist, finds
+// nothing to reverse, and the award then lands on an order that was already
+// refunded. Re-reading the status at award time closes that window.
+func (s *orderService) IsOrderStillPaid(ctx context.Context, orderID int64) (bool, error) {
+	order, err := s.orderRepo.GetByID(ctx, orderID)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return isRefundableStatus(order.Status), nil
+}
+
+// emitOrderPaid writes the order.paid fact for a wallet checkout, on the same
+// transaction that debited the wallet and marked the order paid.
+func (s *orderService) emitOrderPaid(ctx context.Context, tx pgx.Tx, userID int64, order *Order) error {
+	if s.events == nil {
+		return nil
+	}
+	return s.events.OrderPaidTx(ctx, tx, events.OrderPaidData{
+		OrderID: order.ID,
+		UserID:  userID,
+		Amount:  order.TotalAmount,
+		Rail:    "wallet",
+		PaidAt:  time.Now().UTC(),
+	})
+}
+
+// eventsOwnSideEffects reports whether order.paid consumers own the receipt.
+func (s *orderService) eventsOwnSideEffects() bool {
+	return s != nil && s.events != nil && s.events.Enabled()
 }
 
 // clearCart empties a cart in its own short transaction.
@@ -309,23 +471,162 @@ func (s *orderService) clearCart(ctx context.Context, cartID int64) (err error) 
 	return tx.Commit(ctx)
 }
 
-// createPendingPayment records a pending payment transaction for an order. It is
-// best-effort: the gateway flow is the source of truth for payment state, so a
-// failure here doesn't fail order creation.
-func (s *orderService) createPendingPayment(ctx context.Context, order *Order, userID int64, method models.PaymentMethod) {
-	txnID, err := crypto.GenerateSecureToken(16)
-	if err != nil {
+func applyPaymentIntent(order *Order, pt *payments.PaymentTransaction) {
+	if order == nil || pt == nil {
 		return
 	}
+	order.PaymentID = pt.ID
+	order.TransactionID = pt.TransactionID
+	order.PaymentURL = pt.PaymentURL
+	order.PaymentStatus = string(pt.Status)
+}
+
+// insertPendingPaymentTx records a pending payment on the order create TX.
+// Fail-closed: a missing payment row must not leave reserved stock unpaid.
+func (s *orderService) insertPendingPaymentTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	order *Order,
+	userID int64,
+	method models.PaymentMethod,
+) error {
+	pt, err := s.createPendingIntent(ctx, tx, order, userID, method)
+	if err != nil {
+		return err
+	}
+	applyPaymentIntent(order, pt)
+	return nil
+}
+
+var errWalletPayNotSupported = apperr.New(
+	"INVALID_STATE",
+	"wallet orders settle at checkout and cannot start a gateway payment",
+)
+
+func isPayableStatus(s OrderStatus) bool {
+	return s == OrderStatusPending || s == OrderStatusPaymentFailed
+}
+
+// PayOrder starts (or returns) a pending gateway intent for the owner.
+// Existing pending is returned as-is. A failed / missing intent creates a new
+// one. Paid-like and wallet-settled orders are refused.
+func (s *orderService) PayOrder(ctx context.Context, id int64, userID int64) (*Order, error) {
+	order, err := s.orderRepo.GetByIDAndUserID(ctx, id, userID)
+	if err != nil {
+		return nil, fmt.Errorf("orderService.PayOrder: %w", err)
+	}
+	if order.PaymentMethod == models.PaymentMethodWallet {
+		return nil, errWalletPayNotSupported
+	}
+	if order.Status == OrderStatusCancelled {
+		return nil, apperr.ErrOrderCancelled
+	}
+	if !isPayableStatus(order.Status) {
+		return nil, apperr.ErrOrderAlreadyPaid
+	}
+
+	existing, err := s.listOrderPayments(ctx, order.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, pt := range existing {
+		if pt.Status == payments.PaymentStatusSucceeded {
+			return nil, apperr.ErrOrderAlreadyPaid
+		}
+	}
+	for _, pt := range existing {
+		if pt.Status == payments.PaymentStatusPending {
+			applyPaymentIntent(order, pt)
+			return order, nil
+		}
+	}
+
+	pt, err := s.createPendingIntent(ctx, nil, order, userID, order.PaymentMethod)
+	if err != nil {
+		if errors.Is(err, apperr.ErrConflict) {
+			if pending, lerr := s.findPendingPayment(ctx, order.ID); lerr == nil && pending != nil {
+				applyPaymentIntent(order, pending)
+				return order, nil
+			}
+		}
+		return nil, err
+	}
+	applyPaymentIntent(order, pt)
+	return order, nil
+}
+
+func (s *orderService) createPendingIntent(
+	ctx context.Context,
+	tx pgx.Tx,
+	order *Order,
+	userID int64,
+	method models.PaymentMethod,
+) (*payments.PaymentTransaction, error) {
+	if s.payment == nil {
+		return nil, apperr.ErrInternal
+	}
+	txnID, err := crypto.GenerateSecureToken(16)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
 	oid := order.ID
-	_, _ = s.payment.Create(ctx, payments.CreatePaymentTransactionReq{
+	req := payments.CreatePaymentTransactionReq{
 		OrderID:       &oid,
 		UserID:        userID,
 		Amount:        order.TotalAmount,
 		Currency:      defaultCurrency,
 		PaymentMethod: method,
 		TransactionID: txnID,
-	})
+	}
+	if tx != nil {
+		return s.payment.CreateTx(ctx, tx, req)
+	}
+	return s.payment.Create(ctx, req)
+}
+
+func (s *orderService) listOrderPayments(ctx context.Context, orderID int64) ([]*payments.PaymentTransaction, error) {
+	if s.payment == nil {
+		return nil, nil
+	}
+	filter := payments.PaymentTransactionFilter{OrderID: &orderID}
+	filter.Limit = 20
+	filter.SortBy = "created_at"
+	filter.OrderBy = "DESC"
+	pts, _, err := s.payment.GetAll(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return pts, nil
+}
+
+func (s *orderService) findPendingPayment(ctx context.Context, orderID int64) (*payments.PaymentTransaction, error) {
+	pts, err := s.listOrderPayments(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	for _, pt := range pts {
+		if pt.Status == payments.PaymentStatusPending {
+			return pt, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *orderService) attachPaymentIntent(ctx context.Context, order *Order) {
+	if order == nil || order.PaymentMethod == models.PaymentMethodWallet {
+		return
+	}
+	pts, err := s.listOrderPayments(ctx, order.ID)
+	if err != nil || len(pts) == 0 {
+		return
+	}
+	for _, pt := range pts {
+		if pt.Status == payments.PaymentStatusPending {
+			applyPaymentIntent(order, pt)
+			return
+		}
+	}
+	applyPaymentIntent(order, pts[0])
 }
 
 func (s *orderService) validateAndComputeDiscount(
@@ -472,6 +773,7 @@ func (s *orderService) GetOrder(ctx context.Context, id int64) (*Order, error) {
 	if err != nil {
 		return nil, fmt.Errorf("orderService.GetOrder: %w", err)
 	}
+	s.attachPaymentIntent(ctx, order)
 	return order, nil
 }
 
@@ -480,6 +782,7 @@ func (s *orderService) GetUserOrder(ctx context.Context, id int64, userID int64)
 	if err != nil {
 		return nil, fmt.Errorf("orderService.GetUserOrder: %w", err)
 	}
+	s.attachPaymentIntent(ctx, order)
 	return order, nil
 }
 
@@ -506,7 +809,46 @@ func (s *orderService) GetOrderStockLines(ctx context.Context, orderID int64) ([
 
 // ── Write operations ──────────────────────────────────────────────────────────
 
+var (
+	errUsePayCommand = apperr.New(
+		"INVALID_STATE",
+		"use payment settlement to mark an order paid",
+	)
+	errUseCancelEndpoint = apperr.New(
+		"INVALID_STATE",
+		"use POST /orders/:id/cancel or POST /admin/orders/:id/cancel to cancel an order",
+	)
+	errInvalidStatusTransition = apperr.New(
+		"INVALID_STATE",
+		"order status transition is not allowed",
+	)
+)
+
+func rejectCommandOnlyPatchStatus(status OrderStatus) error {
+	switch status {
+	case OrderStatusPaid:
+		return errUsePayCommand
+	case OrderStatusCancelled:
+		return errUseCancelEndpoint
+	default:
+		if isRefundCommandStatus(status) {
+			return errUseRefundEndpoint
+		}
+		return nil
+	}
+}
+
 func (s *orderService) UpdateOrderStatus(ctx context.Context, id int64, req UpdateOrderStatusReq) (*Order, error) {
+	if err := rejectCommandOnlyPatchStatus(req.Status); err != nil {
+		return nil, err
+	}
+	current, err := s.orderRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("orderService.UpdateOrderStatus: %w", err)
+	}
+	if !canPatchTransition(current.Status, req.Status) {
+		return nil, errInvalidStatusTransition
+	}
 	order, err := s.orderRepo.UpdateStatus(ctx, id, req)
 	if err != nil {
 		return nil, fmt.Errorf("orderService.UpdateOrderStatus: %w", err)
@@ -515,25 +857,42 @@ func (s *orderService) UpdateOrderStatus(ctx context.Context, id int64, req Upda
 }
 
 func (s *orderService) CancelOrder(ctx context.Context, id int64, userID int64) error {
-	// Capture the lines before cancelling so we can release their reserved stock.
-	items, err := s.orderRepo.GetItems(ctx, id)
+	return s.cancelOrder(ctx, id, userID)
+}
+
+func (s *orderService) AdminCancelOrder(ctx context.Context, id int64) error {
+	return s.cancelOrder(ctx, id, 0)
+}
+
+// cancelOrder CAS-cancels pending|payment_failed, reverses coupon usage, and
+// releases reserved stock on one TX. ownerUserID 0 is admin (any owner).
+// Release errors are not swallowed — the deferred rollback undoes status + coupon.
+func (s *orderService) cancelOrder(ctx context.Context, id, ownerUserID int64) (err error) {
+	tx, err := s.orderRepo.BeginTx(ctx)
 	if err != nil {
-		return fmt.Errorf("orderService.CancelOrder: load items: %w", err)
+		return fmt.Errorf("orderService.CancelOrder: begin tx: %w", err)
 	}
+	defer utils.RollbackOnErr(ctx, tx, &err)
 
-	// Cancel only succeeds for orders in a pre-fulfilment state, which is exactly
-	// when stock is reserved-but-not-deducted — so releasing it afterwards is
-	// always the correct compensating action.
-	if err := s.orderRepo.Cancel(ctx, id, userID); err != nil {
-		return fmt.Errorf("orderService.CancelOrder: %w", err)
+	if err = s.orderRepo.CancelTx(ctx, tx, id, ownerUserID); err != nil {
+		return err
 	}
-
-	if len(items) > 0 {
-		lines := make([]inventory.StockLine, len(items))
-		for i, item := range items {
-			lines[i] = inventory.StockLine{VariantID: item.VariantID, Quantity: item.Quantity}
+	if s.couponUsageRepo != nil {
+		if err = s.couponUsageRepo.DeleteByOrderTx(ctx, tx, id); err != nil {
+			return fmt.Errorf("orderService.CancelOrder: coupon reverse: %w", err)
 		}
-		_ = s.inventory.ReleaseForOrder(ctx, id, lines)
+	}
+	lines, err := s.orderRepo.GetStockLines(ctx, id)
+	if err != nil {
+		return fmt.Errorf("orderService.CancelOrder: load lines: %w", err)
+	}
+	if s.inventory != nil && len(lines) > 0 {
+		if err = s.inventory.ReleaseForOrderTx(ctx, tx, id, lines); err != nil {
+			return fmt.Errorf("orderService.CancelOrder: release: %w", err)
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("orderService.CancelOrder: commit: %w", err)
 	}
 	return nil
 }

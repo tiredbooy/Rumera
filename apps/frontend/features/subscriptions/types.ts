@@ -21,7 +21,10 @@ export interface CreateSubscriptionInput {
 }
 
 export interface UpdateSubscriptionInput {
-  action: SubscriptionAction;
+  /** Omit for an address-only PATCH (PR-035b / PR-005c). */
+  action?: SubscriptionAction;
+  /** `min=1` if present. JSON null / omit leaves ship-to unchanged. */
+  address_id?: number | null;
 }
 
 /** Route identity is not part of the PATCH request body. */

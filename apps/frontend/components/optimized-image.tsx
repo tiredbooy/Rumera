@@ -47,7 +47,7 @@ export function OptimizedImage({
   alt,
   width = 400,
   height,
-  format = "webp",
+  format,
   quality = 80,
   widths = DEFAULT_WIDTHS,
   fit,
@@ -128,6 +128,7 @@ export function OptimizedImage({
       width={width}
       height={height}
       loading={priority ? "eager" : "lazy"}
+      fetchPriority={priority ? "high" : undefined}
       decoding="async"
       onError={() => setFailed(true)}
       className={cn("object-cover", className)}

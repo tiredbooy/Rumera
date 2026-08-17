@@ -16,6 +16,7 @@ tags: [architecture, api]
 - Envelope: `{ "error": { "code", "message", "fields?" } }`
 - Always `errors.Is` (never `==`) for sentinels and `pgx.ErrNoRows`
 - 5xx: log root cause server-side; **never** put SQL/stack/secrets in `message`
+- Cart unexpected repo/SQL failures are logged in the cart service (`op` + cause) and still surface as `500 INTERNAL_ERROR` ([[Cart Backend]], PR-010b)
 
 ## User-clear contracts (PH-012c)
 
@@ -26,6 +27,7 @@ tags: [architecture, api]
 | Coupon problems | `INVALID_COUPON` / `COUPON_*` / `ORDER_BELOW_MINIMUM` | |
 | Wallet short | `INSUFFICIENT_FUNDS` | **Not** `PAYMENT_FAILED` |
 | Loyalty points short | `INSUFFICIENT_POINTS` | Distinct from wallet |
+| Loyalty programme off | `LOYALTY_DISABLED` | Redeem / admin adjust; earn skips |
 | Gift code bad/used | `GIFT_CARD_INVALID` | No enumeration |
 | Login banned/inactive | `ACCOUNT_DISABLED` | |
 | Wrong password/email | `INVALID_CREDENTIALS` | Same for both (anti-enum) |
@@ -47,8 +49,8 @@ Central helper: `apps/frontend/lib/api/user-facing-error.ts`
 
 - Map high-traffic **codes** → Persian (stock, coupon, funds, points, gift, authz)
 - Prefer mapped title; generic fallback only if unmapped **and** message empty/generic
-- Wired: checkout place-order + coupon, cart mutations, gift redeem, loyalty redeem, admin wallet credit + account actions, recipe bulk-add
-- Residual: NextAuth credentials still collapses login failures to a single Persian line (no code passthrough yet)
+- Wired: checkout place-order + coupon, cart mutations (`cartMutationErrorMessage` on add-to-cart, wishlist add, cart-line qty/remove), gift redeem, loyalty redeem, admin wallet credit + account actions, recipe bulk-add
+- Login/OTP: Auth.js `authorize` passes `RateLimited` / `Inactive` / `CredentialsSignin` / `AuthServiceError` (PR-034a); forms map those codes to Persian
 
 Related: [[Wire contracts]] · [[Term envelope]] · [[Request Paths]] · [[Pitfalls and anti-patterns]] · [[Money and stock rules]]
 

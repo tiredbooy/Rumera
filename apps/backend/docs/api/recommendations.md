@@ -26,17 +26,23 @@ Legend: 🌐 public · 🔒 customer · 🛡️ admin.
 
 ## How it works
 
-The engine reads two first-party signal sources from the main database:
+The engine reads two first-party signal sources from the main database, plus an
+optional explicit quiz:
 
 1. **`user_product_interactions`** — a lean, queryable implicit-feedback log.
-   Customer requests may record `view`, `wishlist`, `review`, `recipe_view`, and
-   `search_click`; purchase/order signals are derived from authoritative order
-   data rather than accepted from the browser.
+   Customer `POST /recommendations/interactions` may record `view`, `wishlist`,
+   `review`, `recipe_view`, `search_click`, `add_to_cart`, and `purchase`.
+   Unknown `product_id` is **404** (no insert). Paid `purchase` is also written
+   server-side on `payments.Confirm` (PR-050d); `add_to_cart` is also written
+   on cart add. Same-day `purchase` / `add_to_cart` (and `purchase` with the
+   same `metadata.order_id`) do not double-weight.
 2. **Order history** — folded directly into profile building, so personalization
    works from existing data before any interaction is ever recorded.
+3. **Taste quiz** (`taste_profiles`) — declared categories / flavor / occasions
+   blended into `/for-you` at request time when a row exists (see below).
 
 A per-user **affinity profile** (top categories/brands/tags + preferred price
-band) is derived from those signals and cached in
+band) is derived from interactions and orders and cached in
 `user_recommendation_profiles` for fast serving. Profiles are kept warm three
 ways:
 
@@ -105,6 +111,21 @@ Scores candidate products against the caller's affinity profile (category, brand
 and tag scores), excludes already-purchased products, and backfills with
 trending when personalization is thin.
 
+If the caller has a saved taste quiz (`GET /me/taste-profile`), those
+preferences are blended **at serve time**:
+
+- `categories` (e.g. `Whisky`, `Wine`) resolve to catalogue category ids by
+  case-insensitive title or slug, including descendants so `Wine` also covers
+  red/white children. Each match adds **+8** to that category affinity.
+- `flavor` and `occasions` (quiz tags / styles) resolve to tag ids the same
+  way. Each match adds **+4**.
+- `budget_max` is stored on the quiz but is not a ranking term today.
+
+A missing quiz, an empty quiz, or names that do not match the catalogue leave
+ranking unchanged (behavioural profile, or trending on a cold user). Taste is
+**not** written into `user_recommendation_profiles`; the nightly refresh stays
+interaction- and order-driven.
+
 ## Record an interaction
 
 ```
@@ -121,10 +142,26 @@ POST /recommendations/interactions
 ```
 
 The server applies the configured weight for the interaction type. `source` is
-optional and limited to 40 characters. Returns `204 No Content`. Call this from
-the storefront on views, wishlist/review actions, search-result clicks, and
-recipe views to continuously enrich personalization. Purchase signals are never
-accepted from this endpoint.
+optional and limited to 40 characters. Returns `204 No Content`. Unknown
+`product_id` is `404 NOT_FOUND` (existence is checked before insert; missing
+catalogue rows never hit the FK). Call this from the storefront on views,
+wishlist/review actions, search-result clicks, recipe views, and add-to-cart
+to enrich personalization.
+
+**Server-owned high-intent signals (PR-050d):**
+
+- After a **paid** `payments.Confirm` (order checkout only), the backend
+  inserts `purchase` (weight 10) per distinct order-line `product_id` with
+  `source=payments.confirm` and `metadata.order_id`. Wallet top-up and gift-card
+  purchase do not write purchase rows. Unpaid checkout does not.
+- `POST /cart/items` and bulk add insert `add_to_cart` (weight 4) with
+  `source=cart.add_item` after a successful line write. Recs failure is logged
+  and does not fail Confirm or the cart mutation.
+
+The HTTP endpoint still accepts `purchase` / `add_to_cart` from the client so
+existing storefront fire-and-forget calls stay valid; inserts are idempotent
+so FE + BE on the same UTC day (or the same paid `order_id`) do not
+double-weight.
 
 ## Profile
 

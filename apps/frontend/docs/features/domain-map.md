@@ -53,7 +53,7 @@ repo-wide [Documentation map](../../../../docs/DOCUMENTATION-MAP.md)
 | `product-alerts` | Back-in-stock / price alerts | PDP / account |
 | `wallet` | Customer wallet | account |
 | `loyalty` | Points earn/redeem UI | account |
-| `gift-cards` | Gift card purchase / admin issue | account, admin |
+| `gift-cards` | Gift card purchase / admin issue + list/void | account, admin |
 | `subscriptions` | Cellar box (physical, pause/skip/cancel) — not Netflix | account |
 | `referral` | Referral codes | account |
 | `taste` | Taste profile | account |
@@ -71,6 +71,13 @@ repo-wide [Documentation map](../../../../docs/DOCUMENTATION-MAP.md)
 Admin feature boards often live under `features/admin/<resource>/` while shared
 domain API modules stay under the customer-facing domain name (e.g.
 `features/inventory/api` used by admin pages).
+
+The product editor category `SearchableIdSelect` is still a flat id list
+(`features/admin/products/.../category-select-options.ts`). Labels walk
+`parent_id` on the SSR lookup page (`limit≤100`) as `Parent / Child` so
+children match the tree operators already see on `/admin/categories`. A
+missing parent or a `parent_id` cycle falls back to the category title.
+Brand select stays a flat title list. No extra tree fetch.
 
 ---
 

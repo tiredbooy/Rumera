@@ -3,8 +3,10 @@ import Link from "next/link";
 import { fetchTopProductsByRevenue } from "@/features/analytics/api";
 import type { TopProductEntry } from "@/features/analytics/types";
 import { getProductForAdmin } from "@/features/admin/products/api/server";
+import { CHART_WINE } from "@/lib/charts/theme";
 import { faNum, formatPrice } from "@/lib/products";
-import { ChartCard, HorizontalBars } from "./Charts";
+import { ChartCard } from "./Charts";
+import { HorizontalBars } from "./dynamic-charts";
 import { AnalyticsErrorState } from "./AnalyticsErrorState";
 
 async function resolveProductLabel(
@@ -81,8 +83,9 @@ export async function AnalyticsTopProducts({
     >
       <HorizontalBars
         data={data}
-        color="oklch(0.55 0.18 25)"
+        color={CHART_WINE}
         valueFormatter={(v) => formatPrice(v).replace(" تومان", "")}
+        ariaLabel="پرفروش‌ترین محصولات بر اساس درآمد"
       />
     </ChartCard>
   );

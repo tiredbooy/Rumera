@@ -15,7 +15,7 @@ import {
   formatRate,
   loadMonitoringSnapshot,
 } from "@/features/admin/monitoring/api/prometheus";
-import { MonitoringCharts } from "@/features/admin/monitoring/components/MonitoringCharts";
+import { MonitoringCharts } from "@/features/admin/monitoring/components/dynamic-charts";
 import { MonitoringRangeToggle } from "@/features/admin/monitoring/components/MonitoringRangeToggle";
 import { faNum } from "@/lib/products";
 import { cn } from "@/lib/utils";
@@ -37,8 +37,8 @@ function MetricCard({
     <div
       className={cn(
         "border-hairline rounded-2xl bg-card p-4 ring-1 ring-foreground/5 sm:p-5",
-        tone === "good" && "ring-emerald-500/20",
-        tone === "warn" && "ring-amber-500/25",
+        tone === "good" && "ring-success/25",
+        tone === "warn" && "ring-warning/25",
         tone === "bad" && "ring-destructive/25",
       )}
     >
@@ -104,7 +104,7 @@ export async function MonitoringBoard({
           className="border-hairline rounded-3xl bg-card/80 p-6 ring-1 ring-foreground/5 sm:p-8"
         >
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" />
             <div className="min-w-0">
               <h2 className="font-serif text-xl">
                 {result.reason === "unconfigured"

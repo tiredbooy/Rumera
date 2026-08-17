@@ -56,7 +56,11 @@ describe("AlertButton availability choices", () => {
   it("offers a restock alert for a sold-out variant", () => {
     render(<AlertButton productVariantId={1} isAvailable={false} />);
 
-    expect(screen.getByText("اطلاع از موجود شدن")).toBeInTheDocument();
-    expect(screen.getByText("اطلاع از کاهش قیمت")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "اطلاع از موجود شدن" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "اطلاع از کاهش قیمت" }),
+    ).toBeInTheDocument();
   });
 });

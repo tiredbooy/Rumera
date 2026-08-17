@@ -3,6 +3,7 @@ package notifications
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -27,29 +28,69 @@ type DeliveryHandler struct {
 	MaxAttempts int
 }
 
-// Handle returns (done, error). done=true means commit offset (delivered, duplicate, or DLQ'd).
+// errPermanent marks a failure that retrying cannot fix — a malformed payload,
+// an unknown type, a provider that is not wired up. These go straight to the
+// DLQ instead of burning the retry budget and stalling the partition.
+var errPermanent = errors.New("notifications: permanent failure")
+
+// ErrDeliveredUnconfirmed means the side effect DID happen but the ledger write
+// that records it did not. The offset must be committed (a redelivery would
+// re-send), but the message must NOT be dead-lettered: the DLQ copy of an OTP
+// carries the plaintext code, and a later bulk replay would text it again.
+var ErrDeliveredUnconfirmed = errors.New("notifications: delivered but not confirmed")
+
+// ErrRetryIndefinitely marks an infrastructure failure — the database is down,
+// not the message is bad. Dead-lettering it would discard a perfectly good
+// message because a dependency blinked, so the consumer keeps retrying instead
+// of spending the attempt budget.
+var ErrRetryIndefinitely = errors.New("notifications: retry indefinitely")
+
+func permanent(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", errPermanent, fmt.Sprintf(format, args...))
+}
+
+// Handle returns (done, error).
+//
+// done=true means the offset may be committed: delivered, a confirmed
+// duplicate, or permanently rejected (the caller DLQs it).
+// done=false with a non-nil error means retry — the message is still owed.
 func (h *DeliveryHandler) Handle(ctx context.Context, topic string, raw []byte) (done bool, err error) {
 	var env Envelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		// Poison message — send to DLQ path by signaling permanent failure.
-		return true, fmt.Errorf("notifications: invalid envelope: %w", err)
+		return true, permanent("invalid envelope: %v", err)
 	}
 	if env.Rumera.IdempotencyKey == "" {
-		return true, fmt.Errorf("notifications: missing idempotency_key")
+		return true, permanent("missing idempotency_key")
 	}
 
 	channel := ChannelForEvent(env.Type)
-	first, err := h.Deliveries.TryBegin(ctx, env.Rumera.IdempotencyKey, topic, env.ID, channel)
+	claimed, err := h.Deliveries.TryBegin(ctx, env.Rumera.IdempotencyKey, topic, env.ID, channel)
 	if err != nil {
-		return false, err
+		// The ledger itself is unavailable — retryable, and we must NOT send
+		// without a claim or a redelivery would duplicate. Flagged as
+		// infrastructure so the message is not dead-lettered over a DB blip.
+		return false, fmt.Errorf("%w: delivery ledger: %v", ErrRetryIndefinitely, err)
 	}
-	if !first {
-		// Already delivered — safe to commit.
+	if !claimed {
+		// Confirmed delivery already exists — safe to commit.
 		return true, nil
 	}
 
-	if err := h.dispatch(ctx, &env); err != nil {
-		return false, err
+	if derr := h.dispatch(ctx, &env); derr != nil {
+		// Release the claim so the retry actually re-sends.
+		if ferr := h.Deliveries.FailDelivery(ctx, env.Rumera.IdempotencyKey, derr.Error()); ferr != nil {
+			return false, fmt.Errorf("dispatch failed (%v); releasing claim also failed: %w", derr, ferr)
+		}
+		if errors.Is(derr, errPermanent) {
+			return true, derr
+		}
+		return false, derr
+	}
+
+	if err := h.Deliveries.ConfirmDelivery(ctx, env.Rumera.IdempotencyKey); err != nil {
+		// The side effect already happened. Commit — a retry would re-send — but
+		// flag it so the consumer does NOT dead-letter a successful delivery.
+		return true, fmt.Errorf("%w: key %s: %v", ErrDeliveredUnconfirmed, env.Rumera.IdempotencyKey, err)
 	}
 	return true, nil
 }
@@ -59,20 +100,22 @@ func (h *DeliveryHandler) dispatch(ctx context.Context, env *Envelope) error {
 	case TypeOTPV1:
 		var data OTPData
 		if err := json.Unmarshal(env.Data, &data); err != nil {
-			return err
+			return permanent("bad %s payload: %v", env.Type, err)
 		}
 		if h.SMS == nil {
-			return fmt.Errorf("notifications: SMS sender not configured")
+			return permanent("SMS sender not configured")
 		}
 		msg := fmt.Sprintf("کد تأیید رومرا: %s", data.Code)
+		// A provider error IS retryable — the gateway may just be down.
 		return h.SMS.Send(ctx, data.Phone, msg)
-	case TypePasswordResetV1, TypeOrderConfirmedV1:
+	case TypePasswordResetV1, TypeOrderConfirmedV1, TypeGiftPurchasedV1,
+		TypeAlertV1, TypeSubscriptionRenewalV1:
 		var data EmailData
 		if err := json.Unmarshal(env.Data, &data); err != nil {
-			return err
+			return permanent("bad %s payload: %v", env.Type, err)
 		}
 		if h.Mail == nil {
-			return fmt.Errorf("notifications: mailer not configured")
+			return permanent("mailer not configured")
 		}
 		body := data.Template
 		if body == "" {
@@ -80,7 +123,7 @@ func (h *DeliveryHandler) dispatch(ctx context.Context, env *Envelope) error {
 		}
 		return h.Mail.Send(ctx, data.To, data.Subject, body)
 	default:
-		return fmt.Errorf("notifications: unsupported type %q", env.Type)
+		return permanent("unsupported type %q", env.Type)
 	}
 }
 

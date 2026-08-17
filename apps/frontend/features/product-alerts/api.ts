@@ -5,7 +5,7 @@ import type { CreateProductAlertInput, ProductAlert } from "./types";
 
 export function listProductAlerts(): Promise<ProductAlert[]> {
   return storeRequest<ApiSuccess<ProductAlert[]>>("alerts").then(
-    (body) => body.data,
+    (body) => body.data ?? [],
   );
 }
 

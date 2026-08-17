@@ -7,20 +7,21 @@ import type {
   DiscountType,
   UpdateCouponInput,
 } from "@/features/coupons/types";
+import { parseAsciiNumber, toAsciiDigits } from "@/lib/normalize-digits";
 
 const discountTypes = ["percentage", "fixed_amount", "free_shipping"] as const;
 export const MAX_COUPON_MONEY = 99_999_999.99;
 export const MAX_COUPON_USES = 2_147_483_647;
 
 function optionalNumber(value: string): number | undefined {
-  const trimmed = value.trim();
+  const trimmed = toAsciiDigits(value).trim();
   if (!trimmed) return undefined;
   const number = Number(trimmed);
   return Number.isFinite(number) ? number : Number.NaN;
 }
 
 function hasCouponMoneyPrecision(value: string): boolean {
-  return /^-?(?:\d+|\d*\.\d{1,2})$/.test(value.trim());
+  return /^-?(?:\d+|\d*\.\d{1,2})$/.test(toAsciiDigits(value).trim());
 }
 
 export function parseIDList(value: string): number[] {
@@ -30,7 +31,7 @@ export function parseIDList(value: string): number[] {
       value
         .split(/[،,\s]+/)
         .filter(Boolean)
-        .map(Number),
+        .map((token) => parseAsciiNumber(token)),
     ),
   ];
 }
@@ -272,7 +273,7 @@ function applicability(values: CouponFormValues): CouponApplicability | null {
 function discountValue(values: CouponFormValues): number {
   return values.discount_type === "free_shipping"
     ? 0
-    : Number(values.discount_value);
+    : parseAsciiNumber(values.discount_value);
 }
 
 export function toCreateCouponInput(
@@ -285,11 +286,13 @@ export function toCreateCouponInput(
     discount_value: discountValue(values),
     max_discount_amount:
       values.discount_type === "percentage" && values.max_discount_amount.trim()
-        ? Number(values.max_discount_amount)
+        ? parseAsciiNumber(values.max_discount_amount)
         : null,
-    min_order_amount: Number(values.min_order_amount),
-    max_uses: values.max_uses.trim() ? Number(values.max_uses) : null,
-    max_uses_per_user: Number(values.max_uses_per_user),
+    min_order_amount: parseAsciiNumber(values.min_order_amount),
+    max_uses: values.max_uses.trim()
+      ? parseAsciiNumber(values.max_uses)
+      : null,
+    max_uses_per_user: parseAsciiNumber(values.max_uses_per_user),
     applicable_to: applicability(values),
     is_active: values.is_active,
     starts_at: new Date(values.starts_at).toISOString(),

@@ -1,0 +1,7 @@
+{
+  "scheduler_id": "01a00f60a5ab",
+  "interval": "1m",
+  "switched_at": "2026-08-17T12:40:00Z",
+  "switch_reason": "D-1a marked [x] in TASKS.md",
+  "still_blocked": "S-6 / S-11 / CF-13 wait on S-2"
+}

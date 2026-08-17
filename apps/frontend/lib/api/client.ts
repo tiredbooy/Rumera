@@ -1,6 +1,8 @@
 // lib/api/client.ts
 import "server-only";
-import { auth } from "@/lib/auth/auth";
+import { headers as requestHeaders } from "next/headers";
+
+import { getAccessTokenFromJwt } from "@/lib/auth/auth.config";
 import { API_BASE } from "./base";
 import { ApiError } from "./errors";
 import type { ApiErrorEnvelope, ApiSuccess } from "./types";
@@ -14,8 +16,8 @@ export type ApiFetchOptions = RequestInit & { token?: string };
  * Universal server-side fetcher.
  *
  * - Explicit `token` takes precedence.
- * - Otherwise, tries to get the session from `auth()` and injects its `accessToken`
- *   automatically if available.
+ * - Otherwise, reads the Go access JWT from the encrypted Auth.js cookie via
+ *   `getToken` (never from `session.accessToken` / `GET /api/auth/session`).
  * - Throws `ApiError` on non‑2xx responses.
  * - Defaults to `cache: "no-store"` unless overridden.
  *
@@ -30,16 +32,14 @@ export async function apiFetch<T>(
   let token = explicitToken;
   if (!token) {
     try {
-      const session = await auth();
-      if (session?.accessToken) {
-        token = session.accessToken;
-      }
+      token = await getAccessTokenFromJwt({ headers: await requestHeaders() });
     } catch (err) {
-      // auth() may fail if called from a context where the session is not available
-      // (e.g., during static generation). We log but do not throw – we just proceed
-      // without a token, which is fine for public endpoints.
+      // getToken / headers() may fail if called from a context where the
+      // request is not available (e.g., during static generation). We log but
+      // do not throw – we just proceed without a token, which is fine for
+      // public endpoints.
       console.warn(
-        "apiFetch: could not retrieve session, proceeding without token",
+        "apiFetch: could not retrieve access token, proceeding without token",
         err,
       );
     }

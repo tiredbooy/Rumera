@@ -162,10 +162,10 @@ type RecipeUpdateReq struct {
 	IsFeatured  *bool         `json:"is_featured"`
 	PublishedAt *time.Time    `json:"published_at"`
 
-	MetaTitle       *string               `json:"meta_title"        validate:"omitempty,max=255"`
-	MetaDescription *string               `json:"meta_description"`
-	MetaKeywords    []string              `json:"meta_keywords"`
-	CanonicalURL    *string               `json:"canonical_url"`
+	MetaTitle       *string                      `json:"meta_title"        validate:"omitempty,max=255"`
+	MetaDescription *string                      `json:"meta_description"`
+	MetaKeywords    []string                     `json:"meta_keywords"`
+	CanonicalURL    *string                      `json:"canonical_url"`
 	OGImageURL      models.NullablePatch[string] `json:"og_image_url"`
 
 	// Relations — nil = leave untouched, non-nil (incl. empty) = replace.
@@ -207,6 +207,9 @@ type RecipeFilter struct {
 	MaxTime   *int   `query:"max_time"` // total_time_minutes <= MaxTime
 	// ExcludeID keeps a separately rendered featured recipe out of pagination.
 	ExcludeID *int64 `query:"exclude_id"`
+	// LiveOnly hides recipes whose published_at is still in the future. Public
+	// list/featured/related set this; admin list does not.
+	LiveOnly bool `query:"-"`
 }
 
 func (f *RecipeFilter) Defaults() {

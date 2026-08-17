@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toAsciiDigits } from "@/lib/normalize-digits";
 import { cn } from "@/lib/utils";
 import { validateImageURL } from "@/features/image-uploader/constants";
 import type {
@@ -47,7 +48,11 @@ import { CategoryImageInput } from "./category-image-input";
 // ── Validation (all fields are strings; coerced to the API shape on submit) ────
 
 const strOrNull = (v?: string) => (v && v.trim() !== "" ? v.trim() : null);
-const numOrNull = (v?: string) => (v && v.trim() !== "" ? Number(v) : null);
+const numOrNull = (v?: string) => {
+  if (!v) return null;
+  const n = toAsciiDigits(v).trim();
+  return n !== "" ? Number(n) : null;
+};
 
 /** Normalize a label into the same Unicode-safe path segment as the backend. */
 function toSlug(value: string): string {
@@ -144,11 +149,13 @@ export function CategoryForm({
   category,
   tree,
   submitLabel = "ذخیره",
+  canWrite = true,
 }: {
   mode: "create" | "edit";
   category?: Category;
   tree: CategoryTree[];
   submitLabel?: string;
+  canWrite?: boolean;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -226,6 +233,7 @@ export function CategoryForm({
   }
 
   async function onSubmit(v: CategoryFormValues) {
+    if (!canWrite) return;
     try {
       if (mode === "create") {
         await createCategory(toPayload(v));
@@ -242,11 +250,30 @@ export function CategoryForm({
     }
   }
 
+  function onFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (!canWrite) {
+      event.preventDefault();
+      return;
+    }
+    void handleSubmit(onSubmit)(event);
+  }
+
+  const editorLocked = isSubmitting || imageUploading || !canWrite;
+
   return (
     <form
-      onSubmit={handleSubmit(onSubmit)}
+      onSubmit={onFormSubmit}
       className="grid gap-6 lg:grid-cols-[1fr_320px]"
     >
+      {canWrite ? null : (
+        <p
+          role="status"
+          className="rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground ring-1 ring-border/60 lg:col-span-2"
+        >
+          فقط مشاهده — ذخیره و بارگذاری تصویر به مجوز نوشتن محصول نیاز دارد.
+        </p>
+      )}
+      <fieldset disabled={editorLocked} className="contents">
       <div className="flex flex-col gap-6">
         <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
           <legend className="px-1 font-serif text-base">
@@ -267,6 +294,7 @@ export function CategoryForm({
                   id="title"
                   data-testid="category-title"
                   aria-invalid={!!errors.title}
+                  disabled={!canWrite}
                   {...register("title")}
                 />
               </Field>
@@ -283,6 +311,7 @@ export function CategoryForm({
                 dir="ltr"
                 placeholder="single-malt"
                 aria-invalid={!!errors.slug}
+                disabled={!canWrite}
                 {...register("slug", {
                   onChange: () => setSlugTouched(true),
                 })}
@@ -299,6 +328,7 @@ export function CategoryForm({
                     onValueChange={(val) =>
                       field.onChange(val === "none" ? "" : val)
                     }
+                    disabled={!canWrite}
                   >
                     <SelectTrigger
                       id="parent_id"
@@ -338,6 +368,7 @@ export function CategoryForm({
                 <Textarea
                   id="description"
                   rows={3}
+                  disabled={!canWrite}
                   {...register("description")}
                 />
               </Field>
@@ -362,6 +393,7 @@ export function CategoryForm({
                       onBlur={field.onBlur}
                       onUploadingChange={setImageUploading}
                       error={errors.image_url?.message}
+                      disabled={!canWrite}
                     />
                   )}
                 />
@@ -396,6 +428,7 @@ export function CategoryForm({
                     checked={field.value}
                     onCheckedChange={field.onChange}
                     data-testid="category-is-featured"
+                    disabled={!canWrite}
                   />
                 )}
               />
@@ -411,6 +444,7 @@ export function CategoryForm({
                       <Select
                         value={field.value}
                         onValueChange={field.onChange}
+                        disabled={!canWrite}
                       >
                         <SelectTrigger
                           id="card_size"
@@ -440,6 +474,7 @@ export function CategoryForm({
                     min={0}
                     inputMode="numeric"
                     aria-invalid={!!errors.display_order}
+                    disabled={!canWrite}
                     {...register("display_order")}
                   />
                 </Field>
@@ -448,6 +483,7 @@ export function CategoryForm({
           </div>
         </fieldset>
       </div>
+      </fieldset>
 
       <aside className="flex flex-col gap-6">
         <div className="lg:sticky lg:top-20 lg:flex lg:flex-col lg:gap-6">
@@ -489,17 +525,19 @@ export function CategoryForm({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Button
-              type="submit"
-              size="lg"
-              disabled={isSubmitting || imageUploading}
-              data-testid="category-submit"
-            >
-              {isSubmitting || imageUploading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : null}
-              {submitLabel}
-            </Button>
+            {canWrite ? (
+              <Button
+                type="submit"
+                size="lg"
+                disabled={isSubmitting || imageUploading}
+                data-testid="category-submit"
+              >
+                {isSubmitting || imageUploading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : null}
+                {submitLabel}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"

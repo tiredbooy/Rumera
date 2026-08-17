@@ -31,6 +31,8 @@ available_stock = stock_on_hand - committed_stock
 | Pay success | Deduct | Payment Confirm TX |
 | Staff restock | Adjust | [[Inventory FE]] |
 
+Reserve / release / deduct take inventory row locks in **VariantID ascending** order. [[Orders Backend]] `GetStockLines` sorts before return (PR-020k) so webhook deduct/release cannot 40P01 against another checkout ([[Money and stock rules]]).
+
 ## Weight on list wire (PH-020a)
 
 Admin inventory list/detail now includes catalogue package weight:
@@ -42,6 +44,22 @@ Admin inventory list/detail now includes catalogue package weight:
 
 FE type: `InventoryItem` in `features/inventory/types.ts`.  
 UI: badge + filter + KPI + detail callout (**PH-020b** / Refactor-Docs **085a** closed).
+
+Admin list (PR-063a) pages on the server: `q` / `page` / `low_stock` → `GET /admin/inventory`. Catalog SKU and low-stock KPI cards use `pagination.total_items`; out-of-stock / missing-weight / stock-value tiles are the current page only.
+
+A failed list read is a retryable error (PR-063b), not “no SKUs”. Empty catalogue and empty search stay separate from outage.
+
+## Variant create (PR-010a)
+
+Every new variant gets a **zero-stock** inventory row in the same write:
+
+| Path | How |
+|------|-----|
+| Standalone `POST /admin/products/:id/variants` | `EnsureForVariant` after insert |
+| Editor aggregate `POST/PUT …/aggregate` | `EnsureForVariantTx` in the product TX |
+| Legacy `POST /admin/products` inline variants | `EnsureForVariantTx` via `insertVariantTx` |
+
+Failure to ensure inventory rolls the variant write back. Stock stays 0 until [[Journey Admin restock]]. Without the row the SKU is not purchasable and disappears from admin stock tools.
 
 ## Code
 

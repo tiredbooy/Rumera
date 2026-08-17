@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { toAsciiDigits } from "@/lib/normalize-digits";
+
 import { faNum } from "../../../lib/products";
 
 export const BRAND_CURRENT_YEAR = new Date().getFullYear();
@@ -22,11 +24,15 @@ export const brandFormSchema = z.object({
     ),
   country: z.string().trim().max(80, "حداکثر ۸۰ نویسه"),
   founded_year: z.string().refine(
-    (value) =>
-      value.trim() === "" ||
-      (/^\d+$/.test(value.trim()) &&
-        Number(value) >= 1000 &&
-        Number(value) <= BRAND_CURRENT_YEAR),
+    (value) => {
+      const n = toAsciiDigits(value).trim();
+      return (
+        n === "" ||
+        (/^\d+$/.test(n) &&
+          Number(n) >= 1000 &&
+          Number(n) <= BRAND_CURRENT_YEAR)
+      );
+    },
     { message: `سالی بین ۱۰۰۰ تا ${faNum(BRAND_CURRENT_YEAR)} وارد کنید` },
   ),
   image_url: z

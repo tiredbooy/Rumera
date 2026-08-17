@@ -59,7 +59,7 @@ func (h *Handler) Update(c *gin.Context) {
 	if !httpx.BindJSON(c, h.Validator, &req) {
 		return
 	}
-	sub, err := h.Service.Update(c.Request.Context(), userID, id, string(req.Action))
+	sub, err := h.Service.Update(c.Request.Context(), userID, id, req)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return

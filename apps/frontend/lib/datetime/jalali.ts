@@ -3,6 +3,8 @@
  * Used for admin date inputs that still submit Gregorian ISO to the API.
  */
 
+import { toAsciiDigits } from "@/lib/normalize-digits";
+
 const gDaysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const jDaysInMonth = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
 
@@ -102,10 +104,12 @@ export function gregorianLocalToJalaliDisplay(value: string): string {
   const gy = Number(match[1]);
   const gm = Number(match[2]);
   const gd = Number(match[3]);
+  const hasTime = Boolean(match[4]);
   const hh = match[4] ?? "00";
   const mm = match[5] ?? "00";
   const { jy, jm, jd } = toJalali(gy, gm, gd);
-  return `${jy}/${pad(jm)}/${pad(jd)} ${hh}:${mm}`;
+  const date = `${jy}/${pad(jm)}/${pad(jd)}`;
+  return hasTime ? `${date} ${hh}:${mm}` : date;
 }
 
 /**
@@ -113,7 +117,7 @@ export function gregorianLocalToJalaliDisplay(value: string): string {
  * Returns null when the input is empty or invalid.
  */
 export function jalaliDisplayToGregorianLocal(value: string): string | null {
-  const trimmed = value.trim();
+  const trimmed = toAsciiDigits(value).trim();
   if (!trimmed) return "";
   const match = trimmed.match(
     /^(\d{3,4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/,

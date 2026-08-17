@@ -1,27 +1,29 @@
 import { z } from "zod";
 import type { ProductDetail } from "@/features/catalog/products/types";
+import { parseAsciiNumber, toAsciiDigits } from "@/lib/normalize-digits";
 
 const numberish = (msg: string) =>
   z
     .string()
     .refine(
-      (v) => v.trim() === "" || (Number.isFinite(Number(v)) && Number(v) >= 0),
+      (v) => {
+        const n = toAsciiDigits(v).trim();
+        return n === "" || (Number.isFinite(Number(n)) && Number(n) >= 0);
+      },
       {
         message: msg,
       },
     );
 
+function isPositivePrice(value: string) {
+  const n = toAsciiDigits(value).trim();
+  return n !== "" && Number.isFinite(Number(n)) && Number(n) > 0;
+}
+
 export const variantSchema = z.object({
   _id: z.number().optional(),
   sku: z.string().max(250),
-  price: z
-    .string()
-    .refine(
-      (v) => v.trim() !== "" && Number.isFinite(Number(v)) && Number(v) > 0,
-      {
-        message: "قیمت معتبر وارد کنید",
-      },
-    ),
+  price: z.string(),
   compare_at_price: numberish("قیمت نامعتبر است"),
   is_active: z.boolean(),
   option_value_ids: z
@@ -45,7 +47,10 @@ export const productFormSchema = z
     brand_id: z.string(),
     country_of_origin: z.string().trim().max(100),
     abv: numberish("بین ۰ تا ۱۰۰").refine(
-      (v) => v.trim() === "" || Number(v) <= 100,
+      (v) => {
+        const n = toAsciiDigits(v).trim();
+        return n === "" || Number(n) <= 100;
+      },
       {
         message: "حداکثر ۱۰۰",
       },
@@ -59,12 +64,37 @@ export const productFormSchema = z
     variants: z.array(variantSchema),
   })
   .superRefine((value, ctx) => {
+    if (value.is_active && value.slug.trim() === "") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["slug"],
+        message: "برای انتشار، نامک الزامی است",
+      });
+    }
+
     const skuRows = new Map<string, number[]>();
     const combinationRows = new Map<string, number[]>();
 
     value.variants.forEach((variant, index) => {
-      const price = Number(variant.price);
-      const compareAtPrice = Number(variant.compare_at_price);
+      const rawPrice = toAsciiDigits(variant.price).trim();
+      if (rawPrice === "") {
+        if (value.is_active) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["variants", index, "price"],
+            message: "قیمت معتبر وارد کنید",
+          });
+        }
+      } else if (!isPositivePrice(variant.price)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["variants", index, "price"],
+          message: "قیمت معتبر وارد کنید",
+        });
+      }
+
+      const price = parseAsciiNumber(variant.price);
+      const compareAtPrice = parseAsciiNumber(variant.compare_at_price);
       if (
         variant.compare_at_price.trim() !== "" &&
         Number.isFinite(price) &&
@@ -117,14 +147,35 @@ export type VariantFormValues = z.infer<typeof variantSchema>;
 
 export const strOrNull = (v?: string) =>
   v && v.trim() !== "" ? v.trim() : null;
-export const numOrNull = (v?: string) =>
-  v && v.trim() !== "" ? Number(v) : null;
+export const numOrNull = (v?: string) => {
+  if (!v) return null;
+  const n = toAsciiDigits(v).trim();
+  return n !== "" ? Number(n) : null;
+};
 
 export const parseTags = (v: string) =>
   v
     .split(/[,،]/)
     .map((t) => t.trim())
     .filter(Boolean);
+
+/** Create-form seed: keep catalogue facts, drop identity, SKUs, and media. */
+export function toDuplicateSeed(product: ProductDetail): ProductDetail {
+  return {
+    ...product,
+    id: 0,
+    title: "",
+    slug: "",
+    code: undefined,
+    images: [],
+    variants: (product.variants ?? []).map((variant) => ({
+      ...variant,
+      id: 0,
+      sku: "",
+      images: [],
+    })),
+  };
+}
 
 export function getDefaultFormValues(
   product?: ProductDetail,

@@ -101,7 +101,8 @@ export function AddressForm({
   const isDefault = useWatch({ control, name: "is_default" })
 
   function submit(values: AddressFormValues) {
-    onSubmit({ ...values, country: defaultValues?.country ?? "ایران" })
+    // ISO 3166-1 alpha-2, not a display name — shipping zones match on the code.
+    onSubmit({ ...values, country: defaultValues?.country ?? "IR" })
   }
 
   return (

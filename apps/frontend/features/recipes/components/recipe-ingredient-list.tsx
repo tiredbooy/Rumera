@@ -55,7 +55,7 @@ export function RecipeIngredientList({
                   className={cn(
                     "mt-1.5 size-1.5 shrink-0 rounded-full",
                     available
-                      ? "bg-emerald-500"
+                      ? "bg-success"
                       : linked
                         ? "bg-destructive/70"
                         : "bg-primary",
@@ -87,7 +87,7 @@ export function RecipeIngredientList({
                         className={cn(
                           "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
                           available
-                            ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                            ? "bg-success/12 text-success"
                             : "bg-destructive/10 text-destructive",
                         )}
                       >

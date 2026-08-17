@@ -14,6 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   deactivate: vi.fn(),
   update: vi.fn(),
+  ban: vi.fn(),
+  unban: vi.fn(),
   refresh: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
@@ -31,6 +33,8 @@ vi.mock("@/features/customers/client", () => {
     AdminCustomerApiError,
     deactivateAdminUser: mocks.deactivate,
     updateAdminUser: mocks.update,
+    banAdminUser: mocks.ban,
+    unbanAdminUser: mocks.unban,
   };
 });
 
@@ -42,6 +46,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.deactivate.mockResolvedValue(undefined);
   mocks.update.mockResolvedValue({ user_id: "user-2", is_active: true });
+  mocks.ban.mockResolvedValue({ user_id: "user-2", is_banned: true });
+  mocks.unban.mockResolvedValue({ user_id: "user-2", is_banned: false });
 });
 
 describe("UserAccountActions", () => {
@@ -53,6 +59,7 @@ describe("UserAccountActions", () => {
         isActive
         isBanned={false}
         isSelf={false}
+        canWrite
       />,
     );
 
@@ -78,6 +85,7 @@ describe("UserAccountActions", () => {
         isActive={false}
         isBanned={false}
         isSelf={false}
+        canWrite
       />,
     );
 
@@ -99,17 +107,21 @@ describe("UserAccountActions", () => {
         isActive
         isBanned={false}
         isSelf
+        canWrite
       />,
     );
 
     expect(screen.getByRole("note")).toHaveTextContent(
-      "نمی‌توانید نقش یا وضعیت حساب خودتان را تغییر دهید",
+      "نمی‌توانید نقش، وضعیت یا مسدودی حساب خودتان را تغییر دهید",
     );
     expect(
       screen.queryByRole("button", { name: "غیرفعال‌کردن حساب" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "فعال‌سازی دوباره" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "مسدود کردن حساب" }),
     ).not.toBeInTheDocument();
   });
 
@@ -121,6 +133,7 @@ describe("UserAccountActions", () => {
         isActive
         isBanned
         isSelf={false}
+        canWrite
       />,
     );
 
@@ -128,5 +141,130 @@ describe("UserAccountActions", () => {
       "تغییر وضعیت فعال، مسدودی را برطرف نمی‌کند",
     );
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("renders nothing without customers:write or customers:ban", () => {
+    const { container } = render(
+      <UserAccountActions
+        userID="user-2"
+        displayName="مینا"
+        isActive
+        isBanned={false}
+        isSelf={false}
+        canWrite={false}
+      />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+    expect(
+      screen.queryByRole("button", { name: "غیرفعال‌کردن حساب" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "فعال‌سازی دوباره" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "مسدود کردن حساب" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not expose ban from customers:write alone", () => {
+    render(
+      <UserAccountActions
+        userID="user-2"
+        displayName="مینا"
+        isActive
+        isBanned={false}
+        isSelf={false}
+        canWrite
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "غیرفعال‌کردن حساب" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "مسدود کردن حساب" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "رفع مسدودی" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("requires confirmation before POSTing ban", async () => {
+    render(
+      <UserAccountActions
+        userID="user-2"
+        displayName="مینا"
+        isActive
+        isBanned={false}
+        isSelf={false}
+        canWrite={false}
+        canBan
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "مسدود کردن حساب" }));
+    expect(mocks.ban).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "مسدود کردن حساب" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "تأیید مسدودسازی" }));
+
+    await waitFor(() => expect(mocks.ban).toHaveBeenCalledWith("user-2"));
+    expect(mocks.unban).not.toHaveBeenCalled();
+    expect(mocks.deactivate).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.success).toHaveBeenCalledWith("حساب کاربر مسدود شد.");
+  });
+
+  it("requires confirmation before POSTing unban", async () => {
+    render(
+      <UserAccountActions
+        userID="user-2"
+        displayName="مینا"
+        isActive
+        isBanned
+        isSelf={false}
+        canWrite={false}
+        canBan
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "رفع مسدودی" }));
+    expect(mocks.unban).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "رفع مسدودی حساب" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "تأیید رفع مسدودی" }));
+
+    await waitFor(() => expect(mocks.unban).toHaveBeenCalledWith("user-2"));
+    expect(mocks.ban).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("hides self-ban even when the operator has customers:ban", () => {
+    render(
+      <UserAccountActions
+        userID="self"
+        displayName="مدیر"
+        isActive
+        isBanned={false}
+        isSelf
+        canWrite={false}
+        canBan
+      />,
+    );
+
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "نمی‌توانید نقش، وضعیت یا مسدودی حساب خودتان را تغییر دهید",
+    );
+    expect(
+      screen.queryByRole("button", { name: "مسدود کردن حساب" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "رفع مسدودی" }),
+    ).not.toBeInTheDocument();
   });
 });

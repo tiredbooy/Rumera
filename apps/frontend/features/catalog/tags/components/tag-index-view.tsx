@@ -4,7 +4,7 @@ import { ArrowLeft, ChevronLeft, PackageOpen, Tags } from "lucide-react";
 
 import { JsonLd } from "@/components/json-ld";
 import { listTags } from "@/features/catalog/tags/api/public";
-import { Placeholder } from "@/features/dashboard/components/placeholder";
+import { EmptyState } from "@/components/empty-state";
 import { Reveal } from "@/features/motion/components/reveal";
 import { faNum } from "@/lib/products";
 import { breadcrumbLd } from "@/lib/seo/jsonld";
@@ -68,7 +68,7 @@ export async function TagIndexView({
             <p className="eyebrow mb-4">
               <Tags className="size-3.5" aria-hidden /> مسیرهای انتخاب
             </p>
-            <h1 className="max-w-3xl text-balance font-serif text-4xl leading-[1.05] sm:text-5xl lg:text-6xl">
+            <h1 className="max-w-3xl text-balance font-serif text-4xl leading-[1.3] sm:text-5xl lg:text-6xl">
               مجموعه را از زاویه‌ای تازه ببینید
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground">
@@ -126,7 +126,7 @@ export async function TagIndexView({
             ))}
           </ul>
         ) : (
-          <Placeholder
+          <EmptyState
             icon={PackageOpen}
             title="هنوز برچسبی برای نمایش نیست"
             description="با اضافه‌شدن مجموعه‌های تازه، مسیرهای بیشتری برای کاوش اینجا ظاهر می‌شود."
@@ -138,7 +138,7 @@ export async function TagIndexView({
               مشاهدهٔ همهٔ محصولات
               <ArrowLeft className="size-4" aria-hidden />
             </Link>
-          </Placeholder>
+          </EmptyState>
         )}
 
         <TagPagination

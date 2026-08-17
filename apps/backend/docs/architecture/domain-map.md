@@ -42,13 +42,13 @@ Charter (historical): `refactor-workstreams/backend-feature-architecture/CHARTER
 | Users / admin customers | **`features/users`** | **`features/users`** | Full vertical slice; `RegisterAdmin` |
 | Panel RBAC / capabilities | **`features/rbac`** | **`features/rbac`** | Matrix + admin routes; `mw.RequirePermission` on write surfaces |
 | Addresses | **`features/addresses`** | **`features/addresses`** | Customer-scoped; `RegisterCustomer` |
-| Wishlist | **`features/wishlist`** | **`features/wishlist`** | One list per user; `RegisterCustomer` |
+| Wishlist | **`features/wishlist`** | **`features/wishlist`** | One list per user; `GetItems` hydrates line `options` from variant option values (one query, not N+1); `RegisterCustomer` |
 | Wallet | **`features/wallet`** | **`features/wallet`** | Customer read + admin credit; `RegisterCustomer`/`Admin` |
 | Loyalty | **`features/loyalty`** | **`features/loyalty`** | Points / redeem to wallet |
 | Referral | **`features/referral`** | **`features/referral`** | Codes; awards via loyalty |
 | Gift cards | **`features/giftcard`** | **`features/giftcard`** | Issue admin + redeem customer |
 | Subscriptions | **`features/subscription`** | **`features/subscription`** | Physical cellar box (not Netflix); [box-subscriptions.md](./box-subscriptions.md) |
-| Product alerts | **`features/alerts`** | **`features/alerts`** | Restock / price-drop |
+| Product alerts | **`features/alerts`** | **`features/alerts`** | Restock / price-drop; GET list hydrates title/slug/price |
 | Taste profile | **`features/taste`** | **`features/taste`** | Personalisation quiz |
 | Site settings | **`features/site_settings`** | **`features/site_settings`** | Public GET + admin PUT; cached |
 | Hero slides | **`features/hero`** | **`features/hero`** | Home carousel; MediaCleaner for images |
@@ -65,7 +65,7 @@ Charter (historical): `refactor-workstreams/backend-feature-architecture/CHARTER
 | Brands | **`features/catalog/brand`** | **`features/catalog/brand`** | Public list + admin CRUD |
 | Tags | **`features/catalog/tag`** | **`features/catalog/tag`** | Public list + admin CRUD; product junction still layered |
 | Media | **`features/media`** | **`features/media`** | Upload, transform, lifecycle; product images via catalog repos |
-| Cart | **`features/cart`** | **`features/cart`** | Customer-scoped; orders use repo under tx |
+| Cart | **`features/cart`** | **`features/cart`** | Customer-scoped; `GetItems` hydrates line `options` from variant option values (one query, not N+1); orders use repo under tx |
 | Orders | **`features/orders`** | **`features/orders`** | Checkout + lifecycle; payments use MarkAsPaid/GetStockLines |
 | Payments / webhooks | **`features/payments`** | **`features/payments`** | Admin reads + gateway webhook; orders create pending |
 | Inventory | **`features/inventory`** | **`features/inventory`** | Stock + movements; orders/payments lifecycle |
@@ -73,6 +73,8 @@ Charter (historical): `refactor-workstreams/backend-feature-architecture/CHARTER
 | Notifications | (via Dispatcher) | `internal/notifications` | Not a public REST resource |
 
 Exact routes: `internal/routes/routes.go` and `docs/api/*.md`.
+
+Catalog lookup lists stay `limit` max 100; admin typeahead pages.
 
 ---
 
@@ -130,7 +132,7 @@ Package `internal/notifications` is a **vertical slice**:
 - envelopes + topics
 - outbox claim/mark published
 - delivery ledger
-- Dispatcher used by handlers
+- Dispatcher used by handlers and cron (alerts, cellar-box renewal)
 - `postgres/` + `kafka/` adapters
 - consumed by `cmd/notification-worker`
 

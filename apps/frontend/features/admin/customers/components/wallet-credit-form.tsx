@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiClientError } from "@/lib/api/store-client";
 import { apiErrorToast } from "@/lib/api/user-facing-error";
+import { parseAsciiNumber } from "@/lib/normalize-digits";
 import { faNum, formatPrice } from "@/lib/products";
 
 type CreditResponse = {
@@ -34,7 +35,8 @@ type CreditResponse = {
 /**
  * Admin wallet top-up for a customer (Task 083a).
  *
- * - Capability gate: only rendered when the operator has customers:write
+ * - Capability gate: only rendered when the operator has wallet:credit
+ *   (not customers:write; not roles:manage — PR-040c)
  * - Confirmation dialog before POST
  * - Client-generated idempotency key (stable per pending credit)
  * - Backend records actor + key; replays return 200 with replayed=true
@@ -64,7 +66,7 @@ export function WalletCreditForm({
 
   function openConfirm(event: React.FormEvent) {
     event.preventDefault();
-    const value = Number(amount);
+    const value = parseAsciiNumber(amount);
     if (!Number.isFinite(value) || value <= 0) {
       toast.error("مبلغ باید عددی بزرگ‌تر از صفر باشد");
       return;
@@ -73,7 +75,7 @@ export function WalletCreditForm({
   }
 
   async function confirmCredit() {
-    const value = Number(amount);
+    const value = parseAsciiNumber(amount);
     if (!Number.isFinite(value) || value <= 0) {
       setConfirmOpen(false);
       return;
@@ -129,7 +131,7 @@ export function WalletCreditForm({
     }
   }
 
-  const amountValue = Number(amount);
+  const amountValue = parseAsciiNumber(amount);
   const amountValid = Number.isFinite(amountValue) && amountValue > 0;
 
   return (

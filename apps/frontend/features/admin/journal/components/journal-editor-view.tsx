@@ -19,7 +19,7 @@ import { ApiError } from "@/lib/api/client";
 
 import { JournalCategoryForm } from "./journal-category-form";
 import { JournalForm } from "./journal-form";
-import type { JournalProductOption } from "./journal-product-picker";
+import type { ProductPickerOption } from "@/features/admin/shared/product-picker";
 
 function BackButton({
   href,
@@ -55,7 +55,7 @@ async function listAllTags(): Promise<Tag[]> {
 
 async function loadInitialProducts(
   post: JournalDetail,
-): Promise<JournalProductOption[]> {
+): Promise<ProductPickerOption[]> {
   const results = await Promise.allSettled(
     Array.from(new Set(post.product_ids)).map((id) => getProductForAdmin(id)),
   );
@@ -88,6 +88,7 @@ export async function JournalCreateView() {
       />
       <JournalForm
         mode="create"
+        canWrite
         categories={categories}
         tags={tags}
         initialProducts={[]}
@@ -96,7 +97,13 @@ export async function JournalCreateView() {
   );
 }
 
-export async function JournalEditView({ id }: { id: number }) {
+export async function JournalEditView({
+  id,
+  canWrite,
+}: {
+  id: number;
+  canWrite: boolean;
+}) {
   let post: JournalDetail;
   try {
     post = await getAdminJournalPost(id);
@@ -118,6 +125,7 @@ export async function JournalEditView({ id }: { id: number }) {
       />
       <JournalForm
         mode="edit"
+        canWrite={canWrite}
         post={post}
         categories={categories}
         tags={tags}

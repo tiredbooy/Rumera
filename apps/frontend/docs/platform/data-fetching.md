@@ -9,17 +9,39 @@ code matches the existing patterns and shares the same cache keys.
 ## The two-layer rule
 
 There are two distinct fetch layers, and which one you use is decided by **who
-is reading the data** — not by convenience.
+is reading the data** — not by convenience. Authenticated account overview is
+the one extra path: the RSC prefetches into TanStack Query, then client hooks
+read the hydrated cache.
 
-| Layer                      | Used by                                              | Helper                                          | Talks to                                   | Auth              |
-| -------------------------- | ---------------------------------------------------- | ----------------------------------------------- | ------------------------------------------ | ----------------- |
-| **Public / server**        | Server Components (catalogue, PDP, recipes, journal) | Feature-owned server APIs via `publicRequest()` | `${API_URL}/api/v1/*` directly             | none (public)     |
-| **Authenticated / client** | Client Components + React Query                      | `storeRequest()` → `/api/store/*` BFF           | the BFF proxy, which adds the bearer token | next-auth session |
+> **Where `API_URL` comes from.** One resolver: `lib/api/origin.ts`
+> (`resolveApiOrigin` / `resolveApiBase`). Precedence is
+> `BACKEND_INTERNAL_URL` → `API_URL` → `NEXT_PUBLIC_API_URL` →
+> `http://localhost:8080`. In the browser only `NEXT_PUBLIC_*` is inlined, so
+> the server-only names read as undefined and the chain falls through by itself
+> — which is why the same function is correct on both sides of the RSC
+> boundary. `lib/api/base.ts` re-exports it behind `server-only`.
+>
+> This used to be defined in three places with three different chains, and only
+> the auth one honoured `BACKEND_INTERNAL_URL`. Both compose files happen to set
+> it and `API_URL` to the same value, which is why nothing broke. Do not add a
+> fourth copy — import the resolver.
+
+| Layer                        | Used by                                              | Helper                                               | Talks to                                   | Auth                   |
+| ---------------------------- | ---------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------ | ---------------------- |
+| **Public / server**          | Server Components (catalogue, PDP, recipes, journal) | Feature-owned server APIs via `publicRequest()`      | `${API_URL}/api/v1/*` directly             | none (public)          |
+| **Authenticated / client**   | Client Components + React Query                      | `storeRequest()` → `/api/store/*` BFF                | the BFF proxy, which adds the bearer token | next-auth session      |
+| **Authenticated / prefetch** | Account overview RSC (then client hooks)             | `apiFetch()` + `prefetchQuery` + `HydrationBoundary` | `${API_URL}/api/v1/*` with the server JWT  | next-auth JWT (server) |
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ Server Component (RSC)                                           │
 │   await listProducts({ ... })  ──► publicRequest ──► /api/v1/... │  (public)
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ Account overview RSC                                             │
+│   prefetchQuery ──► apiFetch ──► /api/v1/...  (auth, no-store)   │
+│   dehydrate ──► HydrationBoundary ──► useOrders / useWallet …    │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
@@ -53,6 +75,7 @@ Public reads live with their domains and call `publicRequest()` from
 | ---------- | ----------------------------------------- | --------------------------------------------------------------------------------- |
 | Products   | `features/catalog/products/api/public.ts` | `listProducts`, `getProductById`, `getProductBySlug`, `allProductSlugs`           |
 | Categories | `features/catalog/categories/api.ts`      | `listCategories`, `getCategoryBySlug`, `getCategoryTree`, `getFeaturedCategories` |
+| Brands     | `features/catalog/brands/api.ts`          | `listBrands`, `getBrand`, `getBrandBySlug`, `getFeaturedBrands`                   |
 | Recipes    | `features/recipes/api/server.ts`          | lists, featured/related reads, slug detail, sitemap slugs                         |
 | Journal    | `features/journal/api/server.ts`          | page/category/related reads, slug detail, static slugs                            |
 
@@ -62,7 +85,9 @@ failures also propagate. The domain APIs preserve that distinction:
 
 - A successful list may truthfully return an empty `results` page or `[]`.
   List, tree, featured, related, and slug-discovery failures are not converted
-  into empty success values.
+  into empty success values. Home `getFeaturedBrands` follows the same rule
+  (PR-080i): empty catalogue is `[]`; 5xx/network throw. No hardcoded liquor
+  names.
 - A detail read returns `null` only when the thrown value is an `ApiError` with
   status `404`. Network errors, 5xx responses, and every non-404 error rethrow.
 - `getProductBySlug()` hydrates only an exact slug match from the search
@@ -114,6 +139,13 @@ export async function generateStaticParams() {
   }
 }
 ```
+
+Admin editors load brand / category / tag option lists the same way, through
+`features/admin/shared/fetch-lookup-list.ts`. Callers must pass a legal
+`limit` (1–100 — `httpx.validBaseQuery` rejects 200). The helper returns
+`results ?? []` and **does not** catch-all to `[]`; a failed lookup throws into
+the nearest admin `error.tsx`. A catalog failure on the product form is isolated
+so it cannot empty those lists.
 
 A page consumes these directly — no React Query, no client hydration:
 
@@ -181,12 +213,36 @@ Provider order in `app/providers.tsx`:
 → `ThemeProvider`. The session must wrap the query client because the BFF proxy
 relies on the session.
 
-> **There is no `HydrationBoundary` / `dehydrate` / `prefetchQuery` in this
-> codebase.** Server-prefetched-then-hydrated React Query is **not** a pattern
-> here — public server data comes from the feature-owned domain APIs rendered
-> directly in RSCs, and client data is fetched on mount via hooks. If you
-> introduce dehydration, you'd be establishing a new pattern; prefer the
-> existing split first.
+### Authenticated RSC prefetch (`HydrationBoundary`)
+
+Public catalogue pages still render server data directly. The one authenticated
+exception is `/account`: the RSC prefetches the six overview queries
+(`useOrders`, `useAddresses`, `useWallet`, `useLoyalty`, `useTasteProfile`,
+`useForYou`) via existing `apiFetch` / `listAccountOrders` paths, dehydrates
+the cache, and wraps `AccountOverview` in `HydrationBoundary`.
+
+Keys must match the hook factories exactly (`orderKeys.list({})`,
+`queryKeys.addresses`, `walletKeys.all`, `loyaltyKeys.account`,
+`tasteProfileKeys.profile`, `recommendationKeys.forYou({})`). `prefetchQuery`
+swallows failures; default `dehydrate` only serializes `success`, so a down
+endpoint still loads independently in the client card.
+
+Do not invent endpoints for prefetch. If a domain has no server reader yet,
+call `apiFetch` on the same path the hook already hits through the BFF.
+
+```tsx
+// app/(account)/account/page.tsx
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 60_000, retry: false } },
+});
+await prefetchAccountOverview(queryClient);
+
+return (
+  <HydrationBoundary state={dehydrate(queryClient)}>
+    <AccountOverview />
+  </HydrationBoundary>
+);
+```
 
 ### Hook files
 

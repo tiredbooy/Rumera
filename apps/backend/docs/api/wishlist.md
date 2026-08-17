@@ -27,7 +27,7 @@ GET /wishlist
 Authorization: Bearer <access_token>
 ```
 
-Returns the caller's wishlist and all its items. If the user has no wishlist yet, an empty one is created and returned.
+Returns the caller's wishlist and its items (capped at 100, newest first). If the user has no wishlist yet, an empty one is created and returned.
 
 **Response** `200 OK` — `WishlistResponse`:
 
@@ -47,7 +47,13 @@ Returns the caller's wishlist and all its items. If the user has no wishlist yet
         "compare_at_price": 72.00,
         "image_url": "https://cdn.example.com/p/88.jpg",
         "options": [
-          { "name": "Size", "value": "700ml" }
+          {
+            "id": 4,
+            "option_type_id": 2,
+            "option_type_title": "size",
+            "option_type": "Size",
+            "value": "700ml"
+          }
         ],
         "is_in_stock": true,
         "added_at": "2026-06-11T10:00:00Z"
@@ -58,6 +64,8 @@ Returns the caller's wishlist and all its items. If the user has no wishlist yet
 ```
 
 `items` is always an array. `total` is the item count.
+
+Each item's `options` are the variant's option values (`OptionValueResponse`: `id`, `option_type_id`, `option_type_title`, `option_type`, `value`), loaded in one query (`product_variants_options` → `option_values` → `option_types`). Omitted when the variant has none.
 
 **Errors:** `401 UNAUTHORIZED`.
 

@@ -22,7 +22,13 @@ export function useLoyalty(enabled = true) {
 export function useLoyaltyTransactions(enabled = true) {
   return useQuery({
     queryKey: loyaltyKeys.transactions,
-    queryFn: listLoyaltyTransactions,
+    queryFn: async () => {
+      const page = await listLoyaltyTransactions();
+      if (!Array.isArray(page.results)) {
+        throw new Error("loyalty/transactions: missing results");
+      }
+      return page.results;
+    },
     enabled,
   });
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiredbooy/internal/models"
@@ -13,11 +15,19 @@ import (
 type Repository interface {
 	GetAccount(ctx context.Context, userID int64) (*LoyaltyAccount, error)
 	// Award grants points idempotently keyed by (reason, refType, refID). Returns
-	// false (no error) when the grant was already recorded.
-	Award(ctx context.Context, userID int64, delta int, reason, refType, refID string) (bool, error)
+	// false (no error) when the grant was already recorded. tiers are live
+	// programme cutovers (not hardcoded 1000/5000/20000).
+	Award(ctx context.Context, userID int64, delta int, reason, refType, refID string, tiers TierThresholds) (bool, error)
+	// GetProgramme returns the singleton loyalty_programme row. Missing → models.ErrNotFound.
+	GetProgramme(ctx context.Context) (*programmeRow, error)
+	// ListProgrammeTiers returns bronze/silver/gold/cellar ordered by sort_order.
+	ListProgrammeTiers(ctx context.Context) ([]ProgrammeTier, error)
+	// SaveProgramme upserts the singleton rates and the four named tiers.
+	SaveProgramme(ctx context.Context, row programmeRow, tiers []ProgrammeTier) error
 	// Spend deducts points (guarded against overdraw) and records a ledger entry.
 	// When the same refID was already spent, replayed is true and err is nil
-	// (no second balance change) — used with HTTP Idempotency-Key (PH-040b).
+	// (no second balance change). Caller must pass a user-scoped ref
+	// ("{userID}:idem:{key}", PR-003g) because UNIQUE is global.
 	Spend(ctx context.Context, userID, points int64, refID string) (replayed bool, err error)
 	// Clawback reduces balance by up to maxPoints without reducing lifetime.
 	// Idempotent on (reason, refType, refID). Returns points actually deducted.
@@ -27,7 +37,20 @@ type Repository interface {
 	// ListBirthdayUserIDs returns active users whose birth month/day match.
 	// When includeFeb29 is true (28 Feb non-leap), also includes 29 Feb birthdays.
 	ListBirthdayUserIDs(ctx context.Context, month, day int, includeFeb29 bool) ([]int64, error)
-	ListTransactions(ctx context.Context, userID int64, limit int) ([]LoyaltyTransaction, error)
+	// ListTransactions pages the caller's ledger. Empty page is [] (never nil).
+	ListTransactions(ctx context.Context, userID int64, filter TransactionFilter) ([]LoyaltyTransaction, int64, error)
+	// ListMembers joins loyalty_accounts with users (email + public UUID).
+	ListMembers(ctx context.Context, filter MemberFilter) ([]AdminMemberRow, int64, error)
+	// GetMemberByUserUUID looks up users.user_id. Missing user → models.ErrNotFound.
+	// A user with no loyalty_accounts row is still returned (zero bronze).
+	GetMemberByUserUUID(ctx context.Context, userUUID uuid.UUID) (*AdminMemberRow, error)
+	// ListMemberTransactions pages the ledger for users.user_id. Missing user → models.ErrNotFound.
+	ListMemberTransactions(ctx context.Context, userUUID uuid.UUID, filter MemberTransactionFilter) ([]LoyaltyTransaction, int64, error)
+	// ResolveUserID maps users.user_id (UUID) to internal users.id. Missing → models.ErrNotFound.
+	ResolveUserID(ctx context.Context, userUUID uuid.UUID) (int64, error)
+	// FindAdminAdjust locates a prior admin_adjust row for this member + key
+	// (exact ref_id or `{key}|actor=…` encoding). Missing → models.ErrNotFound.
+	FindAdminAdjust(ctx context.Context, userID int64, refIdentity string) (*LoyaltyTransaction, error)
 }
 
 type loyaltyRepository struct {
@@ -58,12 +81,14 @@ func (r *loyaltyRepository) GetAccount(ctx context.Context, userID int64) (*Loya
 	return &acc, nil
 }
 
-func (r *loyaltyRepository) Award(ctx context.Context, userID int64, delta int, reason, refType, refID string) (bool, error) {
+func (r *loyaltyRepository) Award(ctx context.Context, userID int64, delta int, reason, refType, refID string, tiers TierThresholds) (bool, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("loyaltyRepository.Award begin: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
+	cut := tiers.orDefault()
 
 	// Idempotency gate: the unique (reason, ref_type, ref_id) makes a replay a no-op.
 	const insLedger = `
@@ -79,24 +104,24 @@ func (r *loyaltyRepository) Award(ctx context.Context, userID int64, delta int, 
 		return false, tx.Commit(ctx)
 	}
 
-	// Upsert the balance + tier. Tier is derived from the new lifetime total.
+	// Upsert the balance + tier. Cutovers come from the live programme (PR-003f).
 	const upsert = `
 		INSERT INTO loyalty_accounts (user_id, points_balance, lifetime_points, tier)
 		VALUES ($1, $2, GREATEST($2,0),
-			CASE WHEN GREATEST($2,0) >= 20000 THEN 'cellar'
-			     WHEN GREATEST($2,0) >= 5000  THEN 'gold'
-			     WHEN GREATEST($2,0) >= 1000  THEN 'silver'
+			CASE WHEN GREATEST($2,0) >= $5 THEN 'cellar'
+			     WHEN GREATEST($2,0) >= $4 THEN 'gold'
+			     WHEN GREATEST($2,0) >= $3 THEN 'silver'
 			     ELSE 'bronze' END)
 		ON CONFLICT (user_id) DO UPDATE SET
 			points_balance  = loyalty_accounts.points_balance  + $2,
 			lifetime_points = loyalty_accounts.lifetime_points + GREATEST($2,0),
 			tier = CASE
-				WHEN loyalty_accounts.lifetime_points + GREATEST($2,0) >= 20000 THEN 'cellar'
-				WHEN loyalty_accounts.lifetime_points + GREATEST($2,0) >= 5000  THEN 'gold'
-				WHEN loyalty_accounts.lifetime_points + GREATEST($2,0) >= 1000  THEN 'silver'
+				WHEN loyalty_accounts.lifetime_points + GREATEST($2,0) >= $5 THEN 'cellar'
+				WHEN loyalty_accounts.lifetime_points + GREATEST($2,0) >= $4 THEN 'gold'
+				WHEN loyalty_accounts.lifetime_points + GREATEST($2,0) >= $3 THEN 'silver'
 				ELSE 'bronze' END,
 			updated_at = NOW()`
-	if _, err := tx.Exec(ctx, upsert, userID, delta); err != nil {
+	if _, err := tx.Exec(ctx, upsert, userID, delta, cut.Silver, cut.Gold, cut.Cellar); err != nil {
 		return false, fmt.Errorf("loyaltyRepository.Award upsert: %w", err)
 	}
 
@@ -261,20 +286,298 @@ func (r *loyaltyRepository) ListBirthdayUserIDs(ctx context.Context, month, day 
 	return ids, rows.Err()
 }
 
-func (r *loyaltyRepository) ListTransactions(ctx context.Context, userID int64, limit int) ([]LoyaltyTransaction, error) {
+func (r *loyaltyRepository) ListTransactions(ctx context.Context, userID int64, filter TransactionFilter) ([]LoyaltyTransaction, int64, error) {
+	filter.Defaults()
+	var total int64
+	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM loyalty_transactions WHERE user_id = $1`, userID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("loyaltyRepository.ListTransactions count: %w", err)
+	}
+	if total == 0 || int64(filter.Offset()) >= total {
+		return []LoyaltyTransaction{}, total, nil
+	}
 	const q = `
 		SELECT id, user_id, delta, reason, ref_type, ref_id, created_at
 		FROM loyalty_transactions
 		WHERE user_id = $1
-		ORDER BY created_at DESC
-		LIMIT $2`
-	rows, err := r.db.Query(ctx, q, userID, limit)
+		ORDER BY created_at DESC, id DESC
+		LIMIT $2 OFFSET $3`
+	rows, err := r.db.Query(ctx, q, userID, filter.Limit, filter.Offset())
 	if err != nil {
-		return nil, fmt.Errorf("loyaltyRepository.ListTransactions: %w", err)
+		return nil, 0, fmt.Errorf("loyaltyRepository.ListTransactions: %w", err)
 	}
 	txs, err := pgx.CollectRows(rows, pgx.RowToStructByName[LoyaltyTransaction])
 	if err != nil {
-		return nil, fmt.Errorf("loyaltyRepository.ListTransactions scan: %w", err)
+		return nil, 0, fmt.Errorf("loyaltyRepository.ListTransactions scan: %w", err)
 	}
-	return txs, nil
+	if txs == nil {
+		txs = []LoyaltyTransaction{}
+	}
+	return txs, total, nil
+}
+
+func (r *loyaltyRepository) resolveInternalUserID(ctx context.Context, userUUID uuid.UUID) (int64, error) {
+	var id int64
+	err := r.db.QueryRow(ctx, `SELECT id FROM users WHERE user_id = $1`, userUUID).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, models.ErrNotFound
+		}
+		return 0, fmt.Errorf("loyaltyRepository.resolveInternalUserID: %w", err)
+	}
+	return id, nil
+}
+
+func (r *loyaltyRepository) ResolveUserID(ctx context.Context, userUUID uuid.UUID) (int64, error) {
+	return r.resolveInternalUserID(ctx, userUUID)
+}
+
+func (r *loyaltyRepository) FindAdminAdjust(ctx context.Context, userID int64, refIdentity string) (*LoyaltyTransaction, error) {
+	refIdentity = strings.TrimSpace(refIdentity)
+	if userID <= 0 || refIdentity == "" {
+		return nil, models.ErrNotFound
+	}
+	const q = `
+		SELECT id, user_id, delta, reason, ref_type, ref_id, created_at
+		FROM loyalty_transactions
+		WHERE user_id = $1
+		  AND reason = $2
+		  AND ref_type = $3
+		  AND (ref_id = $4 OR ref_id LIKE $4 || '|%')
+		ORDER BY id ASC
+		LIMIT 1`
+	rows, err := r.db.Query(ctx, q, userID, string(LoyaltyReasonAdminAdjust), adminAdjustRefType, refIdentity)
+	if err != nil {
+		return nil, fmt.Errorf("loyaltyRepository.FindAdminAdjust: %w", err)
+	}
+	tx, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[LoyaltyTransaction])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("loyaltyRepository.FindAdminAdjust scan: %w", err)
+	}
+	return &tx, nil
+}
+
+func memberOrderSQL(filter MemberFilter) string {
+	dir := "DESC"
+	if filter.OrderBy == "asc" {
+		dir = "ASC"
+	}
+	switch filter.SortBy {
+	case "points_balance":
+		return "a.points_balance " + dir + ", a.user_id DESC"
+	case "lifetime_points":
+		return "a.lifetime_points " + dir + ", a.user_id DESC"
+	case "tier":
+		return "CASE a.tier WHEN 'cellar' THEN 4 WHEN 'gold' THEN 3 WHEN 'silver' THEN 2 ELSE 1 END " + dir + ", a.user_id DESC"
+	default:
+		return "a.updated_at " + dir + ", a.user_id DESC"
+	}
+}
+
+func (r *loyaltyRepository) ListMembers(ctx context.Context, filter MemberFilter) ([]AdminMemberRow, int64, error) {
+	where := []string{"TRUE"}
+	args := make([]any, 0, 4)
+	n := 1
+	if q := strings.TrimSpace(filter.Q); q != "" {
+		where = append(where, fmt.Sprintf("(u.email ILIKE $%d OR u.first_name ILIKE $%d OR u.last_name ILIKE $%d OR u.phone ILIKE $%d)", n, n, n, n))
+		args = append(args, "%"+q+"%")
+		n++
+	}
+	if tier := strings.TrimSpace(filter.Tier); tier != "" {
+		where = append(where, fmt.Sprintf("a.tier = $%d", n))
+		args = append(args, tier)
+		n++
+	}
+	whereSQL := strings.Join(where, " AND ")
+
+	countQ := `SELECT COUNT(*) FROM loyalty_accounts a JOIN users u ON u.id = a.user_id WHERE ` + whereSQL
+	var total int64
+	if err := r.db.QueryRow(ctx, countQ, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("loyaltyRepository.ListMembers count: %w", err)
+	}
+	if total == 0 || int64(filter.Offset()) >= total {
+		return []AdminMemberRow{}, total, nil
+	}
+
+	listQ := fmt.Sprintf(`
+		SELECT u.user_id, u.email,
+		       NULLIF(BTRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '') AS display_name,
+		       a.points_balance, a.lifetime_points, a.tier, a.updated_at
+		FROM loyalty_accounts a
+		JOIN users u ON u.id = a.user_id
+		WHERE %s
+		ORDER BY %s
+		LIMIT $%d OFFSET $%d`, whereSQL, memberOrderSQL(filter), n, n+1)
+	rows, err := r.db.Query(ctx, listQ, append(args, filter.Limit, filter.Offset())...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("loyaltyRepository.ListMembers: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, pgx.RowToStructByName[AdminMemberRow])
+	if err != nil {
+		return nil, 0, fmt.Errorf("loyaltyRepository.ListMembers scan: %w", err)
+	}
+	if out == nil {
+		out = []AdminMemberRow{}
+	}
+	return out, total, nil
+}
+
+func (r *loyaltyRepository) GetMemberByUserUUID(ctx context.Context, userUUID uuid.UUID) (*AdminMemberRow, error) {
+	const q = `
+		SELECT u.user_id, u.email,
+		       NULLIF(BTRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '') AS display_name,
+		       COALESCE(a.points_balance, 0) AS points_balance,
+		       COALESCE(a.lifetime_points, 0) AS lifetime_points,
+		       COALESCE(a.tier, 'bronze') AS tier,
+		       COALESCE(a.updated_at, u.updated_at) AS updated_at
+		FROM users u
+		LEFT JOIN loyalty_accounts a ON a.user_id = u.id
+		WHERE u.user_id = $1`
+	rows, err := r.db.Query(ctx, q, userUUID)
+	if err != nil {
+		return nil, fmt.Errorf("loyaltyRepository.GetMemberByUserUUID: %w", err)
+	}
+	row, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[AdminMemberRow])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("loyaltyRepository.GetMemberByUserUUID scan: %w", err)
+	}
+	return &row, nil
+}
+
+func (r *loyaltyRepository) ListMemberTransactions(ctx context.Context, userUUID uuid.UUID, filter MemberTransactionFilter) ([]LoyaltyTransaction, int64, error) {
+	internalID, err := r.resolveInternalUserID(ctx, userUUID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	where := "user_id = $1"
+	args := []any{internalID}
+	n := 2
+	if reason := strings.TrimSpace(filter.Reason); reason != "" {
+		where += fmt.Sprintf(" AND reason = $%d", n)
+		args = append(args, reason)
+		n++
+	}
+
+	var total int64
+	countQ := `SELECT COUNT(*) FROM loyalty_transactions WHERE ` + where
+	if err := r.db.QueryRow(ctx, countQ, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("loyaltyRepository.ListMemberTransactions count: %w", err)
+	}
+	if total == 0 || int64(filter.Offset()) >= total {
+		return []LoyaltyTransaction{}, total, nil
+	}
+
+	listQ := fmt.Sprintf(`
+		SELECT id, user_id, delta, reason, ref_type, ref_id, created_at
+		FROM loyalty_transactions
+		WHERE %s
+		ORDER BY created_at DESC, id DESC
+		LIMIT $%d OFFSET $%d`, where, n, n+1)
+	rows, err := r.db.Query(ctx, listQ, append(args, filter.Limit, filter.Offset())...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("loyaltyRepository.ListMemberTransactions: %w", err)
+	}
+	txs, err := pgx.CollectRows(rows, pgx.RowToStructByName[LoyaltyTransaction])
+	if err != nil {
+		return nil, 0, fmt.Errorf("loyaltyRepository.ListMemberTransactions scan: %w", err)
+	}
+	if txs == nil {
+		txs = []LoyaltyTransaction{}
+	}
+	return txs, total, nil
+}
+
+const programmeSingletonID = 1
+
+func (r *loyaltyRepository) GetProgramme(ctx context.Context) (*programmeRow, error) {
+	const q = `
+		SELECT id, enabled, earn_divisor, redeem_value,
+		       signup_bonus, review_bonus, birthday_bonus, birthday_tz,
+		       referral_reward, updated_at
+		FROM loyalty_programme
+		WHERE id = $1`
+	rows, err := r.db.Query(ctx, q, programmeSingletonID)
+	if err != nil {
+		return nil, fmt.Errorf("loyaltyRepository.GetProgramme: %w", err)
+	}
+	row, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[programmeRow])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.ErrNotFound
+		}
+		return nil, fmt.Errorf("loyaltyRepository.GetProgramme scan: %w", err)
+	}
+	return &row, nil
+}
+
+func (r *loyaltyRepository) ListProgrammeTiers(ctx context.Context) ([]ProgrammeTier, error) {
+	const q = `
+		SELECT id, min_lifetime_points
+		FROM loyalty_programme_tiers
+		ORDER BY sort_order ASC, id ASC`
+	rows, err := r.db.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("loyaltyRepository.ListProgrammeTiers: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, pgx.RowToStructByName[ProgrammeTier])
+	if err != nil {
+		return nil, fmt.Errorf("loyaltyRepository.ListProgrammeTiers scan: %w", err)
+	}
+	if out == nil {
+		out = []ProgrammeTier{}
+	}
+	return out, nil
+}
+
+func (r *loyaltyRepository) SaveProgramme(ctx context.Context, row programmeRow, tiers []ProgrammeTier) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("loyaltyRepository.SaveProgramme begin: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	const upsert = `
+		INSERT INTO loyalty_programme (
+			id, enabled, earn_divisor, redeem_value,
+			signup_bonus, review_bonus, birthday_bonus, birthday_tz, referral_reward
+		) VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (id) DO UPDATE SET
+			enabled         = EXCLUDED.enabled,
+			earn_divisor    = EXCLUDED.earn_divisor,
+			redeem_value    = EXCLUDED.redeem_value,
+			signup_bonus    = EXCLUDED.signup_bonus,
+			review_bonus    = EXCLUDED.review_bonus,
+			birthday_bonus  = EXCLUDED.birthday_bonus,
+			birthday_tz     = EXCLUDED.birthday_tz,
+			referral_reward = EXCLUDED.referral_reward,
+			updated_at      = NOW()`
+	if _, err := tx.Exec(ctx, upsert,
+		row.Enabled, row.EarnDivisor, row.RedeemValue,
+		row.SignupBonus, row.ReviewBonus, row.BirthdayBonus, row.BirthdayTZ, row.ReferralReward,
+	); err != nil {
+		return fmt.Errorf("loyaltyRepository.SaveProgramme upsert: %w", err)
+	}
+
+	const upsertTier = `
+		INSERT INTO loyalty_programme_tiers (id, min_lifetime_points, sort_order)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (id) DO UPDATE SET
+			min_lifetime_points = EXCLUDED.min_lifetime_points,
+			sort_order          = EXCLUDED.sort_order`
+	for i, t := range tiers {
+		if _, err := tx.Exec(ctx, upsertTier, t.ID, t.MinLifetimePoints, i+1); err != nil {
+			return fmt.Errorf("loyaltyRepository.SaveProgramme tier %s: %w", t.ID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("loyaltyRepository.SaveProgramme commit: %w", err)
+	}
+	return nil
 }

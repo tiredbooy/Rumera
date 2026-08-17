@@ -24,14 +24,20 @@ import {
 import { CategoryThumbnail } from "@/features/catalog/categories/components/category-thumbnail";
 import type { CategoryTree } from "@/features/catalog/categories/types";
 import { getCategoryHref } from "@/features/catalog/categories/utils";
+import { brandCopy } from "@/lib/brand";
+
 import { primaryNavigationItems } from "../config";
 import { HeaderSearch } from "./header-search";
 
 interface MobileNavDrawerProps {
   categoryTree: CategoryTree[];
+  storeName?: string;
 }
 
-export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
+export function MobileNavDrawer({
+  categoryTree,
+  storeName,
+}: MobileNavDrawerProps) {
   const [stack, setStack] = React.useState<CategoryTree[]>([]);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const levelHeadingRef = React.useRef<HTMLSpanElement>(null);
@@ -77,9 +83,16 @@ export function MobileNavDrawer({ categoryTree }: MobileNavDrawerProps) {
         aria-describedby={undefined}
         className="flex max-h-dvh flex-col overflow-x-hidden overflow-y-auto overscroll-contain p-0 [padding-bottom:env(safe-area-inset-bottom)] [padding-left:env(safe-area-inset-left)] [padding-right:env(safe-area-inset-right)] [padding-top:env(safe-area-inset-top)] data-[side=right]:h-dvh data-[side=right]:w-full data-[side=right]:max-w-[360px] data-[side=right]:sm:max-w-[360px]"
       >
-        <SheetHeader className="border-b border-border/50 p-4 pr-16 pb-3">
-          <SheetTitle className="sr-only">رومرا</SheetTitle>
-          <RumeraBrandMark variant="full" size="sm" href="/" />
+        <SheetHeader className="border-b border-border/50 p-4 pe-16 pb-3">
+          <SheetTitle className="sr-only">
+            {storeName?.trim() || brandCopy.wordmarkFa}
+          </SheetTitle>
+          <RumeraBrandMark
+            variant="full"
+            size="sm"
+            href="/"
+            aria-label={`${storeName?.trim() || brandCopy.wordmarkFa} — خانه`}
+          />
         </SheetHeader>
 
         <div className="px-4 pt-4">

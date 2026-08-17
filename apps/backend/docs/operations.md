@@ -245,6 +245,14 @@ request rate (default 100 req/s, burst 200) so one client can't crowd out
 others. Idle visitor buckets are garbage-collected every 3 minutes. Over-limit
 requests get `429` with a `Retry-After` header.
 
+Client IP comes from Gin's `c.ClientIP()`, which honours `X-Forwarded-For` only
+from hops listed in `TRUSTED_PROXIES`. Production `Validate()` refuses to boot
+with an empty list (Gin's default is "trust every hop", which makes login/OTP
+and the global limiter spoofable). The prod compose stack sets
+`TRUSTED_PROXIES=172.16.0.0/12` (Docker user-defined bridge; nginx → backend)
+and prod nginx **resets** `X-Forwarded-For` to `$remote_addr` rather than
+appending a caller-supplied header. Do not set `0.0.0.0/0`.
+
 ---
 
 ## Graceful shutdown
@@ -284,6 +292,7 @@ All via environment variables (see `configs/config.go`).
 | `CRON_RECS_REFRESH_MAX_USERS` | `5000` | Per-run cap on profiles rebuilt |
 | `REDIS_ADDR` / `REDIS_PASSWORD` / `REDIS_DB` | `localhost:6379` / – / `0` | Cache backend |
 | `CORS_ALLOWED_ORIGINS` | `*` | Browser origin allow-list (set explicitly in prod) |
+| `TRUSTED_PROXIES` | – | Ingress IPs/CIDRs trusted for `X-Forwarded-For`. **Required in production**; compose default `172.16.0.0/12`. Do not use `0.0.0.0/0`. |
 | `METRICS_ENABLED` | `true` | Expose the Prometheus `/metrics` endpoint + request metrics middleware (keep internal-only) |
 | `MEDIA_ROOT` | `./storage/media` | Authoritative uploaded originals; persist and back up |
 | `MEDIA_CACHE_DIR` | `./storage/media-cache` | Disposable rendered variants; safe to clear |

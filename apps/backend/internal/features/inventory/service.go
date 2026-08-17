@@ -33,6 +33,8 @@ type Service interface {
 	// dangling pending order on crash).
 	ReserveForOrderTx(ctx context.Context, tx pgx.Tx, orderID int64, items []StockLine) error
 	ReleaseForOrder(ctx context.Context, orderID int64, items []StockLine) error
+	// ReleaseForOrderTx releases on a caller-owned TX (cancel + coupon reverse).
+	ReleaseForOrderTx(ctx context.Context, tx pgx.Tx, orderID int64, items []StockLine) error
 	DeductForOrder(ctx context.Context, orderID int64, items []StockLine) error
 	// DeductForOrderTx drains committed stock on a caller-supplied transaction, so
 	// confirming a payment and deducting stock commit atomically.
@@ -235,8 +237,9 @@ func (s *inventoryService) ReserveForOrderTx(ctx context.Context, tx pgx.Tx, ord
 }
 
 // ReleaseForOrder moves stock back from committed → available without changing
-// physical stock.
-// Called when an order is cancelled before payment.
+// physical stock, only if this order still has an active reservation row.
+// Re-release of an already-released row is a no-op (does not steal another
+// order's committed units). Called when an order is cancelled or payment fails.
 func (s *inventoryService) ReleaseForOrder(ctx context.Context, orderID int64, items []StockLine) (err error) {
 	ctx, endSpan := tracing.Start(ctx, "inventory.ReleaseForOrder", tracing.Int64("order.id", orderID))
 	defer func() {
@@ -254,10 +257,8 @@ func (s *inventoryService) ReleaseForOrder(ctx context.Context, orderID int64, i
 	}
 	defer utils.RollbackOnErr(ctx, tx, &err)
 
-	for _, item := range items {
-		if err = s.inventoryRepo.Release(ctx, tx, item.VariantID, item.Quantity, orderID); err != nil {
-			return fmt.Errorf("inventoryService.ReleaseForOrder variant %d: %w", item.VariantID, err)
-		}
+	if err = s.ReleaseForOrderTx(ctx, tx, orderID, items); err != nil {
+		return err
 	}
 
 	if err = tx.Commit(ctx); err != nil {
@@ -266,7 +267,21 @@ func (s *inventoryService) ReleaseForOrder(ctx context.Context, orderID int64, i
 	return nil
 }
 
-// DeductForOrder removes paid units from physical and committed stock together.
+func (s *inventoryService) ReleaseForOrderTx(ctx context.Context, tx pgx.Tx, orderID int64, items []StockLine) error {
+	if s == nil {
+		return nil
+	}
+	for _, item := range items {
+		if err := s.inventoryRepo.Release(ctx, tx, item.VariantID, item.Quantity, orderID); err != nil {
+			return fmt.Errorf("inventoryService.ReleaseForOrderTx variant %d: %w", item.VariantID, err)
+		}
+	}
+	return nil
+}
+
+// DeductForOrder removes paid units from physical and committed stock together,
+// only if this order still has an active reservation. Late success after
+// fail/release must not deduct another order's committed pool.
 func (s *inventoryService) DeductForOrder(ctx context.Context, orderID int64, items []StockLine) (err error) {
 	tx, err := s.inventoryRepo.BeginTx(ctx)
 	if err != nil {
@@ -311,11 +326,7 @@ func (s *inventoryService) DeductForOrderTx(ctx context.Context, tx pgx.Tx, orde
 // isBusinessError returns true for sentinel errors the handler layer needs to
 // distinguish — these should not be wrapped with additional context.
 func isBusinessError(err error) bool {
-	switch err {
-	case models.ErrInsufficientStock,
-		models.ErrNotFound,
-		models.ErrInvalidState:
-		return true
-	}
-	return false
+	return errors.Is(err, models.ErrInsufficientStock) ||
+		errors.Is(err, models.ErrNotFound) ||
+		errors.Is(err, models.ErrInvalidState)
 }

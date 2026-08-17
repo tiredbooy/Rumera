@@ -12,8 +12,8 @@ import { faNum } from "@/lib/products";
 import { cn } from "@/lib/utils";
 
 const difficultyDot: Record<RecipeDifficulty, string> = {
-  easy: "bg-emerald-500",
-  medium: "bg-amber-500",
+  easy: "bg-success",
+  medium: "bg-warning",
   hard: "bg-wine",
 };
 
@@ -31,7 +31,7 @@ export function RecipeCard({
     <article className="h-full">
       <Link
         href={href}
-        className="group/recipe press border-hairline shadow-e1 hover:shadow-e3 relative flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/5 transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-4 sm:rounded-3xl"
+        className="group/recipe press hover-lift border-hairline shadow-e1 relative flex h-full flex-col overflow-hidden rounded-2xl bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-4 sm:rounded-3xl"
       >
         <div className="relative aspect-[4/3] overflow-hidden">
           <div className="absolute inset-0 transition-transform duration-500 ease-cellar group-hover/recipe:scale-[1.04]">

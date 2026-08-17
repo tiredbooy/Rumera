@@ -3,13 +3,12 @@
 import Link from "next/link";
 import {
   ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
   CreditCard,
   Loader2,
   RotateCw,
 } from "lucide-react";
 
+import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -27,9 +26,27 @@ import type { AdminPaymentTransaction } from "@/features/payments/types";
 import { faNum } from "@/lib/products";
 import { faDateTime } from "@/lib/utils/date";
 
+import { adminCustomerHref } from "../customer-href";
 import { PaymentStatusBadge } from "./payment-status-badge";
 
 type PaymentsQuery = ReturnType<typeof useAdminPayments>;
+
+function PaymentUserLink({ userId }: { userId?: string }) {
+  const href = adminCustomerHref(userId);
+  if (!href || !userId) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <Link
+      href={href}
+      className="block truncate rounded-md font-mono text-xs underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      dir="ltr"
+      title={userId}
+    >
+      {userId}
+    </Link>
+  );
+}
 
 function PaymentLoading() {
   return (
@@ -97,6 +114,12 @@ function PaymentMobileCard({ payment }: { payment: AdminPaymentTransaction }) {
             ) : (
               "بدون سفارش"
             )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">کاربر</dt>
+          <dd className="mt-1">
+            <PaymentUserLink userId={payment.user_id} />
           </dd>
         </div>
         <div>
@@ -199,12 +222,13 @@ export function PaymentListResults({
             <Table className="w-full table-fixed">
               <TableHeader>
                 <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className="w-[24%] text-start">تراکنش</TableHead>
+                  <TableHead className="w-[20%] text-start">تراکنش</TableHead>
                   <TableHead className="w-[10%] text-start">سفارش</TableHead>
-                  <TableHead className="w-[18%] text-start">مبلغ</TableHead>
-                  <TableHead className="w-[14%] text-start">روش</TableHead>
-                  <TableHead className="w-[15%] text-start">وضعیت</TableHead>
-                  <TableHead className="w-[19%] text-start">زمان ثبت</TableHead>
+                  <TableHead className="w-[18%] text-start">کاربر</TableHead>
+                  <TableHead className="w-[16%] text-start">مبلغ</TableHead>
+                  <TableHead className="w-[12%] text-start">روش</TableHead>
+                  <TableHead className="w-[12%] text-start">وضعیت</TableHead>
+                  <TableHead className="w-[12%] text-start">زمان ثبت</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -242,6 +266,9 @@ export function PaymentListResults({
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
+                    <TableCell className="max-w-40">
+                      <PaymentUserLink userId={payment.user_id} />
+                    </TableCell>
                     <TableCell className="font-medium">
                       {formatPaymentAmount(payment.amount, payment.currency)}
                     </TableCell>
@@ -263,46 +290,24 @@ export function PaymentListResults({
       )}
 
       {payments.data.pagination.total_items > 0 ? (
-        <nav
-          className="mt-4 flex flex-wrap items-center justify-between gap-3"
-          aria-label="صفحه‌بندی تراکنش‌های پرداخت"
-        >
-          <p className="text-xs text-muted-foreground" aria-live="polite">
-            {faNum(payments.data.pagination.total_items)} تراکنش · صفحهٔ{" "}
-            {faNum(payments.data.pagination.page)} از{" "}
-            {faNum(payments.data.pagination.total_pages)}
-            {payments.isFetching ? (
-              <Loader2
-                className="ms-1 inline size-3 animate-spin"
-                aria-hidden
-              />
-            ) : null}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={
-                !payments.data.pagination.has_prev || payments.isFetching
-              }
-              onClick={() => onPage(page > 2 ? page - 1 : undefined)}
-            >
-              <ChevronRight className="size-4" aria-hidden /> قبلی
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={
-                !payments.data.pagination.has_next || payments.isFetching
-              }
-              onClick={() => onPage(page + 1)}
-            >
-              بعدی <ChevronLeft className="size-4" aria-hidden />
-            </Button>
-          </div>
-        </nav>
+        <ListPagination
+          page={payments.data.pagination.page}
+          totalPages={payments.data.pagination.total_pages}
+          hasPrev={payments.data.pagination.has_prev}
+          hasNext={payments.data.pagination.has_next}
+          onPrev={() => onPage(page > 2 ? page - 1 : undefined)}
+          onNext={() => onPage(page + 1)}
+          disabled={payments.isFetching}
+          ariaLabel="صفحه‌بندی تراکنش‌های پرداخت"
+          className="mt-6"
+          label={
+            <>
+              {faNum(payments.data.pagination.total_items)} تراکنش · صفحهٔ{" "}
+              {faNum(payments.data.pagination.page)} از{" "}
+              {faNum(payments.data.pagination.total_pages)}
+            </>
+          }
+        />
       ) : null}
     </>
   );

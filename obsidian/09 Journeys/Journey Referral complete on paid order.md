@@ -14,15 +14,17 @@ Referee shopper + system
 
 ## Happy path
 
-1. Referee claims code (or claimed at signup) → [[Referrals]]
+1. Referee claims code (`POST /referrals/claim` → `{claimed:true}` or 400; not a silent 204) → [[Referrals]]
 2. Completes [[Journey First purchase]] through paid webhook
-3. `PaymentService.Confirm` best-effort `referral.OnPaidOrder`
-4. Pending referral completed; loyalty points to referrer + referee
+3. `PaymentService.Confirm` retries `referral.OnPaidOrder` after the money TX (PR-003h)
+4. `OnPaidOrder` **Awards both sides first**, then Completes. Award is idempotent per referral id
+5. Pending referral completed; loyalty points to referrer + referee
 
 ## Failure branches
 
 - No pending referral → no-op
-- Loyalty award fail must not roll back payment (best-effort)
+- Award fail → **do not Complete**; retry can Award (replay) then Complete
+- Loyalty award fail must not roll back payment ([[Payments Backend]])
 
 ## Related
 

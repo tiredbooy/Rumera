@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { validateImageURL } from "@/features/image-uploader/constants";
+import { parseAsciiNumber, toAsciiDigits } from "@/lib/normalize-digits";
 
 const intish = (message: string, options: { min?: number } = {}) =>
   z.string().refine(
     (value) => {
-      if (value.trim() === "") return true;
-      const number = Number(value);
+      if (toAsciiDigits(value).trim() === "") return true;
+      const number = parseAsciiNumber(value);
       return (
         Number.isInteger(number) &&
         (options.min === undefined || number >= options.min)
@@ -37,6 +38,9 @@ export const recipeIngredientFormSchema = z.object({
   notes: z.string().trim().max(255),
   optional: z.boolean(),
   product_variant_id: z.number().nullable(),
+  _label: z.string().optional(),
+  _brand: z.string().nullable().optional(),
+  _sku: z.string().nullable().optional(),
 });
 
 export const recipeProductFormSchema = z.object({
@@ -70,12 +74,25 @@ export const recipeFormSchema = z.object({
   cook_time_minutes: intish("عدد صحیح وارد کنید", { min: 0 }),
   servings: intish("حداقل ۱", { min: 1 }),
   status: z.enum(["draft", "published", "archived"]),
+  published_at: z.string(),
   image_url: imageURL,
   image_alt: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
   og_image_url: imageURL,
   is_featured: z.boolean(),
   meta_title: z.string().trim().max(255),
   meta_description: z.string().trim().max(500),
+  canonical_url: z
+    .string()
+    .trim()
+    .max(2048, "نشانی کانونیکال بسیار طولانی است")
+    .refine(
+      (value) =>
+        value === "" ||
+        /^https?:\/\//i.test(value) ||
+        value.startsWith("/"),
+      "نشانی کانونیکال باید مسیر یا نشانی کامل باشد",
+    ),
+  meta_keywords: z.string().trim().max(500),
   tag_ids: z.array(z.number()),
   ingredients: z.array(recipeIngredientFormSchema),
   products: z.array(recipeProductFormSchema),

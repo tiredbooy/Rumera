@@ -58,6 +58,7 @@ func TestFromAppErrorMoneyCodes(t *testing.T) {
 		{apperr.ErrCartEmpty, "CART_EMPTY", http.StatusBadRequest},
 		{apperr.ErrInvalidCoupon, "INVALID_COUPON", http.StatusBadRequest},
 		{apperr.ErrInsufficientPoints, "INSUFFICIENT_POINTS", http.StatusConflict},
+		{apperr.ErrLoyaltyDisabled, "LOYALTY_DISABLED", http.StatusConflict},
 		{apperr.ErrGiftCardInvalid, "GIFT_CARD_INVALID", http.StatusNotFound},
 		{apperr.ErrAccountDisabled, "ACCOUNT_DISABLED", http.StatusForbidden},
 		{apperr.ErrOrderAlreadyPaid, "ORDER_ALREADY_PAID", http.StatusConflict},

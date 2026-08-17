@@ -29,7 +29,7 @@ type SaveProductAggregateReq struct {
 type SaveProductVariantReq struct {
 	ID             *int64   `json:"id" validate:"omitempty,min=1"`
 	SKU            *string  `json:"sku" validate:"omitempty,max=250"`
-	Price          float64  `json:"price" validate:"required,gt=0"`
+	Price          float64  `json:"price" validate:"required,min=0"`
 	CompareAtPrice *float64 `json:"compare_at_price" validate:"omitempty,min=0"`
 	IsActive       bool     `json:"is_active"`
 	OptionValueIDs []int64  `json:"option_value_ids"`

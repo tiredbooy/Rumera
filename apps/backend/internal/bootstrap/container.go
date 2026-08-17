@@ -9,6 +9,7 @@ import (
 	config "github.com/tiredbooy/configs"
 	analyticscapture "github.com/tiredbooy/internal/analytics"
 	"github.com/tiredbooy/internal/corn"
+	"github.com/tiredbooy/internal/eventconsumers"
 	"github.com/tiredbooy/internal/features/addresses"
 	"github.com/tiredbooy/internal/features/alerts"
 	featanalytics "github.com/tiredbooy/internal/features/analytics"
@@ -67,6 +68,9 @@ type container struct {
 	// cron is the in-process background-job scheduler. It is nil when
 	// CRON_ENABLED=false; the App lifecycle guards against that.
 	cron *cron.Runner
+	// events is the domain-fact bus. Non-nil even when the worker is disabled,
+	// because producers still need the emitter.
+	events *eventSubsystem
 }
 
 // build wires the whole dependency graph from the live database connections.
@@ -83,6 +87,10 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	smsSender := sms.New(cfg, log)
 	v := validator.New()
 	notifDispatcher := buildNotifications(cfg, log, db, smsSender, mailer)
+	// The domain-fact bus. Built here so the emitter can be injected into the
+	// money services below; its consumers are registered further down, once the
+	// services they call exist.
+	eventSys := newEventSubsystem(cfg, log, db)
 
 	// ── Media storage + feature ──────────────────────────────────────────────
 	// Originals live under MediaRoot, rendered variants under MediaCacheDir.
@@ -128,6 +136,20 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	)
 	referralHandler, referralSvc := referral.New(db, loyaltySvc, cfg.LoyaltyReferralReward, v)
 	giftCardHandler, giftCardSvc := giftcard.New(db, walletSvc, v)
+	giftCardSvc = giftCardSvc.
+		WithMailer(mailer).
+		WithDispatcher(notifDispatcher).
+		WithPurchaserEmailLookup(giftcard.EmailByUserIDFunc(func(ctx context.Context, userID int64) (string, error) {
+			au, err := userSvc.GetAuthUserByUID(ctx, userID)
+			if err != nil {
+				return "", err
+			}
+			u, err := userSvc.GetByID(ctx, au.UserID)
+			if err != nil {
+				return "", err
+			}
+			return u.Email, nil
+		}))
 	subscriptionHandler, subscriptionRepo := subscription.New(db, v)
 	wishlistHandler := wishlist.New(db, v)
 	tasteHandler := taste.New(db, v)
@@ -153,14 +175,16 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 	// Inventory first: payments deduct stock on confirm; orders reserve at checkout.
 	couponHandler, couponRepo, couponUsageRepo := coupons.New(db, v)
 	shippingHandler, shippingSvc := shipping.New(db, v)
-	cartHandler, cartRepo := cart.New(db, variantRepo, inventoryRepo, v)
+	cartHandler, cartRepo := cart.New(db, variantRepo, productRepo, inventoryRepo, v)
 	alertHandler, alertRepo := alerts.New(db, variantRepo, inventoryRepo, v)
 
-	// payments.Service before orders.Service (orders create pending payments).
+	// payments.Service before orders.Service (non-wallet rails create pending
+	// payments). Wallet checkout debits via WalletPurchaser on the order TX.
 	// order repos exist first so payments can MarkAsPaid / read stock lines.
 	// Orderless Confirm: wtop-* → wallet (PH-041a); gbuy-* → gift card (PH-042a).
 	orderRepo, orderItemRepo := orders.NewRepos(db)
-	paymentSvc := payments.NewServiceFromDB(db, orderRepo, inventorySvc, loyaltySvc, referralSvc, walletSvc, giftCardSvc)
+	paymentSvc := payments.NewServiceFromDB(db, orderRepo, inventorySvc, loyaltySvc, referralSvc, walletSvc, giftCardSvc, cfg.PaymentStartBaseURL).
+		WithEventPublisher(eventSys.emitter)
 	// Wire payment starters after paymentSvc exists (avoid feature import cycles).
 	walletHandler = walletHandler.WithTopUp(walletTopUpAdapter{paymentSvc})
 	giftCardHandler = giftCardHandler.WithPurchase(giftCardPurchaseAdapter{paymentSvc})
@@ -173,12 +197,21 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		Inventory:     inventorySvc,
 		Payment:       paymentSvc,
 		GiftConfig:    siteSettingsSvc,
+		Clawback:      loyaltySvc,
 		Users:         userSvc,
 		Notifications: notifDispatcher,
 		Mail:          mailer,
 		Validator:     v,
+		Wallet:        walletSvc,
+		Events:        eventSys.emitter,
 	})
-	paymentHandler := payments.NewHTTP(paymentSvc, orderSvc, inventorySvc, cfg.CryptoWebhookKey, v)
+	// *orderService implements payments.OrderItemsLookup (MarkOrderPaymentFailed
+	// lives on the concrete type — not on orders.Service; service.go is sibling-owned).
+	orderLookup, ok := orderSvc.(payments.OrderItemsLookup)
+	if !ok {
+		log.Fatal("orders service does not implement payments.OrderItemsLookup")
+	}
+	paymentHandler := payments.NewHTTP(paymentSvc, orderLookup, inventorySvc, cfg.CryptoWebhookKey, v)
 
 	// ── Auth (after users + loyalty for signup bonus + session kill) ──────────
 	authHandler := auth.Wire(auth.Deps{
@@ -236,16 +269,31 @@ func build(cfg *config.Config, log *zap.Logger, dbs *database.Connections, cache
 		Analytics:        analyticsMod.Handler,
 	})
 
+	// Consumers last: they call the services assembled above. Fields left unset
+	// stay unregistered — see OrderPaidHandlers on why a nil pointer must not be
+	// passed as a non-nil interface.
+	orderStatus, _ := orderSvc.(eventconsumers.OrderStatusReader)
+	eventSys.registerConsumers(eventconsumers.OrderPaidDeps{
+		Receipt:  orderHandler.Receipt,
+		Loyalty:  loyaltySvc,
+		Referral: referralSvc,
+		Intents:  payments.NewRepository(db),
+		Orders:   orderStatus,
+		Recs:     recommendationSvc,
+	})
+	eventSys.buildWorker(false)
+
 	return &container{
 		handler: handler,
 		jwt:     jwt,
+		events:  eventSys,
 		queue:   analyticscapture.NewQueue(analyticsMod.Events),
 		cache:   cacheStore,
 		dbs:     dbs,
 		cron: buildCron(cfg, dbs,
 			analyticsMod.ProductStats, analyticsMod.RevenueStats, analyticsMod.SearchSummary,
-			recommendationSvc, alertRepo, subscriptionRepo, mailer,
-			productRepo, meiliClient, log, loyaltySvc),
+			recommendationSvc, alertRepo, subscriptionRepo, mailer, notifDispatcher,
+			productRepo, meiliClient, log, loyaltySvc, orderSvc, eventSys),
 	}
 }
 
@@ -281,17 +329,23 @@ func buildNotifications(
 	}
 	if notifMode == "async" {
 		log.Info("notifications mode: async (outbox → Kafka worker)")
+		store := notifpg.NewStore(db)
 		return &notifications.Dispatcher{
-			Mode:   "async",
-			Outbox: notifpg.NewStore(db),
-			SMS:    smsSender,
-			Mail:   mailer,
+			Mode:       "async",
+			Outbox:     store,
+			SMS:        smsSender,
+			Mail:       mailer,
+			Deliveries: store,
 		}
 	}
+	// Inline still gets the delivery ledger: it is what stops a retrying event
+	// consumer from sending the same receipt twice. Without it the idempotency
+	// key is computed and discarded on this path.
 	return &notifications.Dispatcher{
-		Mode: "inline",
-		SMS:  smsSender,
-		Mail: mailer,
+		Mode:       "inline",
+		SMS:        smsSender,
+		Mail:       mailer,
+		Deliveries: notifpg.NewStore(db),
 	}
 }
 
@@ -312,10 +366,13 @@ func buildCron(
 	alertRepo alerts.Repository,
 	subscriptionRepo subscription.Repository,
 	mailer notify.Mailer,
+	notif *notifications.Dispatcher,
 	productRepo product.Repository,
 	meiliClient *meili.Client,
 	log *zap.Logger,
 	loyaltySvc *loyalty.Service,
+	orderSvc orders.Service,
+	eventSys *eventSubsystem,
 ) *cron.Runner {
 	if !cfg.CronEnabled {
 		return nil
@@ -338,14 +395,21 @@ func buildCron(
 	runner.Register(cfg.CronIdempotencyCleanupSchedule, "idempotency_cleanup",
 		cron.NewIdempotencyCleanupJob(dbs.DB, cfg.IdempotencyKeyRetention).Run)
 
+	// Housekeeping: prune settled domain facts. Only events whose consumptions
+	// are ALL done are eligible, so anything still pending, retrying or
+	// dead-lettered stays replayable regardless of age.
+	if eventSys != nil && cfg.EventsEnabled {
+		runner.Register(cfg.CronEventsPruneSchedule, "events_prune", eventSys.prune)
+	}
+
 	// Product alerts: notify customers when a watched variant restocks or drops
 	// in price.
 	runner.Register(cfg.CronAlertCheckSchedule, "alert_check",
-		cron.NewAlertCheckJob(alertRepo, mailer, cfg.PublicSiteURL).Run)
+		cron.NewAlertCheckJob(alertRepo, mailer, cfg.PublicSiteURL).WithDispatcher(notif).Run)
 
 	// Subscriptions: email customers whose cellar box is due and roll the date.
 	runner.Register(cfg.CronSubscriptionSchedule, "subscription_renewal",
-		cron.NewSubscriptionRenewalJob(subscriptionRepo, mailer, cfg.PublicSiteURL).Run)
+		cron.NewSubscriptionRenewalJob(subscriptionRepo, mailer, cfg.PublicSiteURL).WithDispatcher(notif).Run)
 
 	// Meili full reindex (PH-030b readiness). Only when client connected at boot.
 	// Does not switch storefront search off Postgres ILIKE.
@@ -359,6 +423,15 @@ func buildCron(
 	if loyaltySvc != nil {
 		runner.Register(cfg.CronLoyaltyBirthdaySchedule, "loyalty_birthday",
 			cron.NewLoyaltyBirthdayJob(loyaltySvc).Run)
+	}
+
+	// Unpaid reservation TTL (PR-020c). Hardcoded every 5 minutes — do not
+	// add CRON_* env here (config.go is sibling-owned).
+	if expirer, ok := orderSvc.(cron.ReservationExpirer); ok {
+		runner.Register("0 */5 * * * *", "reservation_ttl",
+			cron.NewReservationTTLJob(expirer).Run)
+	} else if orderSvc != nil {
+		log.Warn("reservation ttl job: order service does not implement ReservationExpirer")
 	}
 
 	return runner
@@ -381,6 +454,7 @@ func (a walletTopUpAdapter) CreateWalletTopUp(ctx context.Context, userID int64,
 		Amount:        intent.Amount,
 		Currency:      intent.Currency,
 		Status:        string(intent.Status),
+		PaymentURL:    intent.PaymentURL,
 	}, nil
 }
 
@@ -400,5 +474,6 @@ func (a giftCardPurchaseAdapter) CreateGiftCardPurchase(ctx context.Context, use
 		Amount:        intent.Amount,
 		Currency:      intent.Currency,
 		Status:        string(intent.Status),
+		PaymentURL:    intent.PaymentURL,
 	}, nil
 }

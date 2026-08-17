@@ -80,23 +80,57 @@ func (m *MemoryOutbox) MarkPublishError(_ context.Context, id int64, errMsg stri
 }
 
 // MemoryDeliveries is a process-local idempotency ledger.
+//
+// Mirrors the Postgres claim/confirm semantics: only a CONFIRMED key
+// short-circuits, so a test that fails a send then retries sees the retry
+// actually re-dispatch.
 type MemoryDeliveries struct {
-	mu   sync.Mutex
-	seen map[string]struct{}
+	mu sync.Mutex
+	// status maps key → "pending" | "delivered" | "failed".
+	status map[string]string
+	// Attempts counts claims per key, so tests can assert retry behaviour.
+	Attempts map[string]int
 }
 
 func NewMemoryDeliveries() *MemoryDeliveries {
-	return &MemoryDeliveries{seen: map[string]struct{}{}}
+	return &MemoryDeliveries{
+		status:   map[string]string{},
+		Attempts: map[string]int{},
+	}
 }
 
 func (m *MemoryDeliveries) TryBegin(_ context.Context, idempotencyKey, _, _, _ string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.seen[idempotencyKey]; ok {
+	if m.status[idempotencyKey] == "delivered" {
 		return false, nil
 	}
-	m.seen[idempotencyKey] = struct{}{}
+	m.status[idempotencyKey] = "pending"
+	m.Attempts[idempotencyKey]++
 	return true, nil
+}
+
+func (m *MemoryDeliveries) ConfirmDelivery(_ context.Context, idempotencyKey string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.status[idempotencyKey] = "delivered"
+	return nil
+}
+
+func (m *MemoryDeliveries) FailDelivery(_ context.Context, idempotencyKey, _ string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.status[idempotencyKey] != "delivered" {
+		m.status[idempotencyKey] = "failed"
+	}
+	return nil
+}
+
+// Delivered reports whether the key reached a confirmed state.
+func (m *MemoryDeliveries) Delivered(idempotencyKey string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.status[idempotencyKey] == "delivered"
 }
 
 // MemoryPublisher records published messages for tests.

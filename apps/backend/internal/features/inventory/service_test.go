@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -37,15 +38,15 @@ func (t *fakeTx) Conn() *pgx.Conn                                         { retu
 
 type invRepoStub struct {
 	Repository
-	tx                   *fakeTx
-	reserveFn            func(context.Context, pgx.Tx, int64, int, int64) error
-	releaseFn            func(context.Context, pgx.Tx, int64, int, int64) error
-	deductFn             func(context.Context, pgx.Tx, int64, int, int64) error
-	adjustFn             func(context.Context, pgx.Tx, int64, AdjustStockReq, *int64) error
-	ensureFn             func(context.Context, int64) error
-	getByVariantFn       func(context.Context, int64) (*Inventory, error)
-	updateReorderFn      func(context.Context, int64, UpdateReorderReq) (*Inventory, error)
-	ensureTxCalls        int
+	tx              *fakeTx
+	reserveFn       func(context.Context, pgx.Tx, int64, int, int64) error
+	releaseFn       func(context.Context, pgx.Tx, int64, int, int64) error
+	deductFn        func(context.Context, pgx.Tx, int64, int, int64) error
+	adjustFn        func(context.Context, pgx.Tx, int64, AdjustStockReq, *int64) error
+	ensureFn        func(context.Context, int64) error
+	getByVariantFn  func(context.Context, int64) (*Inventory, error)
+	updateReorderFn func(context.Context, int64, UpdateReorderReq) (*Inventory, error)
+	ensureTxCalls   int
 }
 
 func (r *invRepoStub) BeginTx(context.Context) (pgx.Tx, error) {
@@ -328,5 +329,22 @@ func TestService_UpdateReorder_ReturnsConfirmedInventory(t *testing.T) {
 	})
 	if err != nil || got != want {
 		t.Fatalf("UpdateReorder = %+v, %v", got, err)
+	}
+}
+
+func TestIsBusinessError_WrappedSentinel(t *testing.T) {
+	sentinels := []error{
+		models.ErrInsufficientStock,
+		models.ErrNotFound,
+		models.ErrInvalidState,
+	}
+	for _, sentinel := range sentinels {
+		wrapped := fmt.Errorf("repo: %w", sentinel)
+		if !isBusinessError(wrapped) {
+			t.Fatalf("isBusinessError(%v) = false; want true for wrapped sentinel", wrapped)
+		}
+	}
+	if isBusinessError(fmt.Errorf("repo: %w", errors.New("disk full"))) {
+		t.Fatal("isBusinessError(wrapped unknown) = true; want false")
 	}
 }

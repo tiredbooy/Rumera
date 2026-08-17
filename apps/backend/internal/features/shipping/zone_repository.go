@@ -18,7 +18,10 @@ type ZoneRepository interface {
 	GetAll(ctx context.Context, filter ShippingZoneFilter) ([]*ShippingZone, int64, error)
 
 	// GetByRegionCode returns active zones that cover the given region code —
-	// used at checkout to resolve the buyer's zone.
+	// used at checkout to resolve the buyer's zone. Exact codes (IR-TEH) match
+	// containment only. A country code (IR) also matches zones that list any
+	// IR-* subdivision. Exact-match zones are ordered first; each zone appears
+	// at most once.
 	GetByRegionCode(ctx context.Context, regionCode string) ([]*ShippingZone, error)
 
 	Update(ctx context.Context, id int64, req UpdateShippingZoneReq) (*ShippingZone, error)
@@ -142,14 +145,27 @@ func (r *zoneRepository) GetAll(ctx context.Context, f ShippingZoneFilter) ([]*S
 	return zones, total, nil
 }
 
-// GetByRegionCode uses the Postgres array operator @> to check containment.
-// e.g. region_codes @> ARRAY['GB'] finds all zones that include GB.
+// GetByRegionCode uses array containment for an exact code, then a country
+// fallback: IR matches zones that list IR or any IR-* subdivision. starts_with
+// avoids LIKE metacharacters in the query-string region.
 func (r *zoneRepository) GetByRegionCode(ctx context.Context, regionCode string) ([]*ShippingZone, error) {
+	regionCode = strings.ToUpper(strings.TrimSpace(regionCode))
 	const q = `
 		SELECT ` + shippingZoneColumns + ` FROM shipping_zones
-		WHERE region_codes @> ARRAY[$1]::TEXT[]
-		  AND is_active = true
-		ORDER BY name ASC, id ASC`
+		WHERE is_active = true
+		  AND (
+		    region_codes @> ARRAY[$1]::TEXT[]
+		    OR (
+		      POSITION('-' IN $1) = 0
+		      AND EXISTS (
+		        SELECT 1 FROM unnest(region_codes) AS code
+		        WHERE starts_with(code, $1 || '-')
+		      )
+		    )
+		  )
+		ORDER BY
+		  CASE WHEN region_codes @> ARRAY[$1]::TEXT[] THEN 0 ELSE 1 END,
+		  name ASC, id ASC`
 
 	rows, err := r.db.Query(ctx, q, regionCode)
 	if err != nil {
@@ -158,11 +174,16 @@ func (r *zoneRepository) GetByRegionCode(ctx context.Context, regionCode string)
 	defer rows.Close()
 
 	result := make([]*ShippingZone, 0)
+	seen := make(map[int64]struct{})
 	for rows.Next() {
 		zone, err := scanShippingZone(rows)
 		if err != nil {
 			return nil, fmt.Errorf("shipping.zoneRepository.GetByRegionCode scan: %w", err)
 		}
+		if _, dup := seen[zone.ID]; dup {
+			continue
+		}
+		seen[zone.ID] = struct{}{}
 		result = append(result, zone)
 	}
 	if err := rows.Err(); err != nil {

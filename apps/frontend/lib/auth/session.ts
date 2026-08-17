@@ -8,14 +8,20 @@
  * capability-gated pages consistent with the server matrix.
  */
 import "server-only";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { getAccessTokenFromJwt } from "./auth.config";
 import { auth } from "./auth";
 import { getLiveAccount } from "./live-account";
 import { isStaff, isRole, type Role } from "@/lib/rbac/roles";
 import { resolveLivePermissions } from "@/lib/rbac/live-permissions";
 import { can } from "@/lib/rbac/can";
 import type { Permission } from "@/lib/rbac/permissions";
+
+async function getServerAccessToken() {
+  return getAccessTokenFromJwt({ headers: await headers() });
+}
 
 export class LiveAuthorizationUnavailableError extends Error {
   constructor() {
@@ -58,7 +64,8 @@ export async function requireStaff(callbackUrl = "/admin") {
     redirect(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
   }
 
-  const live = await getLiveAccount(session.accessToken);
+  const accessToken = await getServerAccessToken();
+  const live = await getLiveAccount(accessToken);
   if (live.status === "unavailable") {
     throw new LiveAuthorizationUnavailableError();
   }
@@ -69,10 +76,7 @@ export async function requireStaff(callbackUrl = "/admin") {
   const role: Role = isRole(live.profile.role)
     ? live.profile.role
     : "customer";
-  const permissions = await resolveLivePermissions(
-    role,
-    session.accessToken,
-  );
+  const permissions = await resolveLivePermissions(role, accessToken);
 
   const fullName = [live.profile.first_name, live.profile.last_name]
     .filter(Boolean)

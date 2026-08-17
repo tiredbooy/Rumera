@@ -18,6 +18,7 @@ Full dual-doc matrix: repo `docs/PH-DUAL-DOC-MATRIX.md` (PH-050a).
 - [[Journey First purchase]]
 - [[Journey Search to PDP]]
 - [[Journey Recipe to cart]]
+- [[Journey Read journal]]
 - [[Journey Account wallet redeem]]
 - [[Journey Account wallet top-up]]
 - [[Journey Gift card purchase]]
@@ -33,6 +34,7 @@ Full dual-doc matrix: repo `docs/PH-DUAL-DOC-MATRIX.md` (PH-050a).
 - [[Journey Admin restock]]
 - [[Journey Admin publish product]]
 - [[Journey Admin refund restock]]
+- [[Journey Admin loyalty member lookup]]
 - [[Journey Monitor API health]]
 
 ## System / money safety

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { parseAsciiNumber } from "@/lib/normalize-digits";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,23 +29,14 @@ import {
   useRedeemPoints,
 } from "../hooks";
 import { newLoyaltyIdempotencyKey } from "../api";
+import { hasRedeemRate, redeemPreviewToman } from "../redeem-preview";
 import { loyaltyReasonLabel } from "../reasons";
-import type { LoyaltyTier } from "../types";
+import { LOYALTY_TIER_FA } from "../tiers";
 import { faNum, formatPrice } from "@/lib/products";
 import {
   apiErrorMessage,
   apiErrorToast,
 } from "@/lib/api/user-facing-error";
-
-// 1 point = this many Toman of wallet credit (matches LOYALTY_REDEEM_VALUE default).
-const POINT_VALUE = 1000;
-
-const tierFa: Record<LoyaltyTier, string> = {
-  bronze: "برنزی",
-  silver: "نقره‌ای",
-  gold: "طلایی",
-  cellar: "سرداب",
-};
 
 export function RewardsView() {
   const loyalty = useLoyalty();
@@ -100,6 +92,9 @@ export function RewardsView() {
 
   const data = loyalty.data;
   const txs = transactions.data ?? [];
+  const redeemValue = data.redeem_value;
+  const rateKnown = hasRedeemRate(redeemValue);
+  const previewToman = redeemPreviewToman(parseAsciiNumber(amount), redeemValue);
 
   const balance = data.points_balance;
   const progress =
@@ -115,7 +110,7 @@ export function RewardsView() {
       : 100;
 
   function doRedeem() {
-    const points = Number(amount);
+    const points = parseAsciiNumber(amount);
     if (!Number.isFinite(points) || points <= 0) {
       toast.error("تعداد امتیاز معتبر وارد کنید");
       return;
@@ -132,8 +127,12 @@ export function RewardsView() {
         onSuccess: () => {
           setAmount("");
           idemRef.current = newLoyaltyIdempotencyKey();
+          const credit = redeemPreviewToman(points, redeemValue);
           toast.success("امتیازها به کیف پول شما افزوده شد", {
-            description: `${faNum(points)} امتیاز ≈ ${formatPrice(points * POINT_VALUE)}`,
+            description:
+              credit != null
+                ? `${faNum(points)} امتیاز ≈ ${formatPrice(credit)}`
+                : `${faNum(points)} امتیاز`,
           });
         },
         onError: (e) => {
@@ -164,19 +163,19 @@ export function RewardsView() {
               </p>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1.5 text-sm font-medium text-primary ring-1 ring-primary/20">
-              <Award className="size-4" /> سطح {tierFa[data.tier] ?? data.tier}
+              <Award className="size-4" /> سطح {LOYALTY_TIER_FA[data.tier] ?? data.tier}
             </span>
           </div>
 
           {data.next_tier ? (
             <div className="mt-7">
               <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-                <span>تا سطح {tierFa[data.next_tier] ?? data.next_tier}</span>
+                <span>تا سطح {LOYALTY_TIER_FA[data.next_tier] ?? data.next_tier}</span>
                 <span>{faNum(data.points_to_next)} امتیاز دیگر</span>
               </div>
               <Progress
                 value={progress}
-                aria-label={`پیشرفت تا سطح ${tierFa[data.next_tier] ?? data.next_tier}`}
+                aria-label={`پیشرفت تا سطح ${LOYALTY_TIER_FA[data.next_tier] ?? data.next_tier}`}
               />
             </div>
           ) : (
@@ -233,8 +232,8 @@ export function RewardsView() {
             <ArrowDownToLine className="size-5 text-primary" /> بازخرید امتیاز
           </h2>
           <p className="mt-1.5 text-base leading-relaxed text-muted-foreground">
-            هر امتیاز معادل {formatPrice(POINT_VALUE)} اعتبار کیف پول است.
-            بازخرید بلافاصله به کیف پول واریز می‌شود.
+            هر امتیاز معادل {rateKnown ? formatPrice(redeemValue) : "—"} اعتبار
+            کیف پول است. بازخرید بلافاصله به کیف پول واریز می‌شود.
           </p>
           <div className="mt-5 flex flex-col gap-2">
             <Label htmlFor="redeem-amount">تعداد امتیاز برای بازخرید</Label>
@@ -264,9 +263,9 @@ export function RewardsView() {
                 )}
                 بازخرید
               </Button>
-              {Number(amount) > 0 ? (
+              {parseAsciiNumber(amount) > 0 ? (
                 <span className="text-sm font-medium text-foreground">
-                  ≈ {formatPrice(Number(amount) * POINT_VALUE)}
+                  ≈ {previewToman != null ? formatPrice(previewToman) : "—"}
                 </span>
               ) : null}
             </div>
@@ -339,7 +338,7 @@ export function RewardsView() {
                 <span
                   className={cn(
                     "shrink-0 font-serif text-lg tabular-nums",
-                    t.delta >= 0 ? "text-emerald-600 dark:text-emerald-500" : "text-muted-foreground",
+                    t.delta >= 0 ? "text-success" : "text-muted-foreground",
                   )}
                   dir="ltr"
                 >
