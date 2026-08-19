@@ -21,6 +21,7 @@ export const ImageUploader = React.forwardRef<
     deferred = false,
     disabled = false,
     onDirtyChange,
+    onGalleryChange,
   },
   ref,
 ) {
@@ -45,6 +46,7 @@ export const ImageUploader = React.forwardRef<
     prepare,
     preservePrepared,
     discardPrepared,
+    rebase,
     commit,
     hasStaged,
     validate,
@@ -55,6 +57,7 @@ export const ImageUploader = React.forwardRef<
     deferred,
     disabled,
     onDirtyChange,
+    onGalleryChange,
   });
   const [imageURL, setImageURL] = React.useState("");
   const unavailable = disabled || isPending;
@@ -69,6 +72,7 @@ export const ImageUploader = React.forwardRef<
       prepare,
       preservePrepared,
       discardPrepared,
+      rebase,
       commit,
     }),
     [
@@ -79,6 +83,7 @@ export const ImageUploader = React.forwardRef<
       isPending,
       prepare,
       preservePrepared,
+      rebase,
       validate,
     ],
   );

@@ -13,6 +13,8 @@ func RegisterPublic(v1 *gin.RouterGroup, h *Handler) {
 	v1.GET("/recipes/sitemap", h.Sitemap)
 	v1.GET("/recipes/:slug", h.GetBySlug)
 	v1.GET("/recipes/:slug/related", h.Related)
+	// 404 path: resolves a slug retired by a rename to the current one.
+	v1.GET("/recipes/:slug/redirect", h.SlugRedirect)
 	// Cross-sell from product pages: recipes that use this product.
 	v1.GET("/products/:id/recipes", h.ProductRecipes)
 }

@@ -30,6 +30,7 @@ func RegisterAdmin(a *gin.RouterGroup, h *Handler) {
 	a.PUT("/products/:id/images/:imageId/primary", h.SetPrimaryProductImage)
 	a.DELETE("/products/:id/images/:imageId", h.DeleteProductImage)
 
+	a.GET("/uploads", h.ListLibrary)
 	a.POST("/uploads", h.UploadImage)
 	a.POST("/uploads/release", h.ReleaseStandaloneUpload)
 	a.POST("/uploads/:ownerType/:ownerID/:role", h.UploadOwnerImage)

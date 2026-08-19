@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -252,13 +253,20 @@ func (s *Service) award(ctx context.Context, userID int64, delta int, reason, re
 	return s.awardWith(ctx, cfg, userID, delta, reason, refType, refID)
 }
 
-// awardWith is the instrumented grant path. granted is true when the ledger row was new.
+// awardWith is the instrumented grant path for the automated earn reasons,
+// which have no staff actor to record.
 func (s *Service) awardWith(ctx context.Context, cfg programmeConfig, userID int64, delta int, reason, refType, refID string) (granted bool, err error) {
+	return s.awardAudited(ctx, cfg, userID, delta, reason, refType, refID, LedgerAudit{})
+}
+
+// awardAudited is the grant path. granted is true when the ledger row was new.
+// audit is the L-4 who/why, written on the same INSERT as the points move.
+func (s *Service) awardAudited(ctx context.Context, cfg programmeConfig, userID int64, delta int, reason, refType, refID string, audit LedgerAudit) (granted bool, err error) {
 	if delta == 0 {
 		metrics.IncLoyaltyAward(reasonOrUnknown(reason), metrics.ResultSkip)
 		return false, nil
 	}
-	granted, err = s.repo.Award(ctx, userID, delta, reason, refType, refID, cfg.thresholds())
+	granted, err = s.repo.Award(ctx, userID, delta, reason, refType, refID, cfg.thresholds(), audit)
 	if err != nil {
 		metrics.IncLoyaltyAward(reasonOrUnknown(reason), metrics.ResultError)
 		return false, err
@@ -387,7 +395,7 @@ func (s *Service) ClawbackOrderEarn(ctx context.Context, userID, orderID int64) 
 		metrics.IncLoyaltyAward(string(LoyaltyReasonOrderClawback), metrics.ResultSkip)
 		return nil
 	}
-	deducted, err := s.repo.Clawback(ctx, userID, delta, string(LoyaltyReasonOrderClawback), "order", refID)
+	deducted, err := s.repo.Clawback(ctx, userID, delta, string(LoyaltyReasonOrderClawback), "order", refID, LedgerAudit{})
 	if err != nil {
 		metrics.IncLoyaltyAward(string(LoyaltyReasonOrderClawback), metrics.ResultError)
 		return err
@@ -445,9 +453,17 @@ func (s *Service) Redeem(ctx context.Context, userID int64, points int, clientKe
 	credit := float64(points) * cfg.RedeemValue
 	desc := fmt.Sprintf("بازخرید %d امتیاز باشگاه مشتریان", points)
 	if _, err := s.wallet.Deposit(ctx, userID, credit, nil, &desc); err != nil {
-		// Compensate: give the points back so they're never lost.
+		// Compensate: give the points back. Keyed on the same refID as the spend
+		// under a different reason, so a retried failure reverses once.
 		// Use repo.Award directly to avoid double-counting redeem_reversal as success award noise.
-		_, _ = s.repo.Award(ctx, userID, points, string(LoyaltyReasonRedeemReversal), "redeem", refID, cfg.thresholds())
+		//
+		// This is a compensation, not a transaction: if the reversal itself fails
+		// the points ARE gone until someone adjusts them by hand, so log loudly
+		// rather than pretend the guarantee is absolute.
+		if _, cerr := s.repo.Award(ctx, userID, points, string(LoyaltyReasonRedeemReversal), "redeem", refID, cfg.thresholds(), LedgerAudit{}); cerr != nil {
+			slog.Error("loyalty: redeem compensation failed, points spent without wallet credit",
+				"user_id", userID, "points", points, "ref_id", refID, "err", cerr)
+		}
 		metrics.IncLoyaltyRedeem(metrics.ResultError)
 		return nil, apperr.ErrInternal
 	}
@@ -539,26 +555,30 @@ func (s *Service) Adjust(
 	}
 
 	ident := adminAdjustRefIdentity(key)
+	// A replay reports what the ledger recorded, not what this caller retyped:
+	// the note and actor on the response are the audit trail, so a second
+	// request under the same key must not appear to rewrite them.
 	if existing, err := s.repo.FindAdminAdjust(ctx, internalID, ident); err == nil && existing != nil {
-		return s.adjustResult(ctx, targetUserUUID, existing.Delta, note, actorUserID, key, existing.RefID, true)
+		return s.adjustResult(ctx, targetUserUUID, existing.Delta, auditOf(existing), key, existing.RefID, true)
 	} else if err != nil && !errors.Is(err, models.ErrNotFound) {
 		return nil, apperr.ErrInternal
 	}
 
+	audit := s.adjustAudit(ctx, actorUserID, note)
 	refID := adminAdjustRefID(key, actorUserID)
 	reason := string(LoyaltyReasonAdminAdjust)
 	if delta > 0 {
-		granted, err := s.awardWith(ctx, cfg, internalID, delta, reason, adminAdjustRefType, refID)
+		granted, err := s.awardAudited(ctx, cfg, internalID, delta, reason, adminAdjustRefType, refID, audit)
 		if err != nil {
 			return nil, apperr.ErrInternal
 		}
 		if !granted {
-			return s.adjustResult(ctx, targetUserUUID, delta, note, actorUserID, key, refID, true)
+			return s.adjustResult(ctx, targetUserUUID, delta, audit, key, refID, true)
 		}
-		return s.adjustResult(ctx, targetUserUUID, delta, note, actorUserID, key, refID, false)
+		return s.adjustResult(ctx, targetUserUUID, delta, audit, key, refID, false)
 	}
 
-	deducted, err := s.repo.Clawback(ctx, internalID, -delta, reason, adminAdjustRefType, refID)
+	deducted, err := s.repo.Clawback(ctx, internalID, -delta, reason, adminAdjustRefType, refID, audit)
 	if err != nil {
 		metrics.IncLoyaltyAward(reason, metrics.ResultError)
 		return nil, apperr.ErrInternal
@@ -571,27 +591,44 @@ func (s *Service) Adjust(
 		// still a first apply (201).
 		if existing, ferr := s.repo.FindAdminAdjust(ctx, internalID, ident); ferr == nil && existing != nil && existing.Delta != 0 {
 			metrics.IncLoyaltyAward(reason, metrics.ResultReplay)
-			return s.adjustResult(ctx, targetUserUUID, existing.Delta, note, actorUserID, key, existing.RefID, true)
+			return s.adjustResult(ctx, targetUserUUID, existing.Delta, auditOf(existing), key, existing.RefID, true)
 		}
 		metrics.IncLoyaltyAward(reason, metrics.ResultOK)
-		return s.adjustResult(ctx, targetUserUUID, applied, note, actorUserID, key, refID, false)
+		return s.adjustResult(ctx, targetUserUUID, applied, audit, key, refID, false)
 	}
 	metrics.IncLoyaltyAward(reason, metrics.ResultOK)
-	return s.adjustResult(ctx, targetUserUUID, applied, note, actorUserID, key, refID, false)
+	return s.adjustResult(ctx, targetUserUUID, applied, audit, key, refID, false)
+}
+
+// adjustAudit is the attribution stamped on the ledger row (L-4): the note as
+// the operator typed it, plus the actor's UUID and their name snapshotted now.
+// The name is best-effort — a lookup failure must not block the adjust, and
+// the UUID alone still identifies the actor.
+func (s *Service) adjustAudit(ctx context.Context, actor uuid.UUID, note string) LedgerAudit {
+	audit := LedgerAudit{Note: note, ActorUserID: actor}
+	if label, err := s.repo.ResolveActorLabel(ctx, actor); err == nil {
+		audit.ActorLabel = label
+	}
+	return audit
 }
 
 func (s *Service) adjustResult(
 	ctx context.Context,
 	target uuid.UUID,
 	delta int,
-	note string,
-	actor uuid.UUID,
+	audit LedgerAudit,
 	key, refID string,
 	replayed bool,
 ) (*AdminAdjustResult, error) {
 	acc, err := s.GetMember(ctx, target)
 	if err != nil {
 		return nil, err
+	}
+	// A pre-L-4 row carries no actor; report it as absent rather than as the
+	// all-zero UUID, which would read like a real account.
+	actor := ""
+	if audit.ActorUserID != uuid.Nil {
+		actor = audit.ActorUserID.String()
 	}
 	return &AdminAdjustResult{
 		UserID:         acc.UserID,
@@ -601,14 +638,164 @@ func (s *Service) adjustResult(
 		NextTier:       acc.NextTier,
 		PointsToNext:   acc.PointsToNext,
 		Delta:          delta,
-		Note:           note,
-		ActorUserID:    actor.String(),
+		Note:           audit.Note,
+		ActorUserID:    actor,
+		ActorLabel:     audit.ActorLabel,
 		IdempotencyKey: key,
 		RefType:        adminAdjustRefType,
 		RefID:          refID,
 		Replayed:       replayed,
 		Reason:         LoyaltyReasonAdminAdjust,
 	}, nil
+}
+
+// Overview is the programme-level operational snapshot (L-9): points
+// liability, tier distribution and birthday-job health — the three questions a
+// loyalty programme is actually managed by.
+func (s *Service) Overview(ctx context.Context, now time.Time) (*ProgrammeOverview, error) {
+	cfg, err := s.loadConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.repo.TierDistribution(ctx)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	tiers := mergeTierDistribution(cfg.Tiers, rows)
+
+	var members, points int64
+	for _, t := range tiers {
+		members += t.Members
+		points += t.PointsBalance
+	}
+
+	// Points are integers, so the sum above is exact; the Toman conversion is
+	// done as NUMERIC in Postgres. The fallback rate travels as text for the
+	// same reason — the float never enters the arithmetic.
+	liability, err := s.repo.PointsLiability(ctx, points, strconv.FormatFloat(cfg.RedeemValue, 'f', -1, 64))
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+
+	birthday, err := s.birthdayHealth(ctx, cfg, now)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+
+	return &ProgrammeOverview{
+		Enabled:           cfg.Enabled,
+		Members:           members,
+		PointsOutstanding: points,
+		PointsLiability:   liability,
+		RedeemValue:       cfg.RedeemValue,
+		Tiers:             tiers,
+		Birthday:          birthday,
+		GeneratedAt:       now.UTC(),
+	}, nil
+}
+
+// birthdayHealth reconstructs the job's state from its own ledger keys
+// ("{userID}:{year}", one award per user per year).
+//
+// ponytail: on a day nobody has a birthday this cannot tell "the job ran and
+// had nothing to do" from "the job did not run" — status is `idle` and
+// last_award_at is the only evidence of a past run. That is the whole signal
+// the ledger carries; a heartbeat row written by internal/corn would separate
+// the two, and belongs with the job rather than here.
+func (s *Service) birthdayHealth(ctx context.Context, cfg programmeConfig, now time.Time) (BirthdayHealth, error) {
+	loc := cfg.BirthdayLoc
+	if loc == nil {
+		loc = s.BirthdayLocation()
+	}
+	local := now.In(loc)
+	year := local.Year()
+
+	health := BirthdayHealth{
+		Timezone:  cfg.BirthdayTZ,
+		LocalDate: local.Format("2006-01-02"),
+		Bonus:     cfg.BirthdayBonus,
+		Status:    BirthdayStatusOff,
+	}
+	if !cfg.Enabled || cfg.BirthdayBonus <= 0 {
+		return health, nil
+	}
+
+	month := int(local.Month())
+	day := local.Day()
+	includeFeb29 := month == 2 && day == 28 && !isLeapYear(year)
+	ids, err := s.repo.ListBirthdayUserIDs(ctx, month, day, includeFeb29)
+	if err != nil {
+		return health, err
+	}
+	refs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		refs = append(refs, strconv.FormatInt(id, 10)+":"+strconv.Itoa(year))
+	}
+
+	grantedThisYear, grantedToday, last, err := s.repo.BirthdayAwardStats(ctx, year, refs)
+	if err != nil {
+		return health, err
+	}
+
+	health.DueToday = len(ids)
+	health.GrantedToday = int(grantedToday)
+	health.PendingToday = health.DueToday - health.GrantedToday
+	if health.PendingToday < 0 {
+		health.PendingToday = 0
+	}
+	health.GrantedThisYear = grantedThisYear
+	health.LastAwardAt = last
+
+	switch {
+	case health.DueToday == 0:
+		health.Status = BirthdayStatusIdle
+	case health.PendingToday == 0:
+		health.Status = BirthdayStatusOK
+	default:
+		health.Status = BirthdayStatusPending
+	}
+	return health, nil
+}
+
+// mergeTierDistribution keeps the histogram in programme order and shows the
+// empty tiers as zero rows. A tier the programme no longer defines but that
+// still holds members is appended rather than dropped — those points are real.
+func mergeTierDistribution(tiers []ProgrammeTier, rows []TierDistribution) []TierDistribution {
+	if len(tiers) == 0 {
+		tiers = DefaultProgrammeTiers()
+	}
+	byTier := make(map[string]TierDistribution, len(rows))
+	for _, r := range rows {
+		byTier[strings.ToLower(strings.TrimSpace(string(r.Tier)))] = r
+	}
+
+	ordered := append([]ProgrammeTier(nil), tiers...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return ordered[i].MinLifetimePoints < ordered[j].MinLifetimePoints
+	})
+
+	out := make([]TierDistribution, 0, len(ordered)+len(byTier))
+	for _, t := range ordered {
+		id := strings.ToLower(strings.TrimSpace(t.ID))
+		if id == "" {
+			continue
+		}
+		row := byTier[id]
+		row.Tier = LoyaltyTier(id)
+		out = append(out, row)
+		delete(byTier, id)
+	}
+
+	leftovers := make([]string, 0, len(byTier))
+	for id := range byTier {
+		leftovers = append(leftovers, id)
+	}
+	sort.Strings(leftovers)
+	for _, id := range leftovers {
+		out = append(out, byTier[id])
+	}
+	return out
 }
 
 // ListTransactions pages the caller's ledger (PR-003j). Includes id / refs.
@@ -690,14 +877,16 @@ func (s *Service) ListMemberTransactions(ctx context.Context, userUUID uuid.UUID
 	}
 	out := make([]AdminMemberTransaction, len(txs))
 	for i, t := range txs {
-		row := toTransactionResponse(t)
 		out[i] = AdminMemberTransaction{
-			ID:        row.ID,
-			Delta:     row.Delta,
-			Reason:    row.Reason,
-			RefType:   row.RefType,
-			RefID:     row.RefID,
-			CreatedAt: row.CreatedAt,
+			ID:          t.ID,
+			Delta:       t.Delta,
+			Reason:      t.Reason,
+			RefType:     t.RefType,
+			RefID:       t.RefID,
+			Note:        t.Note,
+			ActorUserID: t.ActorUserID,
+			ActorLabel:  t.ActorLabel,
+			CreatedAt:   t.CreatedAt,
 		}
 	}
 	return out, total, nil

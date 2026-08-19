@@ -35,10 +35,10 @@
   and four `TestProductAggregate*` fail today. Bisected — they predate the event work. A
   red baseline is how regressions hide.
 
-- [ ] `@claude` **P1-3 · 🟠 · M — Commit the working tree in reviewable chunks**
+- [x] `@claude` **P1-3 · 🟠 · M — Commit the working tree in reviewable chunks**
   815 changed/untracked files. Not reviewable by anyone.
 
-- [ ] `@claude` **P1-5 · 🟠 · S — Analytics queue loses its buffer on every deploy**
+- [x] `@claude` **P1-5 · 🟠 · S — Analytics queue loses its buffer on every deploy**
   Started with the *signal* context, so on SIGTERM every worker exits with its in-hand
   batch and `Shutdown()` discards up to 10,000 buffered events. Concurrency semantics →
   claude. *Files:* `internal/bootstrap/app.go:146,162`, `internal/analytics/queue.go:118-120`
@@ -110,7 +110,7 @@
 
 ## A4 — Remaining backend debt
 
-- [ ] `@claude` **A-3 · 🟡 · S — Gift-card email dual-writes inside the Confirm TX** (ED-011c)
+- [x] `@claude` **A-3 · 🟡 · S — Gift-card email dual-writes inside the Confirm TX** (ED-011c)
   `notifyPurchased` writes on a second connection while `tx` is open; a rollback can
   still email a card that never committed. `EnqueueTx` exists now — the care needed is
   that the retry loop shares one `pgx.Tx` with no savepoints (state 25P02).
@@ -127,20 +127,20 @@
   `/admin/payments?order_id=X` is empty and `/admin/orders/:id` carries no `payment`
   block. One admin GET over `wallet_transactions` closes it without inventing a gateway
   record. **This is the cheap half of A-5 that was deliberately left out.**
-- [ ] `@claude` **A-11 · 🟡 · S — Two paths still bypass the `order.paid.v1` rule**
+- [x] `@claude` **A-11 · 🟡 · S — Two paths still bypass the `order.paid.v1` rule**
   Found while writing A-5's rule down. (a) With `EVENTS_ENABLED=false` the legacy lever
   is `payment_loyalty_awards` (`payments/service.go:443`), which the wallet rail never
   writes — so on the fallback path wallet buyers still earn nothing. (b)
   `orderService.MarkOrderAsPaid` (`orders/service.go:900`) is an unrouted third paid
   path that emits no fact at all. Both are exactly what the written rule forbids;
   either wire them to the emitter or delete them.
-- [ ] `@claude` **A-6 · 🟠 · S — Decide and document the replica story**
+- [x] `@claude` **A-6 · 🟠 · S — Decide and document the replica story**
   Cron is in-process, rate limiting in-memory. Architected for one box; written down nowhere.
 - [ ] `@claude` **A-7 · 🟠 · M — Make doc claims testable**
   Eight verified cases of "the comment asserts a runtime property the code lacks" in one
   subsystem. Rule: a comment claiming a runtime guarantee gets a test named after it, or
   the claim is deleted.
-- [ ] `@claude` **A-8 · 🟠 · M — Harden the analytics write path (instead of a document-store migration)**
+- [x] `@claude` **A-8 · 🟠 · M — Harden the analytics write path (instead of a document-store migration)**
   Raised as "move analytics off Postgres to MongoDB, it'll get slow." The analytics DB is
   already **TimescaleDB** — hypertables, weekly chunks, a 30-day compression policy, and
   pre-aggregated `daily_*` rollups the dashboards read instead of raw events. Mongo would
@@ -154,7 +154,7 @@
   usage, rollups are either continuous aggregates or covered by a gap-detection test, and
   a retention policy exists. *If Timescale is ever genuinely outgrown the next stop is
   ClickHouse, not a document store — write that down here, not in a migration.*
-- [ ] `@claude` **A-9 · 🟡 · S — `getStockLinesSQL` has no `GROUP BY`; latent, not live**
+- [x] `@claude` **A-9 · 🟡 · S — `getStockLinesSQL` has no `GROUP BY`; latent, not live**
   Found while greening P1-2. `getStockLinesSQL` (`internal/features/orders/repository.go:446-449`)
   returns raw `order_items` rows with **no `GROUP BY product_variant_id`**, but
   `inventory_reservations` is unique on `(order_id, product_variant_id)` and the PR-020b
@@ -181,7 +181,7 @@
   cellar palette, and add `tone` to the Badge cva. The current status colors are sRGB
   Tailwind ramps — the most saturated thing on any admin screen, reading as
   bootstrap-default beside the oklch palette.
-- [ ] `@claude` **D-2 · 🟠 · M — Unify money formatting**
+- [x] `@claude` **D-2 · 🟠 · M — Unify money formatting**
   A gift card issued at `125000.50` renders «۱۲۵٬۰۰۰٫۵ تومان» to the admin and
   «۱۲۵٬۰۰۱ تومان» to the customer who owns it — the exact float-rounding hazard
   `formatPaymentAmount` was written to prevent. **Correctness, not consistency.**
@@ -193,17 +193,17 @@
   Wallet is **preselected**. The most likely first purchase — an empty wallet — becomes an
   order that is never paid, on a screen that names the remedy in prose and offers **no
   button**. Money left uncollected.
-- [ ] `@claude` **U-3 · 🟠 · M — Per-line availability in the cart; cap the quantity stepper**
+- [x] `@claude` **U-3 · 🟠 · M — Per-line availability in the cart; cap the quantity stepper**
   A sold-out line looks fully buyable and fails only at «ثبت و پرداخت». *Needs backend:*
   stock on the cart item projection.
-- [ ] `@claude` **U-4 · 🟠 · M — Stop stripping campaign params from `/products`; expose the search box the parser supports**
+- [x] `@claude` **U-4 · 🟠 · M — Stop stripping campaign params from `/products`; expose the search box the parser supports**
   Every paid click to the main catalogue loses attribution and eats a redirect before
   first paint.
-- [ ] `@claude` **U-8 · 🟡 · M — Replay the add-to-cart intent after a login bounce**
+- [x] `@claude` **U-8 · 🟡 · M — Replay the add-to-cart intent after a login bounce**
 
 ## B4 — Performance
 
-- [ ] `@claude` **PF-4 · 🟡 · M — Suspense boundaries on `/products` and `/search`**
+- [x] `@claude` **PF-4 · 🟡 · M — Suspense boundaries on `/products` and `/search`**
   *Do after P0-7 — value drops sharply once home and PDP prerender.*
 
 
@@ -220,7 +220,7 @@
   pagination sits bottom-start on one screen and bottom-end on another. Build one
   `AdminPage` (breadcrumb, title, primary action, filter bar, content, pagination) and
   migrate every list. **Foundation for S-3, S-6, S-9.**
-- [ ] `@claude` **S-3 · 🟠 · M — Applying a filter costs a full page navigation on the four busiest lists**
+- [x] `@claude` **S-3 · 🟠 · M — Applying a filter costs a full page navigation on the four busiest lists**
   Order triage is a status-toggling loop paying a server round trip per hop.
   `coupons-board.tsx:145-172` already does it right — lift that into a `useFilterParams`
   hook (selects on change, text on ~300ms debounce, `router.replace`), add removable
@@ -228,7 +228,7 @@
 
 ## C2 — Product editor
 
-- [ ] `@claude` **PE-1 · 🔴 · L — The variant matrix is an accordion; the bulk generator abandons the operator**
+- [x] `@claude` **PE-1 · 🔴 · L — The variant matrix is an accordion; the bulk generator abandons the operator**
   The generator builds up to 100 combinations all sharing one price with no SKU and no
   stock — then differentiating them is N open/edit/close cycles over three inputs each. A
   column header row already exists, so the layout is pretending to be a table. Make it
@@ -236,11 +236,11 @@
   selection with "apply to selected", "fill down", keyboard cell traversal, SKU
   auto-generated from the product code + option slugs, and a preview step to deselect
   combinations that do not exist.
-- [ ] `@claude` **PE-2 · 🔴 · M — Break the 409 dead end**
+- [x] `@claude` **PE-2 · 🔴 · M — Break the 409 dead end**
   An operator editing a product a colleague touched has **no path from conflict to a saved
   product** — variants, options, tags and staged images are all lost, and the panel invites
   the retry that cannot succeed. Refresh the revision and re-apply.
-- [ ] `@claude` **PE-4 · 🟠 · M — Brand/category selects cap at 100 with client-only search**
+- [x] `@claude` **PE-4 · 🟠 · M — Brand/category selects cap at 100 with client-only search**
   Two failures: a product cannot be assigned brand #101 (search says «موردی یافت نشد»),
   **and** an existing product whose brand is outside page one renders as «انتخاب برند» —
   the edit screen says the product has no brand when it does. The value still submits, so
@@ -251,7 +251,7 @@
   scroll past an always-expanded 8-field general section. Add `?tab=` search-param
   sections over the existing single component (route segments would remount and lose RHF
   state).
-- [ ] `@claude` **PE-6 · 🟠 · M — Nothing validates until Save, then one sentence and no list**
+- [x] `@claude` **PE-6 · 🟠 · M — Nothing validates until Save, then one sentence and no list**
   After filling a 64-variant product the operator learns nothing is wrong until submit,
   then gets one sentence and a jump to whichever bad field happens to be first. Needs an
   error summary with jump-to-field.
@@ -270,7 +270,7 @@
 - [x] `@claude` **CE-1 · 🔴 · L — No preview anywhere; publishing is the only way to see the page**
   An author writing a 900-word tasting note cannot see one rendered heading or blockquote
   before it is live.
-- [ ] `@claude` **CE-2 · 🔴 · M — No autosave, no unsaved guard, no draft recovery**
+- [x] `@claude` **CE-2 · 🔴 · M — No autosave, no unsaved guard, no draft recovery**
   In the two editors holding the longest-lived work. A 40-minute post lives entirely in
   React state — one mis-aimed click on «انصراف» or a sidebar link and it is gone.
   `ProductForm` carries a complete guard that was never extracted.
@@ -279,7 +279,7 @@
 - [ ] `@claude` **CE-5 · 🟠 · L — Recipe method is one free-text blob, reverse-engineered by regex**
   Ingredients are structured and steps are not — backwards for the half Google indexes as
   `HowToStep`.
-- [ ] `@claude` **CE-7 · 🟠 · M — Slug rename silently breaks every inbound link**
+- [x] `@claude` **CE-7 · 🟠 · M — Slug rename silently breaks every inbound link**
   And the recipe editor's hint actively encourages it. Needs a redirect record, not just a
   warning dialog.
 - [ ] `@claude` **CE-10 · 🟡 · M — One cover image per item, no media library, journal has no OG image**
@@ -295,11 +295,11 @@
   A coupon can never be scoped to product #101+ — the operator searches, finds nothing,
   and scopes to a whole category instead, **over-discounting**. And scope set outside that
   window is invisible in the UI while staying live in the backend. Same root cause as PE-4.
-- [ ] `@claude` **CF-3 · 🟠 · L — Customer detail is an identity card, not a customer record**
+- [x] `@claude` **CF-3 · 🟠 · L — Customer detail is an identity card, not a customer record**
   No orders, no wallet balance, no loyalty — and money is minted with no balance in view.
   This is the screen opened when a customer calls, and it answers none of the questions a
   customer asks.
-- [ ] `@claude` **CF-5 · 🟠 · M — Ten forms silently destroy unsaved work**
+- [x] `@claude` **CF-5 · 🟠 · M — Ten forms silently destroy unsaved work**
   `ProductForm` alone carries a complete navigation guard that was never extracted. The
   coupon form has fourteen fields including two Jalali datetimes and a scope picker.
 - [ ] `@claude` **CF-18 · 🟡 · L — Row selection and bulk actions, starting with inventory**
@@ -313,7 +313,7 @@
   referral bonuses, birthday timezone, or any of the four tier thresholds. **Every
   commercial lever of the loyalty programme is unreachable**, and the page describes a
   configuration source it no longer uses.
-- [ ] `@claude` **L-2 · 🟠 · M — The kill-switch is dropped at the type boundary**
+- [x] `@claude` **L-2 · 🟠 · M — The kill-switch is dropped at the type boundary**
   The feature-flag capability you asked for **is already built in the backend** and
   invisible in the UI — nothing in admin can set it. Plumb the flag through the type and
   add the control. *This is what makes "the whole section can be switched off" true.*
@@ -325,7 +325,7 @@
   The module exports no embeddable widget, so the screen where support actually starts
   shows nothing — no points, no tier, no recent activity. **This is the core of the
   modularity ask:** a self-contained widget other screens embed rather than reimplement.
-- [ ] `@claude` **L-8 · 🟡 · M — No loyalty permission exists**
+- [x] `@claude` **L-8 · 🟡 · M — No loyalty permission exists**
   Point-minting rides on customer-edit, so anyone who can correct a phone number can mint
   unlimited points — and a loyalty specialist cannot be granted access without customer
   edit. Blocks granting or hiding the section independently.

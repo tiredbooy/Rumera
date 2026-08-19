@@ -194,10 +194,14 @@ func registerAdmin(admin *gin.RouterGroup, h *handlers.Handler, moneyIdem gin.Ha
 		moneyIdem,
 	)
 	giftcard.RegisterAdmin(with(rbac.PermGiftCardsIssue), h.GiftCards)
-	// Cellar Club: reads (PR-003d) + signed adjust (PR-003e, customers:write).
+	// Cellar Club: reads (PR-003d) + signed adjust (PR-003e).
+	// Point minting is money — dedicated loyalty:adjust grant, not customers:write
+	// (L-8, same isolation as wallet:credit). It ORs into the read group so a
+	// loyalty specialist is grantable without customers:write.
 	loyalty.RegisterAdmin(
-		with(rbac.PermCustomersRead, rbac.PermCustomersWrite),
+		with(rbac.PermCustomersRead, rbac.PermCustomersWrite, rbac.PermLoyaltyAdjust),
 		with(rbac.PermCustomersWrite),
+		with(rbac.PermLoyaltyAdjust),
 		h.Loyalties,
 		moneyIdem,
 	)

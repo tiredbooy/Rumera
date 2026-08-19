@@ -489,6 +489,20 @@ func (s *Service) GetAdminAudit(
 	return events, total, nil
 }
 
+// GetAdminWalletBalance is the wallet balance shown on the admin customer file
+// (CF-3). Takes the internal id the caller already has from the user read, so
+// it costs one extra query on the detail route and nothing anywhere else.
+func (s *Service) GetAdminWalletBalance(ctx context.Context, id int64) (float64, error) {
+	if id <= 0 {
+		return 0, apperr.ErrInvalidRequest
+	}
+	balance, err := s.userRepo.AdminWalletBalance(ctx, id)
+	if err != nil {
+		return 0, apperr.ErrInternal
+	}
+	return balance, nil
+}
+
 func (s *Service) ExistsByEmail(ctx context.Context, email string) (bool, error) {
 	if email == "" {
 		return false, apperr.ErrInvalidRequest

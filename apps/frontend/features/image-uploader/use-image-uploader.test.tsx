@@ -230,6 +230,81 @@ describe("useImageUploader URL sources", () => {
     expect(setPrimaryImageMock).not.toHaveBeenCalled();
   });
 
+  // PE-2's rebase has to survive PE-8's single-cover rule: the colleague's
+  // rows arrive with their own `is_primary`, and exactly one slot — the first —
+  // may keep it afterwards.
+  it("rebases onto a colleague's revision with one cover left standing", async () => {
+    const { result } = renderHook(() =>
+      useImageUploader({
+        owner: { ownerType: "products", role: "gallery", ownerId: 12 },
+        initialImages: [
+          {
+            id: 91,
+            image_url: "/media/products/12/mine.webp",
+            alt_text: "مال من",
+            sort_order: 0,
+            is_primary: true,
+          },
+          {
+            id: 92,
+            image_url: "/media/products/12/second.webp",
+            alt_text: "دوم",
+            sort_order: 1,
+            is_primary: false,
+          },
+        ],
+        deferred: true,
+      }),
+    );
+
+    act(() => {
+      result.current.addURL("https://images.example/staged.webp");
+    });
+
+    let outcome = { dropped: 0, adopted: 0 };
+    act(() => {
+      // The colleague deleted 91 and added 93 as their primary.
+      outcome = result.current.rebase([
+        {
+          id: 93,
+          image_url: "/media/products/12/theirs.webp",
+          alt_text: "مال همکار",
+          sort_order: 0,
+          is_primary: true,
+        },
+        {
+          id: 92,
+          image_url: "/media/products/12/second.webp",
+          alt_text: "دوم",
+          sort_order: 1,
+          is_primary: false,
+        },
+      ]);
+    });
+
+    expect(outcome).toEqual({ dropped: 1, adopted: 1 });
+    let prepared: Awaited<ReturnType<typeof result.current.prepare>> = [];
+    await act(async () => {
+      prepared = await result.current.prepare();
+    });
+    expect(prepared.map((image) => image.is_primary)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    // Staged work is kept, the colleague's row is adopted, and the surviving
+    // local order decides the cover.
+    expect(prepared).toEqual([
+      { id: 92, alt_text: "دوم", is_primary: true },
+      {
+        image_url: "https://images.example/staged.webp",
+        alt_text: null,
+        is_primary: false,
+      },
+      { id: 93, alt_text: "مال همکار", is_primary: false },
+    ]);
+  });
+
   it("uploads a staged file once across aggregate retries", async () => {
     const { result, unmount } = renderHook(() =>
       useImageUploader({

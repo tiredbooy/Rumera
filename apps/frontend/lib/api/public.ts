@@ -3,6 +3,7 @@ import "server-only";
 import { API_BASE } from "./base";
 import type { ApiFetchOptions } from "./client";
 import { ApiError } from "./errors";
+import { readJsonOrNull } from "./read-json";
 import type { ApiErrorEnvelope, ApiSuccess } from "./types";
 
 type PublicRequestOptions = Omit<ApiFetchOptions, "token">;
@@ -22,7 +23,12 @@ export async function publicRequest<T>(
     },
     cache: rest.cache ?? "no-store",
   });
-  const body: unknown = await response.json().catch(() => null);
+
+  if (response.status === 304) {
+    throw new ApiError(304, "NOT_MODIFIED", response.statusText || "Not Modified");
+  }
+
+  const body: unknown = await readJsonOrNull(response);
 
   if (!response.ok) {
     const error = (body as ApiErrorEnvelope | null)?.error;

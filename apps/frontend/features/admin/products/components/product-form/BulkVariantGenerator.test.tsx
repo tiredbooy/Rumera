@@ -60,7 +60,8 @@ describe("BulkVariantGenerator", () => {
     fireEvent.change(screen.getByLabelText("قیمت پایه (تومان)"), {
       target: { value: "1250000" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "ساخت ۴ ترکیب" }));
+    fireEvent.click(screen.getByRole("button", { name: "پیش‌نمایش ۴ ترکیب" }));
+    fireEvent.click(screen.getByRole("button", { name: "ساخت ۳ تنوع" }));
 
     expect(onGenerate).toHaveBeenCalledTimes(1);
     expect(onGenerate.mock.calls[0]?.[0]).toEqual([
@@ -109,8 +110,85 @@ describe("BulkVariantGenerator", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: "ساخت ۱۱۰ ترکیب" }),
+      screen.getByRole("button", { name: "پیش‌نمایش ۱۱۰ ترکیب" }),
     ).toBeDisabled();
     expect(screen.getByRole("alert")).toHaveTextContent("بیشتر از ۱۰۰");
+  });
+
+  it("lets the operator strike off a combination the product is not sold in", () => {
+    const onGenerate = vi.fn();
+
+    render(
+      <BulkVariantGenerator
+        optionTypes={[
+          optionGroup(1, "رنگ", [
+            [10, "قرمز"],
+            [11, "آبی"],
+          ]),
+          optionGroup(2, "حجم", [
+            [20, "۵۰۰ میلی‌لیتر"],
+            [21, "۷۵۰ میلی‌لیتر"],
+          ]),
+        ]}
+        existingCombinations={[]}
+        onGenerate={onGenerate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /ساخت گروهی تنوع‌ها/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /رنگ/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /حجم/ }));
+    fireEvent.change(screen.getByLabelText("قیمت پایه (تومان)"), {
+      target: { value: "1250000" },
+    });
+
+    // Nothing is created yet — the preview is the point of the step.
+    fireEvent.click(screen.getByRole("button", { name: "پیش‌نمایش ۴ ترکیب" }));
+    expect(onGenerate).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "قرمز / ۵۰۰ میلی‌لیتر" }),
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "آبی / ۷۵۰ میلی‌لیتر" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "ساخت ۲ تنوع" }));
+
+    expect(onGenerate.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({ option_value_ids: [10, 21] }),
+      expect.objectContaining({ option_value_ids: [11, 20] }),
+    ]);
+  });
+
+  it("drops a stale preview when the dimensions change", () => {
+    render(
+      <BulkVariantGenerator
+        optionTypes={[
+          optionGroup(1, "رنگ", [
+            [10, "قرمز"],
+            [11, "آبی"],
+          ]),
+          optionGroup(2, "حجم", [[20, "۵۰۰"]]),
+        ]}
+        existingCombinations={[]}
+        onGenerate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /ساخت گروهی تنوع‌ها/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /رنگ/ }));
+    fireEvent.change(screen.getByLabelText("قیمت پایه (تومان)"), {
+      target: { value: "100" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "پیش‌نمایش ۲ ترکیب" }));
+    expect(screen.getByRole("checkbox", { name: "قرمز" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /حجم/ }));
+    expect(
+      screen.getByRole("button", { name: "پیش‌نمایش ۲ ترکیب" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: "قرمز / ۵۰۰" }),
+    ).not.toBeInTheDocument();
   });
 });

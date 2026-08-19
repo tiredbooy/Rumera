@@ -83,6 +83,22 @@ func (h *Handler) GetBySlug(c *gin.Context) {
 	response.OK(c, post)
 }
 
+// SlugRedirect — GET /blogs/:slug/redirect. The storefront calls this only after
+// the live lookup 404s, so a live slug always wins over a record.
+func (h *Handler) SlugRedirect(c *gin.Context) {
+	slug := c.Param("slug")
+	if slug == "" {
+		response.Error(c, response.ErrInvalidParams)
+		return
+	}
+	target, err := h.Posts.ResolveSlugRedirect(c.Request.Context(), slug)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.OK(c, SlugRedirectResponse{Slug: target})
+}
+
 // GetAdmin — GET /admin/blogs/:id
 func (h *Handler) GetAdmin(c *gin.Context) {
 	id, ok := httpx.ParamInt64(c, "id")

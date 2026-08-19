@@ -52,6 +52,32 @@ Seed command (`cmd/seed`) writes **only** to the main DB.
 Do not join analytics tables from hot storefront product queries — keep the
 boundaries clean.
 
+### Decision: stay on TimescaleDB (A-8)
+
+Raised as "move analytics to MongoDB, it'll get slow". `events` is already a
+TimescaleDB **hypertable** — weekly chunks, a 30-day compression policy, a 365-day
+retention policy, and pre-aggregated `daily_*` roll-ups that every dashboard reads
+instead of raw events. A document store loses all four and gains nothing.
+**Decision: do not migrate.** If Timescale is ever genuinely outgrown, the next
+stop is **ClickHouse**, not a document store.
+
+What was actually wrong, and is now fixed:
+
+| Risk | Fix |
+|---|---|
+| Six indexes on the hottest write path, including a `GIN(payload)` no query can use — every one is write amplification on every ingest batch | `20260818120000_events_ingest_hardening.sql` drops `idx_events_payload` and `idx_events_utm_source`; the remaining four each name their reader |
+| Roll-ups are upserted from Go, not continuous aggregates (`COUNT(DISTINCT …)` rules those out), and each job aggregated *yesterday only* — a missed tick left that day permanently, silently wrong | `internal/corn/pending_dates.go`: each roll-up job scans a 14-day window for days that have events but no roll-up row, and backfills them. Re-running a day is safe (upsert) |
+| No retention policy — compressed chunks accumulate forever | `add_retention_policy('events', INTERVAL '365 days')` |
+
+Before dropping any further index, prove it with real usage rather than reading:
+
+```sql
+SELECT indexrelname, idx_scan, idx_tup_read
+FROM   pg_stat_user_indexes
+WHERE  relname = 'events'
+ORDER  BY idx_scan;
+```
+
 ---
 
 ## Redis

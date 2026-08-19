@@ -23,24 +23,43 @@ func NewProductStatsCronJob(db *pgxpool.Pool, svc *featanalytics.DailyProductSta
 }
 
 func (j *ProductStatsCronJob) Run(ctx context.Context) {
-	yesterday := time.Now().UTC().AddDate(0, 0, -1).Truncate(24 * time.Hour)
-
-	slog.Info("product stats job: aggregating", "date", yesterday.Format("2006-01-02"))
-
-	productIDs, err := j.fetchActiveProductIDs(ctx, yesterday)
+	dates, err := pendingStatDates(ctx, j.db, "daily_product_stats", time.Now())
 	if err != nil {
-		slog.Error("product stats job: fetching product ids", "err", err)
+		slog.Error("product stats job: gap scan failed", "err", err)
+		return
+	}
+	if len(dates) == 0 {
+		slog.Info("product stats job: nothing pending")
+		return
+	}
+	if len(dates) > 1 {
+		slog.Warn("product stats job: backfilling missed days", "days", len(dates))
+	}
+
+	for _, date := range dates {
+		j.runForDate(ctx, date)
+	}
+}
+
+func (j *ProductStatsCronJob) runForDate(ctx context.Context, date time.Time) {
+	slog.Info("product stats job: aggregating", "date", date.Format("2006-01-02"))
+
+	productIDs, err := j.fetchActiveProductIDs(ctx, date)
+	if err != nil {
+		slog.Error("product stats job: fetching product ids",
+			"date", date.Format("2006-01-02"), "err", err)
 		return
 	}
 
 	if len(productIDs) == 0 {
-		slog.Info("product stats job: no products with events yesterday")
+		slog.Info("product stats job: no products with events",
+			"date", date.Format("2006-01-02"))
 		return
 	}
 
 	reqs := make([]*featanalytics.DailyProductStatsUpsertReq, 0, len(productIDs))
 	for _, productID := range productIDs {
-		req, err := j.aggregateForProduct(ctx, productID, yesterday)
+		req, err := j.aggregateForProduct(ctx, productID, date)
 		if err != nil {
 			slog.Error("product stats job: aggregating product",
 				"product_id", productID, "err", err)
@@ -50,11 +69,12 @@ func (j *ProductStatsCronJob) Run(ctx context.Context) {
 	}
 
 	if err := j.svc.FlushStats(ctx, reqs); err != nil {
-		slog.Error("product stats job: flushing batch", "err", err)
+		slog.Error("product stats job: flushing batch",
+			"date", date.Format("2006-01-02"), "err", err)
 		return
 	}
 
-	slog.Info("product stats job: done", "products", len(reqs), "date", yesterday.Format("2006-01-02"))
+	slog.Info("product stats job: done", "products", len(reqs), "date", date.Format("2006-01-02"))
 }
 
 // fetchActiveProductIDs returns distinct catalog product IDs that had events

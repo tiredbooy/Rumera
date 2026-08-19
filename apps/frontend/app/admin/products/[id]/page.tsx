@@ -14,6 +14,7 @@ export default async function AdminEditProductPage({
     <ProductEditView
       id={id}
       canWrite={can(session, PERMISSIONS.PRODUCTS_WRITE)}
+      canAdjustStock={can(session, PERMISSIONS.INVENTORY_WRITE)}
     />
   );
 }

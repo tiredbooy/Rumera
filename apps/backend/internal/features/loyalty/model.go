@@ -120,13 +120,63 @@ type LoyaltyAccount struct {
 }
 
 type LoyaltyTransaction struct {
-	ID        int64                    `db:"id"`
-	UserID    int64                    `db:"user_id"`
-	Delta     int                      `db:"delta"`
-	Reason    LoyaltyTransactionReason `db:"reason"`
-	RefType   string                   `db:"ref_type"`
-	RefID     string                   `db:"ref_id"`
-	CreatedAt time.Time                `db:"created_at"`
+	ID      int64                    `db:"id"`
+	UserID  int64                    `db:"user_id"`
+	Delta   int                      `db:"delta"`
+	Reason  LoyaltyTransactionReason `db:"reason"`
+	RefType string                   `db:"ref_type"`
+	RefID   string                   `db:"ref_id"`
+	// Note / Actor* are the L-4 attribution columns. Only staff adjusts carry
+	// them; every automated earn path leaves all three NULL.
+	Note        *string    `db:"note"`
+	ActorUserID *uuid.UUID `db:"actor_user_id"`
+	ActorLabel  *string    `db:"actor_label"`
+	CreatedAt   time.Time  `db:"created_at"`
+}
+
+// LedgerAudit is the who/why written on the same INSERT as the points move
+// (L-4). The zero value is "no staff actor" and writes three NULLs.
+//
+// ActorLabel is a snapshot taken at mint time, not a join: the ledger has to
+// name the colleague who granted the points after that account is deactivated
+// or renamed.
+type LedgerAudit struct {
+	Note        string
+	ActorUserID uuid.UUID
+	ActorLabel  string
+}
+
+// args returns the three nullable INSERT arguments (untyped nil → NULL).
+func (a LedgerAudit) args() (note, actor, label any) {
+	if n := strings.TrimSpace(a.Note); n != "" {
+		note = n
+	}
+	if a.ActorUserID != uuid.Nil {
+		actor = a.ActorUserID
+	}
+	if l := strings.TrimSpace(a.ActorLabel); l != "" {
+		label = l
+	}
+	return note, actor, label
+}
+
+// auditOf reads the attribution back off a stored ledger row, so a replayed
+// adjust reports what was recorded rather than what the caller just retyped.
+func auditOf(t *LoyaltyTransaction) LedgerAudit {
+	if t == nil {
+		return LedgerAudit{}
+	}
+	var a LedgerAudit
+	if t.Note != nil {
+		a.Note = *t.Note
+	}
+	if t.ActorUserID != nil {
+		a.ActorUserID = *t.ActorUserID
+	}
+	if t.ActorLabel != nil {
+		a.ActorLabel = *t.ActorLabel
+	}
+	return a
 }
 
 // ── Responses ────────────────────────────────────────────────────────────────
@@ -194,20 +244,81 @@ type AdminAdjustRequest struct {
 
 // AdminAdjustResult is the member standing plus audit metadata after an adjust.
 type AdminAdjustResult struct {
-	UserID         uuid.UUID                `json:"user_id"`
-	PointsBalance  int                      `json:"points_balance"`
-	LifetimePoints int                      `json:"lifetime_points"`
-	Tier           LoyaltyTier              `json:"tier"`
-	NextTier       LoyaltyTier              `json:"next_tier,omitempty"`
-	PointsToNext   int                      `json:"points_to_next"`
-	Delta          int                      `json:"delta"`
-	Note           string                   `json:"note,omitempty"`
-	ActorUserID    string                   `json:"actor_user_id"`
+	UserID         uuid.UUID   `json:"user_id"`
+	PointsBalance  int         `json:"points_balance"`
+	LifetimePoints int         `json:"lifetime_points"`
+	Tier           LoyaltyTier `json:"tier"`
+	NextTier       LoyaltyTier `json:"next_tier,omitempty"`
+	PointsToNext   int         `json:"points_to_next"`
+	Delta          int         `json:"delta"`
+	Note           string      `json:"note,omitempty"`
+	ActorUserID    string      `json:"actor_user_id"`
+	// ActorLabel is the staff name recorded with the row (L-4). Empty for a
+	// replay of a pre-L-4 adjust, where no name was ever captured.
+	ActorLabel     string                   `json:"actor_label,omitempty"`
 	IdempotencyKey string                   `json:"idempotency_key"`
 	RefType        string                   `json:"ref_type"`
 	RefID          string                   `json:"ref_id"`
 	Replayed       bool                     `json:"replayed"`
 	Reason         LoyaltyTransactionReason `json:"reason"`
+}
+
+// ── Programme operations (L-9) ───────────────────────────────────────────────
+
+// Birthday job health states.
+const (
+	// BirthdayStatusOff — the programme or the bonus is switched off.
+	BirthdayStatusOff = "off"
+	// BirthdayStatusIdle — nobody has a birthday today; nothing was due.
+	BirthdayStatusIdle = "idle"
+	// BirthdayStatusOK — everyone due today already holds this year's award.
+	BirthdayStatusOK = "ok"
+	// BirthdayStatusPending — people are due today whose award is not written.
+	BirthdayStatusPending = "pending"
+)
+
+// TierDistribution is one bar of the tier histogram. Every configured tier
+// appears, including the empty ones — a missing bar reads as a bug.
+type TierDistribution struct {
+	Tier          LoyaltyTier `json:"tier" db:"tier"`
+	Members       int64       `json:"members" db:"members"`
+	PointsBalance int64       `json:"points_balance" db:"points_balance"`
+}
+
+// BirthdayHealth answers the three questions about internal/corn's birthday
+// job: did it run, when, and did it grant what it should. Awards are keyed
+// once per user per year ("{userID}:{year}"), so the ledger is the evidence —
+// no separate job bookkeeping is involved.
+type BirthdayHealth struct {
+	Timezone  string `json:"timezone"`
+	LocalDate string `json:"local_date"`
+	Bonus     int    `json:"bonus"`
+	// DueToday / GrantedToday / PendingToday are today's cohort in the
+	// programme timezone: eligible users, those already holding this year's
+	// award, and the gap between them.
+	DueToday        int        `json:"due_today"`
+	GrantedToday    int        `json:"granted_today"`
+	PendingToday    int        `json:"pending_today"`
+	GrantedThisYear int64      `json:"granted_this_year"`
+	LastAwardAt     *time.Time `json:"last_award_at,omitempty"`
+	Status          string     `json:"status"`
+}
+
+// ProgrammeOverview is GET /admin/loyalty/overview (L-9): what the programme
+// owes, how members are spread, and whether the birthday job is keeping up.
+type ProgrammeOverview struct {
+	Enabled bool  `json:"enabled"`
+	Members int64 `json:"members"`
+	// PointsOutstanding is the sum of unspent balances.
+	PointsOutstanding int64 `json:"points_outstanding"`
+	// PointsLiability is that in Toman as an exact decimal string. Points ×
+	// redeem_value is multiplied as NUMERIC in Postgres and never routed
+	// through a float — this is money the programme owes.
+	PointsLiability string             `json:"points_liability"`
+	RedeemValue     float64            `json:"redeem_value"`
+	Tiers           []TierDistribution `json:"tiers"`
+	Birthday        BirthdayHealth     `json:"birthday"`
+	GeneratedAt     time.Time          `json:"generated_at"`
 }
 
 // ProgrammeTier is a lifetime threshold for admin/ops (PH-040d / PR-003f).
@@ -287,14 +398,19 @@ type AdminMemberAccount struct {
 	UpdatedAt      time.Time   `json:"updated_at"`
 }
 
-// AdminMemberTransaction is a ledger row for staff (includes refs).
+// AdminMemberTransaction is a ledger row for staff (includes refs and the
+// L-4 attribution: who granted this and why). The customer-facing ledger
+// deliberately does not carry either — the note is an internal ops record.
 type AdminMemberTransaction struct {
-	ID        int64                    `json:"id"`
-	Delta     int                      `json:"delta"`
-	Reason    LoyaltyTransactionReason `json:"reason"`
-	RefType   string                   `json:"ref_type"`
-	RefID     string                   `json:"ref_id"`
-	CreatedAt time.Time                `json:"created_at"`
+	ID          int64                    `json:"id"`
+	Delta       int                      `json:"delta"`
+	Reason      LoyaltyTransactionReason `json:"reason"`
+	RefType     string                   `json:"ref_type"`
+	RefID       string                   `json:"ref_id"`
+	Note        *string                  `json:"note,omitempty"`
+	ActorUserID *uuid.UUID               `json:"actor_user_id,omitempty"`
+	ActorLabel  *string                  `json:"actor_label,omitempty"`
+	CreatedAt   time.Time                `json:"created_at"`
 }
 
 // ProgrammeResponse is the effective Cellar Club configuration for admin.

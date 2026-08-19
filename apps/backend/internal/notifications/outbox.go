@@ -110,3 +110,26 @@ func EnqueueEnvelope(ctx context.Context, store OutboxStore, env *Envelope) erro
 	}
 	return store.Enqueue(ctx, topic, key, env.Rumera.IdempotencyKey, payload)
 }
+
+// EnqueueEnvelopeTx writes the outbox row on the caller's transaction, so the
+// notification commits with the domain write that caused it or not at all.
+//
+// Falls back to a separate connection when the store has no transactional mode —
+// only the in-memory test fake. A real store that lost EnqueueTx would silently
+// reintroduce the dual write, so keep TxOutboxStore on every persistent store.
+func EnqueueEnvelopeTx(ctx context.Context, store OutboxStore, tx pgx.Tx, env *Envelope) error {
+	txStore, ok := store.(TxOutboxStore)
+	if !ok || tx == nil {
+		return EnqueueEnvelope(ctx, store, env)
+	}
+	topic, err := TopicForEvent(env.Type)
+	if err != nil {
+		return err
+	}
+	key := PartitionKey(env.Type, env.Data)
+	payload, err := json.Marshal(env)
+	if err != nil {
+		return err
+	}
+	return txStore.EnqueueTx(ctx, tx, topic, key, env.Rumera.IdempotencyKey, payload)
+}

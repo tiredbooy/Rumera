@@ -19,7 +19,11 @@ import {
   validateFile,
 } from "./constants";
 import type { ProductImage } from "../catalog/products/types";
-import type { PreparedProductImage, UploadedImage } from "./types";
+import type {
+  PreparedProductImage,
+  ProductGalleryRebase,
+  UploadedImage,
+} from "./types";
 import type {
   ProductImageUploaderProps,
   Slot,
@@ -31,17 +35,39 @@ function asError(error: unknown, fallback: string): Error {
   return error instanceof Error ? error : new Error(fallback);
 }
 
-function ensureGalleryPrimary(slots: Slot[]): Slot[] {
-  const hasPrimary = slots.some((slot) =>
-    slot.kind === "uploaded" ? slot.image.is_primary : slot.isPrimary,
+/**
+ * Storefront order. Every read path — the product detail query, the cart join,
+ * the review and recipe joins — sorts `is_primary DESC, sort_order ASC`, so
+ * this is the order a customer actually sees.
+ */
+function galleryOrder(left: ProductImage, right: ProductImage) {
+  return (
+    Number(right.is_primary) - Number(left.is_primary) ||
+    left.sort_order - right.sort_order
   );
-  if (slots.length === 0 || hasPrimary) return slots;
+}
 
-  return slots.map((slot, index) =>
-    slot.kind === "uploaded"
-      ? { ...slot, image: { ...slot.image, is_primary: index === 0 } }
-      : { ...slot, isPrimary: index === 0 },
-  );
+/**
+ * One notion of "the main image" (PE-8): the first slot is the cover, and
+ * `is_primary` is only how that is persisted.
+ *
+ * There used to be two. The star set `is_primary`, which is what the aggregate
+ * save sends and what every read path orders by; the list position set
+ * `sort_order`, which is only the tiebreak. Nothing kept them in step, so
+ * reordering the gallery moved the cover nowhere and the editor showed an order
+ * the storefront never used. Collapsing them means a move *is* the cover
+ * change, and `normalizeGallery` is the single place that says so.
+ */
+function normalizeGallery(slots: Slot[]): Slot[] {
+  return slots.map((slot, index) => {
+    const primary = index === 0;
+    if (slot.kind === "uploaded") {
+      return slot.image.is_primary === primary
+        ? slot
+        : { ...slot, image: { ...slot.image, is_primary: primary } };
+    }
+    return slot.isPrimary === primary ? slot : { ...slot, isPrimary: primary };
+  });
 }
 
 function gallerySignature(slots: Slot[]) {
@@ -81,15 +107,17 @@ export function useImageUploader({
   const idRef = React.useRef(0);
   const initialSlots = React.useMemo<Slot[]>(
     () =>
-      initialImages
-        .slice()
-        .sort((a, b) => a.sort_order - b.sort_order)
-        .map((image) => ({
-          kind: "uploaded",
-          localId: `init-${image.id}`,
-          image,
-          alt: image.alt_text ?? "",
-        })),
+      normalizeGallery(
+        initialImages
+          .slice()
+          .sort(galleryOrder)
+          .map((image) => ({
+            kind: "uploaded",
+            localId: `init-${image.id}`,
+            image,
+            alt: image.alt_text ?? "",
+          })),
+      ),
     [initialImages],
   );
   const [slots, setSlots] = React.useState<Slot[]>(initialSlots);
@@ -121,16 +149,11 @@ export function useImageUploader({
   }, [isDirty, onDirtyChange]);
 
   React.useEffect(() => {
-    const primary =
-      slots.find((slot) =>
-        slot.kind === "uploaded" ? slot.image.is_primary : slot.isPrimary,
-      ) ?? slots[0];
+    const cover = slots[0];
     onGalleryChange?.({
       count: slots.length,
       primaryUrl:
-        primary?.kind === "uploaded"
-          ? primary.image.image_url
-          : primary?.previewUrl,
+        cover?.kind === "uploaded" ? cover.image.image_url : cover?.previewUrl,
     });
   }, [onGalleryChange, slots]);
 
@@ -140,7 +163,7 @@ export function useImageUploader({
 
   const replaceSlots = React.useCallback(
     (update: (current: Slot[]) => Slot[]) => {
-      const next = update(slotsRef.current);
+      const next = normalizeGallery(update(slotsRef.current));
       slotsRef.current = next;
       setSlots(next);
     },
@@ -347,11 +370,9 @@ export function useImageUploader({
         };
       });
 
-      const hasPrimary = current.some((slot) =>
-        slot.kind === "uploaded" ? slot.image.is_primary : slot.isPrimary,
-      );
-      const firstValid = incoming.find((slot) => !slot.validationError);
-      if (!hasPrimary && firstValid) firstValid.isPrimary = true;
+      // normalizeGallery owns the cover; this only keeps the flag a live
+      // upload carries with it in step with where the slot lands.
+      if (current.length === 0 && incoming[0]) incoming[0].isPrimary = true;
       replaceSlots((existing) => [...existing, ...incoming]);
 
       if (live) {
@@ -402,16 +423,13 @@ export function useImageUploader({
         return false;
       }
 
-      const hasPrimary = current.some((slot) =>
-        slot.kind === "uploaded" ? slot.image.is_primary : slot.isPrimary,
-      );
       const incoming: StagedSlot = {
         kind: "staged",
         localId: `slot-${idRef.current++}`,
         source: { kind: "url", url: imageURL },
         previewUrl: imageURL,
         alt: "",
-        isPrimary: !hasPrimary,
+        isPrimary: current.length === 0,
         status: "idle",
         progress: 0,
       };
@@ -433,10 +451,9 @@ export function useImageUploader({
         releasePreparedSlot(slot.localId);
         revokePreview(slot.previewUrl);
         replaceSlots((current) => {
-          const remaining = current.filter(
+          return current.filter(
             (currentSlot) => currentSlot.localId !== slot.localId,
           );
-          return slot.isPrimary ? ensureGalleryPrimary(remaining) : remaining;
         });
         announce("تصویر حذف شد.");
         return;
@@ -450,12 +467,7 @@ export function useImageUploader({
         current.filter((currentSlot) => currentSlot.localId !== slot.localId),
       );
       announce("تصویر حذف شد.");
-      if (!live) {
-        if (wasPrimary) {
-          replaceSlots((current) => ensureGalleryPrimary(current));
-        }
-        return;
-      }
+      if (!live) return;
 
       persistenceErrorRef.current = null;
       trackPersistence(
@@ -540,61 +552,6 @@ export function useImageUploader({
     ],
   );
 
-  const makePrimary = React.useCallback(
-    (slot: Slot) => {
-      if (disabled) return;
-      const previousPrimary = new Map(
-        slotsRef.current.map((currentSlot) => [
-          currentSlot.localId,
-          currentSlot.kind === "uploaded"
-            ? currentSlot.image.is_primary
-            : currentSlot.isPrimary,
-        ]),
-      );
-      replaceSlots((current) =>
-        current.map((currentSlot) => {
-          const isPrimary = currentSlot.localId === slot.localId;
-          return currentSlot.kind === "uploaded"
-            ? {
-                ...currentSlot,
-                image: { ...currentSlot.image, is_primary: isPrimary },
-              }
-            : { ...currentSlot, isPrimary };
-        }),
-      );
-      announce("تصویر اصلی تنظیم شد.");
-      if (!live || slot.kind !== "uploaded") return;
-
-      persistenceErrorRef.current = null;
-      trackPersistence(
-        (async () => {
-          try {
-            await setPrimaryImage(productId, slot.image.id);
-          } catch (error) {
-            replaceSlots((current) =>
-              current.map((currentSlot) => {
-                const isPrimary =
-                  previousPrimary.get(currentSlot.localId) ?? false;
-                return currentSlot.kind === "uploaded"
-                  ? {
-                      ...currentSlot,
-                      image: { ...currentSlot.image, is_primary: isPrimary },
-                    }
-                  : { ...currentSlot, isPrimary };
-              }),
-            );
-            persistenceErrorRef.current = asError(
-              error,
-              "تنظیم تصویر اصلی ناموفق بود",
-            );
-            announce("تنظیم تصویر اصلی ناموفق بود؛ تغییر بازگردانده شد.");
-          }
-        })(),
-      );
-    },
-    [announce, disabled, live, productId, replaceSlots, trackPersistence],
-  );
-
   const setAlt = React.useCallback(
     (slot: Slot, alt: string) => {
       if (
@@ -669,6 +626,38 @@ export function useImageUploader({
     [announce, disabled, live, productId, replaceSlots, trackPersistence],
   );
 
+  const persistGalleryState = React.useCallback(
+    async (pid: number) => {
+      const uploaded = slotsRef.current.filter(
+        (slot): slot is UploadedSlot => slot.kind === "uploaded",
+      );
+      if (uploaded.length > 1) {
+        await reorderProductImages(
+          pid,
+          uploaded.map((slot) => slot.image.id),
+        );
+      }
+      const primary =
+        uploaded.find((slot) => slot.image.is_primary) ?? uploaded[0];
+      if (!primary) return;
+      await setPrimaryImage(pid, primary.image.id);
+      replaceSlots((items) =>
+        items.map((item) =>
+          item.kind === "uploaded"
+            ? {
+                ...item,
+                image: {
+                  ...item.image,
+                  is_primary: item.localId === primary.localId,
+                },
+              }
+            : item,
+        ),
+      );
+    },
+    [replaceSlots],
+  );
+
   const move = React.useCallback(
     (from: number, to: number) => {
       const previous = slotsRef.current;
@@ -688,15 +677,14 @@ export function useImageUploader({
       announce(`تصویر به جایگاه ${to + 1} از ${next.length} منتقل شد.`);
       if (!live) return true;
 
-      const ids = next
-        .filter((slot): slot is UploadedSlot => slot.kind === "uploaded")
-        .map((slot) => slot.image.id);
-      if (ids.length < 2) return true;
+      // Order and cover are the same fact now, so they persist together:
+      // reordering used to leave `is_primary` on whichever image the operator
+      // had just moved out of first place.
       persistenceErrorRef.current = null;
       trackPersistence(
         (async () => {
           try {
-            await reorderProductImages(productId, ids);
+            await persistGalleryState(productId);
           } catch (error) {
             replaceSlots(() => previous);
             persistenceErrorRef.current = asError(
@@ -709,7 +697,15 @@ export function useImageUploader({
       );
       return true;
     },
-    [announce, disabled, live, productId, replaceSlots, trackPersistence],
+    [
+      announce,
+      disabled,
+      live,
+      persistGalleryState,
+      productId,
+      replaceSlots,
+      trackPersistence,
+    ],
   );
 
   const moveUp = React.useCallback(
@@ -724,6 +720,21 @@ export function useImageUploader({
       move(index, index + 1);
     },
     [move],
+  );
+
+  /**
+   * Setting the cover *is* moving the image to the front (PE-8) — there is no
+   * longer a star that can point somewhere other than the first slot.
+   */
+  const makePrimary = React.useCallback(
+    (slot: Slot) => {
+      const index = slotsRef.current.findIndex(
+        (currentSlot) => currentSlot.localId === slot.localId,
+      );
+      if (index <= 0) return;
+      if (move(index, 0)) announce("تصویر اصلی تنظیم شد.");
+    },
+    [announce, move],
   );
 
   const validate = React.useCallback(() => {
@@ -755,38 +766,6 @@ export function useImageUploader({
           ),
         );
       }
-    },
-    [replaceSlots],
-  );
-
-  const persistGalleryState = React.useCallback(
-    async (pid: number) => {
-      const uploaded = slotsRef.current.filter(
-        (slot): slot is UploadedSlot => slot.kind === "uploaded",
-      );
-      if (uploaded.length > 1) {
-        await reorderProductImages(
-          pid,
-          uploaded.map((slot) => slot.image.id),
-        );
-      }
-      const primary =
-        uploaded.find((slot) => slot.image.is_primary) ?? uploaded[0];
-      if (!primary) return;
-      await setPrimaryImage(pid, primary.image.id);
-      replaceSlots((items) =>
-        items.map((item) =>
-          item.kind === "uploaded"
-            ? {
-                ...item,
-                image: {
-                  ...item.image,
-                  is_primary: item.localId === primary.localId,
-                },
-              }
-            : item,
-        ),
-      );
     },
     [replaceSlots],
   );
@@ -984,21 +963,54 @@ export function useImageUploader({
       preparedUploadsRef.current.clear();
       preservePreparedRef.current = false;
       inFlightPreparationsRef.current.clear();
-      const next: Slot[] = images
-        .slice()
-        .sort((left, right) => left.sort_order - right.sort_order)
-        .map((image) => ({
-          kind: "uploaded",
-          localId: `committed-${image.id}`,
-          image,
-          alt: image.alt_text ?? "",
-        }));
+      const next: Slot[] = normalizeGallery(
+        images
+          .slice()
+          .sort(galleryOrder)
+          .map((image) => ({
+            kind: "uploaded",
+            localId: `committed-${image.id}`,
+            image,
+            alt: image.alt_text ?? "",
+          })),
+      );
       setCleanSignature(gallerySignature(next));
       replaceSlots(() => next);
       persistenceErrorRef.current = null;
       setLimitMessage(null);
     },
     [replaceSlots, revokePreview],
+  );
+
+  const rebase = React.useCallback(
+    (images: ProductImage[]): ProductGalleryRebase => {
+      const fresh = new Map(images.map((image) => [image.id, image]));
+      const kept = new Set<number>();
+      let dropped = 0;
+      const survivors = slotsRef.current.filter((slot) => {
+        // Staged work is the operator's own and never lives on the server yet.
+        if (slot.kind === "staged") return true;
+        const current = fresh.get(slot.image.id);
+        if (!current) {
+          dropped += 1;
+          return false;
+        }
+        kept.add(slot.image.id);
+        return true;
+      });
+      const adopted = images
+        .filter((image) => !kept.has(image.id))
+        .sort(galleryOrder)
+        .map<Slot>((image) => ({
+          kind: "uploaded",
+          localId: `rebased-${image.id}`,
+          image,
+          alt: image.alt_text ?? "",
+        }));
+      replaceSlots(() => [...survivors, ...adopted]);
+      return { dropped, adopted: adopted.length };
+    },
+    [replaceSlots],
   );
 
   const preservePrepared = React.useCallback((preserve: boolean) => {
@@ -1049,6 +1061,7 @@ export function useImageUploader({
     prepare,
     preservePrepared,
     discardPrepared,
+    rebase,
     commit,
     validate,
     isDirty,

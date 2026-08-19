@@ -26,6 +26,10 @@ import {
 } from "@/features/journal/api/client";
 import type { JournalCategory } from "@/features/journal/types";
 import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
+import {
   journalCategoryFormDefaults,
   journalCategoryParentOptions,
   journalCategoryFormSchema,
@@ -63,7 +67,7 @@ export function JournalCategoryForm({
     control,
     setError,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<JournalCategoryFormValues>({
     resolver: zodResolver(journalCategoryFormSchema),
     defaultValues: journalCategoryFormDefaults(category),
@@ -71,6 +75,10 @@ export function JournalCategoryForm({
   const name = useWatch({ control, name: "name" });
   const slug = useWatch({ control, name: "slug" });
   const parentOptions = journalCategoryParentOptions(categories, category?.id);
+  const guard = useUnsavedChangesGuard({
+    enabled: isDirty,
+    isSaving: isSubmitting,
+  });
 
   React.useEffect(() => {
     if (slugTouched) return;
@@ -123,6 +131,7 @@ export function JournalCategoryForm({
           refetchType: "none",
         }),
       ]);
+      guard.release();
       router.push("/admin/journal/categories");
       router.refresh();
     } catch (error) {
@@ -260,11 +269,13 @@ export function JournalCategoryForm({
           variant="outline"
           size="lg"
           disabled={isSubmitting}
-          onClick={() => router.push("/admin/journal/categories")}
+          onClick={() => guard.requestNavigation("/admin/journal/categories")}
         >
           انصراف
         </Button>
       </aside>
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
     </form>
   );
 }

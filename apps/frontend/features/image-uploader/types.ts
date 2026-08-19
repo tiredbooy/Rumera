@@ -79,8 +79,21 @@ export type ProductImageUploaderHandle = ImageUploaderHandle<void> & {
   preservePrepared: (preserve: boolean) => void;
   /** Releases rejected prepared files so the next aggregate attempt re-uploads them. */
   discardPrepared: () => void;
+  /**
+   * Rebases the gallery onto a revision saved by someone else: staged work is
+   * kept, rows the other editor deleted are dropped (the server rejects a
+   * payload that still references them) and rows they added are adopted.
+   */
+  rebase: (images: ProductImage[]) => ProductGalleryRebase;
   /** Reconciles local state with the committed aggregate response. */
   commit: (images: ProductImage[]) => void;
+};
+
+export type ProductGalleryRebase = {
+  /** Images the other editor deleted, removed from the local gallery. */
+  dropped: number;
+  /** Images the other editor added, taken over into the local gallery. */
+  adopted: number;
 };
 
 export type UploadImageSuccessEnvelope = ApiSuccess<UploadedImage>;

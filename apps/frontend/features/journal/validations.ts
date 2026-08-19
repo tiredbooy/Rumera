@@ -61,6 +61,7 @@ export const journalPostFormSchema = z
     content: z.string().refine(containsRichText, "محتوای نوشته الزامی است"),
     image_url: imageURL,
     image_alt: z.string().trim().max(255, "حداکثر ۲۵۵ نویسه"),
+    og_image_url: imageURL,
     time_to_read: z.string().refine((value) => {
       const number = parseAsciiNumber(value);
       return Number.isInteger(number) && number >= 1;
@@ -103,6 +104,7 @@ export function journalPostFormDefaults(
     content: post?.content ?? "",
     image_url: post?.image_url ?? "",
     image_alt: post?.image_alt ?? "",
+    og_image_url: post?.og_image_url ?? "",
     time_to_read: String(post?.time_to_read ?? 1),
     status: post?.status ?? "draft",
     published_at: isoToDatetimeLocal(post?.published_at),
@@ -131,6 +133,7 @@ function journalPostPayload(
     excerpt: nullableText(values.excerpt),
     image_url: nullableText(values.image_url),
     image_alt: nullableText(values.image_alt),
+    og_image_url: nullableText(values.og_image_url),
     time_to_read: parseAsciiNumber(values.time_to_read),
     status: values.status,
     ...(values.status === "published" && datetimeLocalToIso(values.published_at)

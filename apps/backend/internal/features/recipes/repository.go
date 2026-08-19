@@ -26,6 +26,11 @@ type Repository interface {
 	IncrementViewCount(ctx context.Context, id int64) error
 	SlugExists(ctx context.Context, slug string) (bool, error)
 	PublishedSitemap(ctx context.Context) ([]*RecipeSitemapItem, error)
+
+	// slug redirects — keep inbound links alive across a rename
+	ResolveSlugRedirect(ctx context.Context, fromSlug string) (string, error)
+	RecordSlugRedirect(ctx context.Context, fromSlug string, recipeID int64) error
+	ReleaseSlugRedirect(ctx context.Context, slug string) error
 	// WithTx returns a repository that executes all queries on tx (for atomic
 	// multi-write create/update).
 	WithTx(tx pgx.Tx) Repository
@@ -436,6 +441,65 @@ func (r *repository) SlugExists(ctx context.Context, slug string) (bool, error) 
 		return false, fmt.Errorf("checking recipe slug: %w", err)
 	}
 	return exists, nil
+}
+
+// ── Slug redirects ────────────────────────────────────────────────────────────
+
+const recipeSlugRedirectType = "recipe"
+
+// ResolveSlugRedirect maps a retired slug to the recipe's current slug. It runs
+// on the 404 path of a public page, so it stays a single index scan on
+// (content_type, from_slug) plus the primary-key join. Joining the live row also
+// means a retired slug whose recipe went back to draft 404s instead of
+// redirecting into another 404.
+func (r *repository) ResolveSlugRedirect(ctx context.Context, fromSlug string) (string, error) {
+	var slug string
+	err := r.db.QueryRow(ctx,
+		`SELECT rec.slug
+		   FROM slug_redirects sr
+		   JOIN recipes rec ON rec.id = sr.target_id
+		  WHERE sr.content_type = $1 AND sr.from_slug = $2
+		    AND rec.slug <> sr.from_slug
+		    AND rec.status = 'published'
+		    AND `+publicLivePublishedAtSQL("rec.published_at"),
+		recipeSlugRedirectType, fromSlug,
+	).Scan(&slug)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", models.ErrNotFound
+		}
+		return "", fmt.Errorf("resolving recipe slug redirect: %w", err)
+	}
+	return slug, nil
+}
+
+// RecordSlugRedirect points a retired slug at the recipe id — not at the
+// replacement slug — so a second rename needs no rewrite and a -> b -> c still
+// lands on c in one hop.
+func (r *repository) RecordSlugRedirect(ctx context.Context, fromSlug string, recipeID int64) error {
+	if _, err := r.db.Exec(ctx,
+		`INSERT INTO slug_redirects (content_type, from_slug, target_id)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (content_type, from_slug)
+		 DO UPDATE SET target_id = EXCLUDED.target_id, updated_at = NOW()`,
+		recipeSlugRedirectType, fromSlug, recipeID,
+	); err != nil {
+		return fmt.Errorf("recording recipe slug redirect: %w", err)
+	}
+	return nil
+}
+
+// ReleaseSlugRedirect drops the record a now-live slug used to redirect away
+// from. Re-using a retired slug for a different recipe must take it over
+// outright, never keep sending that traffic to the previous owner.
+func (r *repository) ReleaseSlugRedirect(ctx context.Context, slug string) error {
+	if _, err := r.db.Exec(ctx,
+		`DELETE FROM slug_redirects WHERE content_type = $1 AND from_slug = $2`,
+		recipeSlugRedirectType, slug,
+	); err != nil {
+		return fmt.Errorf("releasing recipe slug redirect: %w", err)
+	}
+	return nil
 }
 
 func (r *repository) PublishedSitemap(ctx context.Context) ([]*RecipeSitemapItem, error) {

@@ -650,3 +650,47 @@ func TestHandlerListMemberTransactionsNotFound(t *testing.T) {
 		t.Fatalf("response = %d %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+// L-9: the operational view is a read on the same customers:read group as the
+// member list, and its money field stays an exact decimal string on the wire.
+func TestHandlerOverview(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &repoStub{
+		programme: &programmeRow{
+			ID: 1, Enabled: true, EarnDivisor: 10000, RedeemValue: 1000.5,
+			BirthdayBonus: 200, BirthdayTZ: "UTC",
+		},
+		tiers:     DefaultProgrammeTiers(),
+		dist:      []TierDistribution{{Tier: TierBronze, Members: 3, PointsBalance: 1000}},
+		liability: "1000500.0",
+	}
+	h := NewHandler(NewService(repo, nil, 10000, 1000, 0, 0, 0, 300, "UTC"), appvalidator.New())
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/admin/loyalty/overview", nil)
+
+	h.Overview(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"points_liability":"1000500.0"`) {
+		t.Fatalf("liability must stay an exact decimal string: %s", recorder.Body.String())
+	}
+	var body struct {
+		Data ProgrammeOverview `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Data.PointsOutstanding != 1000 || body.Data.Members != 3 {
+		t.Fatalf("overview = %+v", body.Data)
+	}
+	if len(body.Data.Tiers) != 4 {
+		t.Fatalf("tiers = %+v", body.Data.Tiers)
+	}
+	if body.Data.Birthday.Status != BirthdayStatusIdle {
+		t.Fatalf("birthday = %+v", body.Data.Birthday)
+	}
+}

@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCreateProductAlert } from "@/features/product-alerts/hooks";
+import { stashAlertIntent } from "@/features/product-alerts/pending-alert";
 import type { ProductAlertType } from "@/features/product-alerts/types";
 import { ApiClientError } from "@/lib/api/store-client";
 import { cn } from "@/lib/utils";
@@ -41,8 +42,18 @@ export function AlertButton({
 
   function subscribe(type: ProductAlertType) {
     if (status !== "authenticated") {
+      if (productVariantId) {
+        stashAlertIntent({
+          product_variant_id: productVariantId,
+          alert_type: type,
+        });
+      }
       toast.info("برای دریافت اعلان ابتدا وارد شوید");
-      router.push(`/login?callbackUrl=${encodeURIComponent(pathname)}`);
+      const callbackUrl =
+        typeof window === "undefined"
+          ? pathname
+          : `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
       return;
     }
     if (!productVariantId) return;

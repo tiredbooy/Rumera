@@ -91,10 +91,12 @@ vi.mock("./product-form/ImagesSection", () => ({
 }));
 
 import { ProductForm } from "./ProductForm";
+import { openProductSection } from "../test-helpers";
 
 const product = {
   id: 42,
   title: "محصول",
+  slug: "mahsool",
   is_active: true,
   updated_at: "2026-07-26T12:00:00Z",
   tags: [{ id: 1, title: "قدیمی" }],
@@ -111,12 +113,12 @@ beforeEach(() => {
 
 describe("ProductForm tag integration", () => {
   it("submits selected tags with the product create", async () => {
-    render(<ProductForm mode="create" categories={[]} brands={[]} />);
+    render(<ProductForm mode="create" categories={[]} />);
 
     fireEvent.change(screen.getByLabelText("نام محصول"), {
       target: { value: "محصول تازه" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /برچسب‌های فروشگاهی/ }));
+    openProductSection("tags");
     fireEvent.click(screen.getByRole("button", { name: "تازه" }));
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
@@ -129,10 +131,9 @@ describe("ProductForm tag integration", () => {
   });
 
   it("submits selected tags with the product update", async () => {
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
+    openProductSection("tags");
     expect(screen.getByRole("button", { name: "قدیمی" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -149,10 +150,9 @@ describe("ProductForm tag integration", () => {
   });
 
   it("submits an intentional empty tag selection", async () => {
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
+    openProductSection("tags");
     fireEvent.click(screen.getByRole("button", { name: "قدیمی" }));
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
@@ -166,9 +166,7 @@ describe("ProductForm tag integration", () => {
 
   it("reports product update failures", async () => {
     mocks.saveProductAggregate.mockRejectedValueOnce(new Error("شبکه قطع است"));
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 

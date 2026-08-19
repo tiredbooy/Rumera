@@ -3,10 +3,12 @@
 import "@testing-library/jest-dom/vitest";
 
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -162,5 +164,45 @@ describe("RecipeForm write gate", () => {
     expect(
       screen.getByRole("button", { name: "ذخیرهٔ تغییرات" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("RecipeForm draft autosave", () => {
+  const draftKey = "rumera:recipe-draft:edit:7";
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    mocks.updateRecipe.mockResolvedValue({ id: 7 });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("keeps a local draft while editing and drops it once the save lands", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(
+      <RecipeForm
+        mode="edit"
+        recipe={recipe}
+        tags={[]}
+        submitLabel="ذخیرهٔ تغییرات"
+        canWrite
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("عنوان دستور"), {
+      target: { value: "نگرونی تازه" },
+    });
+    expect(sessionStorage.getItem(draftKey)).toBeNull();
+
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(
+      JSON.parse(sessionStorage.getItem(draftKey) ?? "null").values.title,
+    ).toBe("نگرونی تازه");
+
+    fireEvent.click(screen.getByRole("button", { name: "ذخیرهٔ تغییرات" }));
+    await waitFor(() => expect(mocks.updateRecipe).toHaveBeenCalled());
+    await waitFor(() => expect(sessionStorage.getItem(draftKey)).toBeNull());
   });
 });

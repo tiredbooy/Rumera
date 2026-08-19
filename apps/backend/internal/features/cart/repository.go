@@ -213,10 +213,17 @@ func (r *cartRepository) GetItems(ctx context.Context, cartID int64) ([]CartItem
 				WHERE  pi.product_id = p.id
 				  AND  pi.is_primary = true
 				LIMIT  1
-			) AS image_url
+			) AS image_url,
+			-- Same availability the reserve path enforces at checkout. A missing
+			-- inventory row is sold out, negative drift is clamped at the boundary.
+			GREATEST(
+				COALESCE(i.stock_on_hand, 0) - COALESCE(i.committed_stock, 0),
+				0
+			) AS available_stock
 		FROM cart_items ci
 		INNER JOIN product_variants pv ON pv.id = ci.product_variant_id
 		INNER JOIN products         p  ON p.id  = pv.product_id
+		LEFT  JOIN inventory        i  ON i.product_variant_id = pv.id
 		WHERE ci.cart_id = $1
 		  AND pv.is_active = true
 		  AND p.is_active  = true
@@ -245,6 +252,7 @@ func (r *cartRepository) GetItems(ctx context.Context, cartID int64) ([]CartItem
 			&item.Quantity,
 			&item.LineTotal,
 			&item.ImageURL,
+			&item.AvailableStock,
 		); err != nil {
 			return nil, fmt.Errorf("cartRepository.GetItems scan: %w", err)
 		}

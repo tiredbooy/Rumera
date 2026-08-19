@@ -13,10 +13,20 @@ import type {
   UpdateOrderStatusInput,
 } from "@/features/orders/types";
 
+/** Visible-tab poll — ED-043. Not a socket. */
+export const ADMIN_ORDERS_POLL_MS = 20_000;
+
+export const ADMIN_ORDERS_POLL = {
+  refetchInterval: ADMIN_ORDERS_POLL_MS,
+  refetchIntervalInBackground: false,
+  refetchOnWindowFocus: true,
+} as const;
+
 export function useAdminOrders(query: AdminOrderListQuery = {}) {
   return useQuery({
     queryKey: adminOrderKeys.list(query),
     queryFn: () => listAdminOrdersClient(query),
+    ...ADMIN_ORDERS_POLL,
   });
 }
 

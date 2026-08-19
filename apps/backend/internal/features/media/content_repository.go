@@ -101,6 +101,13 @@ func (r *contentMediaRepository) Attach(
 			    updated_at = NOW()
 			WHERE id = $1 AND deleted_at IS NULL`
 		args = []any{ownerID, url, key, alt.Set, alt.Value}
+	case ownerType == "journal" && role == "og":
+		selectQuery = `SELECT og_image_storage_key, slug FROM blogs
+			WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`
+		updateQuery = `UPDATE blogs
+			SET og_image_url = $2, og_image_storage_key = $3, updated_at = NOW()
+			WHERE id = $1 AND deleted_at IS NULL`
+		args = []any{ownerID, url, key}
 	default:
 		return nil, fmt.Errorf("content media: unsupported owner/role %q/%q", ownerType, role)
 	}

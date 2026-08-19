@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAddCartItem } from "@/features/cart/api";
 import { cartMutationErrorMessage } from "@/features/cart/errors";
+import { stashAddToCartIntent } from "@/features/cart/pending-intent";
 import { useRecordInteraction } from "@/features/recommendations/hooks";
 import { cn } from "@/lib/utils";
 
@@ -44,27 +45,39 @@ export function AddToCartButton({
     event.stopPropagation();
 
     if (status === "loading") return;
+
+    const variantId = Number(productVariantId);
+    const validVariant = Number.isFinite(variantId) && variantId >= 1;
+    const qty = Number(quantity);
+    const validQty = Number.isFinite(qty) && qty >= 1;
+
     if (status !== "authenticated") {
+      // Stash before bouncing — <PendingCartIntent /> replays it exactly once
+      // after login instead of dumping the shopper on an empty cart (U-8).
+      if (validVariant && validQty) {
+        stashAddToCartIntent({
+          product_variant_id: Math.trunc(variantId),
+          quantity: Math.trunc(qty),
+        });
+      }
       toast.info("برای افزودن به سبد ابتدا وارد شوید");
       const callbackUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
       return;
     }
 
-    const variantId = Number(productVariantId);
-    if (!Number.isFinite(variantId) || variantId < 1) {
+    if (!validVariant) {
       toast.error("این محصول گزینهٔ قابل خرید ندارد");
       return;
     }
 
-    const qty = Number(quantity);
-    if (!Number.isFinite(qty) || qty < 1) {
+    if (!validQty) {
       toast.error("تعداد نامعتبر است");
       return;
     }
 
     add.mutate(
-      { product_variant_id: variantId, quantity: Math.trunc(qty) },
+      { product_variant_id: Math.trunc(variantId), quantity: Math.trunc(qty) },
       {
         onSuccess: (cart) => {
           toast.success("به سبد خرید افزوده شد", {

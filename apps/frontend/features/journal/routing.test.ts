@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   JOURNAL_SEARCH_MAX_LENGTH,
   journalPageHref,
+  journalRedirectHref,
   parseJournalPage,
   parseJournalRouteQuery,
 } from "./routing";
@@ -64,7 +65,16 @@ describe("journal routing", () => {
       q: undefined,
       needsRedirect: true,
     });
-    expect(parseJournalRouteQuery({ campaign: "x" }).needsRedirect).toBe(true);
+    // U-4: a campaign param is not a malformed URL. It rides along instead of
+    // triggering a redirect that would strip it before analytics ever saw it.
+    expect(parseJournalRouteQuery({ campaign: "x" }).needsRedirect).toBe(false);
+
+    const campaign = parseJournalRouteQuery({ page: "1", utm_source: "ig" });
+    expect(campaign.needsRedirect).toBe(true);
+    expect(journalRedirectHref(campaign, campaign.page)).toContain(
+      "utm_source=ig",
+    );
+    expect(journalPageHref(campaign, 2)).not.toContain("utm_source");
 
     const parsed = parseJournalRouteQuery({
       q: "آ".repeat(JOURNAL_SEARCH_MAX_LENGTH + 3),

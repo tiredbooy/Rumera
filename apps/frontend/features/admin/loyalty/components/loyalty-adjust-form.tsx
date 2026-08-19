@@ -29,7 +29,8 @@ import { signedPoints } from "../labels";
 /**
  * Admin grant / clawback for Cellar Club points (PR-003b).
  *
- * - Capability gate: hidden without customers:write
+ * - Capability gate: hidden without loyalty:adjust (L-8 — minting is money,
+ *   so customers:write alone no longer opens it, on the route or the button)
  * - Confirmation dialog before POST
  * - Client-generated idempotency key (stable per pending adjust)
  * - UUID :userID — same as WalletCreditForm / /admin/customers/:id
@@ -173,6 +174,11 @@ export function LoyaltyAdjustForm({
               maxLength={400}
               data-testid="loyalty-adjust-note"
             />
+            {/* L-4: the note is now a ledger column, not a round-trip echo. */}
+            <p className="text-xs text-muted-foreground">
+              یادداشت همراه نام شما در دفتر کل ثبت می‌شود و بعداً قابل ویرایش
+              نیست.
+            </p>
           </div>
         </div>
 
@@ -243,7 +249,10 @@ export function LoyaltyAdjustForm({
 }
 
 function parseDelta(raw: string): number | null {
-  const trimmed = toAsciiDigits(raw).trim().replace(/,/g, "").replace(/^\+/, "");
+  const trimmed = toAsciiDigits(raw)
+    .trim()
+    .replace(/,/g, "")
+    .replace(/^\+/, "");
   if (!/^-?\d+$/.test(trimmed)) return null;
   const value = Number(trimmed);
   if (!Number.isSafeInteger(value) || value === 0) return null;

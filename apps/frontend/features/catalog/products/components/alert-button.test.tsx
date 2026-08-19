@@ -3,21 +3,26 @@
 import "@testing-library/jest-dom/vitest";
 
 import type { ReactNode } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  push: vi.fn(),
+}));
 
 vi.mock("next-auth/react", () => ({
   useSession: () => ({ status: "unauthenticated" }),
 }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mocks.push }),
   usePathname: () => "/products/sample",
 }));
 vi.mock("sonner", () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() },
 }));
 vi.mock("@/features/product-alerts/hooks", () => ({
-  useCreateProductAlert: () => ({ isPending: false, mutate: vi.fn() }),
+  useCreateProductAlert: () => ({ isPending: false, mutate: mocks.mutate }),
 }));
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, ...props }: { children: ReactNode }) => (
@@ -41,9 +46,16 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   ),
 }));
 
+import { takeAlertIntent } from "@/features/product-alerts/pending-alert";
+
 import { AlertButton } from "./alert-button";
 
 afterEach(cleanup);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  sessionStorage.clear();
+});
 
 describe("AlertButton availability choices", () => {
   it("does not offer a restock alert for an available variant", () => {
@@ -62,5 +74,18 @@ describe("AlertButton availability choices", () => {
     expect(
       screen.getByRole("button", { name: "اطلاع از کاهش قیمت" }),
     ).toBeInTheDocument();
+  });
+
+  it("stashes a restock alert when a guest is bounced to login", () => {
+    render(<AlertButton productVariantId={4} isAvailable={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "اطلاع از موجود شدن" }));
+
+    expect(mocks.mutate).not.toHaveBeenCalled();
+    expect(mocks.push).toHaveBeenCalled();
+    expect(takeAlertIntent()).toEqual({
+      product_variant_id: 4,
+      alert_type: "restock",
+    });
+    expect(takeAlertIntent()).toBeNull();
   });
 });

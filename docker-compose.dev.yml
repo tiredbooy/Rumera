@@ -23,6 +23,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 20s
 
   # ── Analytics database ──────────────────────────────────────────────────────
   analytics_db:
@@ -43,10 +44,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 20s
 
   # ── Redis ───────────────────────────────────────────────────────────────────
   redis:
-    image: redis:8-alpine
+    image: redis:8.2-alpine
     container_name: rumera_redis_dev
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -75,7 +77,7 @@ services:
       - meili_data:/meili_data
     networks: [rumera_network]
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:7700/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:7700/health"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -137,6 +139,7 @@ services:
       MEDIA_MAX_DIMENSION: ${MEDIA_MAX_DIMENSION:-4000}
       MEDIA_MAX_SOURCE_DIMENSION: ${MEDIA_MAX_SOURCE_DIMENSION:-12000}
       MEDIA_MAX_SOURCE_PIXELS: ${MEDIA_MAX_SOURCE_PIXELS:-40000000}
+    stop_grace_period: 30s
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     volumes:
@@ -160,11 +163,11 @@ services:
           path: ./apps/backend/go.sum
     # Healthcheck for backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/ready"]
       interval: 8s
       timeout: 5s
       retries: 8
-      start_period: 20s
+      start_period: 25s
 
   # ── Frontend (Next.js) ──────────────────────────────────────────────────────
   frontend:
@@ -175,6 +178,7 @@ services:
     restart: unless-stopped
     depends_on:
       backend: { condition: service_healthy }
+    stop_grace_period: 30s
     environment:
       NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: "1"
@@ -199,6 +203,18 @@ services:
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     networks: [rumera_network]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 40s
     develop:
       watch:
         - action: sync
@@ -222,7 +238,7 @@ services:
     restart: unless-stopped
     depends_on:
       backend: { condition: service_healthy }
-      frontend: { condition: service_started }
+      frontend: { condition: service_healthy }
     ports:
       - "${GATEWAY_PORT:-80}:80"
     volumes:

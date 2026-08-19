@@ -217,6 +217,12 @@ when a dedicated worker process owns the jobs, or to scale the API horizontally
 without running every replica's cron. The API serves identically; only the
 background roll-ups are skipped.
 
+The scheduler has **no distributed lock**, so this is not an optimisation — it is
+the mechanism that keeps jobs running once when more than one API process exists.
+The full list of per-process state, and the four conditions for running more than
+one `server`, is
+[architecture/processes-and-jobs.md → The replica story](./architecture/processes-and-jobs.md#the-replica-story-a-6).
+
 ---
 
 ## HTTP server hardening

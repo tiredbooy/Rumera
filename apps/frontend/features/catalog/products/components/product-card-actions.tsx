@@ -14,6 +14,7 @@ import {
   useRemoveWishlistItem,
   useWishlist,
 } from "@/features/wishlist/hooks";
+import { stashWishlistIntent } from "@/features/wishlist/pending-wishlist";
 import { cn } from "@/lib/utils";
 
 interface ProductCardActionsProps {
@@ -84,6 +85,10 @@ export function ProductCardActions({
     if (!purchasableVariantId) return;
     if (status === "loading") return;
     if (!authenticated) {
+      stashWishlistIntent({
+        product_variant_id: purchasableVariantId,
+        product_id: productId,
+      });
       toast.info("برای افزودن به علاقه‌مندی‌ها وارد شوید");
       const callbackUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);

@@ -449,10 +449,11 @@ func (s *Service) Confirm(ctx context.Context, req ConfirmPaymentReq) (pt *Payme
 		}
 
 		// The paid fact, on the SAME transaction as the money and the stock.
-		// Assigning to the named `err` is load-bearing: the deferred
-		// RollbackOnErr only fires when *err is non-nil, so a `:=` here would
-		// return an error while leaving the transaction open and the connection
-		// leaking.
+		// RollbackOnErr watches the named result `err` (Confirm uses named
+		// returns). `return nil, apperr.ErrInternal` already assigns that
+		// named err — a `:=` on this line would not leak the connection.
+		// The invariant is: do not introduce a new `err` that shadows the
+		// named result before Commit.
 		if err = s.emitOrderPaid(ctx, tx, pt); err != nil {
 			return nil, apperr.ErrInternal
 		}
@@ -462,22 +463,42 @@ func (s *Service) Confirm(ctx context.Context, req ConfirmPaymentReq) (pt *Payme
 		return nil, apperr.ErrInternal
 	}
 
-	// Post-commit side effects. These only run when the event bus is off — with
-	// it on, the order.paid consumers own loyalty, recs and the receipt, and
-	// running both would award twice.
-	if pt.OrderID != nil && pt.UserID != nil && !s.eventsOwnSideEffects() {
-		if _, pending, perr := s.ProcessPendingLoyaltyAwards(ctx); perr != nil {
-			slog.Error("payments: process loyalty awards",
-				"order_id", *pt.OrderID, "err", perr)
-		} else if pending > 0 {
-			slog.Error("payments: loyalty earn still pending after confirm",
-				"order_id", *pt.OrderID, "pending", pending)
-		}
-		s.recordPurchases(ctx, *pt.UserID, *pt.OrderID)
-		s.sendPaidOrderReceipt(ctx, *pt.UserID, *pt.OrderID, pt.Amount)
+	if pt.OrderID != nil && pt.UserID != nil {
+		s.RunLegacyPaidSideEffects(ctx, *pt.UserID, *pt.OrderID, pt.Amount)
 	}
 
 	return pt, nil
+}
+
+// InsertEarnIntentTx records the loyalty earn to retry after commit, on the
+// caller's transaction. Exported for the wallet rail, which settles inside the
+// order transaction and so cannot go through Confirm (A-5, A-11).
+func (s *Service) InsertEarnIntentTx(ctx context.Context, tx pgx.Tx, intent OrderEarnIntent) error {
+	if s == nil || s.paymentRepo == nil {
+		return nil
+	}
+	return s.paymentRepo.InsertEarnIntent(ctx, tx, intent)
+}
+
+// RunLegacyPaidSideEffects is the EVENTS_ENABLED=false fallback for a paid order:
+// loyalty, recommendation signal and receipt, run post-commit and best-effort.
+//
+// A no-op when the bus is on — then the order.paid.v1 consumers own all three and
+// running both would award twice. Exported because the wallet rail needs the same
+// fallback; without it, pulling the documented emergency lever silently stopped
+// wallet buyers earning anything (A-11).
+func (s *Service) RunLegacyPaidSideEffects(ctx context.Context, userID, orderID int64, amount float64) {
+	if s == nil || userID <= 0 || orderID <= 0 || s.eventsOwnSideEffects() {
+		return
+	}
+	if _, pending, err := s.ProcessPendingLoyaltyAwards(ctx); err != nil {
+		slog.Error("payments: process loyalty awards", "order_id", orderID, "err", err)
+	} else if pending > 0 {
+		slog.Error("payments: loyalty earn still pending after confirm",
+			"order_id", orderID, "pending", pending)
+	}
+	s.recordPurchases(ctx, userID, orderID)
+	s.sendPaidOrderReceipt(ctx, userID, orderID, amount)
 }
 
 // emitOrderPaid writes the order.paid fact for a checkout confirm.

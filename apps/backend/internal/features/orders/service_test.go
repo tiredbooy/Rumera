@@ -313,6 +313,13 @@ type paymentRepoStub struct {
 	createTx  pgx.Tx
 	lastReq   payments.CreatePaymentTransactionReq
 	all       []*payments.PaymentTransaction
+
+	earnIntents []payments.OrderEarnIntent
+}
+
+func (p *paymentRepoStub) InsertEarnIntent(_ context.Context, _ pgx.Tx, i payments.OrderEarnIntent) error {
+	p.earnIntents = append(p.earnIntents, i)
+	return nil
 }
 
 func (p *paymentRepoStub) BeginTx(context.Context) (pgx.Tx, error) {
@@ -712,6 +719,14 @@ func TestCreateOrder_WalletSettlesInSameTx(t *testing.T) {
 	}
 	if !tx.Committed {
 		t.Fatal("wallet settle must commit the order TX")
+	}
+	// A-11: with the bus off the earn intent is the only lever loyalty has, and the
+	// wallet rail never went through Confirm — so wallet buyers earned nothing.
+	if len(payRepo.earnIntents) != 1 {
+		t.Fatalf("earn intents = %d; want 1 on the wallet rail with the bus off", len(payRepo.earnIntents))
+	}
+	if got := payRepo.earnIntents[0]; got.OrderID != 100 || got.UserID != 7 || got.Amount != 59 {
+		t.Fatalf("earn intent = %+v; want order 100 user 7 amount 59", got)
 	}
 }
 

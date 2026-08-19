@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useSession } from "next-auth/react"
 import {
+  AlertTriangle,
   ArrowLeft,
   Loader2,
   Lock,
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { QueryStateRegion } from "@/components/query-state-region"
 import { Separator } from "@/components/ui/separator"
 import { useCart } from "@/features/cart/api"
+import { hasUnorderableLine } from "@/features/cart/availability"
 import { CartLines } from "./cart-lines"
 
 /** Full cart page body (client). Server page wraps it for metadata/noindex. */
@@ -28,6 +30,10 @@ export function CartView() {
   const cart = cartQuery.data
   const hasItems = !!cart && cart.items.length > 0
   const itemCount = cart?.summary.total_items ?? 0
+  // A line whose quantity is above its server-reported stock would be rejected
+  // at «ثبت و پرداخت» — block checkout here instead of failing there (U-3).
+  const blocked = hasUnorderableLine(cart)
+  const canCheckout = hasItems && !blocked
 
   if (status === "loading" || (authed && cartQuery.isPending)) {
     return (
@@ -114,13 +120,20 @@ export function CartView() {
         کد تخفیف و کارت هدیه را در مرحلهٔ تسویه اعمال کنید.
       </p>
 
-      <Button asChild size="lg" className="mt-5 h-12 w-full" disabled={!hasItems}>
-        {hasItems ? (
+      {blocked ? (
+        <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="mt-px size-3.5 shrink-0" />
+          موجودی برخی اقلام سبد کافی نیست. تعداد آن‌ها را کم یا حذف کنید تا بتوانید تسویه کنید.
+        </p>
+      ) : null}
+
+      <Button asChild size="lg" className="mt-5 h-12 w-full" disabled={!canCheckout}>
+        {canCheckout ? (
           <Link href="/checkout">
             ادامه به تسویه <ArrowLeft />
           </Link>
         ) : (
-          <span>
+          <span aria-disabled="true">
             ادامه به تسویه <ArrowLeft />
           </span>
         )}
@@ -171,10 +184,16 @@ export function CartView() {
                 {formatPrice(cart?.summary.subtotal ?? 0)}
               </p>
             </div>
-            <Button asChild size="lg" className="h-12 flex-1">
-              <Link href="/checkout">
-                <Lock className="size-4" /> تسویه
-              </Link>
+            <Button asChild size="lg" className="h-12 flex-1" disabled={!canCheckout}>
+              {canCheckout ? (
+                <Link href="/checkout">
+                  <Lock className="size-4" /> تسویه
+                </Link>
+              ) : (
+                <span aria-disabled="true">
+                  <Lock className="size-4" /> تسویه
+                </span>
+              )}
             </Button>
           </div>
         </div>

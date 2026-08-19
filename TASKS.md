@@ -24,6 +24,8 @@ in `refactor-workstreams/event-driven-and-capacity/FINISHED.md` — do not redo 
 > ```
 > Pre-filtered copies also exist — **`TASKS-GROK.md`** and **`TASKS-CLAUDE.md`**. They
 > are generated from this file; this file is the source of truth.
+>
+> Cross-lane notes: `.claude/FROM-GROK.md` (Grok → Claude). Reply in that file.
 
 ---
 
@@ -178,7 +180,7 @@ first regardless.
   and four `TestProductAggregate*` fail today. Bisected — they predate the event work. A
   red baseline is how regressions hide.
 
-- [ ] `@claude` **P1-3 · 🟠 · M — Commit the working tree in reviewable chunks**
+- [x] `@claude` **P1-3 · 🟠 · M — Commit the working tree in reviewable chunks**
   815 changed/untracked files. Not reviewable by anyone.
 
 - [x] `@grok` **P1-4 · 🟠 · S — Add event-bus alert rules**
@@ -189,7 +191,7 @@ first regardless.
   **Note in the PR:** Prometheus is only in `docker-compose.dev.yml` — it is **not in the
   prod stack**, so these rules have nowhere to run yet. Flag that; do not try to fix it here.
 
-- [ ] `@claude` **P1-5 · 🟠 · S — Analytics queue loses its buffer on every deploy**
+- [x] `@claude` **P1-5 · 🟠 · S — Analytics queue loses its buffer on every deploy**
   Started with the *signal* context, so on SIGTERM every worker exits with its in-hand
   batch and `Shutdown()` discards up to 10,000 buffered events. Concurrency semantics →
   claude. *Files:* `internal/bootstrap/app.go:146,162`, `internal/analytics/queue.go:118-120`
@@ -302,7 +304,7 @@ first regardless.
   and switch the insert to `ON CONFLICT DO NOTHING`, keeping `RowsAffected` as the
   inserted signal. **Done when:** two concurrent identical calls produce one row.
 
-- [ ] `@claude` **A-3 · 🟡 · S — Gift-card email dual-writes inside the Confirm TX** (ED-011c)
+- [x] `@claude` **A-3 · 🟡 · S — Gift-card email dual-writes inside the Confirm TX** (ED-011c)
   `notifyPurchased` writes on a second connection while `tx` is open; a rollback can
   still email a card that never committed. `EnqueueTx` exists now — the care needed is
   that the retry loop shares one `pgx.Tx` with no savepoints (state 25P02).
@@ -324,20 +326,20 @@ first regardless.
   `/admin/payments?order_id=X` is empty and `/admin/orders/:id` carries no `payment`
   block. One admin GET over `wallet_transactions` closes it without inventing a gateway
   record. **This is the cheap half of A-5 that was deliberately left out.**
-- [ ] `@claude` **A-11 · 🟡 · S — Two paths still bypass the `order.paid.v1` rule**
+- [x] `@claude` **A-11 · 🟡 · S — Two paths still bypass the `order.paid.v1` rule**
   Found while writing A-5's rule down. (a) With `EVENTS_ENABLED=false` the legacy lever
   is `payment_loyalty_awards` (`payments/service.go:443`), which the wallet rail never
   writes — so on the fallback path wallet buyers still earn nothing. (b)
   `orderService.MarkOrderAsPaid` (`orders/service.go:900`) is an unrouted third paid
   path that emits no fact at all. Both are exactly what the written rule forbids;
   either wire them to the emitter or delete them.
-- [ ] `@claude` **A-6 · 🟠 · S — Decide and document the replica story**
+- [x] `@claude` **A-6 · 🟠 · S — Decide and document the replica story**
   Cron is in-process, rate limiting in-memory. Architected for one box; written down nowhere.
 - [ ] `@claude` **A-7 · 🟠 · M — Make doc claims testable**
   Eight verified cases of "the comment asserts a runtime property the code lacks" in one
   subsystem. Rule: a comment claiming a runtime guarantee gets a test named after it, or
   the claim is deleted.
-- [ ] `@claude` **A-8 · 🟠 · M — Harden the analytics write path (instead of a document-store migration)**
+- [x] `@claude` **A-8 · 🟠 · M — Harden the analytics write path (instead of a document-store migration)**
   Raised as "move analytics off Postgres to MongoDB, it'll get slow." The analytics DB is
   already **TimescaleDB** — hypertables, weekly chunks, a 30-day compression policy, and
   pre-aggregated `daily_*` rollups the dashboards read instead of raw events. Mongo would
@@ -351,7 +353,7 @@ first regardless.
   usage, rollups are either continuous aggregates or covered by a gap-detection test, and
   a retention policy exists. *If Timescale is ever genuinely outgrown the next stop is
   ClickHouse, not a document store — write that down here, not in a migration.*
-- [ ] `@claude` **A-9 · 🟡 · S — `getStockLinesSQL` has no `GROUP BY`; latent, not live**
+- [x] `@claude` **A-9 · 🟡 · S — `getStockLinesSQL` has no `GROUP BY`; latent, not live**
   Found while greening P1-2. `getStockLinesSQL` (`internal/features/orders/repository.go:446-449`)
   returns raw `order_items` rows with **no `GROUP BY product_variant_id`**, but
   `inventory_reservations` is unique on `(order_id, product_variant_id)` and the PR-020b
@@ -396,7 +398,7 @@ recipe rename leaves the old slug cached.
   `tone`. **Done when:** the grep returns only intentional exceptions, and a theme change
   reaches every status surface.
 
-- [ ] `@claude` **D-2 · 🟠 · M — Unify money formatting**
+- [x] `@claude` **D-2 · 🟠 · M — Unify money formatting**
   A gift card issued at `125000.50` renders «۱۲۵٬۰۰۰٫۵ تومان» to the admin and
   «۱۲۵٬۰۰۱ تومان» to the customer who owns it — the exact float-rounding hazard
   `formatPaymentAmount` was written to prevent. **Correctness, not consistency.**
@@ -480,10 +482,10 @@ recipe rename leaves the old slug cached.
   At 375px the shopper picks shipping and taps «ادامه» without seeing what it added, then
   commits before the total scrolls into view. Move the discount/shipping/gift breakdown
   and grand total above the CTA at `sm` and below.
-- [ ] `@claude` **U-3 · 🟠 · M — Per-line availability in the cart; cap the quantity stepper**
+- [x] `@claude` **U-3 · 🟠 · M — Per-line availability in the cart; cap the quantity stepper**
   A sold-out line looks fully buyable and fails only at «ثبت و پرداخت». *Needs backend:*
   stock on the cart item projection.
-- [ ] `@claude` **U-4 · 🟠 · M — Stop stripping campaign params from `/products`; expose the search box the parser supports**
+- [x] `@claude` **U-4 · 🟠 · M — Stop stripping campaign params from `/products`; expose the search box the parser supports**
   Every paid click to the main catalogue loses attribution and eats a redirect before
   first paint.
 - [x] `@grok` **U-5 · 🟠 · S — Render the place-order failure next to the button that failed**
@@ -497,7 +499,22 @@ recipe rename leaves the old slug cached.
 - [x] `@grok` **U-7 · 🟡 · S — Make restock-notify the primary action on an out-of-stock PDP**
   Including the mobile sticky bar — today the only recoverable outcome of an out-of-stock
   visit is hidden behind an unlabelled dropdown.
-- [ ] `@claude` **U-8 · 🟡 · M — Replay the add-to-cart intent after a login bounce**
+- [x] `@claude` **U-8 · 🟡 · M — Replay the add-to-cart intent after a login bounce**
+- [x] `@grok` **U-13 · 🟡 · S — Replay recipe «افزودن همه» after the same login bounce**
+  **Files:** `features/recipes/components/add-all-button.tsx`, new pending-intent
+  next to it. **Do not edit** `features/cart/pending-intent.tsx` (U-8 settled).
+  **Do:** guest tap stashes the N available variant ids (qty 1 each) in
+  sessionStorage with a 10-minute TTL and the same read-and-clear rule as U-8,
+  then login; after auth, replay through `useBulkAddCartItems` and keep the
+  existing per-item skip reporting. **Done when:** bouncing on a recipe and
+  logging in adds the ingredients once, even if the replay fails.
+- [x] `@grok` **U-14 · 🟡 · S — Replay wishlist and stock-alert after the same login bounce**
+  **Files:** `product-card-actions.tsx:88`, `alert-button.tsx:45`
+  **Do:** same stash/replay as U-8/U-13. Wishlist stores the purchasable variant
+  id (never a product-level item). Alert stores variant + `restock`/`price_drop`.
+  Surgical: only the bounce branch and a layout-mounted replay. Do not reshape
+  the card or the PDP. **Done when:** a guest heart or «اطلاع از موجود شدن»
+  survives login and fires once.
 - [x] `@grok` **U-9 · 🟡 · S — Use the existing Jalali input for the gift delivery date**
   **Files:** gift checkout form, `components/ui/jalali-datetime-input.tsx`
   The shopper picks a Gregorian date and the confirmation answers in Jalali — two
@@ -528,7 +545,7 @@ recipe rename leaves the old slug cached.
   animation + `IntersectionObserver`, honouring `prefers-reduced-motion`.
 - [x] `@grok` **PF-3 · 🟡 · S — Move `Geist_Mono` out of the root layout** — preloaded on
   every public page, used only in admin.
-- [ ] `@claude` **PF-4 · 🟡 · M — Suspense boundaries on `/products` and `/search`**
+- [x] `@claude` **PF-4 · 🟡 · M — Suspense boundaries on `/products` and `/search`**
   *Do after P0-7 — value drops sharply once home and PDP prerender.*
 
 ---
@@ -552,7 +569,7 @@ modules* rather than around the operator's day.
   pagination sits bottom-start on one screen and bottom-end on another. Build one
   `AdminPage` (breadcrumb, title, primary action, filter bar, content, pagination) and
   migrate every list. **Foundation for S-3, S-6, S-9.**
-- [ ] `@claude` **S-3 · 🟠 · M — Applying a filter costs a full page navigation on the four busiest lists**
+- [x] `@claude` **S-3 · 🟠 · M — Applying a filter costs a full page navigation on the four busiest lists**
   Order triage is a status-toggling loop paying a server round trip per hop.
   `coupons-board.tsx:145-172` already does it right — lift that into a `useFilterParams`
   hook (selects on change, text on ~300ms debounce, `router.replace`), add removable
@@ -565,6 +582,20 @@ modules* rather than around the operator's day.
   inventory) / کاتالوگ / مشتریان / بازاریابی و محتوا / پیکربندی — the last collapsed by
   default with state in localStorage. **Done when:** the nav fits a 768px-tall viewport
   without an inner scrollbar and shows pending counts.
+- [x] `@grok` **S-12 · 🟠 · M — Sidebar groups are accordion parents, not tiny labels**
+  **Files:** `lib/rbac/nav.ts`, `features/dashboard/components/dashboard-nav.tsx`
+  **Do:** S-4 left a flat list under 11px muted headings; only «پیکربندی» folds, so
+  the rail still reads as a dump of modules. Make every multi-item group a real
+  accordion: parent row (group icon + title + rolled-up badge + chevron), children
+  nested on a logical-start rail. A one-item group (داشبورد) stays a lone top-level
+  link — do not accordion a single child. Daily groups default open, setup stays
+  collapsed; persist in the existing localStorage key; never hide the group that
+  contains the current route. Derive accordion vs link from item count — delete the
+  parallel `collapsible` flag. Keep `filterNav` / `applyNavBadges` / `flattenNavItems`
+  working so the command palette does not change. Same component for admin and account.
+  **Done when:** parents toggle children, the active group stays open, a collapsed
+  «کاتالوگ» still shows a pending count on the parent, and adding a destination is
+  one object in `ADMIN_NAV` / `ACCOUNT_NAV`.
 - [x] `@grok` **S-5 · 🟠 · S — The command palette rejects the Persian digits the panel prints**
   **Files:** `features/dashboard/components/admin-command-search.ts:10-12,29-34`
   **Do:** the panel renders «#۱۴۲» via `Intl.NumberFormat('fa-IR')`, but
@@ -611,7 +642,7 @@ modules* rather than around the operator's day.
 
 ## C2 — Product editor
 
-- [ ] `@claude` **PE-1 · 🔴 · L — The variant matrix is an accordion; the bulk generator abandons the operator**
+- [x] `@claude` **PE-1 · 🔴 · L — The variant matrix is an accordion; the bulk generator abandons the operator**
   The generator builds up to 100 combinations all sharing one price with no SKU and no
   stock — then differentiating them is N open/edit/close cycles over three inputs each. A
   column header row already exists, so the layout is pretending to be a table. Make it
@@ -619,7 +650,7 @@ modules* rather than around the operator's day.
   selection with "apply to selected", "fill down", keyboard cell traversal, SKU
   auto-generated from the product code + option slugs, and a preview step to deselect
   combinations that do not exist.
-- [ ] `@claude` **PE-2 · 🔴 · M — Break the 409 dead end**
+- [x] `@claude` **PE-2 · 🔴 · M — Break the 409 dead end**
   An operator editing a product a colleague touched has **no path from conflict to a saved
   product** — variants, options, tags and staged images are all lost, and the panel invites
   the retry that cannot succeed. Refresh the revision and re-apply.
@@ -635,7 +666,7 @@ modules* rather than around the operator's day.
   **Done when:** clicking a section link on a dirty form scrolls instead of warning.
   *Repeatedly showing a discard dialog for a harmless action trains operators to dismiss
   it reflexively — which is exactly when it will eat real work.*
-- [ ] `@claude` **PE-4 · 🟠 · M — Brand/category selects cap at 100 with client-only search**
+- [x] `@claude` **PE-4 · 🟠 · M — Brand/category selects cap at 100 with client-only search**
   Two failures: a product cannot be assigned brand #101 (search says «موردی یافت نشد»),
   **and** an existing product whose brand is outside page one renders as «انتخاب برند» —
   the edit screen says the product has no brand when it does. The value still submits, so
@@ -646,7 +677,7 @@ modules* rather than around the operator's day.
   scroll past an always-expanded 8-field general section. Add `?tab=` search-param
   sections over the existing single component (route segments would remount and lose RHF
   state).
-- [ ] `@claude` **PE-6 · 🟠 · M — Nothing validates until Save, then one sentence and no list**
+- [x] `@claude` **PE-6 · 🟠 · M — Nothing validates until Save, then one sentence and no list**
   After filling a 64-variant product the operator learns nothing is wrong until submit,
   then gets one sentence and a jump to whichever bad field happens to be first. Needs an
   error summary with jump-to-field.
@@ -657,7 +688,7 @@ modules* rather than around the operator's day.
   pre-filled from an existing product (everything except name, slug, SKU and images).
   ⚠ `ProductsTable.test.tsx:82` actively asserts a duplicate control does **not** exist —
   that test was written deliberately and must be updated, not worked around.
-- [ ] `@claude` **PE-8 · 🟠 · L — Image management is a one-column list of 56px thumbnails**
+- [x] `@claude` **PE-8 · 🟠 · L — Image management is a one-column list of 56px thumbnails**
   Two competing notions of "the main image", and `ImageUploader` silently drops the
   `onGalleryChange` prop that `ImagesSection` passes — so the sidebar cover thumbnail and
   the "N تصویر" summary never update. Needs a grid, larger previews, drag-reorder, and one
@@ -669,7 +700,7 @@ modules* rather than around the operator's day.
 - [x] `@grok` **PE-10 · 🟡 · M — Save freezes the whole form for the length of the uploads**
   Eight fresh photos greys out every field with no cancel and a `beforeunload` guard. Keep
   fields editable, show per-image upload progress, and on failure leave the form usable.
-- [ ] `@claude` **PE-11 · 🟡 · M — Stock is shown but cannot be set, and there is no route to inventory**
+- [x] `@claude` **PE-11 · 🟡 · M — Stock is shown but cannot be set, and there is no route to inventory**
   Stocking a new product means saving, navigating to inventory, searching, identifying each
   variant by SKU and adjusting one at a time. *Per-variant images need a backend contract
   change too — `SaveProductImageInput` cannot express the association.*
@@ -682,7 +713,7 @@ modules* rather than around the operator's day.
 - [x] `@claude` **CE-1 · 🔴 · L — No preview anywhere; publishing is the only way to see the page**
   An author writing a 900-word tasting note cannot see one rendered heading or blockquote
   before it is live.
-- [ ] `@claude` **CE-2 · 🔴 · M — No autosave, no unsaved guard, no draft recovery**
+- [x] `@claude` **CE-2 · 🔴 · M — No autosave, no unsaved guard, no draft recovery**
   In the two editors holding the longest-lived work. A 40-minute post lives entirely in
   React state — one mis-aimed click on «انصراف» or a sidebar link and it is gone.
   `ProductForm` carries a complete guard that was never extracted.
@@ -696,13 +727,13 @@ modules* rather than around the operator's day.
   a recipe page.*
 - [ ] `@claude` **CE-4 · 🟠 · L — The body editor cannot insert an image, table or product mention**
   The renderer supports all three. A journal post can carry exactly one image — its cover.
-- [ ] `@claude` **CE-5 · 🟠 · L — Recipe method is one free-text blob, reverse-engineered by regex**
+- [x] `@claude` **CE-5 · 🟠 · L — Recipe method is one free-text blob, reverse-engineered by regex**
   Ingredients are structured and steps are not — backwards for the half Google indexes as
   `HowToStep`.
 - [x] `@grok` **CE-6 · 🟠 · M — The recipes board is a dead end past 60 items**
   **Do:** no search, no status filter, no pagination — past 60 recipes the older ones are
   invisible from the admin entirely. The journal board has all three; port that pattern.
-- [ ] `@claude` **CE-7 · 🟠 · M — Slug rename silently breaks every inbound link**
+- [x] `@claude` **CE-7 · 🟠 · M — Slug rename silently breaks every inbound link**
   And the recipe editor's hint actively encourages it. Needs a redirect record, not just a
   warning dialog.
 - [x] `@grok` **CE-8 · 🟡 · M — No publish workflow: no scheduling, no confirm on unpublish**
@@ -728,7 +759,7 @@ modules* rather than around the operator's day.
   A coupon can never be scoped to product #101+ — the operator searches, finds nothing,
   and scopes to a whole category instead, **over-discounting**. And scope set outside that
   window is invisible in the UI while staying live in the backend. Same root cause as PE-4.
-- [ ] `@claude` **CF-3 · 🟠 · L — Customer detail is an identity card, not a customer record**
+- [x] `@claude` **CF-3 · 🟠 · L — Customer detail is an identity card, not a customer record**
   No orders, no wallet balance, no loyalty — and money is minted with no balance in view.
   This is the screen opened when a customer calls, and it answers none of the questions a
   customer asks.
@@ -737,7 +768,7 @@ modules* rather than around the operator's day.
   total, items and payment state are a scroll away, and the payment card omits the amount
   and paid-at date the order already carries. Restructure: money + status + items first,
   address secondary, and add a status timeline from the data already returned.
-- [ ] `@claude` **CF-5 · 🟠 · M — Ten forms silently destroy unsaved work**
+- [x] `@claude` **CF-5 · 🟠 · M — Ten forms silently destroy unsaved work**
   `ProductForm` alone carries a complete navigation guard that was never extracted. The
   coupon form has fourteen fields including two Jalali datetimes and a scope picker.
 - [x] `@grok` **CF-6 · 🟠 · M — The admin reads Jalali and writes Gregorian**
@@ -780,7 +811,7 @@ modules* rather than around the operator's day.
 - [x] `@grok` **CF-17 · 🟡 · S — Let stock adjustments record a reason**
   `damage` is defined in the backend and unreachable from the UI, so the movement log can
   never answer "how much did we lose to breakage".
-- [ ] `@claude` **CF-18 · 🟡 · L — Row selection and bulk actions, starting with inventory**
+- [x] `@claude` **CF-18 · 🟡 · L — Row selection and bulk actions, starting with inventory**
   A 40-bottle delivery costs 40 popovers and 40 server re-renders.
 
 ## C5 — Loyalty: make it a real, modular section
@@ -793,7 +824,7 @@ Containment is already good — **one** loyalty reference exists outside
   referral bonuses, birthday timezone, or any of the four tier thresholds. **Every
   commercial lever of the loyalty programme is unreachable**, and the page describes a
   configuration source it no longer uses.
-- [ ] `@claude` **L-2 · 🟠 · M — The kill-switch is dropped at the type boundary**
+- [x] `@claude` **L-2 · 🟠 · M — The kill-switch is dropped at the type boundary**
   The feature-flag capability you asked for **is already built in the backend** and
   invisible in the UI — nothing in admin can set it. Plumb the flag through the type and
   add the control. *This is what makes "the whole section can be switched off" true.*
@@ -816,11 +847,11 @@ Containment is already good — **one** loyalty reference exists outside
   The query parameter is already plumbed on both sides. A member with a year of history
   has hundreds of `order_paid` rows; reconciling a dispute means paging through all of
   them. Add the filter control.
-- [ ] `@claude` **L-8 · 🟡 · M — No loyalty permission exists**
+- [x] `@claude` **L-8 · 🟡 · M — No loyalty permission exists**
   Point-minting rides on customer-edit, so anyone who can correct a phone number can mint
   unlimited points — and a loyalty specialist cannot be granted access without customer
   edit. Blocks granting or hiding the section independently.
-- [ ] `@claude` **L-9 · 🟡 · L — No programme-level operational view**
+- [x] `@claude` **L-9 · 🟡 · L — No programme-level operational view**
   Points liability, tier distribution and birthday-job health are all invisible — the three
   questions a loyalty programme is actually managed by.
 - [x] `@grok` **L-10 · 🟡 · S — Give the module an API client and cut its two outbound deps**
@@ -851,9 +882,9 @@ Containment is already good — **one** loyalty reference exists outside
 | Phase 0 — Stop the bleeding | 7 | 2 | 9 |
 | Phase 1 — Safety net | 2 | 3 | 5 |
 | Track A — Backend / Kafka | 6 | 11 | 17 |
-| Track B — Design + storefront | 24 | 7 | 31 |
-| Track C — Admin dashboard | 35 | 27 | 62 |
-| **Total** | **74** | **50** | **124** |
+| Track B — Design + storefront | 26 | 7 | 33 |
+| Track C — Admin dashboard | 36 | 27 | 63 |
+| **Total** | **77** | **50** | **127** |
 
 **Suggested start.** grok: P0-2 → P0-3 → P0-4 → P0-5 → P0-6 (one afternoon of token and
 typography fixes that changes how the whole product feels). claude: P0-1 → P0-7 → P1-2,

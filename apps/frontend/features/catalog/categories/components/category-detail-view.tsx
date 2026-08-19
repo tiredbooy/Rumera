@@ -16,6 +16,7 @@ import {
   categoryPath,
   parseCategoryRouteQuery,
   type CategoryPageSearchParams,
+  categoryRedirectHref,
 } from "@/features/catalog/categories/routing";
 import {
   findCategoryContext,
@@ -46,7 +47,7 @@ export async function CategoryDetailView({
   const canonicalSlug = category.slug?.trim() || requestedSlug;
   const basePath = categoryPath(canonicalSlug);
   if (query.needsRedirect || canonicalSlug !== requestedSlug) {
-    redirect(categoryPageHref(basePath, query, query.page));
+    redirect(categoryRedirectHref(basePath, query, query.page));
   }
 
   const context = findCategoryContext(tree, category.id);

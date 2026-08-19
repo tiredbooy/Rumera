@@ -34,6 +34,9 @@ type Service interface {
 
 	GetByID(ctx context.Context, id int64) (*RecipeDetailResponse, error)
 	GetPublishedBySlug(ctx context.Context, slug string) (*RecipeDetailResponse, error)
+	// ResolveSlugRedirect answers the 404 path: the current slug a retired one
+	// now belongs to, or apperr.ErrNotFound when nothing claims it.
+	ResolveSlugRedirect(ctx context.Context, slug string) (string, error)
 	List(ctx context.Context, filter RecipeFilter) ([]*Recipe, int64, error)
 	RecordView(ctx context.Context, id int64) error
 
@@ -67,6 +70,22 @@ func (s *service) GetPublishedBySlug(ctx context.Context, slug string) (*RecipeD
 		return nil, apperr.ErrInvalidRequest
 	}
 	return s.hydrate(ctx, func() (*Recipe, error) { return s.repo.GetPublishedBySlug(ctx, slug) })
+}
+
+// ResolveSlugRedirect is only ever reached after a live lookup missed, so a live
+// slug always outranks a redirect record.
+func (s *service) ResolveSlugRedirect(ctx context.Context, slug string) (string, error) {
+	if slug == "" {
+		return "", apperr.ErrInvalidRequest
+	}
+	target, err := s.repo.ResolveSlugRedirect(ctx, slug)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return "", apperr.ErrNotFound
+		}
+		return "", fmt.Errorf("service.ResolveSlugRedirect: %w", err)
+	}
+	return target, nil
 }
 
 func (s *service) List(ctx context.Context, filter RecipeFilter) ([]*Recipe, int64, error) {
@@ -200,6 +219,11 @@ func (s *service) Create(ctx context.Context, req *RecipeReq) (*RecipeDetailResp
 	if err := txRepo.AssignTags(ctx, recipe.ID, req.TagIDs); err != nil {
 		return nil, fmt.Errorf("service.Create: tags: %w", err)
 	}
+	// A new recipe re-using a retired slug takes it over outright — otherwise the
+	// old record would keep sending that traffic to different content.
+	if err := txRepo.ReleaseSlugRedirect(ctx, recipe.Slug); err != nil {
+		return nil, fmt.Errorf("service.Create: %w", err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("service.Create: commit: %w", err)
@@ -264,6 +288,7 @@ func (s *service) Update(ctx context.Context, id int64, req *RecipeUpdateReq) (*
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	txRepo := s.repo.WithTx(tx)
+	var previousSlug string
 	if req.Slug != nil {
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, recipeSlugWriteLockKey); err != nil {
 			return nil, fmt.Errorf("service.Update: lock slug writes: %w", err)
@@ -275,6 +300,7 @@ func (s *service) Update(ctx context.Context, id int64, req *RecipeUpdateReq) (*
 			}
 			return nil, fmt.Errorf("service.Update: %w", slugErr)
 		}
+		previousSlug = current.Slug
 		exists, existsErr := txRepo.SlugExists(ctx, *req.Slug)
 		if existsErr != nil {
 			return nil, fmt.Errorf("service.Update: %w", existsErr)
@@ -319,6 +345,18 @@ func (s *service) Update(ctx context.Context, id int64, req *RecipeUpdateReq) (*
 		}
 		if err := txRepo.AssignTags(ctx, id, req.TagIDs); err != nil {
 			return nil, fmt.Errorf("service.Update: tags: %w", err)
+		}
+	}
+
+	// A rename must not 404 every inbound link. The retired slug becomes a record
+	// pointing at this recipe's id, and the slug we just moved onto stops
+	// redirecting anywhere — both in the same transaction as the rename itself.
+	if previousSlug != "" && previousSlug != recipe.Slug {
+		if err := txRepo.ReleaseSlugRedirect(ctx, recipe.Slug); err != nil {
+			return nil, fmt.Errorf("service.Update: %w", err)
+		}
+		if err := txRepo.RecordSlugRedirect(ctx, previousSlug, id); err != nil {
+			return nil, fmt.Errorf("service.Update: %w", err)
 		}
 	}
 

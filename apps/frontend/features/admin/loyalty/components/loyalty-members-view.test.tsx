@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/api/errors";
 
 const mocks = vi.hoisted(() => ({
   listLoyaltyMembers: vi.fn(),
+  getLoyaltyProgramme: vi.fn(),
   refresh: vi.fn(),
 }));
 
@@ -19,11 +20,13 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("../api/server", () => ({
   listLoyaltyMembers: mocks.listLoyaltyMembers,
+  getLoyaltyProgramme: mocks.getLoyaltyProgramme,
 }));
 
 import { LoyaltyMembersFilters } from "./loyalty-members-filters";
 import {
   LoyaltyMembersTable,
+  LoyaltyMembersView,
   membersPageHref,
 } from "./loyalty-members-view";
 
@@ -39,6 +42,7 @@ const member = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.getLoyaltyProgramme.mockResolvedValue({ enabled: true });
   mocks.listLoyaltyMembers.mockResolvedValue({
     results: [member],
     pagination: {
@@ -169,6 +173,23 @@ describe("admin loyalty member search", () => {
       ).rejects.toBe(error);
     },
   );
+
+  // L-2: switching the programme off has to close the section, not just stop
+  // one card rendering — the member list must never load behind the switch.
+  it("closes the section when the kill switch is off", async () => {
+    mocks.getLoyaltyProgramme.mockResolvedValue({ enabled: false });
+
+    await expect(LoyaltyMembersView({ searchParams: {} })).rejects.toThrow(
+      "NEXT_REDIRECT",
+    );
+    expect(mocks.listLoyaltyMembers).not.toHaveBeenCalled();
+  });
+
+  it("renders the section while the kill switch is on", async () => {
+    await expect(
+      LoyaltyMembersView({ searchParams: {} }),
+    ).resolves.toBeTruthy();
+  });
 
   it("builds list hrefs with q, tier, sort, and page", () => {
     expect(

@@ -8,6 +8,10 @@ import { Controller, useForm } from "react-hook-form";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { apiErrorMessage } from "@/lib/api/user-facing-error";
 
 import { Button } from "@/components/ui/button";
@@ -55,13 +59,14 @@ export function ShippingZoneForm({
     control,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<ShippingZoneFormValues>({
     resolver: zodResolver(shippingZoneFormSchema),
     defaultValues: shippingZoneFormDefaults(zone),
   });
 
   const busy = isSubmitting || createZone.isPending || updateZone.isPending;
+  const guard = useUnsavedChangesGuard({ enabled: isDirty, isSaving: busy });
 
   function applyError(error: unknown) {
     if (error instanceof ShippingApiError) {
@@ -92,6 +97,7 @@ export function ShippingZoneForm({
           toCreateShippingZoneInput(values),
         );
         toast.success("منطقهٔ ارسال ساخته شد؛ اکنون روش‌های آن را اضافه کنید");
+        guard.release();
         router.push(`/admin/shipping/${created.id}`);
       } else {
         if (!zone) return;
@@ -100,6 +106,7 @@ export function ShippingZoneForm({
           input: toUpdateShippingZoneInput(values, zone),
         });
         toast.success("تغییرات منطقهٔ ارسال ذخیره شد");
+        guard.release();
         router.push("/admin/shipping");
       }
       router.refresh();
@@ -235,6 +242,8 @@ export function ShippingZoneForm({
           {mode === "create" ? "ساخت منطقه" : "ذخیرهٔ تغییرات"}
         </Button>
       </div>
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
     </form>
   );
 }

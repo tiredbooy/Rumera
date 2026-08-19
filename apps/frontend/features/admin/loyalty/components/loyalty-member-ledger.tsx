@@ -155,6 +155,9 @@ export function LoyaltyMemberLedgerView({
                   علت
                 </TableHead>
                 <TableHead className="h-10 text-xs font-medium text-muted-foreground">
+                  ثبت‌کننده
+                </TableHead>
+                <TableHead className="h-10 text-xs font-medium text-muted-foreground">
                   مرجع
                 </TableHead>
                 <TableHead className="h-10 text-end text-xs font-medium text-muted-foreground">
@@ -165,7 +168,10 @@ export function LoyaltyMemberLedgerView({
             <TableBody>
               {transactions.map((tx) => (
                 <TableRow key={tx.id} className="border-border/40">
-                  <TableCell className="font-mono text-xs tabular-nums" dir="ltr">
+                  <TableCell
+                    className="font-mono text-xs tabular-nums"
+                    dir="ltr"
+                  >
                     {faNum(tx.id)}
                   </TableCell>
                   <TableCell
@@ -178,11 +184,22 @@ export function LoyaltyMemberLedgerView({
                   >
                     {signedPoints(tx.delta)}
                   </TableCell>
-                  <TableCell>
-                    <span className="block">{loyaltyReasonLabel(tx.reason)}</span>
+                  <TableCell className="max-w-[18rem]">
+                    <span className="block">
+                      {loyaltyReasonLabel(tx.reason)}
+                    </span>
                     <span className="font-mono text-[0.7rem] text-muted-foreground">
                       {tx.reason}
                     </span>
+                    {/* L-4: why, in the operator's own words, from the ledger. */}
+                    {tx.note ? (
+                      <span className="mt-1 block text-xs text-foreground/80">
+                        <bdi dir="auto">{tx.note}</bdi>
+                      </span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="max-w-[12rem]">
+                    <LedgerActor tx={tx} />
                   </TableCell>
                   <TableCell className="max-w-[16rem]">
                     <span className="block text-xs">{tx.ref_type || "—"}</span>
@@ -218,6 +235,42 @@ export function LoyaltyMemberLedgerView({
   );
 }
 
+/**
+ * L-4: who minted this row. `actor_label` is the name snapshotted when the
+ * points moved, so a deactivated colleague still reads as a person. A row that
+ * only carries a UUID predates the attribution columns — the migration
+ * recovered the id from `ref_id` but no name was ever captured for it. No
+ * actor at all means an automated earn path, not a missing record.
+ */
+function LedgerActor({ tx }: { tx: LoyaltyMemberTransaction }) {
+  const label = tx.actor_label?.trim();
+  if (!label && !tx.actor_user_id) {
+    return <span className="text-xs text-muted-foreground">سامانه</span>;
+  }
+  return (
+    <>
+      {label ? (
+        <span className="block truncate" title={label}>
+          <bdi dir="auto">{label}</bdi>
+        </span>
+      ) : (
+        <span className="block text-xs text-muted-foreground">
+          نام ثبت‌نشده
+        </span>
+      )}
+      {tx.actor_user_id ? (
+        <span
+          className="block truncate font-mono text-[0.7rem] text-muted-foreground"
+          dir="ltr"
+          title={tx.actor_user_id}
+        >
+          {tx.actor_user_id}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 function LedgerHeading({ totalItems }: { totalItems: number | null }) {
   return (
     <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
@@ -230,7 +283,8 @@ function LedgerHeading({ totalItems }: { totalItems: number | null }) {
           دفتر کل امتیاز
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          شامل شناسه، دلتا، علت و مراجع (`ref_type` / `ref_id`).
+          شامل شناسه، دلتا، علت، ثبت‌کننده و یادداشت، و مراجع (`ref_type` /
+          `ref_id`).
         </p>
       </div>
       {totalItems !== null ? (

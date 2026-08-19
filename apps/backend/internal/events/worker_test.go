@@ -395,12 +395,12 @@ type recordingObserver struct {
 }
 
 func (o *recordingObserver) Consumed(string, string, string, time.Duration) {}
-func (o *recordingObserver) Retried(string, string)                        {}
-func (o *recordingObserver) DeadLettered(string, string)                   {}
-func (o *recordingObserver) Published(string, string)                      {}
-func (o *recordingObserver) Depth(string, int64)                           {}
-func (o *recordingObserver) Lag(d time.Duration)                           { o.lag = d }
-func (o *recordingObserver) RelayLag(d time.Duration)                      { o.relayLag = d; o.relayCalls++ }
+func (o *recordingObserver) Retried(string, string)                         {}
+func (o *recordingObserver) DeadLettered(string, string)                    {}
+func (o *recordingObserver) Published(string, string)                       {}
+func (o *recordingObserver) Depth(string, int64)                            {}
+func (o *recordingObserver) Lag(d time.Duration)                            { o.lag = d }
+func (o *recordingObserver) RelayLag(d time.Duration)                       { o.relayLag = d; o.relayCalls++ }
 
 // K-3, the exact blind spot: with the broker down nothing is published and no
 // consumption rows are ever created, so the outbox gauge — derived from those
@@ -847,5 +847,77 @@ func TestPruneKeepsNeverFannedOutFacts(t *testing.T) {
 	}
 	if store.EventCount() != 1 {
 		t.Error("a fact that no consumer had seen yet was deleted")
+	}
+}
+
+// leaseSpy records the visibility timeout ConsumeOnce claims with.
+type leaseSpy struct {
+	Store
+	lease time.Duration
+}
+
+func (s *leaseSpy) ClaimDue(ctx context.Context, limit int, lease time.Duration) ([]Due, error) {
+	s.lease = lease
+	return s.Store.ClaimDue(ctx, limit, lease)
+}
+
+// leaseDuration claims to be "comfortably longer than the handler timeout so a
+// slow-but-alive handler never has its row stolen by another loop". A lease at
+// or below the timeout means a handler that runs to its full budget has its row
+// re-claimed while it is still working — every side effect runs twice.
+func TestLeaseOutlivesHandlerTimeoutSoARowIsNotStolen(t *testing.T) {
+	for _, timeout := range []time.Duration{0, time.Second, 30 * time.Second, 10 * time.Minute} {
+		w := newTestWorker(t, NewMemoryStore(), Config{HandlerTimeout: timeout},
+			&countingHandler{name: "c", types: []string{TypeOrderPaidV1}})
+		if got := w.leaseDuration(); got <= w.cfg.HandlerTimeout {
+			t.Errorf("HandlerTimeout %s: lease = %s; a handler using its whole budget would have its row stolen",
+				timeout, got)
+		}
+	}
+
+	// And the consume loop must actually claim with it — a lease computed but
+	// not passed is the same as no lease at all.
+	spy := &leaseSpy{Store: NewMemoryStore()}
+	w := newTestWorker(t, spy, Config{HandlerTimeout: 5 * time.Second},
+		&countingHandler{name: "c", types: []string{TypeOrderPaidV1}})
+	mustEnqueue(t, spy, TypeOrderPaidV1, "order:23", OrderPaidKey(23), OrderPaidData{OrderID: 23})
+	ctx := context.Background()
+	if _, err := w.FanOutOnce(ctx); err != nil {
+		t.Fatalf("FanOutOnce: %v", err)
+	}
+	if _, err := w.ConsumeOnce(ctx); err != nil {
+		t.Fatalf("ConsumeOnce: %v", err)
+	}
+	if spy.lease != w.leaseDuration() {
+		t.Errorf("ConsumeOnce claimed with lease %s; want %s", spy.lease, w.leaseDuration())
+	}
+}
+
+// PartitionKey "falls back to the subject, then to a constant so a message is
+// never keyless". A keyless Kafka record is round-robined across partitions, so
+// two facts about one order can be consumed out of order.
+func TestPartitionKeyIsNeverEmpty(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  *Envelope
+		want string
+	}{
+		{"explicit partition key", &Envelope{Subject: "order:1", Rumera: Meta{PartitionKey: "pk"}}, "pk"},
+		{"falls back to subject", &Envelope{Subject: "order:1"}, "order:1"},
+		{"subjectless fact still keyed", &Envelope{}, "default"},
+	} {
+		if got := tc.env.PartitionKey(); got != tc.want {
+			t.Errorf("%s: PartitionKey() = %q; want %q", tc.name, got, tc.want)
+		}
+	}
+
+	// New() seeds the key from the subject, so a fact built the normal way is
+	// keyed even before anything stamps it.
+	env, err := New(TypeOrderPaidV1, "", OrderPaidKey(1), OrderPaidData{OrderID: 1})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if env.PartitionKey() == "" {
+		t.Error("a fact built with no subject produced a keyless message")
 	}
 }

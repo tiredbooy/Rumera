@@ -242,6 +242,13 @@ type AdminUser struct {
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
 	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`
 	UpdatedAt       time.Time  `json:"updated_at"`
+	// WalletBalance is the customer's live wallet balance as an exact decimal
+	// string ("125000.00"). CF-3: the customer file is where an operator mints
+	// wallet credit, and it used to do so with no balance in view — the person
+	// granting money could not see what the customer already had. Only the
+	// detail read fills it; omitempty keeps it off the create/update/ban
+	// responses rather than shipping a "0.00" they never looked up.
+	WalletBalance string `json:"wallet_balance,omitempty"`
 }
 
 type UserListItem struct {

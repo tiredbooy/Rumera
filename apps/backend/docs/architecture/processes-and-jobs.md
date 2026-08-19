@@ -186,6 +186,43 @@ with stack traces. Long-lived workers (analytics queue Start, cron, HTTP
 |-------------|-----------|
 | Local dev | Compose: `backend` (server) + frontend + DBs; notifications often **inline** |
 | Staging async | server (`NOTIFICATIONS_MODE=async`) + `notification-worker` + Redpanda/Kafka |
-| Production | server replicas + worker replicas + managed Postgres/Redis/Meili/Kafka; optional separate cron only if you extract jobs later |
+| Production | **one** `server` + `notification-worker` + `event-worker` + managed Postgres/Redis/Meili/Kafka — see the replica story below |
 
 Do **not** run multiple seeders against production as a “sync” tool.
+
+---
+
+## The replica story (A-6)
+
+**Decision: the API runs as a single `server` process.** The workers scale
+independently; the API does not, and nothing in the code stops you from starting a
+second one — it just misbehaves quietly. This section is the written-down version
+of that, because the constraint was previously only implicit in the code.
+
+Everything below was verified against the code, not assumed.
+
+| Per-process state | Where | What a second replica does |
+|---|---|---|
+| **Cron scheduler** | `internal/corn/runner.go` — plain `robfig/cron`, **no advisory lock** | Every job fires once *per replica*. Most are idempotent by key (`alert_check` stamps `notified_at` after dispatch; birthday awards key on `{user,year}`; roll-ups upsert; reservation TTL uses a CAS), so this is duplicated work rather than duplicated effects — but nothing enforces that for the *next* job someone adds. |
+| **Global rate limiter** | `pkg/middleware/ratelimit.go`, mounted in `bootstrap/setupMiddlewares.go` (100 req/s, burst 200) | A per-process token bucket. N replicas = N × the configured limit, and a client pinned to one replica by the load balancer sees a different limit than one that is round-robined. |
+| **Analytics buffer** | `internal/analytics/queue.go` (10k events) | Per replica, which is fine — capacity multiplies and each process drains its own buffer on SIGTERM (P1-5). Not a blocker. |
+| **Embedded event consumers** | `EVENTS_WORKER=embedded` (default) | Every replica joins the consumer group, so every rolling deploy triggers a rebalance and handler slots compete with checkout for the DB pool. This is exactly why production runs `EVENTS_WORKER=external` and `cmd/event-worker` (Q2 / K-9). |
+| **Uploaded media** | local filesystem | Requires shared POSIX storage across processes — see [operations.md → Process topology](../operations.md). |
+| **Next.js cache tags** | frontend | `updateTags`/`refreshTags` are process-local; replicas can serve different ISR generations after an admin write. |
+
+Already shared, so **not** blockers: the auth/OTP throttle (Redis fixed window with
+a per-process fallback, `internal/middlewares/ratelimit.go`), the read-through
+cache (Redis), media reconciliation (globally locked in Postgres), and the event
+outbox relay (`FOR UPDATE SKIP LOCKED`).
+
+### Before running N > 1 `server` processes
+
+1. `CRON_ENABLED=true` on **exactly one** process — or extract the jobs into their
+   own binary. Never on all of them.
+2. `EVENTS_WORKER=external` on every API replica; `cmd/event-worker` owns consumption.
+3. Move the global limiter to the shared Redis counter the auth limiter already
+   uses, or accept N × the limit and say so in the runbook.
+4. Shared POSIX media storage, and a shared Next cache for the frontend.
+
+Until all four hold, "server replicas" is a configuration that boots, serves
+traffic and does the wrong thing without an error anywhere.

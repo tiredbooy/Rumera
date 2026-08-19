@@ -64,8 +64,20 @@ const programme: LoyaltyProgramme = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.update.mockResolvedValue(programme);
+  // Radix Switch measures its thumb; jsdom has no ResizeObserver.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 function editAndSave(label: RegExp, value: string) {
   render(<LoyaltyProgrammeForm programme={programme} />);
@@ -88,9 +100,8 @@ describe("LoyaltyProgrammeForm", () => {
   });
 
   // The server validates `enabled` as required, so a save that drops it is a
-  // 422 on every submit — the kill switch has to round-trip even though this
-  // form does not expose a control for it (that is L-2).
-  it("round-trips the kill switch it does not edit", async () => {
+  // 422 on every submit — every save carries the switch, edited or not.
+  it("round-trips the kill switch when another lever is edited", async () => {
     mocks.update.mockResolvedValue({ ...programme, enabled: false });
     render(
       <LoyaltyProgrammeForm programme={{ ...programme, enabled: false }} />,
@@ -102,6 +113,40 @@ describe("LoyaltyProgrammeForm", () => {
 
     await waitFor(() => expect(mocks.update).toHaveBeenCalledOnce());
     expect(mocks.update.mock.calls[0][0].enabled).toBe(false);
+  });
+
+  // L-2: the switch the backend has always honoured is finally settable.
+  it("switches the programme off and warns before the save", async () => {
+    render(<LoyaltyProgrammeForm programme={programme} />);
+    const toggle = screen.getByRole("switch", {
+      name: /باشگاه مشتریان فعال باشد/,
+    });
+    expect(toggle).toBeChecked();
+
+    fireEvent.click(toggle);
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /تنها همین صفحه در بخش باشگاه در دسترس می‌ماند/,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /ذخیرهٔ تغییرات/ }));
+
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledOnce());
+    expect(mocks.update.mock.calls[0][0].enabled).toBe(false);
+    // The rest of the programme rides along untouched — the PUT is a replace.
+    expect(mocks.update.mock.calls[0][0].earn_divisor).toBe(10000);
+  });
+
+  it("switches a dark programme back on", async () => {
+    render(
+      <LoyaltyProgrammeForm programme={{ ...programme, enabled: false }} />,
+    );
+    fireEvent.click(
+      screen.getByRole("switch", { name: /باشگاه مشتریان فعال باشد/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /ذخیرهٔ تغییرات/ }));
+
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledOnce());
+    expect(mocks.update.mock.calls[0][0].enabled).toBe(true);
   });
 
   it("submits numbers and the full tier list, not form strings", async () => {

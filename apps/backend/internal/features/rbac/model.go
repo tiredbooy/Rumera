@@ -26,7 +26,13 @@ const (
 	PermCustomersBan   = "customers:ban"
 	// PermWalletCredit mints ledger money via POST /admin/users/:id/wallet/credit.
 	// Isolated from customers:write so the default staff seed cannot print money (PR-040c).
-	PermWalletCredit   = "wallet:credit"
+	PermWalletCredit = "wallet:credit"
+	// PermLoyaltyAdjust mints loyalty points via POST /admin/users/:id/loyalty/adjust.
+	// Same isolation as wallet:credit (L-8): correcting a phone number is
+	// customers:write and must not also grant unlimited point minting. It ORs
+	// into the Cellar Club read group so a loyalty specialist is grantable
+	// without customers:write.
+	PermLoyaltyAdjust  = "loyalty:adjust"
 	PermReviewsRead    = "reviews:read"
 	PermReviewsMod     = "reviews:moderate"
 	PermRecipesRead    = "recipes:read"
@@ -53,6 +59,7 @@ func AllKnownPermissions() []string {
 		PermOrdersRead, PermOrdersWrite, PermOrdersRefund,
 		PermPaymentsRead, PermCouponsManage, PermShippingManage, PermGiftCardsIssue,
 		PermCustomersRead, PermCustomersWrite, PermCustomersBan, PermWalletCredit,
+		PermLoyaltyAdjust,
 		PermReviewsRead, PermReviewsMod,
 		PermRecipesRead, PermRecipesWrite,
 		PermJournalRead, PermJournalWrite,

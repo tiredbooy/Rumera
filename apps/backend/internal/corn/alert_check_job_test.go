@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/tiredbooy/internal/features/alerts"
 	"github.com/tiredbooy/pkg/notify"
@@ -187,7 +188,7 @@ type fakeAlertDispatcher struct {
 	sent    []int64
 }
 
-func (d *fakeAlertDispatcher) DispatchAlert(_ context.Context, _, _, _ string, alertID int64, _ string) error {
+func (d *fakeAlertDispatcher) DispatchAlert(_ context.Context, _, _, _ string, alertID int64, _ time.Time, _ string) error {
 	if err, ok := d.failIDs[alertID]; ok {
 		return err
 	}

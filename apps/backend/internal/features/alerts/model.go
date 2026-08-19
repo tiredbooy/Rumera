@@ -58,4 +58,8 @@ type PendingAlert struct {
 	ProductTitle string    `db:"product_title"`
 	ProductSlug  *string   `db:"product_slug"`
 	CurrentPrice float64   `db:"current_price"`
+	// CreatedAt is reset to NOW() on re-subscribe (ON CONFLICT). It is the
+	// arming token DispatchAlert keys on so a new subscription is not
+	// swallowed by the previous send's idempotency row.
+	CreatedAt time.Time `db:"created_at"`
 }

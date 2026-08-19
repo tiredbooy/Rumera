@@ -5,6 +5,7 @@ import {
   categoryFilterHref,
   categoryPageHref,
   categoryPath,
+  categoryRedirectHref,
   parseCategoryPage,
   parseCategoryRouteQuery,
 } from "./routing";
@@ -105,8 +106,30 @@ describe("category detail routing", () => {
       page: 1,
       needsRedirect: true,
     });
+    // U-4: a campaign param is not a malformed URL. It rides along instead of
+    // triggering a redirect that would strip it before analytics ever saw it.
     expect(parseCategoryRouteQuery({ availability: "in-stock" })).toMatchObject(
-      { page: 1, sort: "newest", needsRedirect: true },
+      { page: 1, sort: "newest", needsRedirect: false },
+    );
+
+    const campaign = parseCategoryRouteQuery({
+      page: "1",
+      utm_source: "google",
+      utm_medium: "cpc",
+      gclid: "abc123",
+    });
+    expect(campaign.needsRedirect).toBe(true);
+    const corrected = categoryRedirectHref(
+      categoryPath("x"),
+      campaign,
+      campaign.page,
+    );
+    expect(corrected).toContain("utm_source=google");
+    expect(corrected).toContain("utm_medium=cpc");
+    expect(corrected).toContain("gclid=abc123");
+    // Internal links stay campaign-free — attribution must not propagate.
+    expect(categoryPageHref(categoryPath("x"), campaign, 2)).not.toContain(
+      "utm_source",
     );
   });
 

@@ -3,6 +3,7 @@
  * Returns the backend's JSON body verbatim (callers pick `.data` or `.results`)
  * and throws a typed error from the `{ error }` envelope.
  */
+import { readJsonOrNull } from "./read-json"
 import type { ApiErrorEnvelope, ApiFieldErrors } from "./types"
 
 export class ApiClientError extends Error {
@@ -27,8 +28,15 @@ export async function storeRequest<T>(path: string, opts: RequestInit = {}): Pro
   })
 
   if (res.status === 204) return undefined as T
+  if (res.status === 304) {
+    throw new ApiClientError(
+      304,
+      "NOT_MODIFIED",
+      res.statusText || "Not Modified",
+    )
+  }
 
-  const body: unknown = await res.json().catch(() => null)
+  const body: unknown = await readJsonOrNull(res)
   if (!res.ok) {
     const error = (body as ApiErrorEnvelope | null)?.error
     throw new ApiClientError(

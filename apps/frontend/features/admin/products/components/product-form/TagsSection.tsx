@@ -31,7 +31,6 @@ export function TagsSection({
       description="برای دسته‌بندی و کشف بهتر محصول در فروشگاه"
       icon={<Tags />}
       collapsible
-      defaultOpen={Boolean(initialTags?.length)}
       hasError={Boolean(errors.tag_ids)}
       summary={
         selectedTags.length

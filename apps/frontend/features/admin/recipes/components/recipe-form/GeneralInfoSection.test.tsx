@@ -63,8 +63,13 @@ describe("GeneralInfoSection editorial fields", () => {
     expect(screen.getByText(/۵۰۰/)).toBeInTheDocument();
   });
 
-  it("warns that renaming the slug changes the public URL", () => {
+  it("says what a rename actually does to the old public URL", () => {
     render(<Harness mode="edit" />);
-    expect(screen.getByText(editorialSlugHint("edit"))).toBeInTheDocument();
+    const hint = screen.getByText(editorialSlugHint("edit"));
+    expect(hint).toBeInTheDocument();
+    // Not "the URL changes" and nothing more: the editor has to know the old
+    // link survives via a permanent redirect, and when that redirect dies.
+    expect(hint.textContent).toContain("تغییر مسیر دائمی");
+    expect(hint.textContent).toContain("از کار می‌افتد");
   });
 });

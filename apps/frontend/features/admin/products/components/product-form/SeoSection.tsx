@@ -26,7 +26,6 @@ export function SeoSection({
       description="نمایش محصول در موتورهای جست‌وجو"
       icon={<Search />}
       collapsible
-      defaultOpen={false}
       hasError={hasError}
     >
       <FormField

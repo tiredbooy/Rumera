@@ -9,6 +9,7 @@ import {
 
 import { JsonLd } from "@/components/json-ld";
 import { getCategoryTree } from "@/features/catalog/categories/api";
+import { isProductionBuild } from "@/lib/next-phase";
 import { CategoryDirectoryCard } from "@/features/catalog/categories/components/category-directory-card";
 import type { CategoryTree } from "@/features/catalog/categories/types";
 import {
@@ -27,7 +28,12 @@ import { absoluteUrl } from "@/lib/site";
  * `SmartImage` keeps missing or failed media intentional.
  */
 export async function CategoryIndexView() {
-  const tree: CategoryTree[] = await getCategoryTree();
+  // Prerender must not die because host :8080 is some other process
+  // (health 200, Rumera routes 404). Runtime still surfaces the error.
+  const tree: CategoryTree[] = await getCategoryTree().catch((error) => {
+    if (isProductionBuild()) return [];
+    throw error;
+  });
   const routeableCategoryCount = countRouteableCategories(tree);
 
   return (

@@ -8,8 +8,11 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"path"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -282,6 +285,70 @@ func (s *Service) UploadImage(ctx context.Context, folder string, data []byte) (
 		return nil, apperr.ErrInternal
 	}
 	return &UploadResult{URL: url, Key: key, Width: w, Height: h}, nil
+}
+
+// ── Media library ───────────────────────────────────────────────────────────
+
+// LibraryItem is one reusable original from the media library.
+type LibraryItem struct {
+	URL        string    `json:"url"`
+	Key        string    `json:"key"`
+	Size       int64     `json:"size"`
+	ModifiedAt time.Time `json:"modified_at"`
+}
+
+const (
+	libraryDefaultLimit = 60
+	libraryMaxLimit     = 200
+)
+
+// ListLibrary returns stored originals newest first, so an editor can reuse an
+// image that is already on the site instead of uploading it a second time.
+// Rendered variants live in a separate cache store and never appear here.
+//
+// ponytail: one walk of the originals namespace per request, filtered in Go.
+// Fine for the low thousands of objects this store holds; index the keys in a
+// table if listing ever shows up in a latency profile.
+func (s *Service) ListLibrary(ctx context.Context, search string, limit int) ([]LibraryItem, error) {
+	if limit <= 0 {
+		limit = libraryDefaultLimit
+	}
+	if limit > libraryMaxLimit {
+		limit = libraryMaxLimit
+	}
+	objects, err := s.store.List(ctx, "")
+	if err != nil {
+		s.log.Error("media: list library", zap.Error(err))
+		return nil, apperr.ErrInternal
+	}
+
+	needle := strings.ToLower(strings.TrimSpace(search))
+	items := make([]LibraryItem, 0, len(objects))
+	for _, object := range objects {
+		if !isStoredImageExtension(strings.ToLower(strings.TrimPrefix(path.Ext(object.Key), "."))) {
+			continue
+		}
+		if needle != "" && !strings.Contains(strings.ToLower(object.Key), needle) {
+			continue
+		}
+		url, err := canonicalMediaPath(object.Key)
+		if err != nil {
+			continue
+		}
+		items = append(items, LibraryItem{
+			URL:        url,
+			Key:        object.Key,
+			Size:       object.Size,
+			ModifiedAt: object.ModTime,
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ModifiedAt.After(items[j].ModifiedAt)
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
 }
 
 // UploadOwnerImage stores one immutable content image and atomically attaches

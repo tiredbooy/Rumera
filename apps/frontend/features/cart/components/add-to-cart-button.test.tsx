@@ -41,12 +41,15 @@ vi.mock("@/features/recommendations/hooks", () => ({
   useRecordInteraction: () => ({ mutateAsync: mocks.mutateAsync }),
 }));
 
+import { takeAddToCartIntent } from "@/features/cart/pending-intent";
+
 import { AddToCartButton } from "./add-to-cart-button";
 
 afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
   mocks.status = "authenticated";
   mocks.mutateAsync.mockResolvedValue(undefined);
 });
@@ -93,6 +96,31 @@ describe("AddToCartButton", () => {
 
     expect(mocks.error).toHaveBeenCalledWith("موجودی کافی نیست");
     expect(mocks.success).not.toHaveBeenCalled();
+  });
+
+  it("stashes the intent before bouncing a guest to login", () => {
+    mocks.status = "unauthenticated";
+    render(<AddToCartButton productVariantId={17} quantity={2} />);
+    fireEvent.click(screen.getByRole("button", { name: "افزودن به سبد" }));
+
+    expect(mocks.mutate).not.toHaveBeenCalled();
+    expect(mocks.push).toHaveBeenCalledWith(
+      expect.stringContaining("/login?callbackUrl="),
+    );
+    // Replayed once after login by <PendingCartIntent /> (U-8).
+    expect(takeAddToCartIntent()).toEqual({
+      product_variant_id: 17,
+      quantity: 2,
+    });
+  });
+
+  it("does not stash an unbuyable product when a guest is bounced", () => {
+    mocks.status = "unauthenticated";
+    render(<AddToCartButton />);
+    fireEvent.click(screen.getByRole("button", { name: "افزودن به سبد" }));
+
+    expect(mocks.push).toHaveBeenCalled();
+    expect(takeAddToCartIntent()).toBeNull();
   });
 
   it("rejects missing variants before making a cart request", () => {

@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { Package } from "lucide-react";
 
-import { ADMIN_NAV, ACCOUNT_NAV, applyNavBadges, filterNav } from "./nav";
+import {
+  ADMIN_NAV,
+  ACCOUNT_NAV,
+  applyNavBadges,
+  filterNav,
+  groupBadgeTotal,
+  isAccordionGroup,
+} from "./nav";
 import { PERMISSIONS } from "./permissions";
 
 function hrefs(permissions: (typeof PERMISSIONS)[keyof typeof PERMISSIONS][]) {
@@ -68,7 +75,7 @@ describe("admin module navigation", () => {
     ]);
 
     const setup = ADMIN_NAV.find((g) => g.title === "پیکربندی");
-    expect(setup?.collapsible).toBe(true);
+    expect(setup && isAccordionGroup(setup)).toBe(true);
     expect(setup?.defaultCollapsed).toBe(true);
     expect(setup?.items.map((i) => i.href)).toEqual(
       expect.arrayContaining([
@@ -119,6 +126,14 @@ describe("admin module navigation", () => {
     expect(daily.items[0].badge).toBe(4);
     expect(daily.items[1].badge).toBeUndefined();
     expect(daily.items[2].badge).toBeUndefined();
+    expect(groupBadgeTotal(daily)).toBe(4);
+  });
+
+  it("treats a one-item group as a link and multi-item groups as accordions", () => {
+    const today = ADMIN_NAV.find((g) => g.id === "today");
+    const daily = ADMIN_NAV.find((g) => g.id === "daily");
+    expect(today && isAccordionGroup(today)).toBe(false);
+    expect(daily && isAccordionGroup(daily)).toBe(true);
   });
 
   it("groups account links without permission gates", () => {

@@ -346,14 +346,14 @@ export function WalletTransactions({
                         dir="ltr"
                       >
                         {credit ? "+" : "−"}
-                        {formatPrice(Number(transaction.amount))}
+                        {formatPrice(transaction.amount)}
                       </TableCell>
                       <TableCell
                         className="text-end tabular-nums whitespace-nowrap text-muted-foreground"
                         dir="ltr"
                       >
                         {transaction.balance_after !== undefined
-                          ? formatPrice(Number(transaction.balance_after))
+                          ? formatPrice(transaction.balance_after)
                           : "—"}
                       </TableCell>
                     </TableRow>

@@ -45,3 +45,31 @@ func TestPublicLivePublishedAtSQL(t *testing.T) {
 		t.Fatalf("sql = %q, want %q", got, want)
 	}
 }
+
+func TestMethodStepsReadsTheOrderedListOnly(t *testing.T) {
+	content := "<ul><li>نکته: یخ تازه</li></ul>" +
+		"<ol><li><p>یخ بریزید</p><ul><li>ریز</li></ul></li><li>هم بزنید</li></ol>"
+	got := methodSteps(content)
+	want := []string{"یخ بریزید ریز", "هم بزنید"}
+	if len(got) != len(want) {
+		t.Fatalf("steps = %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("step %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestMethodStepsFallsBackToParagraphsAndNeverEmitsMarkup(t *testing.T) {
+	got := methodSteps("<h2>آماده‌سازی</h2><p>یخ بریزید</p><p>هم بزنید</p>")
+	if len(got) != 2 || got[0] != "یخ بریزید" || got[1] != "هم بزنید" {
+		t.Fatalf("steps = %#v", got)
+	}
+	if steps := methodSteps("متن ساده"); len(steps) != 1 || steps[0] != "متن ساده" {
+		t.Fatalf("plain body steps = %#v", steps)
+	}
+	if steps := methodSteps("   "); steps != nil {
+		t.Fatalf("blank body steps = %#v", steps)
+	}
+}

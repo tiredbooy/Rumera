@@ -20,6 +20,7 @@ import type { Category } from "@/features/catalog/categories/types";
 
 const mocks = vi.hoisted(() => ({
   saveProductAggregate: vi.fn(),
+  listBrands: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
   refresh: vi.fn(),
@@ -35,6 +36,11 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+// PE-4: the brand picker searches the server instead of filtering a page of 100.
+vi.mock("@/features/admin/brands/client", () => ({
+  listBrands: mocks.listBrands,
 }));
 
 vi.mock("@/features/admin/products/api/client", () => ({
@@ -76,6 +82,14 @@ vi.mock("@/features/admin/tags/api", () => ({
 }));
 
 import { ProductForm } from "./ProductForm";
+import { openProductSection } from "../test-helpers";
+
+// The stock adjustment posts through a "use server" action; Next breaks that
+// import chain at the boundary, Vitest needs it stubbed (PE-11).
+vi.mock("@/features/inventory/actions", () => ({
+  adjustVariantStockAction: vi.fn(),
+  updateVariantReorderAction: vi.fn(),
+}));
 
 const categories: Category[] = [
   {
@@ -177,6 +191,10 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.listBrands.mockResolvedValue({
+    results: brands,
+    pagination: { page: 1, limit: 20, total: brands.length, has_next: false },
+  });
   sessionStorage.clear();
   window.history.replaceState(null, "", "/admin/products/new");
   Object.defineProperty(globalThis, "ResizeObserver", {
@@ -193,9 +211,21 @@ beforeEach(() => {
   });
 });
 
+/**
+ * Radix hands focus back to a closing popover's trigger a tick after it goes,
+ * which dismisses a picker opened in that same tick — a race only a test is
+ * fast enough to lose. Re-open and re-pick until the choice sticks.
+ */
 async function chooseOption(label: string, option: string) {
-  fireEvent.click(screen.getByRole("combobox", { name: label }));
-  fireEvent.click(await screen.findByRole("option", { name: option }));
+  const trigger = screen.getByRole("combobox", { name: label });
+  const before = trigger.textContent ?? "";
+  await waitFor(() => {
+    if (trigger.getAttribute("aria-expanded") !== "true") {
+      fireEvent.click(trigger);
+    }
+    fireEvent.click(screen.getByRole("option", { name: option }));
+    expect(trigger.textContent).not.toBe(before);
+  });
 }
 
 function clickSave() {
@@ -203,9 +233,7 @@ function clickSave() {
 }
 
 describe("ProductForm complete authoring journeys", () => {
-  it(
-    "creates a draft with merchandising fields, tags, gallery, and generated variants",
-    async () => {
+  it("creates a draft with merchandising fields, tags, gallery, and generated variants", async () => {
     const saved: AdminProductDetail = {
       id: 77,
       title: "محصول تازه",
@@ -220,7 +248,6 @@ describe("ProductForm complete authoring journeys", () => {
       <ProductForm
         mode="create"
         categories={categories}
-        brands={brands}
         optionTypes={optionTypes}
       />,
     );
@@ -244,7 +271,7 @@ describe("ProductForm complete authoring journeys", () => {
       target: { value: "توضیح کامل محصول" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /مشخصات/ }));
+    openProductSection("specs");
     fireEvent.change(screen.getByLabelText("درصد الکل"), {
       target: { value: "14.5" },
     });
@@ -252,23 +279,25 @@ describe("ProductForm complete authoring journeys", () => {
       target: { value: "750" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /برچسب‌های فروشگاهی/ }));
+    openProductSection("tags");
     fireEvent.click(screen.getByRole("button", { name: "هدیه" }));
 
+    openProductSection("variants");
     fireEvent.click(screen.getByRole("button", { name: /ساخت گروهی تنوع‌ها/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /رنگ/ }));
     fireEvent.change(screen.getByLabelText("قیمت پایه (تومان)"), {
       target: { value: "125000" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /ساخت ۲ ترکیب/ }));
+    fireEvent.click(screen.getByRole("button", { name: /پیش‌نمایش ۲ ترکیب/ }));
+    fireEvent.click(screen.getByRole("button", { name: /ساخت ۲ تنوع/ }));
 
-    fireEvent.click(screen.getByRole("button", { name: /تصاویر محصول/ }));
+    openProductSection("images");
     fireEvent.change(screen.getByLabelText("نشانی تصویر محصول"), {
       target: { value: "https://images.example/new-product.webp" },
     });
     fireEvent.click(screen.getByRole("button", { name: "افزودن نشانی" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /سئو و متادیتا/ }));
+    openProductSection("seo");
     fireEvent.change(screen.getByLabelText("عنوان سئو"), {
       target: { value: "عنوان محصول تازه" },
     });
@@ -302,11 +331,15 @@ describe("ProductForm complete authoring journeys", () => {
         meta_tags: ["تازه", "هدیه"],
         tag_ids: [9],
         variants: [
+          // Bulk-generated rows arrive already named from the product code and
+          // the option value, so nothing is left undifferentiated (PE-1).
           expect.objectContaining({
+            sku: "NEW-77-V11",
             price: 125000,
             option_value_ids: [11],
           }),
           expect.objectContaining({
+            sku: "NEW-77-V12",
             price: 125000,
             option_value_ids: [12],
           }),
@@ -322,9 +355,7 @@ describe("ProductForm complete authoring journeys", () => {
     );
     expect(mocks.replace).toHaveBeenCalledWith("/admin/products/77");
     expect(mocks.push).not.toHaveBeenCalledWith("/admin/products");
-  },
-  15_000,
-  );
+  }, 15_000);
 
   it("edits a product and intentionally clears nullable and aggregate fields", async () => {
     const saved: AdminProductDetail = {
@@ -343,7 +374,6 @@ describe("ProductForm complete authoring journeys", () => {
         mode="edit"
         product={existingProduct}
         categories={categories}
-        brands={brands}
         optionTypes={optionTypes}
       />,
     );
@@ -359,17 +389,20 @@ describe("ProductForm complete authoring journeys", () => {
     await chooseOption("دسته‌بندی", "بدون دسته");
     await chooseOption("برند / سازنده", "بدون برند");
 
-    fireEvent.click(screen.getByRole("button", { name: /مشخصات/ }));
+    openProductSection("specs");
     fireEvent.change(screen.getByLabelText("درصد الکل"), {
       target: { value: "" },
     });
     fireEvent.change(screen.getByLabelText(/وزن/), { target: { value: "" } });
+    openProductSection("tags");
     fireEvent.click(screen.getByRole("button", { name: "هدیه" }));
+    openProductSection("variants");
     fireEvent.click(screen.getByRole("button", { name: "حذف تنوع 1" }));
     fireEvent.click(screen.getByRole("button", { name: "حذف تنوع" }));
+    openProductSection("images");
     fireEvent.click(screen.getByRole("button", { name: "حذف تصویر 1" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /سئو و متادیتا/ }));
+    openProductSection("seo");
     fireEvent.change(screen.getByLabelText("عنوان سئو"), {
       target: { value: "" },
     });
@@ -416,12 +449,88 @@ describe("ProductForm complete authoring journeys", () => {
     expect(mocks.replace).not.toHaveBeenCalled();
   });
 
+  // PE-6: validate on blur so a long form does not save its verdict for submit,
+  // but stay quiet while the operator is still typing into the field.
+  it("flags a field on blur without nagging mid-typing or opening the summary", async () => {
+    render(
+      <ProductForm
+        mode="create"
+        categories={categories}
+        optionTypes={optionTypes}
+      />,
+    );
+
+    const title = screen.getByLabelText("نام محصول");
+    fireEvent.change(title, { target: { value: "الف" } });
+    fireEvent.change(title, { target: { value: "" } });
+    expect(screen.queryByText("نام محصول الزامی است")).not.toBeInTheDocument();
+
+    fireEvent.blur(title);
+
+    expect(await screen.findByText("نام محصول الزامی است")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/مورد باید پیش از ذخیره اصلاح شود/),
+    ).not.toBeInTheDocument();
+  });
+
+  // PE-6: the variant grid marks a bad cell inline, which is invisible when the
+  // row is one of dozens. The summary has to say which row and which column.
+  it("names every failing variant cell and jumps into the grid", async () => {
+    window.history.replaceState(null, "", "/admin/products/42");
+    render(
+      <ProductForm
+        mode="edit"
+        product={existingProduct}
+        categories={categories}
+        optionTypes={optionTypes}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("نام محصول"), {
+      target: { value: "" },
+    });
+    openProductSection("variants");
+    fireEvent.change(screen.getByLabelText("قیمت تنوع 1 به تومان"), {
+      target: { value: "" },
+    });
+    // Submitting from the variants section: the summary sits above the
+    // sections, so it is reachable whichever one is open (PE-5 × PE-6).
+    clickSave();
+
+    const priceLink = await screen.findByRole("link", {
+      name: "تنوع 1 — قیمت: قیمت معتبر وارد کنید",
+    });
+    expect(
+      screen.getByRole("link", { name: "نام محصول: نام محصول الزامی است" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("۲ مورد باید پیش از ذخیره اصلاح شود"),
+    ).toBeInTheDocument();
+    expect(mocks.saveProductAggregate).not.toHaveBeenCalled();
+
+    fireEvent.click(priceLink);
+    await waitFor(() =>
+      expect(screen.getByLabelText("قیمت تنوع 1 به تومان")).toHaveFocus(),
+    );
+
+    fireEvent.change(screen.getByLabelText("قیمت تنوع 1 به تومان"), {
+      target: { value: "250000" },
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByText("۱ مورد باید پیش از ذخیره اصلاح شود"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("link", { name: /تنوع 1 — قیمت/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps brand, category, and tag lookups when the option catalog failed", async () => {
     render(
       <ProductForm
         mode="create"
         categories={categories}
-        brands={brands}
         tags={[
           {
             id: 9,
@@ -438,10 +547,13 @@ describe("ProductForm complete authoring journeys", () => {
 
     await chooseOption("دسته‌بندی", "نوشیدنی ویژه");
     await chooseOption("برند / سازنده", "رومرا");
-    fireEvent.click(screen.getByRole("button", { name: /برچسب‌های فروشگاهی/ }));
+    openProductSection("tags");
     expect(screen.getByRole("button", { name: "هدیه" })).toBeInTheDocument();
 
-    expect(screen.getByText("هنوز ویژگی مشترکی تعریف نشده")).toBeInTheDocument();
+    openProductSection("variants");
+    expect(
+      screen.getByText("هنوز ویژگی مشترکی تعریف نشده"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("بارگذاری ویژگی‌های تنوع ناموفق بود. دوباره تلاش کنید."),
     ).toBeInTheDocument();

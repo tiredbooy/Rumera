@@ -1,6 +1,7 @@
 package cart
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -147,5 +148,45 @@ func TestAssignVariantOptions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// U-3: a sold-out line must be distinguishable in the cart, so GetItems has to
+// project the same availability the reserve path enforces at checkout.
+func TestGetItemsProjectsAvailableStock(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	src, err := os.ReadFile(filepath.Join(filepath.Dir(thisFile), "repository.go"))
+	if err != nil {
+		t.Fatalf("read repository.go: %v", err)
+	}
+	body := string(src)
+	for _, want := range []string{
+		"LEFT  JOIN inventory        i  ON i.product_variant_id = pv.id",
+		"COALESCE(i.stock_on_hand, 0) - COALESCE(i.committed_stock, 0)",
+		"AS available_stock",
+		"&item.AvailableStock,",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("GetItems no longer carries stock on the cart projection: missing %q", want)
+		}
+	}
+	// Clamped at the DB boundary so a drifted negative never reaches the client.
+	if !strings.Contains(body, "GREATEST(") {
+		t.Fatal("available_stock must be clamped with GREATEST(..., 0)")
+	}
+}
+
+func TestCartItemResponseSerializesAvailableStock(t *testing.T) {
+	// available_stock is a plain int (never omitempty): a sold-out line must
+	// serialize as 0, not vanish and read as "unknown" on the client.
+	payload, err := json.Marshal(CartItemResponse{ID: 1, Quantity: 2})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(payload), `"available_stock":0`) {
+		t.Fatalf("payload = %s; want available_stock:0", payload)
 	}
 }

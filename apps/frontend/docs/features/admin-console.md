@@ -246,6 +246,29 @@ write-gated. Readers see a Persian “فقط مشاهده” hint — they are n
 403’d. List create / delete stay hidden without write. Backend write
 routes remain the real gate.
 
+### Editorial body editor
+
+`components/admin/rich-text-editor.tsx` is shared by the recipe method and the
+journal body. Besides text formatting it inserts the three block kinds the public
+renderer already understands (CE-4):
+
+| Control | Node | Serialises to |
+|---------|------|---------------|
+| تصویر | `EditorImage` (`components/admin/editor-nodes.ts`) | `<img src alt title>` |
+| جدول | `EditorTable` — one atom holding a grid of plain-text cells, edited in `TableDialog` | `<table><thead><th>…</table>` |
+| اشاره به محصول | — | `<a href="/products/:slug">` |
+
+The serialisation is dictated by `lib/content/sanitize-html.ts`: it keeps `href`
+and `title` on `<a>`, `src`/`alt`/`title`/`width`/`height` on `<img>`, and drops
+every class and data attribute. A richer mention format would simply not render
+on the public page.
+
+The image control opens `MediaPickerDialog` — the media library (CE-10). It
+lists `GET /admin/uploads` (stored originals, newest first), uploads a new file
+standalone, or takes an external HTTPS address. Standalone uploads stay alive
+because `mediaReferencesCTE` scans `recipes.content` / `blogs.content` for
+`/media/` keys.
+
 ### Site settings (`/admin/settings`)
 
 `AdminSettingsView` loads `getAdminSiteSettings()`. A failed fetch is

@@ -27,7 +27,7 @@ export default async function AdminLoyaltyMemberPage({
       userID={id}
       ledgerPage={ledger.page}
       ledgerReason={ledger.reason}
-      canAdjust={can(session, PERMISSIONS.CUSTOMERS_WRITE)}
+      canAdjust={can(session, PERMISSIONS.LOYALTY_ADJUST)}
     />
   );
 }

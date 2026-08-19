@@ -42,7 +42,6 @@ type Service interface {
 	PayOrder(ctx context.Context, id int64, userID int64) (*Order, error)
 	CancelOrder(ctx context.Context, id int64, userID int64) error
 	AdminCancelOrder(ctx context.Context, id int64) error
-	MarkOrderAsPaid(ctx context.Context, orderID int64) error
 }
 
 // shippingAuthorizer prices and validates checkout shipping methods. Implemented
@@ -361,6 +360,19 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req Create
 		if err = s.emitOrderPaid(ctx, tx, userID, order); err != nil {
 			return nil, err
 		}
+		// With the bus off there are no consumers, and the legacy lever is the
+		// payment_loyalty_awards row Confirm writes — which the wallet rail never
+		// went through. Without this, pulling EVENTS_ENABLED=false stopped wallet
+		// buyers earning anything at all (A-11).
+		if !s.eventsOwnSideEffects() && s.payment != nil {
+			if err = s.payment.InsertEarnIntentTx(ctx, tx, payments.OrderEarnIntent{
+				OrderID: order.ID,
+				UserID:  userID,
+				Amount:  order.TotalAmount,
+			}); err != nil {
+				return nil, fmt.Errorf("orderService.CreateOrder: earn intent: %w", err)
+			}
+		}
 	} else if err = s.insertPendingPaymentTx(ctx, tx, order, userID, req.PaymentMethod); err != nil {
 		return nil, err
 	}
@@ -372,6 +384,10 @@ func (s *orderService) CreateOrder(ctx context.Context, userID int64, req Create
 	// ── Post-commit ──────────────────────────────────────────────────────────
 	// Order + stock (+ pending payment) are durable. Empty the cart (non-fatal).
 	_ = s.clearCart(ctx, cart.ID)
+	if req.PaymentMethod == models.PaymentMethodWallet && s.payment != nil {
+		// No-op with the bus on; the order.paid.v1 consumers own these.
+		s.payment.RunLegacyPaidSideEffects(ctx, userID, order.ID, order.TotalAmount)
+	}
 	return order, nil
 }
 
@@ -897,19 +913,7 @@ func (s *orderService) cancelOrder(ctx context.Context, id, ownerUserID int64) (
 	return nil
 }
 
-func (s *orderService) MarkOrderAsPaid(ctx context.Context, orderID int64) error {
-	tx, err := s.orderRepo.BeginTx(ctx)
-	if err != nil {
-		return fmt.Errorf("orderService.MarkOrderAsPaid: begin tx: %w", err)
-	}
-	defer utils.RollbackOnErr(ctx, tx, &err)
-
-	if err = s.orderRepo.MarkAsPaid(ctx, tx, orderID); err != nil {
-		return fmt.Errorf("orderService.MarkOrderAsPaid: %w", err)
-	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return fmt.Errorf("orderService.MarkOrderAsPaid: commit: %w", err)
-	}
-	return nil
-}
+// MarkOrderAsPaid was deleted (A-11): an unrouted third paid path that marked the
+// order paid with no payment row, no stock deduction and no order.paid.v1 fact.
+// order.paid.v1 is the only paid signal — the gateway rail emits it in
+// payments.Confirm, the wallet rail in settleWalletInTx. Do not add a third.

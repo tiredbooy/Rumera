@@ -14,6 +14,14 @@ import { OrdersTable } from "./OrdersTable";
 const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
   useAdminOrders: vi.fn(),
+  replace: vi.fn(),
+  searchParams: vi.fn(() => new URLSearchParams()),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/admin/orders",
+  useRouter: () => ({ replace: mocks.replace }),
+  useSearchParams: () => mocks.searchParams(),
 }));
 
 vi.mock("@/features/admin/orders/hooks", () => ({
@@ -41,6 +49,7 @@ function lastQuery() {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mocks.searchParams.mockReturnValue(new URLSearchParams());
 });
 
 describe("OrdersTable failure state", () => {
@@ -67,7 +76,7 @@ describe("OrdersTable failure state", () => {
 });
 
 describe("OrdersTable server filters", () => {
-  it("asks GET /admin/orders for status, dates, and user instead of client-filtering", () => {
+  it("scopes the request server-side and mirrors every filter in the bar", () => {
     mocks.useAdminOrders.mockReturnValue({
       data: {
         results: [order(1, "paid"), order(2, "pending")],
@@ -96,18 +105,15 @@ describe("OrdersTable server filters", () => {
     render(<OrdersTable filters={filters} />);
 
     expect(lastQuery()).toEqual(toAdminOrderListQuery(filters));
-    const form = screen.getByRole("form", { name: "فیلتر سفارش‌ها" });
-    expect(form).toHaveAttribute("action", "/admin/orders");
-    expect(form).toHaveAttribute("method", "get");
     expect(screen.getByLabelText("وضعیت")).toHaveValue("paid");
-    // The visible box shows Jalali; the submitted value is the hidden ISO input.
-    expect(form.querySelector('input[name="paid_from"]')).toHaveValue(
-      "2026-08-01",
-    );
-    expect(form.querySelector('input[name="paid_to"]')).toHaveValue(
-      "2026-08-16",
-    );
+    // The Jalali boxes show Jalali; the committed value stays Gregorian.
+    expect(screen.getByLabelText("از تاریخ پرداخت")).toHaveValue("1405/05/10");
+    expect(screen.getByLabelText("تا تاریخ پرداخت")).toHaveValue("1405/05/25");
     expect(screen.getByLabelText("شناسهٔ داخلی کاربر")).toHaveValue("7");
+    // No «اعمال» button survives S-3 — every control applies by itself.
+    expect(
+      screen.queryByRole("button", { name: "اعمال فیلترها" }),
+    ).not.toBeInTheDocument();
     // Hook already scoped the request; leftover statuses on the page stay visible.
     expect(screen.getByText(`#${faNum(1)}`)).toBeInTheDocument();
     expect(screen.getByText(`#${faNum(2)}`)).toBeInTheDocument();

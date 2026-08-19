@@ -157,6 +157,7 @@ vi.mock("./product-form/ImagesSection", async () => {
 
 import { ProductClientError } from "@/features/admin/products/api/client";
 import { ProductForm } from "./ProductForm";
+import { openProductSection } from "../test-helpers";
 
 const product: AdminProductDetail = {
   id: 42,
@@ -198,24 +199,45 @@ beforeEach(() => {
 });
 
 describe("ProductForm production behavior", () => {
-  it("focuses the first invalid field on create", async () => {
-    render(<ProductForm mode="create" categories={[]} brands={[]} />);
+  // PE-6: one generic sentence plus a jump to whichever field happened to be
+  // first told the operator nothing. The summary names every failure, takes
+  // focus, and shrinks as they are fixed.
+  it("summarises every failure on create and jumps to a named field", async () => {
+    render(<ProductForm mode="create" categories={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
+    const link = await screen.findByRole("link", {
+      name: "نام محصول: نام محصول الزامی است",
+    });
     expect(
-      await screen.findByText("لطفاً موارد مشخص‌شده در فرم را بررسی کنید."),
+      screen.getByText("۱ مورد باید پیش از ذخیره اصلاح شود"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText("لطفاً موارد مشخص‌شده در فرم را بررسی کنید."),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(document.getElementById("product-error-summary")).toHaveFocus(),
+    );
+
+    fireEvent.click(link);
     await waitFor(() =>
       expect(screen.getByLabelText("نام محصول")).toHaveFocus(),
     );
     expect(mocks.saveProductAggregate).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("نام محصول"), {
+      target: { value: "محصول تازه" },
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByText("۱ مورد باید پیش از ذخیره اصلاح شود"),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("guards app links and cancel navigation while edit changes are dirty", async () => {
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
     fireEvent.change(screen.getByLabelText("نام محصول"), {
       target: { value: "محصول ویرایش‌شده" },
     });
@@ -232,30 +254,64 @@ describe("ProductForm production behavior", () => {
     expect(mocks.push).toHaveBeenCalledWith("/admin/products");
   });
 
-  it("scrolls to a section jump instead of warning on a dirty form", () => {
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+  // PE-5: sections are addressable by `?tab=`, and switching one is not
+  // leaving the form — the unsaved dialog must stay out of the way (PE-3).
+  it("switches sections through the URL without warning on a dirty form", () => {
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
     fireEvent.change(screen.getByLabelText("نام محصول"), {
       target: { value: "محصول ویرایش‌شده" },
     });
+    expect(screen.getByLabelText("نام محصول")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("link", { name: /سئو/ }));
+    openProductSection("seo");
 
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(mocks.push).not.toHaveBeenCalled();
-    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(window.location.search).toBe("?tab=seo");
     expect(screen.getByRole("link", { name: /سئو/ })).toHaveAttribute(
       "aria-current",
-      "true",
+      "page",
     );
+    expect(screen.getByLabelText("عنوان سئو")).toBeVisible();
+    // Hidden, never unmounted — a remount would take the whole
+    // react-hook-form state and the staged gallery with it.
+    expect(screen.getByLabelText("نام محصول")).toBeInTheDocument();
+    expect(screen.getByLabelText("نام محصول")).not.toBeVisible();
+
+    act(() => {
+      window.history.back();
+      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    });
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("opens the section named by a deep link and steps back through them", async () => {
+    window.history.replaceState(null, "", "/admin/products/42?tab=seo");
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
+
+    // Rendered from the URL rather than always starting at «اطلاعات کلی» —
+    // that is what makes a section linkable at all.
+    await waitFor(() =>
+      expect(screen.getByLabelText("عنوان سئو")).toBeVisible(),
+    );
+
+    openProductSection("specs");
+    expect(window.location.search).toBe("?tab=specs");
+
+    act(() => {
+      window.history.back();
+      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    });
+
+    await waitFor(() => expect(window.location.search).toBe("?tab=seo"));
+    expect(screen.getByLabelText("عنوان سئو")).toBeVisible();
+    window.history.replaceState(null, "", "/admin/products/42");
   });
 
   it("includes deferred gallery edits in the unsaved-change boundary", async () => {
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
+    openProductSection("images");
     fireEvent.click(screen.getByRole("button", { name: "تغییر تصویر" }));
     fireEvent.click(screen.getByRole("button", { name: "انصراف" }));
 
@@ -265,9 +321,7 @@ describe("ProductForm production behavior", () => {
   });
 
   it("registers beforeunload protection only after the form becomes dirty", () => {
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
     const cleanEvent = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(cleanEvent);
     expect(cleanEvent.defaultPrevented).toBe(false);
@@ -286,9 +340,7 @@ describe("ProductForm production behavior", () => {
       .spyOn(window.history, "forward")
       .mockImplementation(() => {});
     const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
     fireEvent.change(screen.getByLabelText("نام محصول"), {
       target: { value: "محصول ویرایش‌شده" },
     });
@@ -297,6 +349,7 @@ describe("ProductForm production behavior", () => {
     );
 
     act(() => {
+      window.history.pushState(null, "", "/admin/products");
       window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
     });
 
@@ -313,7 +366,7 @@ describe("ProductForm production behavior", () => {
     const persistence = deferred<AdminProductDetail>();
     mocks.prepare.mockReturnValueOnce(preparation.promise);
     mocks.saveProductAggregate.mockReturnValueOnce(persistence.promise);
-    render(<ProductForm mode="create" categories={[]} brands={[]} />);
+    render(<ProductForm mode="create" categories={[]} />);
     fireEvent.change(screen.getByLabelText("نام محصول"), {
       target: { value: "محصول تازه" },
     });
@@ -337,9 +390,7 @@ describe("ProductForm production behavior", () => {
   });
 
   it("stays on the editor after an existing product is saved", async () => {
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
@@ -358,7 +409,7 @@ describe("ProductForm production behavior", () => {
   it("keeps fields editable and cancel available while images prepare", async () => {
     const preparation = deferred<[]>();
     mocks.prepare.mockReturnValueOnce(preparation.promise);
-    render(<ProductForm mode="create" categories={[]} brands={[]} />);
+    render(<ProductForm mode="create" categories={[]} />);
     fireEvent.change(screen.getByLabelText("نام محصول"), {
       target: { value: "محصول تازه" },
     });
@@ -378,9 +429,7 @@ describe("ProductForm production behavior", () => {
   it("blocks app-link exit while an aggregate save is unresolved", async () => {
     const persistence = deferred<AdminProductDetail>();
     mocks.saveProductAggregate.mockReturnValueOnce(persistence.promise);
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
     await waitFor(() =>
@@ -405,15 +454,21 @@ describe("ProductForm production behavior", () => {
         meta_title: ["عنوان سئو معتبر نیست"],
       }),
     );
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
     expect(
       (await screen.findAllByText("عنوان سئو معتبر نیست")).length,
     ).toBeGreaterThan(0);
+    // A server rejection lands on the same summary a client one does (PE-6).
+    await waitFor(() =>
+      expect(document.getElementById("product-error-summary")).toHaveFocus(),
+    );
+    fireEvent.click(
+      screen.getByRole("link", { name: "عنوان سئو: عنوان سئو معتبر نیست" }),
+    );
+    // The section has to be painted before the field in it can take focus.
     await waitFor(() =>
       expect(screen.getByLabelText("عنوان سئو")).toHaveFocus(),
     );
@@ -428,9 +483,7 @@ describe("ProductForm production behavior", () => {
         "images.0": ["staged upload is missing or invalid"],
       }),
     );
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
@@ -453,9 +506,7 @@ describe("ProductForm production behavior", () => {
         variants: ["one or more removed variants are still in use"],
       }),
     );
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
@@ -477,7 +528,6 @@ describe("ProductForm production behavior", () => {
         mode="edit"
         product={product}
         categories={[]}
-        brands={[]}
         canWrite={false}
       />,
     );

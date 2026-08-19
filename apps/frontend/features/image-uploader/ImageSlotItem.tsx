@@ -6,8 +6,8 @@ import { OptimizedImage } from "@/components/optimized-image";
 import { cn } from "@/lib/utils";
 import {
   AlertCircle,
-  ChevronDown,
-  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   GripVertical,
   Loader2,
   RotateCcw,
@@ -24,6 +24,7 @@ type ImageSlotItemProps = {
   total: number;
   isPending: boolean;
   isDragging: boolean;
+  isDropTarget: boolean;
   isPrimary: boolean;
   canRetry: boolean;
   onAltChange: (alt: string) => void;
@@ -31,20 +32,26 @@ type ImageSlotItemProps = {
   onMakePrimary: () => void;
   onRemove: () => void;
   onRetry: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
+  onMovePrev: () => void;
+  onMoveNext: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
   onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: () => void;
   onDrop: () => void;
 };
 
+/**
+ * One gallery tile (PE-8). The 56px row this replaced was too small to tell two
+ * bottle shots apart, which is the one thing the operator is here to do.
+ */
 export function ImageSlotItem({
   slot,
   index,
   total,
   isPending,
   isDragging,
+  isDropTarget,
   isPrimary,
   canRetry,
   onAltChange,
@@ -52,15 +59,17 @@ export function ImageSlotItem({
   onMakePrimary,
   onRemove,
   onRetry,
-  onMoveUp,
-  onMoveDown,
+  onMovePrev,
+  onMoveNext,
   onDragStart,
   onDragEnd,
   onDragOver,
+  onDragLeave,
   onDrop,
 }: ImageSlotItemProps) {
   const uploading = slot.kind === "staged" && slot.status === "uploading";
   const errored = slot.kind === "staged" && slot.status === "error";
+  const position = `${index + 1} از ${total}`;
 
   const preview =
     slot.kind === "uploaded" ? (
@@ -68,7 +77,7 @@ export function ImageSlotItem({
         imageKey={slot.image.storage_key}
         src={slot.image.image_url}
         alt={slot.alt || "تصویر محصول"}
-        width={160}
+        width={480}
         className="h-full w-full object-cover"
       />
     ) : (
@@ -85,128 +94,142 @@ export function ImageSlotItem({
       draggable={!uploading && !isPending}
       aria-posinset={index + 1}
       aria-setsize={total}
-      onDragStart={onDragStart}
+      onDragStart={(event) => {
+        // Firefox will not start a drag unless dataTransfer.setData runs.
+        event.dataTransfer.setData("text/plain", slot.localId);
+        event.dataTransfer.effectAllowed = "move";
+        onDragStart();
+      }}
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={cn(
-        "grid grid-cols-[auto_3.5rem_minmax(0,1fr)] items-center gap-3 rounded-2xl border border-border/60 bg-card p-2 transition-shadow sm:flex",
-        isPrimary && "ring-1 ring-primary/40",
+        "flex flex-col gap-2 rounded-2xl border border-border/60 bg-card p-2 transition-shadow",
+        isPrimary && "border-primary/40 ring-1 ring-primary/40",
+        isDropTarget && "ring-2 ring-primary",
         isDragging && "opacity-50",
       )}
     >
-      <div className="flex flex-col items-center gap-0.5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          data-image-reorder={slot.localId}
-          data-reorder-direction="up"
-          aria-label={`انتقال تصویر ${index + 1} از ${total} به بالا`}
-          disabled={index === 0 || uploading || isPending}
-          onClick={onMoveUp}
-          className="rounded-md text-muted-foreground hover:text-foreground disabled:opacity-30"
-        >
-          <ChevronUp className="size-3.5" />
-        </Button>
+      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-muted">
+        {preview}
+        {isPrimary ? (
+          <span className="absolute start-1.5 top-1.5 rounded-lg bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground">
+            تصویر اصلی
+          </span>
+        ) : null}
         <span
           aria-hidden
-          className="cursor-grab text-muted-foreground active:cursor-grabbing"
+          className="absolute end-1.5 top-1.5 cursor-grab rounded-lg bg-background/80 p-1 text-muted-foreground active:cursor-grabbing"
         >
           <GripVertical className="size-4" />
         </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          data-image-reorder={slot.localId}
-          data-reorder-direction="down"
-          aria-label={`انتقال تصویر ${index + 1} از ${total} به پایین`}
-          disabled={index === total - 1 || uploading || isPending}
-          onClick={onMoveDown}
-          className="rounded-md text-muted-foreground hover:text-foreground disabled:opacity-30"
-        >
-          <ChevronDown className="size-3.5" />
-        </Button>
-      </div>
-
-      <span className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-muted">
-        {preview}
         {uploading && (
           <span className="absolute inset-0 flex items-center justify-center bg-background/60">
-            <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
+            <Loader2 className="size-6 animate-spin text-primary" aria-hidden />
           </span>
         )}
-      </span>
-
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <Input
-          value={slot.alt}
-          maxLength={255}
-          onChange={(e) => onAltChange(e.target.value)}
-          onBlur={onAltCommit}
-          placeholder="متن جایگزین (alt)"
-          aria-label={`متن جایگزین تصویر ${index + 1}`}
-          disabled={uploading || isPending}
-        />
-        {uploading ? (
-          <UploadProgressBar
-            progress={slot.progress || 0}
-            label={`پیشرفت بارگذاری تصویر ${index + 1}`}
-          />
-        ) : errored ? (
-          <p
-            role="alert"
-            className="flex items-center gap-1 text-xs text-destructive"
-          >
-            <AlertCircle className="size-3" aria-hidden />{" "}
-            {(slot as StagedSlot).error}
-          </p>
-        ) : isPrimary ? (
-          <p className="text-xs text-primary">تصویر اصلی</p>
-        ) : null}
       </div>
 
-      <div className="col-span-3 flex items-center justify-end gap-0.5 sm:col-auto sm:justify-start">
-        {errored && canRetry && (
+      <Input
+        value={slot.alt}
+        maxLength={255}
+        onChange={(e) => onAltChange(e.target.value)}
+        onBlur={onAltCommit}
+        placeholder="متن جایگزین (alt)"
+        aria-label={`متن جایگزین تصویر ${index + 1}`}
+        disabled={uploading || isPending}
+      />
+
+      {uploading ? (
+        <UploadProgressBar
+          progress={slot.progress || 0}
+          label={`پیشرفت بارگذاری تصویر ${index + 1}`}
+        />
+      ) : errored ? (
+        <p
+          role="alert"
+          className="flex items-start gap-1 text-xs text-destructive"
+        >
+          <AlertCircle className="mt-0.5 size-3 shrink-0" aria-hidden />
+          {(slot as StagedSlot).error}
+        </p>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-0.5">
+        {/* The grid reads right-to-left, so «قبلی» sits on the right. Labels
+            name the position rather than a direction: in a wrapping grid
+            «بالا» would be wrong for every tile but the first of a row. */}
+        <div className="flex items-center">
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={`تلاش دوباره برای تصویر ${index + 1}`}
-            disabled={isPending}
-            onClick={onRetry}
+            data-image-reorder={slot.localId}
+            data-reorder-direction="prev"
+            aria-label={`انتقال تصویر ${position} به جایگاه قبلی`}
+            disabled={index === 0 || uploading || isPending}
+            onClick={onMovePrev}
+            className="rounded-md text-muted-foreground hover:text-foreground disabled:opacity-30"
           >
-            <RotateCcw className="size-4" />
+            <ChevronRight className="size-4" />
           </Button>
-        )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={
-            isPrimary
-              ? `تصویر ${index + 1} اصلی است`
-              : `تنظیم تصویر ${index + 1} به‌عنوان تصویر اصلی`
-          }
-          aria-pressed={isPrimary}
-          disabled={uploading || errored || isPending}
-          onClick={onMakePrimary}
-        >
-          <Star
-            className={cn("size-4", isPrimary && "fill-primary text-primary")}
-          />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`حذف تصویر ${index + 1}`}
-          disabled={uploading || isPending}
-          onClick={onRemove}
-        >
-          <Trash2 className="size-4" />
-        </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            data-image-reorder={slot.localId}
+            data-reorder-direction="next"
+            aria-label={`انتقال تصویر ${position} به جایگاه بعدی`}
+            disabled={index === total - 1 || uploading || isPending}
+            onClick={onMoveNext}
+            className="rounded-md text-muted-foreground hover:text-foreground disabled:opacity-30"
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center">
+          {errored && canRetry && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`تلاش دوباره برای تصویر ${index + 1}`}
+              disabled={isPending}
+              onClick={onRetry}
+            >
+              <RotateCcw className="size-4" />
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={
+              isPrimary
+                ? `تصویر ${index + 1} اصلی است`
+                : `تنظیم تصویر ${index + 1} به‌عنوان تصویر اصلی`
+            }
+            aria-pressed={isPrimary}
+            disabled={isPrimary || uploading || errored || isPending}
+            onClick={onMakePrimary}
+          >
+            <Star
+              className={cn("size-4", isPrimary && "fill-primary text-primary")}
+            />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`حذف تصویر ${index + 1}`}
+            disabled={uploading || isPending}
+            onClick={onRemove}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
       </div>
     </li>
   );

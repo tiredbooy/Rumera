@@ -1,3 +1,8 @@
+import {
+  collectRoutePassthrough,
+  type RoutePassthrough,
+  withRoutePassthrough,
+} from "@/features/catalog/route-passthrough";
 import type {
   JournalSortDirection,
   JournalSortField,
@@ -38,6 +43,8 @@ export type JournalRouteQuery = {
   sortBy: JournalSortField;
   orderBy: JournalSortDirection;
   needsRedirect: boolean;
+  /** Params the route does not own — carried through any redirect. */
+  passthrough: RoutePassthrough;
 };
 
 const QUERY_KEYS = new Set(["page", "q", "sort"]);
@@ -54,9 +61,10 @@ export function parseJournalPage(
 export function parseJournalRouteQuery(
   searchParams: JournalSearchParamsRecord,
 ): JournalRouteQuery {
-  let needsRedirect = Object.entries(searchParams).some(
-    ([key, value]) => value !== undefined && !QUERY_KEYS.has(key),
-  );
+  // A campaign param is not a malformed URL. Unknown keys ride along instead of
+  // triggering a redirect that would strip them (see route-passthrough.ts).
+  const passthrough = collectRoutePassthrough(searchParams, QUERY_KEYS);
+  let needsRedirect = false;
 
   const parsedPage = parseJournalPage(searchParams.page);
   const page = parsedPage ?? 1;
@@ -99,6 +107,7 @@ export function parseJournalRouteQuery(
     sortBy: sortOption.sortBy,
     orderBy: sortOption.orderBy,
     needsRedirect,
+    passthrough,
   };
 }
 
@@ -114,6 +123,21 @@ export function journalPageHref(
   const value = params.toString();
   const path = value ? `/journal?${value}` : "/journal";
   return hash ? `${path}#${hash}` : path;
+}
+
+/**
+ * The href a redirect goes to — canonical, plus the params the route does not
+ * own, so a campaign click keeps its attribution across the correction.
+ */
+export function journalRedirectHref(
+  query: Pick<JournalRouteQuery, "q" | "sort" | "passthrough">,
+  page: number,
+  hash?: string,
+): string {
+  return withRoutePassthrough(
+    journalPageHref(query, page, hash),
+    query.passthrough,
+  );
 }
 
 export function getJournalSortLabel(sort: JournalSortMode): string {

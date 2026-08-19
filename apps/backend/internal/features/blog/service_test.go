@@ -32,6 +32,11 @@ type blogRepositoryStub struct {
 	removeProductsCalls   int
 	removeTagsCalls       int
 	withTxCalls           int
+
+	// Slug redirect record (CE-7). Both maps are shared by the root and tx stubs
+	// so a rename made under a transaction is visible to resolve assertions.
+	redirects map[string]int64 // retired slug -> post id
+	slugs     map[int64]string // post id -> current slug
 }
 
 type blogCategoryRepositoryStub struct {
@@ -167,6 +172,33 @@ func (r *blogRepositoryStub) RemoveTags(context.Context, int64) error {
 
 func (r *blogRepositoryStub) GetTagIDsByBlogID(context.Context, int64) ([]int64, error) {
 	return []int64{}, nil
+}
+
+func (r *blogRepositoryStub) RecordSlugRedirect(_ context.Context, fromSlug string, blogID int64) error {
+	if r.redirects == nil {
+		r.redirects = map[string]int64{}
+	}
+	r.redirects[fromSlug] = blogID
+	return nil
+}
+
+func (r *blogRepositoryStub) ReleaseSlugRedirect(_ context.Context, slug string) error {
+	delete(r.redirects, slug)
+	return nil
+}
+
+// ResolveSlugRedirect mirrors the SQL: the record holds the post id, so the
+// answer is always that post's current slug — one hop, never a chain.
+func (r *blogRepositoryStub) ResolveSlugRedirect(_ context.Context, fromSlug string) (string, error) {
+	id, ok := r.redirects[fromSlug]
+	if !ok {
+		return "", models.ErrNotFound
+	}
+	slug := r.slugs[id]
+	if slug == "" || slug == fromSlug {
+		return "", models.ErrNotFound
+	}
+	return slug, nil
 }
 
 func TestBlogCreateRollsBackRelationFailureThroughTransactionalRepository(t *testing.T) {

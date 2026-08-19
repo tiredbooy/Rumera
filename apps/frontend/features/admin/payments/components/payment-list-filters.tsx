@@ -1,20 +1,18 @@
 "use client";
 
-import * as React from "react";
-
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { AdminFilterBar } from "@/features/dashboard/components/admin-page";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  AdminFilterChips,
+  AdminSavedViews,
+  FilterSearchInput,
+  FilterSelect,
+  useFilterParams,
+  type FilterChip,
+  type FilterParamLabels,
+} from "@/features/dashboard/components/admin-filter-controls";
+import { AdminFilterBar } from "@/features/dashboard/components/admin-page";
 import { PAYMENT_STATUS_FA } from "@/features/payments/presentation";
 import type { PaymentStatus } from "@/features/payments/types";
+import { faNum } from "@/lib/products";
 
 export type PaymentSort = "newest" | "oldest" | "amount_desc" | "amount_asc";
 
@@ -40,150 +38,125 @@ export function paymentSort(value: string | null): PaymentSort {
     : "newest";
 }
 
+const STATUS_OPTIONS = [
+  { value: "", label: "همهٔ وضعیت‌ها" },
+  ...(Object.keys(PAYMENT_STATUS_FA) as PaymentStatus[]).map((value) => ({
+    value,
+    label: PAYMENT_STATUS_FA[value],
+  })),
+];
+
+const SORT_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "جدیدترین" },
+  { value: "oldest", label: "قدیمی‌ترین" },
+  { value: "amount_desc", label: "بیشترین مبلغ" },
+  { value: "amount_asc", label: "کمترین مبلغ" },
+];
+
+const SORT_FA: Record<PaymentSort, string> = {
+  newest: "جدیدترین",
+  oldest: "قدیمی‌ترین",
+  amount_desc: "بیشترین مبلغ",
+  amount_asc: "کمترین مبلغ",
+};
+
+/** Every param the ledger owns — feeds the chips and the saved-view menu. */
+export const PAYMENT_FILTER_PARAMS: FilterParamLabels = {
+  order: "شناسهٔ سفارش",
+  user: "شناسهٔ داخلی کاربر",
+  status: "وضعیت",
+  sort: "ترتیب",
+};
+
+/**
+ * Status and sort were already instant; S-3 retires «اعمال شناسه‌ها» too. The
+ * id fields accept digits only — Eastern digits are folded on the way in — so
+ * a half-typed id is a narrower query rather than the malformed one the submit
+ * button and its error message used to guard against.
+ */
 export function PaymentListFilters({
   orderID,
   userID,
   status,
   sort,
   hasFilters,
-  onUpdate,
-  onReset,
 }: {
   orderID?: number;
   userID?: number;
   status?: PaymentStatus;
   sort: PaymentSort;
   hasFilters: boolean;
-  onUpdate: (updates: Record<string, string | undefined>) => void;
-  onReset: () => void;
 }) {
-  const [filterError, setFilterError] = React.useState<string | null>(null);
+  const setFilters = useFilterParams();
 
-  function applyIDFilters(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    const rawOrder = String(data.get("order") ?? "").trim();
-    const rawUser = String(data.get("user") ?? "").trim();
-    if (rawOrder && !positiveInteger(rawOrder)) {
-      setFilterError("شناسهٔ سفارش باید یک عدد صحیح مثبت و معتبر باشد.");
-      (form.elements.namedItem("order") as HTMLElement | null)?.focus();
-      return;
-    }
-    if (rawUser && !positiveInteger(rawUser)) {
-      setFilterError("شناسهٔ داخلی کاربر باید یک عدد صحیح مثبت و معتبر باشد.");
-      (form.elements.namedItem("user") as HTMLElement | null)?.focus();
-      return;
-    }
-    setFilterError(null);
-    onUpdate({ order: rawOrder || undefined, user: rawUser || undefined });
+  const chips: FilterChip[] = [];
+  if (orderID) {
+    chips.push({ param: "order", label: `سفارش #${faNum(orderID)}` });
+  }
+  if (userID) {
+    chips.push({ param: "user", label: `کاربر #${faNum(userID)}` });
+  }
+  if (status) {
+    chips.push({ param: "status", label: `وضعیت: ${PAYMENT_STATUS_FA[status]}` });
+  }
+  if (sort !== "newest") {
+    chips.push({ param: "sort", label: `ترتیب: ${SORT_FA[sort]}` });
   }
 
   return (
-    <>
-      <AdminFilterBar
-        id="payment-filter-title"
-        title="جستجو و فیلتر تراکنش‌ها"
-        description="فیلترها مستقیماً روی دادهٔ واقعی پرداخت اعمال می‌شوند. وضعیت و ترتیب بی‌درنگ، شناسه‌ها با «اعمال شناسه‌ها»."
-        hasFilters={hasFilters}
-        onReset={onReset}
-        gridClassName="lg:grid-cols-[minmax(0,1fr)_12rem_12rem]"
-      >
-        <form
-          key={`${orderID ?? ""}-${userID ?? ""}`}
-          onSubmit={applyIDFilters}
-          className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-        >
-          <div className="min-w-0">
-            <Label htmlFor="payment-order-filter" className="sr-only">
-              شناسهٔ سفارش
-            </Label>
-            <Input
-              id="payment-order-filter"
-              name="order"
-              inputMode="numeric"
-              pattern="[1-9][0-9]*"
-              defaultValue={orderID ?? ""}
-              placeholder="شناسهٔ سفارش"
-              aria-describedby={
-                filterError ? "payment-filter-error" : undefined
-              }
-              className="h-9"
-            />
-          </div>
-          <div className="min-w-0">
-            <Label htmlFor="payment-user-filter" className="sr-only">
-              شناسهٔ داخلی کاربر
-            </Label>
-            <Input
-              id="payment-user-filter"
-              name="user"
-              inputMode="numeric"
-              pattern="[1-9][0-9]*"
-              defaultValue={userID ?? ""}
-              placeholder="شناسهٔ داخلی کاربر"
-              aria-describedby={
-                filterError ? "payment-filter-error" : undefined
-              }
-              className="h-9"
-            />
-          </div>
-          <Button type="submit" variant="outline" className="h-9">
-            اعمال شناسه‌ها
-          </Button>
-        </form>
-
-        <Select
-          value={status ?? "all"}
-          onValueChange={(value) =>
-            onUpdate({ status: value === "all" ? undefined : value })
-          }
-        >
-          <SelectTrigger
-            className="h-9 w-full"
-            aria-label="فیلتر وضعیت پرداخت"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">همهٔ وضعیت‌ها</SelectItem>
-            {(Object.keys(PAYMENT_STATUS_FA) as PaymentStatus[]).map(
-              (value) => (
-                <SelectItem key={value} value={value}>
-                  {PAYMENT_STATUS_FA[value]}
-                </SelectItem>
-              ),
-            )}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={sort}
-          onValueChange={(value) =>
-            onUpdate({ sort: value === "newest" ? undefined : value })
-          }
-        >
-          <SelectTrigger className="h-9 w-full" aria-label="ترتیب تراکنش‌ها">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="newest">جدیدترین</SelectItem>
-            <SelectItem value="oldest">قدیمی‌ترین</SelectItem>
-            <SelectItem value="amount_desc">بیشترین مبلغ</SelectItem>
-            <SelectItem value="amount_asc">کمترین مبلغ</SelectItem>
-          </SelectContent>
-        </Select>
-      </AdminFilterBar>
-
-      {filterError ? (
-        <p
-          id="payment-filter-error"
-          role="alert"
-          className="mb-4 text-sm text-destructive"
-        >
-          {filterError}
-        </p>
-      ) : null}
-    </>
+    <AdminFilterBar
+      id="payment-filter-title"
+      title="جستجو و فیلتر تراکنش‌ها"
+      description="فیلترها مستقیماً روی دادهٔ واقعی پرداخت اعمال می‌شوند و بدون دکمهٔ اعمال اثر می‌گذارند."
+      hasFilters={hasFilters}
+      onReset={() =>
+        setFilters(
+          Object.fromEntries(
+            Object.keys(PAYMENT_FILTER_PARAMS).map((param) => [
+              param,
+              undefined,
+            ]),
+          ),
+        )
+      }
+      gridClassName="sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_12rem_12rem] lg:items-end"
+      chips={
+        <>
+          <AdminFilterChips params={PAYMENT_FILTER_PARAMS} chips={chips} />
+          <AdminSavedViews list="payments" params={PAYMENT_FILTER_PARAMS} />
+        </>
+      }
+    >
+      <FilterSearchInput
+        id="payment-order-filter"
+        label="شناسهٔ سفارش"
+        placeholder="مثلاً ۱۲۳"
+        param="order"
+        numeric
+        value={orderID ? String(orderID) : ""}
+      />
+      <FilterSearchInput
+        id="payment-user-filter"
+        label="شناسهٔ داخلی کاربر"
+        placeholder="مثلاً ۷"
+        param="user"
+        numeric
+        value={userID ? String(userID) : ""}
+      />
+      <FilterSelect
+        id="payment-status-filter"
+        label="وضعیت"
+        param="status"
+        value={status ?? ""}
+        options={STATUS_OPTIONS}
+      />
+      <FilterSelect
+        id="payment-sort-filter"
+        label="ترتیب"
+        param="sort"
+        value={sort === "newest" ? "" : sort}
+        options={SORT_OPTIONS}
+      />
+    </AdminFilterBar>
   );
 }

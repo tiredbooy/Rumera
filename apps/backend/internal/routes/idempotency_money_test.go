@@ -225,7 +225,7 @@ func TestFeatureRegister_MoneyIdemWiring(t *testing.T) {
 	orders.RegisterCustomer(cust, &orders.Handler{}, moneyIdem)
 	giftcard.RegisterCustomer(cust, &giftcard.Handler{}, moneyIdem)
 	loyalty.RegisterCustomer(cust, &loyalty.Handler{}, moneyIdem)
-	loyalty.RegisterAdmin(admin, admin, &loyalty.Handler{}, moneyIdem)
+	loyalty.RegisterAdmin(admin, admin, admin, &loyalty.Handler{}, moneyIdem)
 	wallet.RegisterCustomer(cust, &wallet.Handler{}, moneyIdem)
 	wallet.RegisterAdmin(admin, admin, &wallet.Handler{}, moneyIdem)
 

@@ -12,7 +12,7 @@ export function normalizeEditorialSlug(value: string): string {
 export function editorialSlugHint(mode: "create" | "edit"): string {
   return mode === "create"
     ? "خالی بگذارید تا از روی عنوان ساخته شود."
-    : "تغییر نامک، نشانی عمومی این صفحه را تغییر می‌دهد.";
+    : "تغییر نامک، نشانی عمومی این صفحه را عوض می‌کند؛ نشانی قبلی با تغییر مسیر دائمی به نشانی تازه هدایت می‌شود، اما اگر بعداً برای مطلب دیگری استفاده شود از کار می‌افتد.";
 }
 
 export function editorialExcerptHint(): string {

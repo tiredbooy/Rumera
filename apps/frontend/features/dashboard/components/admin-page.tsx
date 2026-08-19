@@ -126,6 +126,7 @@ export function AdminFilterBar({
   onReset,
   className,
   gridClassName,
+  chips,
   children,
 }: {
   /** Id for the (visually hidden) heading; the section is labelled by it. */
@@ -140,6 +141,11 @@ export function AdminFilterBar({
   className?: string;
   /** Column template for the control grid; spacing stays fixed. */
   gridClassName?: string;
+  /**
+   * Row under the controls (S-3): `<AdminFilterChips>` for the active filters
+   * and `<AdminSavedViews>` for the saved-view action.
+   */
+  chips?: ReactNode;
   children: ReactNode;
 }) {
   const reset = hasFilters ? (
@@ -179,6 +185,10 @@ export function AdminFilterBar({
           {children}
         </div>
         {reset}
+      </div>
+      {/* `empty:hidden` keeps the gap away when nothing is applied. */}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 empty:hidden">
+        {chips}
       </div>
     </section>
   );

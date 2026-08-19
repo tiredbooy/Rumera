@@ -1,6 +1,10 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  renderStreamedMarkup,
+  renderStreamedShell,
+} from "@/lib/testing/render-stream";
 
 import type { ProductListItem } from "@/features/catalog/products/types";
 
@@ -42,6 +46,7 @@ vi.mock("@/features/catalog/products/components/product-card", () => ({
     <article data-card={product.id}>{product.title}</article>
   ),
   PRODUCT_CARD_GRID_CLASS: "grid",
+  PRODUCT_CARD_MEDIA_FRAME_CLASS: "product-card-media",
 }));
 
 vi.mock(
@@ -53,7 +58,12 @@ vi.mock(
   }),
 );
 
-import { SearchView } from "@/features/storefront/search/components/search-view";
+import { redirect } from "next/navigation";
+
+import {
+  SearchView,
+  SEARCH_PAGE_SIZE,
+} from "@/features/storefront/search/components/search-view";
 
 const product: ProductListItem = {
   id: 11,
@@ -98,8 +108,8 @@ describe("SearchView error vs empty", () => {
       },
     );
 
-    const markup = renderToStaticMarkup(
-      await SearchView({ searchParams: Promise.resolve({ q: "ویسکی" }) }),
+    const markup = await renderStreamedMarkup(
+      <SearchView searchParams={Promise.resolve({ q: "ویسکی" })} />,
     );
 
     expect(markup).toContain("جستجو انجام نشد");
@@ -118,8 +128,8 @@ describe("SearchView error vs empty", () => {
       },
     );
 
-    const markup = renderToStaticMarkup(
-      await SearchView({ searchParams: Promise.resolve({ q: "xyzzy" }) }),
+    const markup = await renderStreamedMarkup(
+      <SearchView searchParams={Promise.resolve({ q: "xyzzy" })} />,
     );
 
     expect(markup).toContain("نتیجه‌ای برای «xyzzy» پیدا نشد");
@@ -158,8 +168,8 @@ describe("SearchView error vs empty", () => {
       },
     );
 
-    const markup = renderToStaticMarkup(
-      await SearchView({ searchParams: Promise.resolve({ q: "ویسکی" }) }),
+    const markup = await renderStreamedMarkup(
+      <SearchView searchParams={Promise.resolve({ q: "ویسکی" })} />,
     );
 
     expect(markup).toContain("۴۰ نتیجه");
@@ -169,5 +179,76 @@ describe("SearchView error vs empty", () => {
     expect(mocks.listProducts).toHaveBeenCalledWith(
       expect.objectContaining({ search: "ویسکی", limit: 24, page: 1 }),
     );
+  });
+});
+
+describe("SearchView streaming", () => {
+  /** Held open until the shell has flushed, so «pending» really means pending. */
+  let releaseSearch: () => void;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.listCategories.mockResolvedValue([]);
+    mocks.listProducts.mockImplementation((filter: { search?: string }) =>
+      filter.search
+        ? new Promise((resolve) => {
+            releaseSearch = () => resolve(productPage([product]));
+          })
+        : Promise.resolve(productPage([product])),
+    );
+  });
+
+  function renderWithPendingHits(page?: string) {
+    return renderStreamedShell(
+      <SearchView searchParams={Promise.resolve({ q: "ویسکی", page })} />,
+      () => releaseSearch(),
+    );
+  }
+
+  it("flushes the hero and search box while the hits are still pending", async () => {
+    const { shell, html } = await renderWithPendingHits();
+
+    expect(shell.length).toBeLessThan(html.length);
+    expect(shell).toContain("دنبال چه می‌گردید؟");
+    expect(shell).toContain(
+      'placeholder="نام، توضیحات، برند، دسته، کد، SKU یا برچسب…"',
+    );
+    expect(shell).toContain('data-slot="route-loading"');
+    expect(shell).not.toContain("data-hit=");
+    expect(html).toContain("data-hit=");
+  });
+
+  it("falls back to one search page of placeholder cards", async () => {
+    const { shell } = await renderWithPendingHits();
+
+    expect(shell.split("product-card-media").length - 1).toBe(SEARCH_PAGE_SIZE);
+  });
+
+  it("still resolves an out-of-range page in the shell", async () => {
+    mocks.listProducts.mockImplementation(
+      (filter: { search?: string; page?: number }) =>
+        filter.search
+          ? Promise.resolve({
+              results: [product],
+              pagination: {
+                page: filter.page ?? 1,
+                limit: SEARCH_PAGE_SIZE,
+                total_items: 40,
+                total_pages: 2,
+                has_next: false,
+                has_prev: true,
+              },
+            })
+          : Promise.resolve(productPage([product])),
+    );
+
+    // A deep page blocks on its own results: the redirect is decided in the
+    // shell, never from inside a boundary after the page has been sent.
+    const { shell } = await renderWithPendingHits("3");
+
+    expect(redirect).toHaveBeenCalledWith(
+      "/search?q=%D9%88%DB%8C%D8%B3%DA%A9%DB%8C&page=2",
+    );
+    expect(shell).toContain("دنبال چه می‌گردید؟");
   });
 });

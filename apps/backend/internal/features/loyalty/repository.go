@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -16,8 +18,9 @@ type Repository interface {
 	GetAccount(ctx context.Context, userID int64) (*LoyaltyAccount, error)
 	// Award grants points idempotently keyed by (reason, refType, refID). Returns
 	// false (no error) when the grant was already recorded. tiers are live
-	// programme cutovers (not hardcoded 1000/5000/20000).
-	Award(ctx context.Context, userID int64, delta int, reason, refType, refID string, tiers TierThresholds) (bool, error)
+	// programme cutovers (not hardcoded 1000/5000/20000). audit is the L-4
+	// who/why, written on the same INSERT; automated paths pass the zero value.
+	Award(ctx context.Context, userID int64, delta int, reason, refType, refID string, tiers TierThresholds, audit LedgerAudit) (bool, error)
 	// GetProgramme returns the singleton loyalty_programme row. Missing → models.ErrNotFound.
 	GetProgramme(ctx context.Context) (*programmeRow, error)
 	// ListProgrammeTiers returns bronze/silver/gold/cellar ordered by sort_order.
@@ -31,7 +34,8 @@ type Repository interface {
 	Spend(ctx context.Context, userID, points int64, refID string) (replayed bool, err error)
 	// Clawback reduces balance by up to maxPoints without reducing lifetime.
 	// Idempotent on (reason, refType, refID). Returns points actually deducted.
-	Clawback(ctx context.Context, userID int64, maxPoints int, reason, refType, refID string) (deducted int, err error)
+	// audit carries the L-4 who/why for staff clawbacks.
+	Clawback(ctx context.Context, userID int64, maxPoints int, reason, refType, refID string, audit LedgerAudit) (deducted int, err error)
 	// GetLedgerDelta returns the delta for an exact ledger key (e.g. order_paid).
 	GetLedgerDelta(ctx context.Context, reason, refType, refID string) (delta int, err error)
 	// ListBirthdayUserIDs returns active users whose birth month/day match.
@@ -51,6 +55,20 @@ type Repository interface {
 	// FindAdminAdjust locates a prior admin_adjust row for this member + key
 	// (exact ref_id or `{key}|actor=…` encoding). Missing → models.ErrNotFound.
 	FindAdminAdjust(ctx context.Context, userID int64, refIdentity string) (*LoyaltyTransaction, error)
+	// ResolveActorLabel is the staff display name to snapshot on an adjust
+	// (L-4). Missing user → models.ErrNotFound.
+	ResolveActorLabel(ctx context.Context, userUUID uuid.UUID) (string, error)
+	// TierDistribution groups loyalty_accounts by tier (L-9). Tiers with no
+	// members are absent — the service fills them in from the programme table.
+	TierDistribution(ctx context.Context) ([]TierDistribution, error)
+	// PointsLiability multiplies outstanding points by the live redeem_value
+	// as NUMERIC and returns an exact decimal string. fallbackRedeemValue is
+	// used (also as text) when no programme row exists yet.
+	PointsLiability(ctx context.Context, points int64, fallbackRedeemValue string) (string, error)
+	// BirthdayAwardStats reads the birthday ledger keys (L-9): how many awards
+	// this year, how many of todayRefIDs are already written, and the newest
+	// birthday award of all time.
+	BirthdayAwardStats(ctx context.Context, year int, todayRefIDs []string) (grantedThisYear, grantedToday int64, lastAwardAt *time.Time, err error)
 }
 
 type loyaltyRepository struct {
@@ -81,7 +99,7 @@ func (r *loyaltyRepository) GetAccount(ctx context.Context, userID int64) (*Loya
 	return &acc, nil
 }
 
-func (r *loyaltyRepository) Award(ctx context.Context, userID int64, delta int, reason, refType, refID string, tiers TierThresholds) (bool, error) {
+func (r *loyaltyRepository) Award(ctx context.Context, userID int64, delta int, reason, refType, refID string, tiers TierThresholds, audit LedgerAudit) (bool, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("loyaltyRepository.Award begin: %w", err)
@@ -92,10 +110,11 @@ func (r *loyaltyRepository) Award(ctx context.Context, userID int64, delta int, 
 
 	// Idempotency gate: the unique (reason, ref_type, ref_id) makes a replay a no-op.
 	const insLedger = `
-		INSERT INTO loyalty_transactions (user_id, delta, reason, ref_type, ref_id)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO loyalty_transactions (user_id, delta, reason, ref_type, ref_id, note, actor_user_id, actor_label)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (reason, ref_type, ref_id) DO NOTHING`
-	tag, err := tx.Exec(ctx, insLedger, userID, delta, reason, refType, refID)
+	note, actor, label := audit.args()
+	tag, err := tx.Exec(ctx, insLedger, userID, delta, reason, refType, refID, note, actor, label)
 	if err != nil {
 		return false, fmt.Errorf("loyaltyRepository.Award ledger: %w", err)
 	}
@@ -174,7 +193,7 @@ func (r *loyaltyRepository) Spend(ctx context.Context, userID, points int64, ref
 	return false, nil
 }
 
-func (r *loyaltyRepository) Clawback(ctx context.Context, userID int64, maxPoints int, reason, refType, refID string) (int, error) {
+func (r *loyaltyRepository) Clawback(ctx context.Context, userID int64, maxPoints int, reason, refType, refID string, audit LedgerAudit) (int, error) {
 	if maxPoints <= 0 {
 		return 0, nil
 	}
@@ -205,10 +224,11 @@ func (r *loyaltyRepository) Clawback(ctx context.Context, userID int64, maxPoint
 	if deducted <= 0 {
 		// Nothing to take; claim the idempotency key with 0 so retries no-op.
 		const ins0 = `
-			INSERT INTO loyalty_transactions (user_id, delta, reason, ref_type, ref_id)
-			VALUES ($1, 0, $2, $3, $4)
+			INSERT INTO loyalty_transactions (user_id, delta, reason, ref_type, ref_id, note, actor_user_id, actor_label)
+			VALUES ($1, 0, $2, $3, $4, $5, $6, $7)
 			ON CONFLICT (reason, ref_type, ref_id) DO NOTHING`
-		if _, err := tx.Exec(ctx, ins0, userID, reason, refType, refID); err != nil {
+		note, actor, label := audit.args()
+		if _, err := tx.Exec(ctx, ins0, userID, reason, refType, refID, note, actor, label); err != nil {
 			return 0, fmt.Errorf("loyaltyRepository.Clawback ledger0: %w", err)
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -218,10 +238,11 @@ func (r *loyaltyRepository) Clawback(ctx context.Context, userID int64, maxPoint
 	}
 
 	const ins = `
-		INSERT INTO loyalty_transactions (user_id, delta, reason, ref_type, ref_id)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO loyalty_transactions (user_id, delta, reason, ref_type, ref_id, note, actor_user_id, actor_label)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (reason, ref_type, ref_id) DO NOTHING`
-	tag, err := tx.Exec(ctx, ins, userID, -deducted, reason, refType, refID)
+	note, actor, label := audit.args()
+	tag, err := tx.Exec(ctx, ins, userID, -deducted, reason, refType, refID, note, actor, label)
 	if err != nil {
 		return 0, fmt.Errorf("loyaltyRepository.Clawback ledger: %w", err)
 	}
@@ -296,7 +317,7 @@ func (r *loyaltyRepository) ListTransactions(ctx context.Context, userID int64, 
 		return []LoyaltyTransaction{}, total, nil
 	}
 	const q = `
-		SELECT id, user_id, delta, reason, ref_type, ref_id, created_at
+		SELECT id, user_id, delta, reason, ref_type, ref_id, note, actor_user_id, actor_label, created_at
 		FROM loyalty_transactions
 		WHERE user_id = $1
 		ORDER BY created_at DESC, id DESC
@@ -331,13 +352,31 @@ func (r *loyaltyRepository) ResolveUserID(ctx context.Context, userUUID uuid.UUI
 	return r.resolveInternalUserID(ctx, userUUID)
 }
 
+// ResolveActorLabel snapshots the acting staff member's name at mint time.
+// Name first, email as the fallback — an operator with no profile name still
+// resolves to something a person can act on.
+func (r *loyaltyRepository) ResolveActorLabel(ctx context.Context, userUUID uuid.UUID) (string, error) {
+	const q = `
+		SELECT COALESCE(NULLIF(BTRIM(CONCAT_WS(' ', first_name, last_name)), ''), email)
+		FROM users
+		WHERE user_id = $1`
+	var label string
+	if err := r.db.QueryRow(ctx, q, userUUID).Scan(&label); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", models.ErrNotFound
+		}
+		return "", fmt.Errorf("loyaltyRepository.ResolveActorLabel: %w", err)
+	}
+	return label, nil
+}
+
 func (r *loyaltyRepository) FindAdminAdjust(ctx context.Context, userID int64, refIdentity string) (*LoyaltyTransaction, error) {
 	refIdentity = strings.TrimSpace(refIdentity)
 	if userID <= 0 || refIdentity == "" {
 		return nil, models.ErrNotFound
 	}
 	const q = `
-		SELECT id, user_id, delta, reason, ref_type, ref_id, created_at
+		SELECT id, user_id, delta, reason, ref_type, ref_id, note, actor_user_id, actor_label, created_at
 		FROM loyalty_transactions
 		WHERE user_id = $1
 		  AND reason = $2
@@ -474,7 +513,7 @@ func (r *loyaltyRepository) ListMemberTransactions(ctx context.Context, userUUID
 	}
 
 	listQ := fmt.Sprintf(`
-		SELECT id, user_id, delta, reason, ref_type, ref_id, created_at
+		SELECT id, user_id, delta, reason, ref_type, ref_id, note, actor_user_id, actor_label, created_at
 		FROM loyalty_transactions
 		WHERE %s
 		ORDER BY created_at DESC, id DESC
@@ -491,6 +530,69 @@ func (r *loyaltyRepository) ListMemberTransactions(ctx context.Context, userUUID
 		txs = []LoyaltyTransaction{}
 	}
 	return txs, total, nil
+}
+
+func (r *loyaltyRepository) TierDistribution(ctx context.Context) ([]TierDistribution, error) {
+	const q = `
+		SELECT tier,
+		       COUNT(*)::bigint AS members,
+		       COALESCE(SUM(points_balance), 0)::bigint AS points_balance
+		FROM loyalty_accounts
+		GROUP BY tier`
+	rows, err := r.db.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("loyaltyRepository.TierDistribution: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, pgx.RowToStructByName[TierDistribution])
+	if err != nil {
+		return nil, fmt.Errorf("loyaltyRepository.TierDistribution scan: %w", err)
+	}
+	return out, nil
+}
+
+// PointsLiability keeps the whole multiplication inside Postgres as NUMERIC.
+// redeem_value is stored as DOUBLE PRECISION, so casting it here (rather than
+// reading it into a Go float64 and multiplying) is what makes the Toman figure
+// exact — a rate like 1000.1 has no binary representation.
+func (r *loyaltyRepository) PointsLiability(ctx context.Context, points int64, fallbackRedeemValue string) (string, error) {
+	const q = `
+		SELECT (
+			$1::bigint::numeric
+			* COALESCE(
+				(SELECT redeem_value FROM loyalty_programme WHERE id = 1)::numeric,
+				$2::numeric
+			)
+		)::text`
+	var liability string
+	if err := r.db.QueryRow(ctx, q, points, fallbackRedeemValue).Scan(&liability); err != nil {
+		return "", fmt.Errorf("loyaltyRepository.PointsLiability: %w", err)
+	}
+	return liability, nil
+}
+
+// BirthdayAwardStats reads the job's own ledger keys. ponytail: the LIKE scans
+// the birthday rows (a few per member per year, small); index it if the ledger
+// ever grows past that.
+func (r *loyaltyRepository) BirthdayAwardStats(ctx context.Context, year int, todayRefIDs []string) (int64, int64, *time.Time, error) {
+	if todayRefIDs == nil {
+		todayRefIDs = []string{}
+	}
+	const q = `
+		SELECT
+			COUNT(*) FILTER (WHERE ref_id LIKE $1)::bigint          AS granted_this_year,
+			COUNT(*) FILTER (WHERE ref_id = ANY($2::text[]))::bigint AS granted_today,
+			MAX(created_at)                                          AS last_award_at
+		FROM loyalty_transactions
+		WHERE reason = $3 AND ref_type = 'user'`
+	var grantedThisYear, grantedToday int64
+	var last *time.Time
+	err := r.db.QueryRow(ctx, q,
+		"%:"+strconv.Itoa(year), todayRefIDs, string(LoyaltyReasonBirthday),
+	).Scan(&grantedThisYear, &grantedToday, &last)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("loyaltyRepository.BirthdayAwardStats: %w", err)
+	}
+	return grantedThisYear, grantedToday, last, nil
 }
 
 const programmeSingletonID = 1

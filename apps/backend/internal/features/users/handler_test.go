@@ -57,3 +57,41 @@ func TestUpdateProfileDoesNotPersistNewPhone(t *testing.T) {
 		t.Fatalf("first_name not updated: %+v", env.Data.FirstName)
 	}
 }
+
+// CF-3: the customer file is where wallet credit is minted, and it used to do
+// that with no balance on the page. The detail read now carries it, so the
+// operator granting money can see what the customer already has.
+func TestGetUserCarriesWalletBalance(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	userID := uuid.New()
+	repo := &userServiceRepoStub{
+		byID:          &User{ID: 7, UserID: userID, Email: "a@b.c", Role: UserRoleCustomer, IsActive: true},
+		walletBalance: 125000.5,
+	}
+	h := NewHandler(NewService(repo), validator.New())
+
+	r := gin.New()
+	r.GET("/admin/users/:userID", h.GetUser)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/admin/users/"+userID.String(), nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s; want 200", w.Code, w.Body.String())
+	}
+	var env struct {
+		Data AdminUser `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// Exact decimal string, not a float — the frontend money formatter parses
+	// the string rather than routing it through Number().
+	if env.Data.WalletBalance != "125000.50" {
+		t.Fatalf("wallet_balance = %q; want 125000.50", env.Data.WalletBalance)
+	}
+	// The write projections never looked the balance up; they must not claim one.
+	if got := MapToAdminUser(repo.byID).WalletBalance; got != "" {
+		t.Fatalf("MapToAdminUser wallet_balance = %q; want empty", got)
+	}
+}

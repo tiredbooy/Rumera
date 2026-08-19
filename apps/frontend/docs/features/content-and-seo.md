@@ -45,6 +45,18 @@ ItemList (PR-080k).
 Recipes are editorial content **plus** optional `product_variant_id` links.
 Never invent stock; use shoppable product payloads from the API.
 
+**The method is a list of steps** (CE-5). It still lives in the single `content`
+column, serialised as the canonical ordered list `<ol><li>…</li></ol>`:
+
+- `features/admin/recipes/method-steps.ts` — `splitMethod` / `joinMethod`. The
+  split is lossless by construction, so a legacy free-text body opens as steps
+  rather than as an empty editor. Nothing is rewritten until the author edits.
+- `extractContentSteps` (`lib/content/sanitize-html.ts`) reads the ordered list
+  back for `HowToStep`, ignoring an unrelated `<ul>` of tips, and carries each
+  step's own image into the structured data.
+- Anything that is not a step already has a home: `description`/`excerpt` for the
+  intro, `serving_suggestion` for the outro.
+
 Cache tag: `RECIPE_CACHE_TAG`. Revalidate on admin recipe writes.
 
 ---
@@ -60,6 +72,11 @@ Cache tag: `RECIPE_CACHE_TAG`. Revalidate on admin recipe writes.
 
 Backend resource name is **blog**; frontend product language is **journal**.
 That naming split is intentional — map carefully at the API boundary.
+
+`og_image_url` is the dedicated social crop (CE-10); empty falls back to the
+cover in both `generateMetadata` and `journalArticleLd`. A local file reaches it
+only through `POST /admin/uploads/journal/:id/og` (`JournalOGImage`), because a
+`/media/` path in a JSON payload is rejected by design.
 
 Cache tag: `JOURNAL_CACHE_TAG`.
 

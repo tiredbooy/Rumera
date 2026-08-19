@@ -121,6 +121,7 @@ func TestContentMediaSlotUsesClosedOwnerRoleMatrix(t *testing.T) {
 		{ownerType: "recipes", role: "cover", kind: MediaOwnerRecipe, mediaRole: RoleCover},
 		{ownerType: "recipes", role: "og", kind: MediaOwnerRecipe, mediaRole: RoleOG},
 		{ownerType: "journal", role: "cover", kind: MediaOwnerJournal, mediaRole: RoleCover},
+		{ownerType: "journal", role: "og", kind: MediaOwnerJournal, mediaRole: RoleOG},
 	}
 	for _, tt := range valid {
 		t.Run(tt.ownerType+" "+tt.role, func(t *testing.T) {
@@ -136,7 +137,7 @@ func TestContentMediaSlotUsesClosedOwnerRoleMatrix(t *testing.T) {
 		{"hero", "desktop"},
 		{"hero-slides", "cover"},
 		{"recipes", "desktop"},
-		{"journal", "og"},
+		{"journal", "desktop"},
 		{"journals", "cover"},
 	}
 	for _, tt := range invalid {

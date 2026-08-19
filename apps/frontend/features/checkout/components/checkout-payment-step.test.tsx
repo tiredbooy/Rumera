@@ -54,8 +54,9 @@ describe("checkout payment step copy (PR-030d)", () => {
         isGift
         giftSettings={{
           enabled: true,
-          message_max_length: 200,
-          hide_price_default: false,
+          messageEnabled: true,
+          messageMaxLength: 200,
+          hidePriceEnabled: false,
           options: [],
         }}
       />,

@@ -3,33 +3,23 @@ import "server-only";
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Package, Plus, Search } from "lucide-react";
+import { Package, Plus } from "lucide-react";
 
 import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
 import { fetchAdminProducts } from "@/features/admin/products/api/server";
+import { ProductsFilters } from "@/features/admin/products/components/products-list-filters";
 import { ProductsTable } from "@/features/admin/products/components/ProductsTable";
 import {
-  ADMIN_PRODUCT_SORT_OPTIONS,
   ADMIN_PRODUCTS_PAGE_SIZE,
   hasAdminProductListFilters,
-  matchAdminProductSort,
   parseAdminProductListParams,
   productsPageHref,
   type AdminProductListFilters,
   type ProductsSearchParams,
 } from "@/features/admin/products/products-list-params";
 import { AdminDataErrorState } from "@/features/dashboard/components/admin-data-error-state";
-import {
-  AdminFilterBar,
-  AdminPage,
-} from "@/features/dashboard/components/admin-page";
+import { AdminPage } from "@/features/dashboard/components/admin-page";
 import { ApiError } from "@/lib/api/errors";
 import { faNum } from "@/lib/products";
 
@@ -57,12 +47,7 @@ export function ProductsListView({
           </Button>
         ) : null
       }
-      filters={
-        <ProductsFilters
-          key={`${filters.query}|${filters.isActive ?? "all"}|${filters.sortBy}:${filters.orderBy}`}
-          filters={filters}
-        />
-      }
+      filters={<ProductsFilters filters={filters} />}
     >
       <Suspense
         key={`${filters.query}|${filters.isActive ?? "all"}|${filters.sortBy}:${filters.orderBy}|${filters.page}`}
@@ -71,97 +56,6 @@ export function ProductsListView({
         <ProductsListResults filters={filters} canWrite={canWrite} />
       </Suspense>
     </AdminPage>
-  );
-}
-
-export function ProductsFilters({
-  filters,
-}: {
-  filters: AdminProductListFilters;
-}) {
-  const hasFilters = hasAdminProductListFilters(filters);
-  const sortValue =
-    matchAdminProductSort(filters.sortBy, filters.orderBy)?.value ?? "newest";
-  const isActiveValue =
-    filters.isActive === true
-      ? "true"
-      : filters.isActive === false
-        ? "false"
-        : "all";
-
-  return (
-    <AdminFilterBar
-      id="products-filter-title"
-      title="جستجو و فیلتر محصولات"
-      hasFilters={hasFilters}
-      resetHref="/admin/products"
-      gridClassName="sm:grid-cols-2 lg:grid-cols-[minmax(16rem,1fr)_12rem_12rem_auto] lg:items-end"
-    >
-      <form
-        action="/admin/products"
-        method="get"
-        aria-labelledby="products-filter-title"
-        className="contents"
-      >
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <Label htmlFor="products-query">نام یا برند</Label>
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
-              aria-hidden
-            />
-            <Input
-              id="products-query"
-              name="q"
-              type="search"
-              defaultValue={filters.query}
-              placeholder="جستجوی محصول یا برند…"
-              className="h-9 ps-9"
-            />
-          </div>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <Label htmlFor="products-is-active">وضعیت</Label>
-          <NativeSelect
-            id="products-is-active"
-            name="is_active"
-            defaultValue={isActiveValue}
-            className="w-full [&_[data-slot=native-select]]:h-9"
-          >
-            <NativeSelectOption value="all">
-              منتشرشده و پیش‌نویس
-            </NativeSelectOption>
-            <NativeSelectOption value="true">منتشرشده</NativeSelectOption>
-            <NativeSelectOption value="false">پیش‌نویس</NativeSelectOption>
-          </NativeSelect>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <Label htmlFor="products-sort">مرتب‌سازی</Label>
-          <NativeSelect
-            id="products-sort"
-            name="sort"
-            defaultValue={sortValue}
-            className="w-full [&_[data-slot=native-select]]:h-9"
-          >
-            {ADMIN_PRODUCT_SORT_OPTIONS.map((option) => (
-              <NativeSelectOption key={option.value} value={option.value}>
-                {option.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </div>
-
-        <Button
-          type="submit"
-          size="lg"
-          className="h-9 cursor-pointer sm:col-span-2 lg:col-span-1"
-        >
-          اعمال فیلترها
-        </Button>
-      </form>
-    </AdminFilterBar>
   );
 }
 
@@ -278,8 +172,8 @@ export async function ProductsListResults({
         className="mt-4"
         label={
           <>
-            {faNum(pagination.total_items)} محصول · صفحهٔ {faNum(pagination.page)}{" "}
-            از {faNum(pagination.total_pages)}
+            {faNum(pagination.total_items)} محصول · صفحهٔ{" "}
+            {faNum(pagination.page)} از {faNum(pagination.total_pages)}
           </>
         }
       />

@@ -1,4 +1,8 @@
 import {
+  collectRoutePassthrough,
+  withRoutePassthrough,
+} from "@/features/catalog/route-passthrough";
+import {
   isProductSortDirection,
   isProductSortField,
   type ProductSortDirection,
@@ -61,6 +65,12 @@ export type ProductListRouteQuery = {
   sortBy: ProductSortField;
   orderBy: ProductSortDirection;
   sortMode: ProductListSortMode;
+  /**
+   * Campaign/attribution params (utm_*, gclid, fbclid, …) the catalogue does
+   * not own. Carried verbatim so an ad click is never redirected or stripped
+   * before the analytics middleware reads it.
+   */
+  passthrough: readonly (readonly [string, string])[];
   needsRedirect: boolean;
 };
 
@@ -72,6 +82,9 @@ const QUERY_KEYS = new Set([
   "brand",
   "brand_id",
 ]);
+
+/** Legacy catalogue keys the parser deliberately drops on the next redirect. */
+const LEGACY_QUERY_KEYS = new Set(["sort"]);
 
 const BRAND_SLUG_PATTERN = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u;
 
@@ -95,12 +108,16 @@ function matchSortOption(
 export function parseProductListRouteQuery(
   searchParams: ProductListSearchParamsRecord,
 ): ProductListRouteQuery {
-  let needsRedirect = Object.entries(searchParams).some(
-    ([key, value]) => value !== undefined && !QUERY_KEYS.has(key),
+  // Anything the catalogue does not own is none of our business: it rides
+  // along untouched instead of triggering a canonicalizing redirect.
+  const passthrough = collectRoutePassthrough(
+    searchParams,
+    QUERY_KEYS,
+    LEGACY_QUERY_KEYS,
   );
 
   // Legacy footer/share links used `sort=discount` / `sort=new` (unsupported).
-  if (searchParams.sort !== undefined) needsRedirect = true;
+  let needsRedirect = searchParams.sort !== undefined;
 
   const parsedPage = parsePage(searchParams.page);
   const page = parsedPage ?? 1;
@@ -193,6 +210,7 @@ export function parseProductListRouteQuery(
     sortBy,
     orderBy,
     sortMode,
+    passthrough,
     needsRedirect,
   };
 }
@@ -214,6 +232,19 @@ export function productListHref(
   if (page > 1) params.set("page", String(page));
   const value = params.toString();
   return value ? `/products?${value}` : "/products";
+}
+
+/**
+ * Redirect target for a URL that genuinely needs correcting. Same canonical
+ * catalogue URL, plus the campaign params so attribution survives the hop.
+ * Internal links keep using `productListHref` so utm tags are not propagated.
+ */
+export function productListRedirectHref(
+  query: Parameters<typeof productListHref>[0] &
+    Pick<ProductListRouteQuery, "passthrough">,
+  page: number,
+): string {
+  return withRoutePassthrough(productListHref(query, page), query.passthrough);
 }
 
 /** Deep-link to the full catalogue filtered by a single brand. */

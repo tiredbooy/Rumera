@@ -127,9 +127,7 @@ describe("ProductForm aggregate recovery", () => {
     mocks.saveProductAggregate
       .mockRejectedValueOnce(new TypeError("network failed"))
       .mockResolvedValueOnce(savedProduct);
-    const firstRender = render(
-      <ProductForm mode="create" categories={[]} brands={[]} />,
-    );
+    const firstRender = render(<ProductForm mode="create" categories={[]} />);
     fireEvent.change(screen.getByLabelText("نام محصول"), {
       target: { value: "Recovered product" },
     });
@@ -147,7 +145,7 @@ describe("ProductForm aggregate recovery", () => {
     ).not.toBeNull();
 
     firstRender.unmount();
-    render(<ProductForm mode="create" categories={[]} brands={[]} />);
+    render(<ProductForm mode="create" categories={[]} />);
     const retry = await screen.findByRole("button", { name: "تلاش دوباره" });
     expect(screen.getByLabelText("نام محصول")).toBeDisabled();
     fireEvent.click(retry);
@@ -171,7 +169,7 @@ describe("ProductForm aggregate recovery", () => {
         title: ["invalid title"],
       }),
     );
-    render(<ProductForm mode="create" categories={[]} brands={[]} />);
+    render(<ProductForm mode="create" categories={[]} />);
     const title = screen.getByLabelText("نام محصول");
     fireEvent.change(title, { target: { value: "Rejected product" } });
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));

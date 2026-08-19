@@ -27,6 +27,7 @@ import {
   RECIPE_PAGE_SIZE,
   recipePageHref,
   type RecipeListSearchParams,
+  recipeRedirectHref,
 } from "@/features/recipes/routing";
 import { difficultyFa, formatDuration } from "@/features/recipes/utils";
 import { faNum } from "@/lib/products";
@@ -42,7 +43,7 @@ export async function RecipeListView({
   searchParams: RecipeListSearchParams;
 }) {
   const query = parseRecipeRouteQuery(await searchParams);
-  if (query.needsRedirect) redirect(recipePageHref(query, query.page));
+  if (query.needsRedirect) redirect(recipeRedirectHref(query, query.page));
 
   const isUnfiltered = !query.q && !query.difficulty && query.sort === "new";
   const editorialFeatured = isUnfiltered

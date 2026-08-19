@@ -217,7 +217,13 @@ export function journalArticleLd(post: JournalDetail) {
     "@type": "BlogPosting",
     headline: post.title,
     ...(description ? { description } : {}),
-    ...(post.image_url ? { image: [absoluteMediaUrl(post.image_url)] } : {}),
+    ...(post.og_image_url || post.image_url
+      ? {
+          image: [
+            absoluteMediaUrl((post.og_image_url ?? post.image_url) as string),
+          ],
+        }
+      : {}),
     inLanguage: "fa-IR",
     ...(post.published_at ? { datePublished: post.published_at } : {}),
     dateModified: post.updated_at,
@@ -303,10 +309,11 @@ export function recipeDetailLd(recipe: RecipeDetail) {
       : {}),
     ...(instructions.length
       ? {
-          recipeInstructions: instructions.map((text, index) => ({
+          recipeInstructions: instructions.map((step, index) => ({
             "@type": "HowToStep",
             position: index + 1,
-            text,
+            text: step.text,
+            ...(step.image ? { image: absoluteMediaUrl(step.image) } : {}),
           })),
         }
       : {}),

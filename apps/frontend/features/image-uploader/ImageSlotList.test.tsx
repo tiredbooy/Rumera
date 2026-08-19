@@ -39,14 +39,19 @@ function stagedSlot(localId: string, alt: string): StagedSlot {
 function ReorderHarness({
   persist = false,
   rollback = false,
+  count = 2,
 }: {
   persist?: boolean;
   rollback?: boolean;
+  count?: number;
 }) {
-  const [slots, setSlots] = React.useState<Slot[]>([
-    stagedSlot("first", "اول"),
-    stagedSlot("second", "دوم"),
-  ]);
+  const seeds = ["first", "second", "third", "fourth"] as const;
+  const alts = ["اول", "دوم", "سوم", "چهارم"] as const;
+  const [slots, setSlots] = React.useState<Slot[]>(
+    Array.from({ length: count }, (_, index) =>
+      stagedSlot(seeds[index], alts[index]),
+    ),
+  );
   const [isPending, setIsPending] = React.useState(false);
 
   function move(from: number, to: number) {
@@ -90,7 +95,7 @@ describe("ImageSlotList keyboard reordering", () => {
     render(<ReorderHarness />);
 
     const moveDown = screen.getByRole("button", {
-      name: "انتقال تصویر 1 از 2 به پایین",
+      name: "انتقال تصویر 1 از 2 به جایگاه بعدی",
     });
     moveDown.focus();
     fireEvent.click(moveDown);
@@ -102,13 +107,13 @@ describe("ImageSlotList keyboard reordering", () => {
     ).toEqual(["دوم", "اول"]);
 
     const movedControl = screen.getByRole("button", {
-      name: "انتقال تصویر 2 از 2 به بالا",
+      name: "انتقال تصویر 2 از 2 به جایگاه قبلی",
     });
     expect(movedControl).toHaveFocus();
     expect(movedControl).toBeEnabled();
     expect(
       screen.getByRole("button", {
-        name: "انتقال تصویر 2 از 2 به پایین",
+        name: "انتقال تصویر 2 از 2 به جایگاه بعدی",
       }),
     ).toBeDisabled();
     expect(movedControl.className).toContain(
@@ -121,13 +126,13 @@ describe("ImageSlotList keyboard reordering", () => {
     render(<ReorderHarness persist />);
 
     const moveDown = screen.getByRole("button", {
-      name: "انتقال تصویر 1 از 2 به پایین",
+      name: "انتقال تصویر 1 از 2 به جایگاه بعدی",
     });
     moveDown.focus();
     fireEvent.click(moveDown);
 
     const movedControl = screen.getByRole("button", {
-      name: "انتقال تصویر 2 از 2 به بالا",
+      name: "انتقال تصویر 2 از 2 به جایگاه قبلی",
     });
     expect(movedControl).toBeDisabled();
     expect(movedControl).not.toHaveFocus();
@@ -140,12 +145,53 @@ describe("ImageSlotList keyboard reordering", () => {
     expect(movedControl).toHaveFocus();
   });
 
+  it("keeps focus on the same-direction control so a second keypress continues", () => {
+    render(<ReorderHarness count={3} />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "انتقال تصویر 1 از 3 به جایگاه بعدی",
+      }),
+    );
+
+    expect(
+      screen
+        .getAllByRole("textbox")
+        .map((input) => input.getAttribute("value")),
+    ).toEqual(["دوم", "اول", "سوم"]);
+
+    const continueNext = screen.getByRole("button", {
+      name: "انتقال تصویر 2 از 3 به جایگاه بعدی",
+    });
+    expect(continueNext).toHaveFocus();
+
+    fireEvent.click(continueNext);
+
+    expect(
+      screen
+        .getAllByRole("textbox")
+        .map((input) => input.getAttribute("value")),
+    ).toEqual(["دوم", "سوم", "اول"]);
+  });
+
+  it("writes a drag payload so Firefox will start the drag", () => {
+    render(<ReorderHarness />);
+
+    const dataTransfer = {
+      setData: vi.fn(),
+      effectAllowed: "",
+    };
+    fireEvent.dragStart(screen.getAllByRole("listitem")[0], { dataTransfer });
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith("text/plain", "first");
+  });
+
   it("restores focus to a valid control when persistence rolls back", async () => {
     vi.useFakeTimers();
     render(<ReorderHarness persist rollback />);
 
     const moveDown = screen.getByRole("button", {
-      name: "انتقال تصویر 1 از 2 به پایین",
+      name: "انتقال تصویر 1 از 2 به جایگاه بعدی",
     });
     moveDown.focus();
     fireEvent.click(moveDown);
@@ -161,7 +207,7 @@ describe("ImageSlotList keyboard reordering", () => {
     ).toEqual(["اول", "دوم"]);
     expect(
       screen.getByRole("button", {
-        name: "انتقال تصویر 1 از 2 به پایین",
+        name: "انتقال تصویر 1 از 2 به جایگاه بعدی",
       }),
     ).toHaveFocus();
   });

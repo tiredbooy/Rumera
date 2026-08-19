@@ -595,3 +595,60 @@ func testPNG(t *testing.T) []byte {
 	}
 	return buf.Bytes()
 }
+
+func TestListLibraryReturnsImagesNewestFirstAndFiltersByKey(t *testing.T) {
+	store := newTestLocalStorage(t)
+	service := NewService(
+		store,
+		newTestLocalStorage(t),
+		&mediaImageRepositoryStub{},
+		&productMediaRepositoryStub{},
+		&contentMediaRepositoryStub{},
+		nil,
+		imaging.New(),
+		Config{MaxUploadBytes: 1 << 20},
+		zap.NewNop(),
+	)
+
+	ctx := context.Background()
+	for _, key := range []string{
+		"uploads/first.webp",
+		"recipes/9/cover-" + testMediaObjectID + ".png",
+		"uploads/notes.txt",
+	} {
+		if err := store.Put(ctx, key, strings.NewReader("x")); err != nil {
+			t.Fatalf("seed %q: %v", key, err)
+		}
+	}
+
+	items, err := service.ListLibrary(ctx, "", 0)
+	if err != nil {
+		t.Fatalf("ListLibrary: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("items = %#v; want the two images only", items)
+	}
+	for i := 1; i < len(items); i++ {
+		if items[i-1].ModifiedAt.Before(items[i].ModifiedAt) {
+			t.Fatalf("items are not newest-first: %#v", items)
+		}
+	}
+	for _, item := range items {
+		if item.URL != "/media/"+item.Key {
+			t.Fatalf("url = %q; want the canonical path for %q", item.URL, item.Key)
+		}
+	}
+
+	filtered, err := service.ListLibrary(ctx, "RECIPES/9", 0)
+	if err != nil {
+		t.Fatalf("ListLibrary filtered: %v", err)
+	}
+	if len(filtered) != 1 || !strings.HasPrefix(filtered[0].Key, "recipes/9/") {
+		t.Fatalf("filtered = %#v", filtered)
+	}
+
+	capped, err := service.ListLibrary(ctx, "", 1)
+	if err != nil || len(capped) != 1 {
+		t.Fatalf("capped = %#v, err = %v", capped, err)
+	}
+}

@@ -141,6 +141,7 @@ describe("editorial structured data", () => {
       excerpt: "خلاصهٔ عمومی",
       image_url: "/media/journal/2/cover.webp",
       image_alt: "تصویر نوشته",
+      og_image_url: null,
       time_to_read: 7,
       total_reads: 10,
       status: "published",
@@ -188,6 +189,10 @@ describe("editorial structured data", () => {
       organizationLd().logo,
     );
     expect(JSON.stringify(journalArticleLd(post))).not.toContain('"author"');
+    // CE-10: a dedicated social crop outranks the cover in structured data too.
+    expect(
+      journalArticleLd({ ...post, og_image_url: "/media/journal/2/og.webp" }),
+    ).toMatchObject({ image: ["http://localhost:8080/media/journal/2/og.webp"] });
   });
 
   it("builds Recipe data from sanitized instructions and precise API fields", () => {

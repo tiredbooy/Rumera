@@ -30,6 +30,7 @@ func ToBlogResponse(b *Blog) BlogResponse {
 		Excerpt:         b.Excerpt,
 		ImageURL:        b.ImageURL,
 		ImageAlt:        b.ImageAlt,
+		OGImageURL:      b.OGImageURL,
 		TimeToRead:      b.TimeToRead,
 		TotalReads:      b.TotalReads,
 		Status:          b.Status,

@@ -1,3 +1,4 @@
+import { formatToman } from "@/lib/money"
 
 export type Product = {
   id: string
@@ -45,11 +46,12 @@ export function faNum(value: number): string {
   return faNumberFormatter.format(value)
 }
 
-const tomanFormatter = new Intl.NumberFormat("fa-IR", {
-  maximumFractionDigits: 0,
-})
-
-/** Formats a Toman price with Persian digits, e.g. «۱۸٬۹۰۰٬۰۰۰ تومان». */
-export function formatPrice(value: number): string {
-  return `${tomanFormatter.format(value)} تومان`
-}
+/**
+ * Formats a Toman price with Persian digits, e.g. «۱۸٬۹۰۰٬۰۰۰ تومان».
+ *
+ * Accepts the exact decimal string the API returns as well as a number — pass the
+ * string wherever you have one. This used to be an `Intl.NumberFormat` with
+ * `maximumFractionDigits: 0`, which silently rounded every fractional amount
+ * (a 125000.50 gift card rendered as ۱۲۵٬۰۰۱ to its owner). See lib/money.ts.
+ */
+export const formatPrice = formatToman

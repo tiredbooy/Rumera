@@ -37,6 +37,7 @@ type Blog struct {
 	Excerpt         *string    `json:"excerpt"`
 	ImageURL        *string    `json:"image_url"`
 	ImageAlt        *string    `json:"image_alt"`
+	OGImageURL      *string    `json:"og_image_url"`
 	TimeToRead      int        `json:"time_to_read"`
 	TotalReads      int64      `json:"total_reads"`
 	Status          BlogStatus `json:"status"`
@@ -47,6 +48,12 @@ type Blog struct {
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 	DeletedAt       *time.Time `json:"deleted_at"`
+}
+
+// SlugRedirectResponse is the 404-path answer for a retired slug: the slug the
+// content lives at now.
+type SlugRedirectResponse struct {
+	Slug string `json:"slug"`
 }
 
 type BlogCategoryAssignment struct {
@@ -91,6 +98,7 @@ type BlogReq struct {
 	Excerpt         *string    `json:"excerpt"`
 	ImageURL        *string    `json:"image_url" validate:"omitempty,max=2048"`
 	ImageAlt        *string    `json:"image_alt" validate:"omitempty,max=255"`
+	OGImageURL      *string    `json:"og_image_url" validate:"omitempty,max=2048"`
 	TimeToRead      int        `json:"time_to_read"     validate:"omitempty,min=1"`
 	Status          BlogStatus `json:"status"           validate:"omitempty,oneof=draft published archived"`
 	IsFeatured      bool       `json:"is_featured"`
@@ -103,22 +111,26 @@ type BlogReq struct {
 }
 
 type BlogUpdateReq struct {
-	Title            *string                         `json:"title"            validate:"omitempty,max=255"`
-	Slug             *string                         `json:"slug"             validate:"omitempty,max=255"`
-	Content          *string                         `json:"content"`
-	Excerpt          models.NullablePatch[string]    `json:"excerpt"`
-	ImageURL         models.NullablePatch[string]    `json:"image_url"`
-	ImageAlt         models.NullablePatch[string]    `json:"image_alt"`
-	ExpectedImageURL models.NullablePatch[string]    `json:"-"`
-	TimeToRead       *int                            `json:"time_to_read"     validate:"omitempty,min=1"`
-	Status           *BlogStatus                     `json:"status"           validate:"omitempty,oneof=draft published archived"`
-	IsFeatured       *bool                           `json:"is_featured"`
-	MetaTitle        models.NullablePatch[string]    `json:"meta_title"`
-	MetaDescription  models.NullablePatch[string]    `json:"meta_description"`
-	PublishedAt      models.NullablePatch[time.Time] `json:"published_at"`
-	CategoryIDs      []int64                         `json:"category_ids"`
-	ProductIDs       []int64                         `json:"product_ids"`
-	TagIDs           []int64                         `json:"tag_ids"`
+	Title            *string                      `json:"title"            validate:"omitempty,max=255"`
+	Slug             *string                      `json:"slug"             validate:"omitempty,max=255"`
+	Content          *string                      `json:"content"`
+	Excerpt          models.NullablePatch[string] `json:"excerpt"`
+	ImageURL         models.NullablePatch[string] `json:"image_url"`
+	ImageAlt         models.NullablePatch[string] `json:"image_alt"`
+	OGImageURL       models.NullablePatch[string] `json:"og_image_url"`
+	ExpectedImageURL models.NullablePatch[string] `json:"-"`
+	// ExpectedOGImageURL guards the OG slot the same way ExpectedImageURL guards
+	// the cover: a concurrent owner-scoped upload must not be silently clobbered.
+	ExpectedOGImageURL models.NullablePatch[string]    `json:"-"`
+	TimeToRead         *int                            `json:"time_to_read"     validate:"omitempty,min=1"`
+	Status             *BlogStatus                     `json:"status"           validate:"omitempty,oneof=draft published archived"`
+	IsFeatured         *bool                           `json:"is_featured"`
+	MetaTitle          models.NullablePatch[string]    `json:"meta_title"`
+	MetaDescription    models.NullablePatch[string]    `json:"meta_description"`
+	PublishedAt        models.NullablePatch[time.Time] `json:"published_at"`
+	CategoryIDs        []int64                         `json:"category_ids"`
+	ProductIDs         []int64                         `json:"product_ids"`
+	TagIDs             []int64                         `json:"tag_ids"`
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
@@ -162,6 +174,7 @@ type BlogResponse struct {
 	Excerpt         *string    `json:"excerpt"`
 	ImageURL        *string    `json:"image_url"`
 	ImageAlt        *string    `json:"image_alt"`
+	OGImageURL      *string    `json:"og_image_url"`
 	TimeToRead      int        `json:"time_to_read"`
 	TotalReads      int64      `json:"total_reads"`
 	Status          BlogStatus `json:"status"`

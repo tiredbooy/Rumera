@@ -26,6 +26,8 @@ export const PERMISSIONS = {
   CUSTOMERS_WRITE: "customers:write",
   CUSTOMERS_BAN: "customers:ban",
   WALLET_CREDIT: "wallet:credit",
+  /** Mints loyalty points. Isolated from customers:write like wallet:credit (L-8). */
+  LOYALTY_ADJUST: "loyalty:adjust",
   // Reviews / moderation
   REVIEWS_READ: "reviews:read",
   REVIEWS_MODERATE: "reviews:moderate",
@@ -64,6 +66,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "customers:write": "ویرایش مشتریان",
   "customers:ban": "مسدودسازی مشتری",
   "wallet:credit": "افزایش موجودی کیف پول",
+  "loyalty:adjust": "تنظیم امتیاز باشگاه",
   "reviews:read": "مشاهدهٔ دیدگاه‌ها",
   "reviews:moderate": "بازبینی دیدگاه‌ها",
   "recipes:read": "مشاهدهٔ دستورها",

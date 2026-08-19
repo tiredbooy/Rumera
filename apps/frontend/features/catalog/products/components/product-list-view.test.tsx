@@ -1,6 +1,10 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  renderStreamedMarkup,
+  renderStreamedShell,
+} from "@/lib/testing/render-stream";
 
 const mocks = vi.hoisted(() => ({
   redirect: vi.fn(),
@@ -16,7 +20,9 @@ vi.mock("next/navigation", () => ({
     mocks.redirect(href);
     throw new Error("NEXT_REDIRECT");
   },
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+  usePathname: () => "/products",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("next/link", () => ({
@@ -47,6 +53,13 @@ vi.mock("@/features/catalog/categories/api", () => ({
 vi.mock("@/features/catalog/products/api/public", () => ({
   listProducts: mocks.listProducts,
 }));
+
+import { PRODUCT_LIST_PAGE_SIZE } from "@/features/catalog/products/list-routing";
+
+import {
+  PRODUCT_CARD_GRID_CLASS,
+  PRODUCT_CARD_MEDIA_FRAME_CLASS,
+} from "./product-card";
 
 import { ProductListView } from "./product-list-view";
 
@@ -123,8 +136,8 @@ describe("ProductListView error vs empty", () => {
   it("shows a retryable error instead of the empty catalogue copy", async () => {
     mocks.listProducts.mockRejectedValue(new Error("offline"));
 
-    const markup = renderToStaticMarkup(
-      await ProductListView({ searchParams: Promise.resolve({}) }),
+    const markup = await renderStreamedMarkup(
+      <ProductListView searchParams={Promise.resolve({})} />,
     );
 
     expect(markup).toContain("فهرست محصولات بارگذاری نشد");
@@ -139,8 +152,8 @@ describe("ProductListView error vs empty", () => {
   it("keeps a successful empty list distinct from an API outage", async () => {
     mocks.listProducts.mockResolvedValue(emptyPage);
 
-    const markup = renderToStaticMarkup(
-      await ProductListView({ searchParams: Promise.resolve({}) }),
+    const markup = await renderStreamedMarkup(
+      <ProductListView searchParams={Promise.resolve({})} />,
     );
 
     expect(markup).toContain("محصولی برای نمایش نیست");
@@ -169,12 +182,70 @@ describe("ProductListView filter chips", () => {
   });
 
   it("gives category and brand chips a 44px coarse-pointer target", async () => {
-    const markup = renderToStaticMarkup(
-      await ProductListView({ searchParams: Promise.resolve({}) }),
+    const markup = await renderStreamedMarkup(
+      <ProductListView searchParams={Promise.resolve({})} />,
     );
 
     expect(markup).toContain("[@media(any-pointer:coarse)]:min-h-11");
     expect(markup).toContain("ویسکی");
     expect(markup).toContain("Jack Daniel");
+  });
+});
+
+describe("ProductListView streaming", () => {
+  /** Held open until the shell has flushed, so «pending» really means pending. */
+  let releaseProducts: () => void;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.listCategories.mockResolvedValue([]);
+    mocks.listBrands.mockResolvedValue({ ...emptyPage, results: [brand] });
+    mocks.getBrandBySlug.mockResolvedValue(null);
+    mocks.listProducts.mockReturnValue(
+      new Promise((resolve) => {
+        releaseProducts = () => resolve(emptyPage);
+      }),
+    );
+  });
+
+  function renderWithPendingCatalogue() {
+    return renderStreamedShell(
+      <ProductListView searchParams={Promise.resolve({})} />,
+      () => releaseProducts(),
+    );
+  }
+
+  it("flushes the shell while the catalogue is still pending", async () => {
+    const { shell, html } = await renderWithPendingCatalogue();
+
+    expect(shell.length).toBeLessThan(html.length);
+    expect(shell).toContain("فروشگاه بطری‌ها");
+    expect(shell).toContain('aria-label="جستجو در کاتالوگ"');
+    expect(shell).toContain("Jack Daniel");
+    expect(shell).toContain('data-slot="route-loading"');
+    expect(shell).not.toContain("محصولی برای نمایش نیست");
+    expect(shell).not.toContain("محصول — بر اساس دسته یا برند مرور کنید");
+
+    expect(html).toContain("محصولی برای نمایش نیست");
+    expect(html).toContain("محصول — بر اساس دسته یا برند مرور کنید");
+  });
+
+  it("falls back to one full page of placeholder cards", async () => {
+    const { shell } = await renderWithPendingCatalogue();
+
+    expect(shell.split(PRODUCT_CARD_MEDIA_FRAME_CLASS).length - 1).toBe(
+      PRODUCT_LIST_PAGE_SIZE,
+    );
+    expect(shell).toContain(PRODUCT_CARD_GRID_CLASS);
+  });
+
+  it("keeps the catalogue request concurrent with the shell lookups", async () => {
+    await renderWithPendingCatalogue();
+
+    // Fired before the brand/category lookups are awaited, not after them.
+    expect(mocks.listProducts).toHaveBeenCalledTimes(1);
+    expect(mocks.listProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: PRODUCT_LIST_PAGE_SIZE, page: 1 }),
+    );
   });
 });

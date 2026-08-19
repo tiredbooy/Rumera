@@ -104,7 +104,8 @@ func (r *alertRepository) FindPending(ctx context.Context, limit int) ([]Pending
 		       a.alert_type                  AS alert_type,
 		       p.title                       AS product_title,
 		       p.slug                        AS product_slug,
-		       v.price                       AS current_price
+		       v.price                       AS current_price,
+		       a.created_at                  AS created_at
 		FROM product_alerts a
 		JOIN product_variants v ON v.id = a.product_variant_id
 		JOIN products p         ON p.id = v.product_id

@@ -1,15 +1,18 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { History, Scale } from "lucide-react";
 
 import { faNum } from "@/lib/products";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DataTable,
   type Column,
   type Filter,
 } from "@/features/admin/analytics/components/DataTable";
+import { useRowSelection } from "@/features/dashboard/components/use-row-selection";
 import { InventoryStockBadge } from "@/features/inventory/components/inventory-stock-badge";
 import type {
   InventoryItem,
@@ -18,9 +21,14 @@ import type {
 import { getInventoryStatus } from "@/features/inventory/utils";
 import { cn } from "@/lib/utils";
 
+import { BulkStockAdjustment } from "./bulk-stock-adjustment";
 import { StockAdjustmentPopover } from "./stock-adjustment-popover";
 
 type InventoryTableRow = InventoryItem & { status: InventoryStatus };
+
+function selectionKey(row: InventoryTableRow): string {
+  return String(row.product_variant_id);
+}
 
 function InventoryActions({
   canWrite,
@@ -66,6 +74,32 @@ export function InventoryTable({
     ...row,
     status: getInventoryStatus(row),
   }));
+  // DataTable owns the facet state. Select-all and the bar must follow the
+  // rows it is actually showing — ticking a hidden row is how an operator
+  // adjusts stock they cannot see.
+  const [visibleKeys, setVisibleKeys] = React.useState<string[] | null>(null);
+  const visibleRows = React.useMemo(() => {
+    if (visibleKeys === null) return rows;
+    const allowed = new Set(visibleKeys);
+    return rows.filter((row) => allowed.has(selectionKey(row)));
+  }, [rows, visibleKeys]);
+  const handleVisibleRows = React.useCallback((visible: InventoryTableRow[]) => {
+    const keys = visible.map(selectionKey);
+    setVisibleKeys((current) => {
+      if (
+        current &&
+        current.length === keys.length &&
+        current.every((key, index) => key === keys[index])
+      ) {
+        return current;
+      }
+      return keys;
+    });
+  }, []);
+  // Keyed by variant id — the id the adjust endpoint takes, so nothing has to
+  // translate between "the row I ticked" and "the ledger row I moved".
+  const selection = useRowSelection(visibleRows, selectionKey);
+  const facetActive = visibleRows.length !== rows.length;
   const categories = Array.from(
     new Set(
       rows
@@ -80,12 +114,17 @@ export function InventoryTable({
       header: "محصول",
       sortValue: (r) => r.product_title,
       cell: (r) => (
-        <div className="min-w-36 leading-tight">
-          <p className="font-medium">{r.product_title}</p>
-          <p className="text-xs text-muted-foreground">
+        // The row itself is not a link: a full-row link and a selection
+        // checkbox cannot share a row without nesting one inside the other.
+        <Link
+          href={`/admin/inventory/${r.product_variant_id}`}
+          className="-m-1 flex min-h-11 min-w-36 flex-col justify-center rounded-md p-1 leading-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <span className="font-medium">{r.product_title}</span>
+          <span className="text-xs text-muted-foreground">
             {r.category_title ?? "بدون دسته"}
-          </p>
-        </div>
+          </span>
+        </Link>
       ),
     },
     {
@@ -178,6 +217,22 @@ export function InventoryTable({
     },
   ];
 
+  if (canWrite) {
+    columns.unshift({
+      id: "select",
+      header: "انتخاب",
+      cell: (r) => (
+        <Checkbox
+          checked={selection.isSelected(selectionKey(r))}
+          aria-label={`انتخاب ${r.product_title}`}
+          onCheckedChange={(checked) =>
+            selection.toggle(selectionKey(r), checked === true)
+          }
+        />
+      ),
+    });
+  }
+
   const filters: Filter<InventoryTableRow>[] = [
     {
       id: "category",
@@ -240,18 +295,33 @@ export function InventoryTable({
   }
 
   return (
-    <DataTable
-      rows={rows}
-      columns={columns}
-      getRowKey={(r) => String(r.id)}
-      rowHref={(r) => `/admin/inventory/${r.product_variant_id}`}
-      filters={filters}
-      pageSize={Math.max(rows.length, 1)}
-      toolbarHint="فیلتر جدول فقط روی ردیف‌های همین صفحه است، نه کل انبار."
-      resultCountLabel={(filtered, total) =>
-        `${faNum(filtered)} از ${faNum(total)} ردیف این صفحه`
-      }
-      emptyMessage="در این صفحه رکوردی مطابق فیلتر جدول پیدا نشد. فیلتر را پاک کنید یا صفحه را عوض کنید."
-    />
+    <>
+      {canWrite ? (
+        <BulkStockAdjustment
+          pageRowCount={rows.length}
+          visibleRowCount={visibleRows.length}
+          facetActive={facetActive}
+          selected={selection.selectedRows}
+          allSelected={selection.allSelected}
+          onToggleAll={selection.toggleAll}
+          onKeepOnly={(variantIDs) =>
+            selection.keepOnly(variantIDs.map(String))
+          }
+        />
+      ) : null}
+      <DataTable
+        rows={rows}
+        columns={columns}
+        getRowKey={(r) => String(r.id)}
+        filters={filters}
+        pageSize={Math.max(rows.length, 1)}
+        onVisibleRowsChange={handleVisibleRows}
+        toolbarHint="فیلتر جدول فقط روی ردیف‌های همین صفحه است، نه کل انبار."
+        resultCountLabel={(filtered, total) =>
+          `${faNum(filtered)} از ${faNum(total)} ردیف این صفحه`
+        }
+        emptyMessage="در این صفحه رکوردی مطابق فیلتر جدول پیدا نشد. فیلتر را پاک کنید یا صفحه را عوض کنید."
+      />
+    </>
   );
 }

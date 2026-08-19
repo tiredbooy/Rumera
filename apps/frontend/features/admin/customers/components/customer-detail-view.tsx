@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowRight, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CustomerLoyaltyPanel } from "@/features/admin/loyalty/components/customer-loyalty-panel";
 import { getAdminUser, getAdminUserAudit } from "@/features/customers/api";
 import { UserRoleBadge } from "@/features/customers/components/user-role-badge";
 import { UserStatusBadge } from "@/features/customers/components/user-status-badge";
@@ -19,6 +20,14 @@ import type { Paginated } from "@/lib/api/types";
 import { faDate } from "@/lib/utils/date";
 
 import { UserAccountActions } from "./UserAccountActions";
+import {
+  CustomerOrdersPanel,
+  loadCustomerOrders,
+} from "./customer-orders-panel";
+import {
+  CustomerWalletPanel,
+  loadCustomerLedger,
+} from "./customer-wallet-panel";
 import { UserAuditHistory } from "./user-audit-history";
 import { WalletCreditForm } from "./wallet-credit-form";
 
@@ -88,6 +97,15 @@ export async function CustomerDetailView({
     }
     // Keep live identity/actions available if only the audit request fails.
   }
+  // CF-3: what the caller actually asks — what did I order, what happened to
+  // it, what is my balance. Both reads tolerate their own failure, so neither
+  // can take the identity card down; in parallel so the file is one round trip
+  // deep rather than three.
+  const [customerOrders, customerLedger] = await Promise.all([
+    loadCustomerOrders(user.user_id),
+    loadCustomerLedger(user.user_id),
+  ]);
+
   if (audit && auditPage > audit.pagination.total_pages) {
     redirect(
       audit.pagination.total_pages > 1
@@ -210,15 +228,30 @@ export async function CustomerDetailView({
         </section>
       </div>
 
+      <CustomerOrdersPanel userID={user.user_id} {...customerOrders} />
+
+      <CustomerWalletPanel
+        balance={user.wallet_balance}
+        {...customerLedger}
+      />
+
       {canCreditWallet ? (
-        <div className="mt-6">
+        <div className="mt-4">
           <WalletCreditForm
             userId={user.user_id}
             userLabel={displayName}
+            balance={user.wallet_balance}
             canCredit
           />
         </div>
       ) : null}
+
+      {/*
+        L-5: the loyalty module's own widget. It resolves the kill switch, the
+        loyalty:adjust gate and its reads itself, so this screen passes an id
+        and nothing else — and hides itself when the programme is off.
+      */}
+      <CustomerLoyaltyPanel userID={user.user_id} />
 
       {audit ? (
         <UserAuditHistory

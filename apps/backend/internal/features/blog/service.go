@@ -92,6 +92,9 @@ type Service interface {
 	GetByID(ctx context.Context, id int64) (*BlogDetailResponse, error)
 	GetBySlug(ctx context.Context, slug string) (*BlogDetailResponse, error)
 	GetPublishedBySlug(ctx context.Context, slug string) (*BlogDetailResponse, error)
+	// ResolveSlugRedirect answers the 404 path: the current slug a retired one
+	// now belongs to, or apperr.ErrNotFound when nothing claims it.
+	ResolveSlugRedirect(ctx context.Context, slug string) (string, error)
 	GetAll(ctx context.Context) ([]*Blog, error)
 	List(ctx context.Context, filter BlogFilter) ([]*Blog, int64, error)
 	Update(ctx context.Context, id int64, req *BlogUpdateReq) (*BlogDetailResponse, error)
@@ -167,6 +170,22 @@ func (s *service) GetPublishedBySlug(ctx context.Context, slug string) (*BlogDet
 	})
 }
 
+// ResolveSlugRedirect is only ever reached after a live lookup missed, so a live
+// slug always outranks a redirect record.
+func (s *service) ResolveSlugRedirect(ctx context.Context, slug string) (string, error) {
+	if slug == "" {
+		return "", apperr.ErrInvalidRequest
+	}
+	target, err := s.repo.ResolveSlugRedirect(ctx, slug)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return "", apperr.ErrNotFound
+		}
+		return "", fmt.Errorf("service.ResolveSlugRedirect: %w", err)
+	}
+	return target, nil
+}
+
 func (s *service) RecordRead(ctx context.Context, id int64) error {
 	if err := s.repo.IncrementReads(ctx, id); err != nil {
 		return fmt.Errorf("service.RecordRead: %w", err)
@@ -181,6 +200,9 @@ func (s *service) Create(ctx context.Context, req *BlogReq) (*BlogDetailResponse
 		return nil, err
 	}
 	if err := normalizeCreateMediaURL(&req.ImageURL); err != nil {
+		return nil, err
+	}
+	if err := normalizeCreateMediaURL(&req.OGImageURL); err != nil {
 		return nil, err
 	}
 	if err := normalizeCreateImageAlt(&req.ImageAlt); err != nil {
@@ -218,6 +240,11 @@ func (s *service) Create(ctx context.Context, req *BlogReq) (*BlogDetailResponse
 	if err = syncBlogRelations(ctx, txRepo, blog.ID, req.CategoryIDs, req.ProductIDs, req.TagIDs); err != nil {
 		return nil, fmt.Errorf("service.Create: %w", err)
 	}
+	// A new post re-using a retired slug takes it over outright — otherwise the
+	// old record would keep sending that traffic to different content.
+	if err = txRepo.ReleaseSlugRedirect(ctx, blog.Slug); err != nil {
+		return nil, fmt.Errorf("service.Create: %w", err)
+	}
 	result, err := hydrateBlog(ctx, txRepo, blog)
 	if err != nil {
 		return nil, fmt.Errorf("service.Create: %w", err)
@@ -243,10 +270,18 @@ func (s *service) Update(ctx context.Context, id int64, req *BlogUpdateReq) (*Bl
 	}
 
 	var mediaBefore *Blog
-	if req.ImageURL.Set || req.ImageAlt.Set {
+	if req.ImageURL.Set || req.ImageAlt.Set || req.OGImageURL.Set {
 		mediaBefore = current
-		req.ExpectedImageURL = mediaExpectation(current.ImageURL)
+		if req.ImageURL.Set || req.ImageAlt.Set {
+			req.ExpectedImageURL = mediaExpectation(current.ImageURL)
+		}
+		if req.OGImageURL.Set {
+			req.ExpectedOGImageURL = mediaExpectation(current.OGImageURL)
+		}
 		if err := normalizeMediaURLPatch(&req.ImageURL, current.ImageURL); err != nil {
+			return nil, err
+		}
+		if err := normalizeMediaURLPatch(&req.OGImageURL, current.OGImageURL); err != nil {
 			return nil, err
 		}
 		if err := normalizeImageAltPatch(&req.ImageAlt); err != nil {
@@ -335,6 +370,18 @@ func (s *service) Update(ctx context.Context, id int64, req *BlogUpdateReq) (*Bl
 			return nil, fmt.Errorf("service.Update: assign tags: %w", err)
 		}
 	}
+	// A rename must not 404 every inbound link. The retired slug becomes a record
+	// pointing at this post's id, and the slug we just moved onto stops
+	// redirecting anywhere — both in the same transaction as the rename itself.
+	if current.Slug != "" && current.Slug != blog.Slug {
+		if err = txRepo.ReleaseSlugRedirect(ctx, blog.Slug); err != nil {
+			return nil, fmt.Errorf("service.Update: %w", err)
+		}
+		if err = txRepo.RecordSlugRedirect(ctx, current.Slug, id); err != nil {
+			return nil, fmt.Errorf("service.Update: %w", err)
+		}
+	}
+
 	result, err := hydrateBlog(ctx, txRepo, blog)
 	if err != nil {
 		return nil, fmt.Errorf("service.Update: %w", err)
@@ -343,8 +390,13 @@ func (s *service) Update(ctx context.Context, id int64, req *BlogUpdateReq) (*Bl
 	if err = tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("service.Update: commit: %w", err)
 	}
-	if mediaBefore != nil && !sameMediaURL(mediaBefore.ImageURL, blog.ImageURL) {
-		s.media.CleanupURLs(ctx, mediaBefore.ImageURL)
+	if mediaBefore != nil {
+		if !sameMediaURL(mediaBefore.ImageURL, blog.ImageURL) {
+			s.media.CleanupURLs(ctx, mediaBefore.ImageURL)
+		}
+		if !sameMediaURL(mediaBefore.OGImageURL, blog.OGImageURL) {
+			s.media.CleanupURLs(ctx, mediaBefore.OGImageURL)
+		}
 	}
 
 	return result, nil
@@ -364,7 +416,7 @@ func (s *service) Delete(ctx context.Context, id int64) error {
 		}
 		return fmt.Errorf("service.Delete: %w", err)
 	}
-	s.media.CleanupURLs(ctx, current.ImageURL)
+	s.media.CleanupURLs(ctx, current.ImageURL, current.OGImageURL)
 	return nil
 }
 
@@ -422,6 +474,7 @@ func hydrateBlog(ctx context.Context, repo Repository, blog *Blog) (*BlogDetailR
 			Excerpt:         blog.Excerpt,
 			ImageURL:        blog.ImageURL,
 			ImageAlt:        blog.ImageAlt,
+			OGImageURL:      blog.OGImageURL,
 			TimeToRead:      blog.TimeToRead,
 			TotalReads:      blog.TotalReads,
 			Status:          blog.Status,

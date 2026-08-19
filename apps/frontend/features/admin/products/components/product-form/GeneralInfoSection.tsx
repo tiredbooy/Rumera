@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { fieldErrorId } from "@/components/ui/field";
 import { SearchableIdSelect } from "@/features/admin/shared/searchable-id-select";
 import type { Category } from "@/features/catalog/categories/types";
-import type { Brand } from "@/features/catalog/brands/types";
+import { BrandSelect, type BrandOption } from "./BrandSelect";
 import { categorySelectOptions } from "./category-select-options";
 import { FormField, FormSection } from "./FormLayout";
 import type { ProductFormValues } from "../../validations";
@@ -23,13 +23,16 @@ export function GeneralInfoSection({
   control,
   errors,
   categories,
-  brands,
+  selectedBrand,
+  onBrandChange,
 }: {
   register: UseFormRegister<ProductFormValues>;
   control: Control<ProductFormValues>;
   errors: FieldErrors<ProductFormValues>;
+  /** The whole tree, not a page of it — see `loadProductLookups` (PE-4). */
   categories: Category[];
-  brands: Brand[];
+  selectedBrand?: BrandOption | null;
+  onBrandChange?: (brand: BrandOption | null) => void;
 }) {
   return (
     <FormSection title="اطلاعات کلی" icon={<Info />}>
@@ -109,17 +112,14 @@ export function GeneralInfoSection({
           control={control}
           name="brand_id"
           render={({ field }) => (
-            <SearchableIdSelect
+            <BrandSelect
               id="brand_id"
               value={field.value || ""}
-              onChange={field.onChange}
-              options={brands.map((b) => ({
-                id: b.id,
-                title: b.title,
-              }))}
-              placeholder="انتخاب برند"
-              noneLabel="بدون برند"
-              searchPlaceholder="جستجوی برند…"
+              selectedBrand={selectedBrand}
+              onChange={(next, brand) => {
+                field.onChange(next);
+                onBrandChange?.(brand);
+              }}
               invalid={Boolean(errors.brand_id)}
               describedBy={
                 errors.brand_id ? fieldErrorId("brand_id") : undefined

@@ -54,6 +54,7 @@ Returns the caller's cart, creating an empty one on first access.
         "current_price": 54.90,
         "price_changed": true,
         "quantity": 2,
+        "available_stock": 1,
         "line_total": 99.80,
         "weight_kg": 1.25,
         "image_url": "https://cdn.example.com/sm12.jpg",
@@ -73,6 +74,17 @@ Returns the caller's cart, creating an empty one on first access.
 ```
 
 `line_total` and `subtotal` use the snapshotted price. `price_changed` is `true` when `current_price` differs from `unit_price_snapshot`.
+
+### Line availability (U-3)
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `available_stock` | integer | Sellable stock for the line's variant right now: `inventory.stock_on_hand - committed_stock`, clamped at `0` (a missing inventory row reads as `0`). |
+
+This is the **same** number `POST /orders` enforces when it reserves stock, so the
+cart can show the truth up front instead of failing at checkout: `0` means the line
+is sold out, and any value below `quantity` means the line cannot be ordered as it
+stands. Clients cap the quantity stepper at `available_stock`.
 
 ### Line weight (PH-020c)
 

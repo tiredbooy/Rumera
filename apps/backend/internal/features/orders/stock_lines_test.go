@@ -30,7 +30,7 @@ func TestGetStockLines_MissingProductStillReturnsLine(t *testing.T) {
 
 	// order_items row whose products.id is gone still becomes a stock line.
 	lines := []inventory.StockLine{{VariantID: 42, Quantity: 3}}
-	sortStockLinesByVariantID(lines)
+	lines = inventory.NormalizeStockLines(lines)
 	if len(lines) != 1 {
 		t.Fatalf("len(lines)=%d; want 1 (deleted product must not drop the line)", len(lines))
 	}
@@ -40,14 +40,14 @@ func TestGetStockLines_MissingProductStillReturnsLine(t *testing.T) {
 }
 
 func TestGetStockLines_SortedByVariantID(t *testing.T) {
-	// GetStockLines reads order_items then sortStockLinesByVariantID before return.
+	// GetStockLines reads order_items then normalizes before return.
 	lines := []inventory.StockLine{
 		{VariantID: 30, Quantity: 1},
 		{VariantID: 10, Quantity: 2},
 		{VariantID: 20, Quantity: 3},
 		{VariantID: 5, Quantity: 1},
 	}
-	sortStockLinesByVariantID(lines)
+	lines = inventory.NormalizeStockLines(lines)
 
 	want := []inventory.StockLine{
 		{VariantID: 5, Quantity: 1},
@@ -65,12 +65,38 @@ func TestGetStockLines_SortedByVariantID(t *testing.T) {
 	}
 }
 
-func TestSortStockLinesByVariantID_EmptyAndSingle(t *testing.T) {
-	sortStockLinesByVariantID(nil)
+func TestNormalizeStockLines_EmptyAndSingle(t *testing.T) {
+	if got := inventory.NormalizeStockLines(nil); len(got) != 0 {
+		t.Fatalf("nil normalized to %+v", got)
+	}
 
-	one := []inventory.StockLine{{VariantID: 7, Quantity: 4}}
-	sortStockLinesByVariantID(one)
+	one := inventory.NormalizeStockLines([]inventory.StockLine{{VariantID: 7, Quantity: 4}})
 	if one[0].VariantID != 7 || one[0].Quantity != 4 {
 		t.Fatalf("single line mutated: %+v", one[0])
+	}
+}
+
+// A-9: two order_items rows for one variant must reserve/deduct their SUM, because
+// inventory_reservations is unique on (order_id, product_variant_id). Per-row lines
+// make closeReservation's `quantity = $3` miss and Confirm roll back after payment.
+func TestNormalizeStockLines_MergesDuplicateVariant(t *testing.T) {
+	in := []inventory.StockLine{
+		{VariantID: 20, Quantity: 1},
+		{VariantID: 10, Quantity: 2},
+		{VariantID: 20, Quantity: 3},
+	}
+	got := inventory.NormalizeStockLines(in)
+
+	want := []inventory.StockLine{{VariantID: 10, Quantity: 2}, {VariantID: 20, Quantity: 4}}
+	if len(got) != len(want) {
+		t.Fatalf("got %+v; want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got[%d] = %+v; want %+v", i, got[i], want[i])
+		}
+	}
+	if len(in) != 3 || in[0].VariantID != 20 {
+		t.Fatalf("caller slice mutated: %+v", in)
 	}
 }

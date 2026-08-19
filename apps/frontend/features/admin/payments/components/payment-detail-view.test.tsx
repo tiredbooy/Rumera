@@ -81,8 +81,11 @@ describe("PaymentDetailView", () => {
 
     render(<PaymentDetailView paymentID={51} />);
 
+    // D-2: trailing zeros are trimmed, so the same card reads the same here and
+    // on the customer's own screen no matter how many decimal places the column
+    // happened to send back.
     expect(
-      screen.getByText("۱۲۳٬۴۵۶٬۷۸۹٬۰۱۲٬۳۴۵٬۶۷۸٫۹۰ تومان"),
+      screen.getByText("۱۲۳٬۴۵۶٬۷۸۹٬۰۱۲٬۳۴۵٬۶۷۸٫۹ تومان"),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", {

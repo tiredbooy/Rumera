@@ -45,6 +45,7 @@ function Harness() {
       register={register}
       control={control}
       errors={formState.errors}
+      mediaRef={{ current: null }}
     />
   );
 }

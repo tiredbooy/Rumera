@@ -73,7 +73,16 @@ What you get in dev:
 - **Persistent volumes** for every datastore plus Go module/build caches, so
   restarts are fast and data survives.
 - **Healthcheck-gated startup:** the API waits until Postgres, the analytics DB,
-  Redis and Meilisearch all report healthy before it boots.
+  Redis and Meilisearch all report healthy. The API is only marked healthy when
+  `GET /health/ready` succeeds (both databases up). Nginx waits for a healthy
+  frontend as well, so the gateway does not take traffic during a cold start.
+- **Pinned database images.** Compose uses `timescale/timescaledb:2.19.3-pg17`,
+  not `latest`, so a pull cannot change Postgres under you.
+- **Host port 8080 is not uniquely Rumera.** Another process on this machine
+  already answers `/health` with 200 and 404s `/api/v1/*`. If `next build` or a
+  local Next server talks to `http://localhost:8080` and you get nonsense 404s,
+  either stop that process or set `BACKEND_PORT` / `NEXT_PUBLIC_API_URL` /
+  `API_URL` to a free port (compose already supports `BACKEND_PORT`).
 
 Common commands:
 
@@ -107,8 +116,10 @@ Designed for real deployment:
   - *Backend:* a statically linked (`CGO_ENABLED=0`), stripped Go binary on a
     minimal Alpine base — no toolchain, no source.
 - **Non-root containers.** Both apps run as unprivileged users.
-- **Built-in healthchecks.** Frontend probes `/`, backend probes `/health`;
-  Docker restarts unhealthy containers.
+- **Built-in healthchecks.** Frontend probes `/`. The API image still uses
+  cheap `GET /health` as a liveness check; Compose marks the API healthy only
+  after `GET /health/ready` (databases up). Nginx waits for both. SIGTERM gets
+  30s so in-flight work can finish.
 - **Fail-fast configuration.** Required secrets use `${VAR:?...}`, so the stack
   refuses to start (with a clear message) if a secret is missing — no silently
   insecure boots.

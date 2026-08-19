@@ -31,6 +31,7 @@ import type { InventoryItem, MovementType } from "@/features/inventory/types";
 import { faNum } from "@/lib/products";
 import { cn } from "@/lib/utils";
 
+import { adjustErrorMessage } from "../adjust-errors";
 import {
   MAX_INVENTORY_INTEGER,
   MIN_INVENTORY_INTEGER,
@@ -55,19 +56,9 @@ function quickRestockUnits(reorderQuantity: number): number[] {
 }
 
 function adjustmentErrorMessage(error: unknown): string {
-  if (!(error instanceof InventoryMutationError)) {
-    return "ذخیرهٔ موجودی انجام نشد. دوباره تلاش کنید.";
-  }
-  if (error.code === "OUT_OF_STOCK" || error.code === "INSUFFICIENT_STOCK") {
-    return "این مقدار مجاز نیست (مثلاً کمتر از رزرو). صفحه را تازه کنید و دوباره تلاش کنید.";
-  }
-  if (error.code === "NOT_FOUND") {
-    return "واریانت پیدا نشد.";
-  }
-  if (error.code === "VALIDATION_ERROR" || error.code === "INVALID_REQUEST") {
-    return "مقدار موجودی معتبر نیست.";
-  }
-  return error.message || "ذخیرهٔ موجودی انجام نشد. دوباره تلاش کنید.";
+  return error instanceof InventoryMutationError
+    ? adjustErrorMessage(error.code, error.message)
+    : adjustErrorMessage(null);
 }
 
 export function StockAdjustmentPopover({
@@ -133,6 +124,12 @@ export function StockAdjustmentPopover({
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Radix renders this popover in a portal, but React still propagates the
+    // submit up the *React* tree — so inside the product editor this fired
+    // ProductForm's onFormSubmit too, and every stock movement dragged a full
+    // product aggregate save along with it. Stopped at the shared root so any
+    // other form embedding the popover is covered as well.
+    event.stopPropagation();
     setError(null);
 
     const parsedQuantity = parseStockAdjustment(quantity);

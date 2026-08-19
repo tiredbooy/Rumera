@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe("admin loyalty member route", () => {
-  it("requires customers:read and passes write capability to the detail view", async () => {
+  it("requires customers:read and passes the loyalty grant to the detail view", async () => {
     const element = await AdminLoyaltyMemberPage({
       params: Promise.resolve({ userID }),
       searchParams: Promise.resolve({ page: "2" }),
@@ -45,8 +45,13 @@ describe("admin loyalty member route", () => {
     expect(mocks.requirePermission).toHaveBeenCalledWith(
       PERMISSIONS.CUSTOMERS_READ,
     );
+    // L-8: minting rides loyalty:adjust, never customers:write.
     expect(mocks.can).toHaveBeenCalledWith(
       { role: "admin" },
+      PERMISSIONS.LOYALTY_ADJUST,
+    );
+    expect(mocks.can).not.toHaveBeenCalledWith(
+      expect.anything(),
       PERMISSIONS.CUSTOMERS_WRITE,
     );
     expect(element.type).toBe(mocks.view);
@@ -71,7 +76,7 @@ describe("admin loyalty member route", () => {
     });
   });
 
-  it("hides adjust when the operator lacks customers:write", async () => {
+  it("hides adjust when the operator lacks loyalty:adjust", async () => {
     mocks.can.mockReturnValue(false);
 
     const element = await AdminLoyaltyMemberPage({

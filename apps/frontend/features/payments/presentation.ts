@@ -1,3 +1,4 @@
+import { formatMoney } from "@/lib/money";
 import type { PaymentStatus } from "./types";
 
 export const PAYMENT_STATUS_FA: Record<PaymentStatus, string> = {
@@ -8,28 +9,12 @@ export const PAYMENT_STATUS_FA: Record<PaymentStatus, string> = {
   partially_refunded: "بازپرداخت جزئی",
 };
 
-const PERSIAN_DIGITS = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
-
-function localizeDigits(value: string): string {
-  return value.replace(
-    /\d/g,
-    (digit) => PERSIAN_DIGITS[Number(digit)] ?? digit,
-  );
-}
-
-/** Formats an exact decimal string without routing money through a JS float. */
-export function formatPaymentAmount(amount: string, currency: string): string {
-  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(amount.trim());
-  if (!match) return `${amount} ${currency}`.trim();
-
-  const [, sign, integer, fraction] = match;
-  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, "٬");
-  const decimal = fraction ? `٫${fraction}` : "";
-  const localized = localizeDigits(`${sign}${grouped}${decimal}`);
-  return currency.toUpperCase() === "IRT"
-    ? `${localized} تومان`
-    : `${localized} ${currency.toUpperCase()}`;
-}
+/**
+ * Formats an exact decimal string without routing money through a JS float.
+ * Shares lib/money.ts with the storefront's formatPrice — the two used to round
+ * differently, so one gift card rendered as two different amounts (D-2).
+ */
+export const formatPaymentAmount = formatMoney;
 
 export function decodePaymentRawResponse(rawResponse?: string): string | null {
   if (!rawResponse) return null;

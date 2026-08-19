@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   getRecipe: vi.fn(),
   listSlugs: vi.fn(),
   view: vi.fn(() => null),
+  publicRequest: vi.fn(),
+  permanentRedirect: vi.fn((url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  }),
 }));
 
 vi.mock("@/features/recipes/api/server", () => ({
@@ -15,8 +19,15 @@ vi.mock("@/features/recipes/api/server", () => ({
 vi.mock("@/features/recipes/components/recipe-detail-view", () => ({
   RecipeDetailView: mocks.view,
 }));
+vi.mock("@/lib/api/public", () => ({ publicRequest: mocks.publicRequest }));
+vi.mock("next/navigation", () => ({
+  permanentRedirect: mocks.permanentRedirect,
+}));
 
-import { generateMetadata, generateStaticParams } from "./page";
+import RecipeDetailPage, {
+  generateMetadata,
+  generateStaticParams,
+} from "./page";
 
 const recipe: RecipeDetail = {
   id: 3,
@@ -58,6 +69,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getRecipe.mockResolvedValue(recipe);
   mocks.listSlugs.mockResolvedValue(["one", "two"]);
+  mocks.publicRequest.mockRejectedValue(new Error("no redirect record"));
+  mocks.permanentRedirect.mockImplementation((url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  });
 });
 
 describe("recipe detail route", () => {
@@ -93,5 +108,40 @@ describe("recipe detail route", () => {
       { slug: "one" },
       { slug: "two" },
     ]);
+  });
+});
+
+describe("recipe slug redirect record", () => {
+  it("permanently redirects a slug retired by a rename", async () => {
+    mocks.getRecipe.mockResolvedValue(null);
+    mocks.publicRequest.mockResolvedValue({ slug: "mojito" });
+
+    await expect(
+      RecipeDetailPage({ params: Promise.resolve({ slug: "old-mojito" }) }),
+    ).rejects.toThrow("NEXT_REDIRECT:/recipes/mojito");
+
+    expect(mocks.publicRequest).toHaveBeenCalledWith(
+      "/recipes/old-mojito/redirect",
+      expect.objectContaining({ cache: "force-cache" }),
+    );
+  });
+
+  it("lets a live slug win over any redirect record", async () => {
+    await RecipeDetailPage({ params: Promise.resolve({ slug: recipe.slug }) });
+
+    expect(mocks.publicRequest).not.toHaveBeenCalled();
+    expect(mocks.permanentRedirect).not.toHaveBeenCalled();
+  });
+
+  it("still renders the 404 view when nothing claims the slug", async () => {
+    mocks.getRecipe.mockResolvedValue(null);
+
+    const rendered = await RecipeDetailPage({
+      params: Promise.resolve({ slug: "unknown" }),
+    });
+
+    expect(mocks.permanentRedirect).not.toHaveBeenCalled();
+    // Falls through to the recipe detail view, which is what calls notFound().
+    expect(rendered.type).toBe(mocks.view);
   });
 });

@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
-import { ArrowLeft, Loader2, ShoppingBag } from "lucide-react"
+import { AlertTriangle, ArrowLeft, Loader2, ShoppingBag } from "lucide-react"
 
 import { formatPrice, faNum } from "@/lib/products"
 import { QueryStateRegion } from "@/components/query-state-region"
@@ -18,6 +18,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { useCart } from "@/features/cart/api"
+import { hasUnorderableLine } from "@/features/cart/availability"
 import { CartLines } from "./cart-lines"
 
 function cartCountName(count: number) {
@@ -30,6 +31,9 @@ export function CartButton() {
   const authed = status === "authenticated"
   const { data: cart } = useCart(authed)
   const count = cart?.summary.total_items ?? 0
+  // Mirrors the cart page: a line above its server-reported stock cannot be
+  // ordered, so the drawer must not hand the customer a checkout link (U-3).
+  const blocked = hasUnorderableLine(cart)
   const [open, setOpen] = React.useState(false)
   const [announcement, setAnnouncement] = React.useState("")
   const previousCount = React.useRef<number | null>(null)
@@ -102,10 +106,28 @@ export function CartButton() {
               <span className="font-serif text-xl text-foil tabular-nums">{formatPrice(cart!.summary.subtotal)}</span>
             </div>
             <p className="mb-3 text-xs text-muted-foreground">هزینهٔ ارسال در مرحلهٔ تسویه محاسبه می‌شود.</p>
-            <Button asChild size="lg" className="h-12 w-full" onClick={() => setOpen(false)}>
-              <Link href="/checkout">
-                ادامه به تسویه <ArrowLeft />
-              </Link>
+            {blocked ? (
+              <p className="mb-3 flex items-start gap-1.5 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                <AlertTriangle className="mt-px size-3.5 shrink-0" />
+                موجودی برخی اقلام سبد کافی نیست. تعداد آن‌ها را کم یا حذف کنید تا بتوانید تسویه کنید.
+              </p>
+            ) : null}
+            <Button
+              asChild
+              size="lg"
+              className="h-12 w-full"
+              disabled={blocked}
+              onClick={() => !blocked && setOpen(false)}
+            >
+              {blocked ? (
+                <span aria-disabled="true">
+                  ادامه به تسویه <ArrowLeft />
+                </span>
+              ) : (
+                <Link href="/checkout">
+                  ادامه به تسویه <ArrowLeft />
+                </Link>
+              )}
             </Button>
             <Button asChild variant="ghost" size="sm" className="mt-1 w-full" onClick={() => setOpen(false)}>
               <Link href="/cart">مشاهدهٔ سبد کامل</Link>

@@ -5,6 +5,7 @@ import {
   parseRecipePage,
   parseRecipeRouteQuery,
   recipePageHref,
+  recipeRedirectHref,
 } from "./routing";
 
 describe("recipe routing", () => {
@@ -65,7 +66,16 @@ describe("recipe routing", () => {
       q: undefined,
       needsRedirect: true,
     });
-    expect(parseRecipeRouteQuery({ tag: "7" }).needsRedirect).toBe(true);
+    // U-4: a campaign param is not a malformed URL. It rides along instead of
+    // triggering a redirect that would strip it before analytics ever saw it.
+    expect(parseRecipeRouteQuery({ tag: "7" }).needsRedirect).toBe(false);
+
+    const campaign = parseRecipeRouteQuery({ page: "1", utm_campaign: "eid" });
+    expect(campaign.needsRedirect).toBe(true);
+    expect(recipeRedirectHref(campaign, campaign.page)).toContain(
+      "utm_campaign=eid",
+    );
+    expect(recipePageHref(campaign, 2)).not.toContain("utm_campaign");
 
     const parsed = parseRecipeRouteQuery({
       q: "آ".repeat(RECIPE_SEARCH_MAX_LENGTH + 4),

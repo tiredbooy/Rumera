@@ -39,6 +39,12 @@ export interface AdminUser {
   email_verified_at?: string;
   last_login_at?: string;
   updated_at: string;
+  /**
+   * Live wallet balance as an exact decimal string, from `GET /admin/users/:id`
+   * only (CF-3). Absent on the create / update / ban responses, which never
+   * looked it up — so treat `undefined` as "not read", never as zero.
+   */
+  wallet_balance?: string;
 }
 
 export interface UserListItem {

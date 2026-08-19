@@ -479,6 +479,21 @@
   .prose-recipe blockquote {
     @apply border-s-2 border-primary/40 ps-4 text-foreground/80 italic;
   }
+  /* CE-4: images and tables are insertable in the body, so the editor surface
+     has to show them the way the published page will. */
+  .prose-recipe img {
+    @apply my-3 h-auto max-w-full rounded-lg;
+  }
+  .prose-recipe table {
+    @apply my-3 block max-w-full overflow-x-auto border-collapse text-sm;
+  }
+  .prose-recipe th,
+  .prose-recipe td {
+    @apply border border-border px-2 py-1 text-start;
+  }
+  .prose-recipe .ProseMirror-selectednode {
+    @apply outline-2 outline-offset-2 outline-primary/60;
+  }
   /* Placeholder: when the only block is an empty first paragraph, show the
      editable surface's `data-placeholder` text (no Tiptap Placeholder ext). */
   .prose-recipe > p:first-child:last-child:empty::before {

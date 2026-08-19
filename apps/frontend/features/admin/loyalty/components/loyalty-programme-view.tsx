@@ -4,6 +4,8 @@ import {
   Cake,
   Info,
   Lock,
+  Power,
+  PowerOff,
   ShoppingBag,
   Star,
   Users,
@@ -16,6 +18,7 @@ import { faNum, formatPrice } from "@/lib/products";
 
 import { loyaltyTierLabel } from "../labels";
 import type { LoyaltyProgramme } from "../types";
+import { LoyaltyOverviewPanel } from "./loyalty-overview";
 import { LoyaltyProgrammeForm } from "./loyalty-programme-form";
 
 export function LoyaltyProgrammeView({
@@ -68,12 +71,39 @@ export function LoyaltyProgrammeView({
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center gap-2">
+        <Badge
+          variant={programme.enabled ? "secondary" : "destructive"}
+          className="gap-1.5"
+        >
+          {programme.enabled ? (
+            <Power className="size-3.5" />
+          ) : (
+            <PowerOff className="size-3.5" />
+          )}
+          {programme.enabled ? "فعال" : "خاموش"}
+        </Badge>
         <Badge variant="secondary" className="gap-1.5">
           <Lock className="size-3.5" />
           {programme.editable ? "قابل ویرایش" : "فقط‌خواندنی"}
         </Badge>
         <Badge variant="outline">منبع: {programme.config_source}</Badge>
       </div>
+
+      {!programme.enabled ? (
+        <div
+          role="status"
+          className="border-hairline mb-6 flex gap-3 rounded-2xl bg-destructive/10 p-4 text-sm text-destructive ring-1 ring-destructive/20"
+        >
+          <PowerOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <div className="space-y-1">
+            <p className="font-medium">باشگاه مشتریان خاموش است</p>
+            <p>
+              کسب امتیاز متوقف است، بازخرید و تنظیم دستی امتیاز رد می‌شوند و
+              فهرست اعضا در دسترس نیست. امتیازهای ثبت‌شده دست‌نخورده مانده‌اند.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {!programme.editable ? (
         <div className="border-hairline mb-6 flex gap-3 rounded-2xl bg-muted/40 p-4 text-sm text-muted-foreground ring-1 ring-foreground/5">
@@ -97,6 +127,12 @@ export function LoyaltyProgrammeView({
           <p>ویرایش برنامه به دسترسی «customers:write» نیاز دارد.</p>
         </div>
       )}
+
+      {/*
+        L-9: what the programme owes, how members are spread and whether the
+        birthday job kept up — read before the rates that produce them.
+      */}
+      <LoyaltyOverviewPanel />
 
       <section className="mb-8">
         <h2 className="mb-3 font-serif text-xl">نرخ‌های مؤثر</h2>

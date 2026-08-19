@@ -2,14 +2,15 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
+import { Loader2, PowerOff } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { faNum } from "@/lib/products";
 
 import { LoyaltyApiError, updateLoyaltyProgramme } from "../api/client";
@@ -66,6 +67,7 @@ export function LoyaltyProgrammeForm({
   const router = useRouter();
   const [formError, setFormError] = React.useState<string | null>(null);
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -79,11 +81,8 @@ export function LoyaltyProgrammeForm({
   async function onSubmit(values: LoyaltyProgrammeFormValues) {
     setFormError(null);
     try {
-      // `enabled` is round-tripped, not edited here: the server validates it as
-      // required, so dropping it would be a 422 on every save. The visible
-      // kill-switch control is L-2.
       const saved = await updateLoyaltyProgramme(
-        toUpdateLoyaltyProgrammeInput(values, programme.enabled),
+        toUpdateLoyaltyProgrammeInput(values),
       );
       toast.success("برنامهٔ باشگاه به‌روزرسانی شد");
       reset(loyaltyProgrammeFormDefaults(saved));
@@ -122,6 +121,43 @@ export function LoyaltyProgrammeForm({
           {formError}
         </p>
       ) : null}
+
+      <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
+        <legend className="px-1 font-serif text-base">وضعیت برنامه</legend>
+        <Controller
+          control={control}
+          name="enabled"
+          render={({ field }) => (
+            <>
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <Label htmlFor="enabled">باشگاه مشتریان فعال باشد</Label>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    با خاموش‌کردن، کسب امتیاز متوقف می‌شود، بازخرید و تنظیم دستی
+                    امتیاز رد می‌شوند و بخش باشگاه در پنل بسته می‌شود. امتیازهای
+                    ثبت‌شده پاک نمی‌شوند.
+                  </p>
+                </div>
+                <Switch
+                  id="enabled"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </div>
+              {field.value ? null : (
+                <p
+                  role="status"
+                  className="mt-4 flex items-start gap-2 rounded-xl bg-destructive/10 px-4 py-3 text-xs leading-5 text-destructive ring-1 ring-destructive/20"
+                >
+                  <PowerOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  پس از ذخیره، تنها همین صفحه در بخش باشگاه در دسترس می‌ماند تا
+                  بتوانید دوباره آن را روشن کنید.
+                </p>
+              )}
+            </>
+          )}
+        />
+      </fieldset>
 
       <fieldset className="border-hairline rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.04] sm:p-6">
         <legend className="px-1 font-serif text-base">نرخ‌ها</legend>
@@ -240,7 +276,9 @@ export function LoyaltyProgrammeForm({
                 dir="ltr"
                 readOnly={index === 0}
                 className={index === 0 ? "read-only:bg-muted" : undefined}
-                {...register(`tier_${tier}` as keyof LoyaltyProgrammeFormValues)}
+                {...register(
+                  `tier_${tier}` as keyof LoyaltyProgrammeFormValues,
+                )}
               />
             </Field>
           ))}

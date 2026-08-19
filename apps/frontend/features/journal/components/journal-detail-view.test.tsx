@@ -61,6 +61,7 @@ const post: JournalDetail = {
   excerpt: "خلاصه",
   image_url: null,
   image_alt: null,
+  og_image_url: null,
   time_to_read: 5,
   total_reads: 10,
   status: "published",

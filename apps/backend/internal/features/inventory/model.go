@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"sort"
 	"time"
 
 	"github.com/tiredbooy/internal/models"
@@ -116,4 +117,32 @@ func (f *MovementFilter) Defaults() {
 type StockLine struct {
 	VariantID int64
 	Quantity  int
+}
+
+// NormalizeStockLines returns the lines merged by VariantID and sorted ascending,
+// leaving the caller's slice untouched.
+//
+// Two invariants ride on this and neither was enforced anywhere before:
+//
+//   - inventory_reservations is UNIQUE on (order_id, product_variant_id), so an
+//     order carrying two lines for one variant must reserve/release/deduct their
+//     SUM. Un-merged, the per-row quantity can never match the single aggregated
+//     reservation row: closeReservation's `quantity = $3` predicate misses, Deduct
+//     returns ErrInvalidState and Confirm rolls back — after the customer has paid.
+//   - ascending VariantID is the lock order, so two checkouts sharing variants in
+//     opposite order cannot deadlock (40P01).
+func NormalizeStockLines(lines []StockLine) []StockLine {
+	if len(lines) < 2 {
+		return lines
+	}
+	byVariant := make(map[int64]int, len(lines))
+	for _, l := range lines {
+		byVariant[l.VariantID] += l.Quantity
+	}
+	out := make([]StockLine, 0, len(byVariant))
+	for id, qty := range byVariant {
+		out = append(out, StockLine{VariantID: id, Quantity: qty})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].VariantID < out[j].VariantID })
+	return out
 }

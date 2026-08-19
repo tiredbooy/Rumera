@@ -157,10 +157,12 @@ vi.mock("./product-form/VariantsSection", () => ({
 }));
 
 import { ProductForm } from "./ProductForm";
+import { openProductSection } from "../test-helpers";
 
 const product: AdminProductDetail = {
   id: 42,
   title: "محصول",
+  slug: "mahsool",
   is_active: true,
   updated_at: "2026-07-26T12:00:00Z",
   images: [],
@@ -204,6 +206,7 @@ const product: AdminProductDetail = {
 const emptyProduct: AdminProductDetail = {
   id: 43,
   title: "محصول خالی",
+  slug: "mahsool-khali",
   is_active: true,
   updated_at: "2026-07-26T12:00:00Z",
   images: [],
@@ -220,10 +223,9 @@ beforeEach(() => {
 
 describe("ProductForm variant option persistence", () => {
   it("sends exchanged combinations in one aggregate request", async () => {
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
+    openProductSection("variants");
     fireEvent.click(screen.getByRole("button", { name: "جابه‌جایی ویژگی‌ها" }));
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
@@ -238,10 +240,9 @@ describe("ProductForm variant option persistence", () => {
   });
 
   it("sends a valid SKU exchange without intermediate clearing writes", async () => {
-    render(
-      <ProductForm mode="edit" product={product} categories={[]} brands={[]} />,
-    );
+    render(<ProductForm mode="edit" product={product} categories={[]} />);
 
+    openProductSection("variants");
     fireEvent.click(screen.getByRole("button", { name: "جابه‌جایی SKU" }));
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));
 
@@ -270,14 +271,7 @@ describe("ProductForm variant option persistence", () => {
       ],
     };
     mocks.saveProductAggregate.mockResolvedValue(savedWithVariant);
-    render(
-      <ProductForm
-        mode="edit"
-        product={emptyProduct}
-        categories={[]}
-        brands={[]}
-      />,
-    );
+    render(<ProductForm mode="edit" product={emptyProduct} categories={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "افزودن تنوع تازه" }));
     fireEvent.click(screen.getByRole("button", { name: "ذخیره محصول" }));

@@ -1,6 +1,7 @@
 package users
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -99,12 +100,25 @@ func (h *Handler) GetUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, err := h.Service.GetByIDIncludingInactive(c.Request.Context(), id)
+	ctx := c.Request.Context()
+	user, err := h.Service.GetByIDIncludingInactive(ctx, id)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
 	}
-	response.OK(c, MapToAdminUser(user))
+	// CF-3: the customer file mints wallet credit, so the balance ships with
+	// the identity instead of being one more call the screen has to fan out to.
+	// A wallet read that fails omits the field rather than taking the whole
+	// identity card down — the admin screen renders an absent balance as
+	// "unknown", which is the honest answer and never reads as an empty wallet.
+	balance, err := h.Service.GetAdminWalletBalance(ctx, user.ID)
+	if err != nil {
+		slog.Warn("users: admin wallet balance read failed",
+			"user_id", user.ID, "error", err)
+		response.OK(c, MapToAdminUser(user))
+		return
+	}
+	response.OK(c, MapToAdminUserWithWallet(user, balance))
 }
 
 // UpdateUser — PATCH /admin/users/:userID

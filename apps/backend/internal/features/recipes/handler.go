@@ -104,6 +104,22 @@ func (h *Handler) GetBySlug(c *gin.Context) {
 	response.RevalidateJSON(c, data)
 }
 
+// SlugRedirect — GET /recipes/:slug/redirect. The storefront calls this only
+// after the live lookup 404s, so a live slug always wins over a record.
+func (h *Handler) SlugRedirect(c *gin.Context) {
+	slug := c.Param("slug")
+	if slug == "" {
+		response.Error(c, response.ErrInvalidParams)
+		return
+	}
+	target, err := h.Recipes.ResolveSlugRedirect(c.Request.Context(), slug)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.OK(c, SlugRedirectResponse{Slug: target})
+}
+
 // Related — GET /recipes/:slug/related
 func (h *Handler) Related(c *gin.Context) {
 	slug := c.Param("slug")
@@ -216,13 +232,25 @@ func (h *Handler) Update(c *gin.Context) {
 	if !httpx.BindJSON(c, h.Validator, &req) {
 		return
 	}
-	recipe, err := h.Recipes.Update(c.Request.Context(), id, &req)
+	ctx := c.Request.Context()
+
+	// A rename retires the old slug. Its cached detail has to go too, or the old
+	// URL keeps answering 200 from cache and never reaches its redirect record.
+	var previousSlug string
+	if before, err := h.Recipes.GetByID(ctx, id); err == nil {
+		previousSlug = before.Slug
+	}
+
+	recipe, err := h.Recipes.Update(ctx, id, &req)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
 	}
 	// Invalidate the cached public view for this recipe's slug.
-	h.invalidate(c.Request.Context(), cache.KeyRecipe(recipe.Slug))
+	h.invalidate(ctx, cache.KeyRecipe(recipe.Slug))
+	if previousSlug != "" && previousSlug != recipe.Slug {
+		h.invalidate(ctx, cache.KeyRecipe(previousSlug))
+	}
 	response.OK(c, recipe)
 }
 

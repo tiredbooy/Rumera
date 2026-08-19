@@ -22,8 +22,7 @@ export function SpecificationsSection({
   errors: FieldErrors<ProductFormValues>;
 }) {
   const weightRaw = useWatch({ control, name: "weight" });
-  const weightMissing =
-    weightRaw == null || String(weightRaw).trim() === "";
+  const weightMissing = weightRaw == null || String(weightRaw).trim() === "";
 
   return (
     <FormSection
@@ -32,7 +31,6 @@ export function SpecificationsSection({
       description="اطلاعات فیزیکی و مشخصات نوشیدنی — وزن برای محاسبهٔ هزینهٔ ارسال (کیلوگرم) استفاده می‌شود."
       icon={<FlaskConical />}
       collapsible
-      defaultOpen={Boolean(errors.abv || errors.weight || weightMissing)}
       hasError={Boolean(errors.abv || errors.weight)}
     >
       <FormField
@@ -72,9 +70,9 @@ export function SpecificationsSection({
           role="status"
           className="sm:col-span-2 rounded-xl border border-warning/25 bg-warning/12 px-3 py-2 text-xs leading-5 text-warning"
         >
-          وزن ثبت نشده است. در تسویه حساب، وزن این محصول در جمع وزن بسته صفر
-          در نظر گرفته می‌شود و ممکن است نرخ «به‌ازای کیلو» یا محدودیت وزن
-          اشتباه اعمال شود.
+          وزن ثبت نشده است. در تسویه حساب، وزن این محصول در جمع وزن بسته صفر در
+          نظر گرفته می‌شود و ممکن است نرخ «به‌ازای کیلو» یا محدودیت وزن اشتباه
+          اعمال شود.
         </p>
       ) : null}
     </FormSection>

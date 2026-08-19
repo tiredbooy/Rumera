@@ -15,11 +15,29 @@ import {
   Heading3,
   Quote,
   Link as LinkIcon,
+  ImagePlus,
+  Table as TableIcon,
+  Wine,
   Undo2,
   Redo2,
   type LucideIcon,
 } from "lucide-react";
 
+import {
+  EditorImage,
+  EditorTable,
+  EMPTY_TABLE,
+  type TableGrid,
+} from "@/components/admin/editor-nodes";
+import {
+  MediaPickerDialog,
+  type MediaPick,
+} from "@/components/admin/media-picker-dialog";
+import {
+  ProductMentionDialog,
+  type ProductMention,
+} from "@/components/admin/product-mention-dialog";
+import { TableDialog } from "@/components/admin/table-dialog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,6 +46,10 @@ import { cn } from "@/lib/utils";
  * Emits HTML via `onChange`. Keyboard-accessible toolbar (every control is a real
  * <button> with a Persian aria-label and an active state), respects the cellar
  * design tokens, and never reaches for `left`/`right` — logical props only.
+ *
+ * CE-4: images, tables and product mentions are insertable here. All three
+ * serialise to markup `sanitizeHtml` keeps, so what the author inserts is what
+ * the public page renders — see `components/admin/editor-nodes.ts`.
  */
 
 type ToolButton = {
@@ -40,6 +62,9 @@ type ToolButton = {
 
 function buildTools(
   promptLink: (e: Editor) => void,
+  openImage: (e: Editor) => void,
+  openTable: (e: Editor) => void,
+  openProduct: () => void,
 ): (ToolButton | "divider")[] {
   return [
     {
@@ -100,6 +125,24 @@ function buildTools(
     },
     "divider",
     {
+      icon: ImagePlus,
+      label: "تصویر",
+      isActive: (e) => e.isActive("image"),
+      run: openImage,
+    },
+    {
+      icon: TableIcon,
+      label: "جدول",
+      isActive: (e) => e.isActive("simpleTable"),
+      run: openTable,
+    },
+    {
+      icon: Wine,
+      label: "اشاره به محصول",
+      run: () => openProduct(),
+    },
+    "divider",
+    {
       icon: Undo2,
       label: "بازگردانی",
       run: (e) => e.chain().focus().undo().run(),
@@ -140,6 +183,8 @@ export function RichTextEditor({
     editable: !disabled,
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3] } }),
+      EditorImage,
+      EditorTable,
       Underline,
       Link.configure({
         openOnClick: false,
@@ -197,6 +242,48 @@ export function RichTextEditor({
     }
   }, [value, editor]);
 
+  const [dialog, setDialog] = React.useState<
+    "image" | "table" | "product" | null
+  >(null);
+  const insertImage = React.useCallback(
+    (pick: MediaPick) => {
+      editor
+        ?.chain()
+        .focus()
+        .insertContent({
+          type: "image",
+          attrs: { src: pick.url, alt: pick.alt },
+        })
+        .run();
+    },
+    [editor],
+  );
+  const insertTable = React.useCallback(
+    (grid: TableGrid) => {
+      const chain = editor?.chain().focus();
+      if (!chain) return;
+      // Editing an existing table replaces its grid rather than adding a second.
+      if (editor?.isActive("simpleTable")) {
+        chain.updateAttributes("simpleTable", grid).run();
+        return;
+      }
+      chain.insertContent({ type: "simpleTable", attrs: grid }).run();
+    },
+    [editor],
+  );
+  const insertProduct = React.useCallback(
+    (mention: ProductMention) => {
+      editor
+        ?.chain()
+        .focus()
+        .insertContent(
+          `<a href="${mention.href}">${mention.title.replace(/[<>&]/g, "")}</a>`,
+        )
+        .run();
+    },
+    [editor],
+  );
+
   const promptLink = React.useCallback((e: Editor) => {
     const previous = e.getAttributes("link").href as string | undefined;
     const url = window.prompt("نشانی پیوند (URL):", previous ?? "https://");
@@ -212,7 +299,16 @@ export function RichTextEditor({
       .run();
   }, []);
 
-  const tools = React.useMemo(() => buildTools(promptLink), [promptLink]);
+  const tools = React.useMemo(
+    () =>
+      buildTools(
+        promptLink,
+        () => setDialog("image"),
+        () => setDialog("table"),
+        () => setDialog("product"),
+      ),
+    [promptLink],
+  );
 
   return (
     <div
@@ -266,6 +362,34 @@ export function RichTextEditor({
           : null}
       </div>
       <EditorContent editor={editor} />
+      <MediaPickerDialog
+        open={dialog === "image"}
+        onOpenChange={(next) => setDialog(next ? "image" : null)}
+        onPick={insertImage}
+        initial={
+          editor?.isActive("image")
+            ? {
+                url: String(editor.getAttributes("image").src ?? ""),
+                alt: String(editor.getAttributes("image").alt ?? ""),
+              }
+            : undefined
+        }
+      />
+      <TableDialog
+        open={dialog === "table"}
+        onOpenChange={(next) => setDialog(next ? "table" : null)}
+        onSave={insertTable}
+        initial={
+          editor?.isActive("simpleTable")
+            ? (editor.getAttributes("simpleTable") as TableGrid)
+            : EMPTY_TABLE
+        }
+      />
+      <ProductMentionDialog
+        open={dialog === "product"}
+        onOpenChange={(next) => setDialog(next ? "product" : null)}
+        onPick={insertProduct}
+      />
     </div>
   );
 }

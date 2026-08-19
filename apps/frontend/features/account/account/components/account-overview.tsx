@@ -176,7 +176,7 @@ export function AccountOverview() {
         ) : (
           <AccountStatCard
             label="موجودی کیف پول"
-            value={wallet.data ? formatPrice(Number(wallet.data.balance)) : "—"}
+            value={wallet.data ? formatPrice(wallet.data.balance) : "—"}
             icon={Wallet}
             href="/account/wallet"
             accent="gold"

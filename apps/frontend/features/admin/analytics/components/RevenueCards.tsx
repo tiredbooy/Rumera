@@ -43,7 +43,7 @@ export async function RevenueCards({
     <>
       <StatCard
         label="درآمد امروز"
-        value={formatPrice(Number(today.net_revenue))}
+        value={formatPrice(today.net_revenue)}
         icon={Coins}
         hint="امروز"
       />
@@ -61,7 +61,7 @@ export async function RevenueCards({
       />
       <StatCard
         label="میانگین سبد"
-        value={formatPrice(Number(today.avg_order_value))}
+        value={formatPrice(today.avg_order_value)}
         icon={TrendingUp}
       />
     </>

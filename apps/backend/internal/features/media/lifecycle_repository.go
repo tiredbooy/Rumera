@@ -64,6 +64,15 @@ const mediaReferencesCTE = `
 		UNION ALL SELECT substr(og_image_url, 8) FROM recipes WHERE left(og_image_url, 7) = '/media/'
 		UNION ALL SELECT image_storage_key FROM blogs WHERE deleted_at IS NULL AND image_storage_key IS NOT NULL
 		UNION ALL SELECT substr(image_url, 8) FROM blogs WHERE deleted_at IS NULL AND left(image_url, 7) = '/media/'
+		UNION ALL SELECT og_image_storage_key FROM blogs WHERE deleted_at IS NULL AND og_image_storage_key IS NOT NULL
+		UNION ALL SELECT substr(og_image_url, 8) FROM blogs WHERE deleted_at IS NULL AND left(og_image_url, 7) = '/media/'
+		-- CE-4/CE-10: images embedded in an editorial body are referenced only by
+		-- the HTML itself. Without these two the reconcile job would treat every
+		-- in-body image as an orphan and delete it. The pattern stops at ? and &
+		-- so a pasted transform URL (/media/key?w=800) still names the real key.
+		UNION ALL SELECT (regexp_matches(content, '/media/([^"''\s<>)?&]+)', 'g'))[1] FROM recipes
+		UNION ALL SELECT (regexp_matches(content, '/media/([^"''\s<>)?&]+)', 'g'))[1] FROM blogs
+			WHERE deleted_at IS NULL
 		UNION ALL SELECT substr(image_url, 8) FROM categories WHERE left(image_url, 7) = '/media/'
 		UNION ALL SELECT substr(image_url, 8) FROM brands WHERE left(image_url, 7) = '/media/'
 		UNION ALL SELECT substr(image_url, 8) FROM review_images WHERE left(image_url, 7) = '/media/'

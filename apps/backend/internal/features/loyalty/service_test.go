@@ -2,11 +2,14 @@ package loyalty
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tiredbooy/internal/features/wallet"
 	"github.com/tiredbooy/internal/models"
 	"github.com/tiredbooy/pkg/apperr"
 )
@@ -50,9 +53,24 @@ type repoStub struct {
 
 	internalID    int64
 	resolveErr    error
-	adjustTx      *LoyaltyTransaction
-	adjustErr     error
-	clawbackCalls []clawbackCall
+	actorLabel    string
+	actorLabelErr error
+
+	dist              []TierDistribution
+	distErr           error
+	liability         string
+	liabilityErr      error
+	liabilityPoints   int64
+	liabilityFallback string
+	statsThisYear     int64
+	statsToday        int64
+	statsLast         *time.Time
+	statsErr          error
+	statsYear         int
+	statsRefs         []string
+	adjustTx          *LoyaltyTransaction
+	adjustErr         error
+	clawbackCalls     []clawbackCall
 
 	programme    *programmeRow
 	programmeErr error
@@ -67,6 +85,7 @@ type clawbackCall struct {
 	userID             int64
 	maxPoints          int
 	reason, refT, refI string
+	audit              LedgerAudit
 }
 
 type spendCall struct {
@@ -78,6 +97,7 @@ type awardCall struct {
 	userID             int64
 	delta              int
 	reason, refT, refI string
+	audit              LedgerAudit
 }
 
 func (r *repoStub) GetAccount(ctx context.Context, userID int64) (*LoyaltyAccount, error) {
@@ -90,8 +110,8 @@ func (r *repoStub) GetAccount(ctx context.Context, userID int64) (*LoyaltyAccoun
 	return nil, models.ErrNotFound
 }
 
-func (r *repoStub) Award(ctx context.Context, userID int64, delta int, reason, refType, refID string, tiers TierThresholds) (bool, error) {
-	r.awardCalls = append(r.awardCalls, awardCall{userID, delta, reason, refType, refID})
+func (r *repoStub) Award(ctx context.Context, userID int64, delta int, reason, refType, refID string, tiers TierThresholds, audit LedgerAudit) (bool, error) {
+	r.awardCalls = append(r.awardCalls, awardCall{userID, delta, reason, refType, refID, audit})
 	r.lastTiers = tiers
 	if r.awardErr != nil {
 		return false, r.awardErr
@@ -111,6 +131,7 @@ func (r *repoStub) Award(ctx context.Context, userID int64, delta int, reason, r
 				RefType: refType,
 				RefID:   refID,
 			}
+			applyAudit(r.adjustTx, audit)
 		}
 	}
 	return r.awardGranted, nil
@@ -125,8 +146,8 @@ func (r *repoStub) Spend(ctx context.Context, userID, points int64, refID string
 	return r.spendReplay, nil
 }
 
-func (r *repoStub) Clawback(ctx context.Context, userID int64, maxPoints int, reason, refType, refID string) (int, error) {
-	r.clawbackCalls = append(r.clawbackCalls, clawbackCall{userID, maxPoints, reason, refType, refID})
+func (r *repoStub) Clawback(ctx context.Context, userID int64, maxPoints int, reason, refType, refID string, audit LedgerAudit) (int, error) {
+	r.clawbackCalls = append(r.clawbackCalls, clawbackCall{userID, maxPoints, reason, refType, refID, audit})
 	if r.clawbackErr != nil {
 		return 0, r.clawbackErr
 	}
@@ -148,8 +169,26 @@ func (r *repoStub) Clawback(ctx context.Context, userID int64, maxPoints int, re
 			RefType: refType,
 			RefID:   refID,
 		}
+		applyAudit(r.adjustTx, audit)
 	}
 	return n, nil
+}
+
+// applyAudit mirrors what the INSERT persists, so a stubbed replay reads the
+// attribution back off the ledger row instead of the caller's request.
+func applyAudit(tx *LoyaltyTransaction, audit LedgerAudit) {
+	if audit.Note != "" {
+		note := audit.Note
+		tx.Note = &note
+	}
+	if audit.ActorUserID != uuid.Nil {
+		actor := audit.ActorUserID
+		tx.ActorUserID = &actor
+	}
+	if audit.ActorLabel != "" {
+		label := audit.ActorLabel
+		tx.ActorLabel = &label
+	}
 }
 
 func (r *repoStub) GetLedgerDelta(ctx context.Context, reason, refType, refID string) (int, error) {
@@ -207,6 +246,41 @@ func (r *repoStub) ResolveUserID(ctx context.Context, userUUID uuid.UUID) (int64
 		return 1, nil
 	}
 	return 0, models.ErrNotFound
+}
+
+func (r *repoStub) TierDistribution(ctx context.Context) ([]TierDistribution, error) {
+	if r.distErr != nil {
+		return nil, r.distErr
+	}
+	return r.dist, nil
+}
+
+func (r *repoStub) PointsLiability(ctx context.Context, points int64, fallbackRedeemValue string) (string, error) {
+	r.liabilityPoints = points
+	r.liabilityFallback = fallbackRedeemValue
+	if r.liabilityErr != nil {
+		return "", r.liabilityErr
+	}
+	return r.liability, nil
+}
+
+func (r *repoStub) BirthdayAwardStats(ctx context.Context, year int, todayRefIDs []string) (int64, int64, *time.Time, error) {
+	r.statsYear = year
+	r.statsRefs = todayRefIDs
+	if r.statsErr != nil {
+		return 0, 0, nil, r.statsErr
+	}
+	return r.statsThisYear, r.statsToday, r.statsLast, nil
+}
+
+func (r *repoStub) ResolveActorLabel(ctx context.Context, userUUID uuid.UUID) (string, error) {
+	if r.actorLabelErr != nil {
+		return "", r.actorLabelErr
+	}
+	if r.actorLabel == "" {
+		return "", models.ErrNotFound
+	}
+	return r.actorLabel, nil
 }
 
 func (r *repoStub) FindAdminAdjust(ctx context.Context, userID int64, refIdentity string) (*LoyaltyTransaction, error) {
@@ -1119,4 +1193,335 @@ func TestAwardUsesLiveTierThresholds(t *testing.T) {
 	if acc.NextTier != TierGold || acc.PointsToNext != 130 {
 		t.Fatalf("standing with custom tiers = %+v", acc)
 	}
+}
+
+// brokenWalletRepo makes wallet.Service.Deposit fail. Only GetOrCreate matters —
+// Deposit gives up there, so nothing below it is ever reached.
+type brokenWalletRepo struct{ wallet.Repository }
+
+func (brokenWalletRepo) GetOrCreate(context.Context, int64) (*wallet.Wallet, error) {
+	return nil, errors.New("wallet down")
+}
+
+// Redeem spends the points BEFORE it credits the wallet, and the comment on the
+// failure branch promises the points are "never lost". Without the compensating
+// award a customer who hits a wallet outage is simply poorer.
+func TestRedeemCompensatesSoPointsAreNeverLostWhenTheWalletDepositFails(t *testing.T) {
+	repo := &repoStub{
+		awardGranted: true,
+		account:      &LoyaltyAccount{PointsBalance: 100, LifetimePoints: 100, Tier: TierBronze},
+	}
+	svc := NewService(repo, wallet.NewService(brokenWalletRepo{}), 10000, 1000, 0, 0, 0, 300, "UTC")
+
+	if _, err := svc.Redeem(context.Background(), 5, 30, "compensate-key-01"); !errors.Is(err, apperr.ErrInternal) {
+		t.Fatalf("err = %v; want ErrInternal so the caller does not report a successful redeem", err)
+	}
+	if len(repo.spendCalls) != 1 || repo.spendCalls[0].points != 30 {
+		t.Fatalf("spend calls = %+v; want one 30-point spend", repo.spendCalls)
+	}
+	if len(repo.awardCalls) != 1 {
+		t.Fatalf("award calls = %+v; want exactly one compensating award — the spent points are gone", repo.awardCalls)
+	}
+	got := repo.awardCalls[0]
+	if got.delta != 30 {
+		t.Errorf("compensated %d points; want the 30 that were spent", got.delta)
+	}
+	if got.reason != string(LoyaltyReasonRedeemReversal) {
+		t.Errorf("compensation reason = %q; want %q", got.reason, LoyaltyReasonRedeemReversal)
+	}
+	// Same ref as the spend, different reason: the reversal must not collide
+	// with the redemption's own ledger row, and must stay scoped to this user's
+	// idempotency key so a second failure does not double-refund.
+	if got.refI != repo.spendCalls[0].refID {
+		t.Errorf("compensation ref = %q; want the spend ref %q", got.refI, repo.spendCalls[0].refID)
+	}
+}
+
+// L-4: the note and a named actor must reach the ledger INSERT, not just the
+// HTTP response.
+func TestAdjustPersistsNoteAndActor(t *testing.T) {
+	uid := uuid.MustParse("5b2c0000-0000-0000-0000-000000000030")
+	actor := uuid.MustParse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")
+	member := func() *AdminMemberRow {
+		return &AdminMemberRow{UserID: uid, PointsBalance: 80, LifetimePoints: 80, Tier: TierBronze}
+	}
+
+	t.Run("grant", func(t *testing.T) {
+		repo := &repoStub{awardGranted: true, internalID: 3, member: member(), actorLabel: "سارا مرادی"}
+		svc := NewService(repo, nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+		res, err := svc.Adjust(context.Background(), actor, uid, 25, "  جبران تأخیر ارسال  ", "adjust-key-30")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(repo.awardCalls) != 1 {
+			t.Fatalf("award calls = %d", len(repo.awardCalls))
+		}
+		got := repo.awardCalls[0].audit
+		if got.Note != "جبران تأخیر ارسال" || got.ActorUserID != actor || got.ActorLabel != "سارا مرادی" {
+			t.Fatalf("audit = %+v", got)
+		}
+		if res.ActorLabel != "سارا مرادی" || res.Note != "جبران تأخیر ارسال" {
+			t.Fatalf("result = %+v", res)
+		}
+	})
+
+	t.Run("clawback", func(t *testing.T) {
+		repo := &repoStub{internalID: 4, member: member(), actorLabel: "سارا مرادی"}
+		svc := NewService(repo, nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+		if _, err := svc.Adjust(context.Background(), actor, uid, -10, "اشتباه ثبت شده بود", "adjust-key-31"); err != nil {
+			t.Fatal(err)
+		}
+		if len(repo.clawbackCalls) != 1 {
+			t.Fatalf("clawback calls = %d", len(repo.clawbackCalls))
+		}
+		got := repo.clawbackCalls[0].audit
+		if got.Note != "اشتباه ثبت شده بود" || got.ActorUserID != actor || got.ActorLabel != "سارا مرادی" {
+			t.Fatalf("audit = %+v", got)
+		}
+	})
+
+	// A name we cannot resolve must not block the grant: the UUID still
+	// identifies the actor.
+	t.Run("unresolvable actor still grants", func(t *testing.T) {
+		repo := &repoStub{awardGranted: true, internalID: 5, member: member()}
+		svc := NewService(repo, nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+		if _, err := svc.Adjust(context.Background(), actor, uid, 5, "n", "adjust-key-32"); err != nil {
+			t.Fatal(err)
+		}
+		if len(repo.awardCalls) != 1 || repo.awardCalls[0].audit.ActorUserID != actor {
+			t.Fatalf("award = %+v", repo.awardCalls)
+		}
+		if repo.awardCalls[0].audit.ActorLabel != "" {
+			t.Fatalf("label should be empty: %q", repo.awardCalls[0].audit.ActorLabel)
+		}
+	})
+}
+
+// A replay reports the recorded attribution, not the note the second caller
+// retyped — otherwise the response would look like the audit trail changed.
+func TestAdjustReplayReportsRecordedAttribution(t *testing.T) {
+	uid := uuid.MustParse("5b2c0000-0000-0000-0000-000000000031")
+	first := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	second := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	note := "اهدای اولیه"
+	label := "نازنین احمدی"
+	repo := &repoStub{
+		internalID: 9,
+		member:     &AdminMemberRow{UserID: uid, PointsBalance: 50, LifetimePoints: 50, Tier: TierBronze},
+		actorLabel: "کاربر دوم",
+		adjustTx: &LoyaltyTransaction{
+			Delta:       50,
+			Reason:      LoyaltyReasonAdminAdjust,
+			RefType:     adminAdjustRefType,
+			RefID:       "same-key-yy|actor=" + first.String(),
+			Note:        &note,
+			ActorUserID: &first,
+			ActorLabel:  &label,
+		},
+	}
+	svc := NewService(repo, nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+	res, err := svc.Adjust(context.Background(), second, uid, 50, "چیز دیگری", "same-key-yy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Replayed {
+		t.Fatalf("expected replay: %+v", res)
+	}
+	if res.Note != note || res.ActorUserID != first.String() || res.ActorLabel != label {
+		t.Fatalf("replay attribution = %+v", res)
+	}
+}
+
+// The staff ledger carries the attribution; the customer ledger deliberately
+// does not.
+func TestListMemberTransactionsCarriesAttribution(t *testing.T) {
+	note := "جبران تأخیر"
+	actor := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	label := "سارا مرادی"
+	repo := &repoStub{
+		memberTxs: []LoyaltyTransaction{{
+			ID: 5, Delta: 25, Reason: LoyaltyReasonAdminAdjust,
+			RefType: adminAdjustRefType, RefID: "k|actor=" + actor.String(),
+			Note: &note, ActorUserID: &actor, ActorLabel: &label,
+		}},
+		memberTxsTotal: 1,
+	}
+	svc := NewService(repo, nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+	rows, _, err := svc.ListMemberTransactions(context.Background(), uuid.New(), MemberTransactionFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Note == nil || *rows[0].Note != note {
+		t.Fatalf("rows = %+v", rows)
+	}
+	if rows[0].ActorLabel == nil || *rows[0].ActorLabel != label {
+		t.Fatalf("actor label = %+v", rows[0].ActorLabel)
+	}
+	if rows[0].ActorUserID == nil || *rows[0].ActorUserID != actor {
+		t.Fatalf("actor = %+v", rows[0].ActorUserID)
+	}
+
+	customer := &repoStub{txs: repo.memberTxs, txsTotal: 1}
+	csvc := NewService(customer, nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+	crows, _, cerr := csvc.ListTransactions(context.Background(), 1, TransactionFilter{})
+	if cerr != nil {
+		t.Fatal(cerr)
+	}
+	if len(crows) != 1 {
+		t.Fatalf("customer rows = %+v", crows)
+	}
+	blob, merr := json.Marshal(crows[0])
+	if merr != nil {
+		t.Fatal(merr)
+	}
+	if strings.Contains(string(blob), note) || strings.Contains(string(blob), label) {
+		t.Fatalf("customer ledger leaked staff attribution: %s", blob)
+	}
+}
+
+// L-9: the three questions a programme is managed by.
+func TestOverview(t *testing.T) {
+	base := func() *repoStub {
+		return &repoStub{
+			programme: &programmeRow{
+				ID: 1, Enabled: true, EarnDivisor: 10000, RedeemValue: 1000.5,
+				SignupBonus: 100, ReviewBonus: 50, BirthdayBonus: 200,
+				BirthdayTZ: "UTC", ReferralReward: 300,
+			},
+			tiers: DefaultProgrammeTiers(),
+			dist: []TierDistribution{
+				{Tier: TierGold, Members: 2, PointsBalance: 900},
+				{Tier: TierBronze, Members: 5, PointsBalance: 100},
+			},
+			liability: "1000500.0",
+		}
+	}
+	now := time.Date(2026, time.August, 18, 9, 0, 0, 0, time.UTC)
+
+	t.Run("liability is computed from the exact point sum", func(t *testing.T) {
+		repo := base()
+		svc := NewService(repo, nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+		ov, err := svc.Overview(context.Background(), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ov.PointsOutstanding != 1000 || ov.Members != 7 {
+			t.Fatalf("totals = %+v", ov)
+		}
+		if repo.liabilityPoints != 1000 {
+			t.Fatalf("liability points = %d", repo.liabilityPoints)
+		}
+		// The rate reaches the database as text: no float multiplication.
+		if repo.liabilityFallback != "1000.5" {
+			t.Fatalf("fallback rate = %q", repo.liabilityFallback)
+		}
+		if ov.PointsLiability != "1000500.0" {
+			t.Fatalf("liability = %q", ov.PointsLiability)
+		}
+	})
+
+	t.Run("every configured tier gets a bar, in programme order", func(t *testing.T) {
+		svc := NewService(base(), nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+		ov, err := svc.Overview(context.Background(), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []TierDistribution{
+			{Tier: TierBronze, Members: 5, PointsBalance: 100},
+			{Tier: TierSilver},
+			{Tier: TierGold, Members: 2, PointsBalance: 900},
+			{Tier: TierCellar},
+		}
+		if len(ov.Tiers) != len(want) {
+			t.Fatalf("tiers = %+v", ov.Tiers)
+		}
+		for i, w := range want {
+			if ov.Tiers[i] != w {
+				t.Fatalf("tier %d = %+v want %+v", i, ov.Tiers[i], w)
+			}
+		}
+	})
+
+	t.Run("birthday health flags an unworked cohort", func(t *testing.T) {
+		repo := base()
+		repo.birthdayIDs = []int64{7, 8, 9}
+		repo.statsToday = 1
+		repo.statsThisYear = 12
+		last := time.Date(2026, time.August, 17, 3, 0, 0, 0, time.UTC)
+		repo.statsLast = &last
+		svc := NewService(repo, nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+
+		ov, err := svc.Overview(context.Background(), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := ov.Birthday
+		if h.Status != BirthdayStatusPending || h.DueToday != 3 || h.GrantedToday != 1 || h.PendingToday != 2 {
+			t.Fatalf("health = %+v", h)
+		}
+		if h.GrantedThisYear != 12 || h.LastAwardAt == nil || !h.LastAwardAt.Equal(last) {
+			t.Fatalf("health = %+v", h)
+		}
+		if h.LocalDate != "2026-08-18" {
+			t.Fatalf("local date = %q", h.LocalDate)
+		}
+		// The keys the job itself writes: one award per user per year.
+		if repo.statsYear != 2026 {
+			t.Fatalf("year = %d", repo.statsYear)
+		}
+		want := []string{"7:2026", "8:2026", "9:2026"}
+		if len(repo.statsRefs) != len(want) {
+			t.Fatalf("refs = %v", repo.statsRefs)
+		}
+		for i, w := range want {
+			if repo.statsRefs[i] != w {
+				t.Fatalf("refs = %v", repo.statsRefs)
+			}
+		}
+	})
+
+	t.Run("a fully worked cohort is ok, an empty one is idle", func(t *testing.T) {
+		repo := base()
+		repo.birthdayIDs = []int64{7}
+		repo.statsToday = 1
+		svc := NewService(repo, nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+		ov, err := svc.Overview(context.Background(), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ov.Birthday.Status != BirthdayStatusOK {
+			t.Fatalf("status = %q", ov.Birthday.Status)
+		}
+
+		idle := base()
+		ov, err = NewService(idle, nil, 10000, 1000, 0, 0, 0, 300, "UTC").
+			Overview(context.Background(), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ov.Birthday.Status != BirthdayStatusIdle {
+			t.Fatalf("status = %q", ov.Birthday.Status)
+		}
+	})
+
+	t.Run("a switched-off programme reports off without querying the cohort", func(t *testing.T) {
+		repo := base()
+		repo.programme.Enabled = false
+		repo.birthdayIDs = []int64{7}
+		svc := NewService(repo, nil, 10000, 1000, 0, 0, 0, 300, "UTC")
+		ov, err := svc.Overview(context.Background(), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ov.Enabled || ov.Birthday.Status != BirthdayStatusOff {
+			t.Fatalf("overview = %+v", ov)
+		}
+		if ov.Birthday.DueToday != 0 || repo.statsYear != 0 {
+			t.Fatalf("cohort was queried anyway: %+v", ov.Birthday)
+		}
+		// Liability survives the kill switch: the points are still owed.
+		if ov.PointsOutstanding != 1000 {
+			t.Fatalf("outstanding = %d", ov.PointsOutstanding)
+		}
+	})
 }

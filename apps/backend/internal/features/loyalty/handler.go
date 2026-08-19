@@ -2,6 +2,7 @@ package loyalty
 
 import (
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tiredbooy/internal/platform/httpx"
@@ -80,6 +81,21 @@ func (h *Handler) UpdateProgramme(c *gin.Context) {
 		return
 	}
 	response.OK(c, p)
+}
+
+// Overview — GET /admin/loyalty/overview (L-9). Programme-level operations:
+// points liability, tier distribution, birthday-job health.
+func (h *Handler) Overview(c *gin.Context) {
+	if h.Service == nil {
+		httpx.HandleError(c, apperr.ErrInternal)
+		return
+	}
+	overview, err := h.Service.Overview(c.Request.Context(), time.Now())
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	response.OK(c, overview)
 }
 
 // ListMembers — GET /admin/loyalty/members?q=&tier=&sortBy=&orderBy=&page=&limit=

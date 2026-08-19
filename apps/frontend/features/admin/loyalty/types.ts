@@ -50,6 +50,49 @@ export interface UpdateLoyaltyProgrammeInput {
   tiers: LoyaltyProgrammeTier[];
 }
 
+/** One bar of the tier histogram from GET /admin/loyalty/overview (L-9). */
+export interface LoyaltyTierDistribution {
+  tier: LoyaltyTier | string;
+  members: number;
+  points_balance: number;
+}
+
+export type LoyaltyBirthdayStatus = "off" | "idle" | "ok" | "pending";
+
+/**
+ * Birthday-job health, reconstructed from the job's own ledger keys — awards
+ * are written once per user per year, so the ledger is the evidence.
+ */
+export interface LoyaltyBirthdayHealth {
+  timezone: string;
+  /** Today in the programme timezone, `YYYY-MM-DD`. */
+  local_date: string;
+  bonus: number;
+  due_today: number;
+  granted_today: number;
+  pending_today: number;
+  granted_this_year: number;
+  last_award_at?: string;
+  status: LoyaltyBirthdayStatus | string;
+}
+
+/** GET /admin/loyalty/overview (L-9): the programme-level operational view. */
+export interface LoyaltyOverview {
+  enabled: boolean;
+  members: number;
+  points_outstanding: number;
+  /**
+   * Toman owed, as an exact decimal string. The backend multiplies points by
+   * redeem_value as NUMERIC — render it with formatPrice / lib/money, never
+   * through Number().
+   */
+  points_liability: string;
+  redeem_value: number;
+  tiers: LoyaltyTierDistribution[];
+  birthday: LoyaltyBirthdayHealth;
+  generated_at: string;
+}
+
 /** Admin list row from GET /admin/loyalty/members (PR-003d). */
 export interface LoyaltyMember {
   user_id: string;
@@ -67,13 +110,25 @@ export interface LoyaltyMemberAccount extends LoyaltyMember {
   points_to_next: number;
 }
 
-/** Staff ledger row — same fields as the customer ledger (id / ref_*). */
+/**
+ * Staff ledger row — the customer ledger's fields (id / ref_*) plus the L-4
+ * attribution columns, which only staff adjusts carry.
+ */
 export interface LoyaltyMemberTransaction {
   id: number;
   delta: number;
   reason: LoyaltyTransactionReason | string;
   ref_type: string;
   ref_id: string;
+  /** Why the points moved, as the operator typed it at mint time. */
+  note?: string;
+  /** Public UUID of the staff member who minted the row. */
+  actor_user_id?: string;
+  /**
+   * Their name, snapshotted at mint time — an audit trail has to name a
+   * deactivated colleague, so this never re-resolves against the live user.
+   */
+  actor_label?: string;
   created_at: string;
 }
 

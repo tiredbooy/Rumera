@@ -40,7 +40,7 @@ describe("Reveal", () => {
 
     callback(
       [{ isIntersecting: true } as IntersectionObserverEntry],
-      { disconnect } as IntersectionObserver,
+      { disconnect } as unknown as IntersectionObserver,
     );
 
     expect(await screen.findByText("محتوا")).toHaveClass("reveal-visible");

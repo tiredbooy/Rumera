@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { AlertTriangle, Minus, Plus, RefreshCw, Trash2, Wine } from "lucide-react"
+import { AlertTriangle, Ban, Minus, Plus, RefreshCw, Trash2, Wine } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -17,6 +17,8 @@ import {
   useUpdateCartItem,
 } from "@/features/cart/api"
 import { cartMutationErrorMessage } from "@/features/cart/errors"
+import { isLineUnorderable, lineAvailableStock } from "@/features/cart/availability"
+import { lowStockLabel } from "@/features/catalog/products/stock-display"
 import type { CartItem } from "@/features/cart/types"
 
 /**
@@ -24,7 +26,8 @@ import type { CartItem } from "@/features/cart/types"
  * and remove write the React Query cart cache immediately (rollback on error);
  * only the mutating line is disabled. Remove toasts with undo that re-adds the
  * snapshot. The `price_changed` flag surfaces a warning when a snapshotted
- * price has drifted.
+ * price has drifted, and `available_stock` flags a sold-out/short line and caps
+ * the stepper so the customer cannot build a cart that must fail at checkout.
  */
 export function CartLines({ enabled = true }: { enabled?: boolean }) {
   const cartQuery = useCart(enabled)
@@ -194,6 +197,12 @@ export function CartLines({ enabled = true }: { enabled?: boolean }) {
       <ul className="flex flex-col divide-y divide-border/60">
         {cart.items.map((item) => {
           const lineBusy = isLineBusy(item.id)
+          // Cap and flags come from the server projection only; client state
+          // never widens what the customer is allowed to ask for.
+          const available = lineAvailableStock(item)
+          const unorderable = isLineUnorderable(item)
+          const atStockCap = available !== null && item.quantity >= available
+          const lowStock = !unorderable ? lowStockLabel(available) : null
           return (
             <li
               key={item.id}
@@ -236,6 +245,20 @@ export function CartLines({ enabled = true }: { enabled?: boolean }) {
                   </p>
                 ) : null}
 
+                {available === 0 ? (
+                  <p className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-md bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
+                    <Ban className="size-3" /> ناموجود — برای تسویه این قلم را حذف کنید
+                  </p>
+                ) : unorderable ? (
+                  <p className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-md bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
+                    <AlertTriangle className="size-3" /> تنها {faNum(available!)} عدد موجود است؛ تعداد را کم کنید
+                  </p>
+                ) : lowStock ? (
+                  <p className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
+                    {lowStock}
+                  </p>
+                ) : null}
+
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex items-center gap-0.5 rounded-lg border border-border bg-background/50 p-0.5">
                     <Button
@@ -257,7 +280,7 @@ export function CartLines({ enabled = true }: { enabled?: boolean }) {
                       size="icon"
                       className="size-9 rounded-md"
                       aria-label="افزایش تعداد"
-                      disabled={lineBusy}
+                      disabled={lineBusy || atStockCap}
                       onClick={() => {
                         remove.reset()
                         update.mutate({ itemId: item.id, quantity: item.quantity + 1 })

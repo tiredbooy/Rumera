@@ -9,7 +9,7 @@
 >
 > Full context — decisions, non-goals, the other lane — is in `TASKS.md`.
 
-74 tasks · 3 🔴 critical · 30 🟠 high · 41 🟡 medium
+77 tasks · 3 🔴 critical · 31 🟠 high · 43 🟡 medium
 
 ---
 
@@ -237,6 +237,21 @@
 - [x] `@grok` **U-7 · 🟡 · S — Make restock-notify the primary action on an out-of-stock PDP**
   Including the mobile sticky bar — today the only recoverable outcome of an out-of-stock
   visit is hidden behind an unlabelled dropdown.
+- [x] `@grok` **U-13 · 🟡 · S — Replay recipe «افزودن همه» after the same login bounce**
+  **Files:** `features/recipes/components/add-all-button.tsx`, new pending-intent
+  next to it. **Do not edit** `features/cart/pending-intent.tsx` (U-8 settled).
+  **Do:** guest tap stashes the N available variant ids (qty 1 each) in
+  sessionStorage with a 10-minute TTL and the same read-and-clear rule as U-8,
+  then login; after auth, replay through `useBulkAddCartItems` and keep the
+  existing per-item skip reporting. **Done when:** bouncing on a recipe and
+  logging in adds the ingredients once, even if the replay fails.
+- [x] `@grok` **U-14 · 🟡 · S — Replay wishlist and stock-alert after the same login bounce**
+  **Files:** `product-card-actions.tsx:88`, `alert-button.tsx:45`
+  **Do:** same stash/replay as U-8/U-13. Wishlist stores the purchasable variant
+  id (never a product-level item). Alert stores variant + `restock`/`price_drop`.
+  Surgical: only the bounce branch and a layout-mounted replay. Do not reshape
+  the card or the PDP. **Done when:** a guest heart or «اطلاع از موجود شدن»
+  survives login and fires once.
 - [x] `@grok` **U-9 · 🟡 · S — Use the existing Jalali input for the gift delivery date**
   **Files:** gift checkout form, `components/ui/jalali-datetime-input.tsx`
   The shopper picks a Gregorian date and the confirmation answers in Jalali — two
@@ -281,6 +296,20 @@
   inventory) / کاتالوگ / مشتریان / بازاریابی و محتوا / پیکربندی — the last collapsed by
   default with state in localStorage. **Done when:** the nav fits a 768px-tall viewport
   without an inner scrollbar and shows pending counts.
+- [x] `@grok` **S-12 · 🟠 · M — Sidebar groups are accordion parents, not tiny labels**
+  **Files:** `lib/rbac/nav.ts`, `features/dashboard/components/dashboard-nav.tsx`
+  **Do:** S-4 left a flat list under 11px muted headings; only «پیکربندی» folds, so
+  the rail still reads as a dump of modules. Make every multi-item group a real
+  accordion: parent row (group icon + title + rolled-up badge + chevron), children
+  nested on a logical-start rail. A one-item group (داشبورد) stays a lone top-level
+  link — do not accordion a single child. Daily groups default open, setup stays
+  collapsed; persist in the existing localStorage key; never hide the group that
+  contains the current route. Derive accordion vs link from item count — delete the
+  parallel `collapsible` flag. Keep `filterNav` / `applyNavBadges` / `flattenNavItems`
+  working so the command palette does not change. Same component for admin and account.
+  **Done when:** parents toggle children, the active group stays open, a collapsed
+  «کاتالوگ» still shows a pending count on the parent, and adding a destination is
+  one object in `ADMIN_NAV` / `ACCOUNT_NAV`.
 - [x] `@grok` **S-5 · 🟠 · S — The command palette rejects the Persian digits the panel prints**
   **Files:** `features/dashboard/components/admin-command-search.ts:10-12,29-34`
   **Do:** the panel renders «#۱۴۲» via `Intl.NumberFormat('fa-IR')`, but

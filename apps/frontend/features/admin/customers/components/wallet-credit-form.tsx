@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Loader2, Wallet } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
@@ -24,7 +25,7 @@ import { parseAsciiNumber } from "@/lib/normalize-digits";
 import { faNum, formatPrice } from "@/lib/products";
 
 type CreditResponse = {
-  transaction?: { id?: number; amount?: string };
+  transaction?: { id?: number; amount?: string; balance_after?: string };
   actor_user_id?: string;
   idempotency_key?: string;
   replayed?: boolean;
@@ -40,17 +41,30 @@ type CreditResponse = {
  * - Confirmation dialog before POST
  * - Client-generated idempotency key (stable per pending credit)
  * - Backend records actor + key; replays return 200 with replayed=true
+ *
+ * CF-3: the balance the credit lands on is shown on the form and repeated in the
+ * confirmation, because this screen used to mint money with no balance in view —
+ * the operator granting credit could not see what the customer already had. The
+ * new balance is read back from the ledger row the server returns, never from
+ * client arithmetic on money.
  */
 export function WalletCreditForm({
   userId,
   userLabel,
+  balance,
   canCredit = true,
 }: {
   userId: string;
   userLabel: string;
+  /**
+   * `wallet_balance` from the admin customer read, as an exact decimal string.
+   * `undefined` means it was not read — shown as unknown, never as zero.
+   */
+  balance?: string;
   /** When false the form is not rendered (server capability gate). */
   canCredit?: boolean;
 }) {
+  const router = useRouter();
   const [amount, setAmount] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [pending, setPending] = React.useState(false);
@@ -111,18 +125,28 @@ export function WalletCreditForm({
       }
       const data = unwrapData<CreditResponse>(body);
       const replayed = Boolean(data?.replayed);
+      // The ledger row carries the balance the server actually landed on. Adding
+      // the amount to the displayed balance here would be float money math.
+      // Only on a fresh credit: a replay returns the original ledger row, whose
+      // balance_after is the balance as of that first credit, not the current one.
+      const after = replayed ? undefined : data?.transaction?.balance_after;
       toast.success(
         replayed
           ? "این واریز قبلاً ثبت شده بود"
           : "موجودی کیف پول افزایش یافت",
         {
-          description: `${formatPrice(value)} برای ${userLabel}`,
+          description: after
+            ? `${formatPrice(value)} برای ${userLabel} — موجودی جدید ${formatPrice(after)}`
+            : `${formatPrice(value)} برای ${userLabel}`,
         },
       );
       setAmount("");
       setDescription("");
       setIdempotencyKey(newIdempotencyKey());
       setConfirmOpen(false);
+      // Re-read the server projection so the balance above the form and the
+      // ledger trail beside it stop showing the pre-credit figure.
+      router.refresh();
     } catch (error) {
       const t = apiErrorToast(error, "افزایش موجودی ناموفق بود");
       toast.error(t.title, { description: t.description });
@@ -147,6 +171,15 @@ export function WalletCreditForm({
           </span>
           <div className="min-w-0">
             <h2 className="font-serif text-lg">افزایش موجودی کیف پول</h2>
+            <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm">
+              <span className="text-muted-foreground">موجودی فعلی</span>
+              <strong
+                className="tabular-nums text-foil"
+                data-testid="wallet-credit-balance"
+              >
+                {balance === undefined ? "نامشخص" : formatPrice(balance)}
+              </strong>
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
               مبلغ پس از تأیید شما به کیف پول {userLabel} واریز می‌شود. از کلید
               یکتای درخواست برای جلوگیری از واریز تکراری استفاده می‌شود.
@@ -216,7 +249,9 @@ export function WalletCreditForm({
             <AlertDialogTitle>تأیید افزایش موجودی</AlertDialogTitle>
             <AlertDialogDescription>
               {amountValid
-                ? `مبلغ ${formatPrice(amountValue)} به کیف پول «${userLabel}» واریز می‌شود. این عملیات پس از تأیید قابل برگشت خودکار نیست.`
+                ? `موجودی فعلی «${userLabel}» ${
+                    balance === undefined ? "نامشخص" : formatPrice(balance)
+                  } است و مبلغ ${formatPrice(amountValue)} به آن افزوده می‌شود. این عملیات پس از تأیید قابل برگشت خودکار نیست.`
                 : "مبلغ نامعتبر است."}
             </AlertDialogDescription>
           </AlertDialogHeader>

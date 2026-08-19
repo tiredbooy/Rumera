@@ -1,12 +1,8 @@
 "use client";
 
 import * as React from "react";
-import {
-  ChevronDown,
-  ImageIcon,
-  SlidersHorizontal,
-  Trash2,
-} from "lucide-react";
+import Link from "next/link";
+import { ImageIcon, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Controller, useFormState, useWatch } from "react-hook-form";
 import type {
   Control,
@@ -25,28 +21,86 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Checkbox } from "@/components/ui/checkbox";
 import { fieldErrorId } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import { TableCell, TableRow } from "@/components/ui/table";
 import type { ProductOptionGroup } from "@/features/admin/products/types";
+import { StockAdjustmentPopover } from "@/features/admin/inventory/components/stock-adjustment-popover";
 import type { ProductImage } from "@/features/catalog/products/types";
+import type { InventoryItem } from "@/features/inventory/types";
+import { formatToman } from "@/lib/money";
+import { toAsciiDigits } from "@/lib/normalize-digits";
 import { cn } from "@/lib/utils";
 import type { ProductFormValues } from "../../validations";
 import { VariantOptionSelectors } from "./VariantOptionSelectors";
 
-function formatPrice(value?: string) {
-  const price = Number(value);
-  return price > 0 ? `${price.toLocaleString("fa-IR")} تومان` : "بدون قیمت";
+/**
+ * The editable columns of the variant grid, in visual order (PE-1).
+ *
+ * Arrow-key traversal addresses a cell by `data-cell="<row>:<column index into
+ * this list>"`, so the read-only option columns are deliberately absent: there
+ * is nothing to land on in them.
+ */
+export const VARIANT_CELL_COLUMNS = [
+  "select",
+  "sku",
+  "price",
+  "compare_at_price",
+  "is_active",
+] as const;
+
+export type VariantCellColumn = (typeof VARIANT_CELL_COLUMNS)[number];
+
+export const cellIndex = (column: VariantCellColumn) =>
+  VARIANT_CELL_COLUMNS.indexOf(column);
+
+/** `data-cell` address of one editable cell. */
+export const cellAddress = (row: number, column: VariantCellColumn) =>
+  `${row}:${cellIndex(column)}`;
+
+/**
+ * The typed price echoed back grouped. A variant price is an exact decimal
+ * string, so it goes through `formatToman`; `Number()` + `toLocaleString` used
+ * to round it and disagree with every other screen showing the amount (D-2).
+ */
+function PriceEcho({ value }: { value?: string }) {
+  const raw = toAsciiDigits(value ?? "").trim();
+  if (raw === "" || !(Number(raw) > 0)) return null;
+  return (
+    <p className="mt-1 truncate text-xs text-muted-foreground">
+      {formatToman(raw)}
+    </p>
+  );
 }
 
+function CellError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p
+      id={fieldErrorId(id)}
+      role="alert"
+      className="mt-1 text-xs text-destructive"
+    >
+      {message}
+    </p>
+  );
+}
+
+/**
+ * One row of the variant grid.
+ *
+ * Memoised and driven by `register`, so a keystroke in a cell re-renders
+ * nothing: at 100 rows an inline editor that re-rendered the table per
+ * character would be worse than the accordion it replaced.
+ */
 export const VariantRow = React.memo(function VariantRow({
   index,
   fieldId,
@@ -56,9 +110,13 @@ export const VariantRow = React.memo(function VariantRow({
   optionTypes,
   images,
   availableStock,
+  inventory,
+  variantId,
   isPersisted = false,
-  defaultOpen = false,
+  selected = false,
   disabled,
+  canAdjustStock = false,
+  onToggleSelect,
   onRemove,
 }: {
   index: number;
@@ -69,21 +127,23 @@ export const VariantRow = React.memo(function VariantRow({
   optionTypes: ProductOptionGroup[];
   images?: ProductImage[];
   availableStock?: number;
+  /** Ledger row for this variant, present once it is persisted (PE-11). */
+  inventory?: InventoryItem;
+  variantId?: number;
   isPersisted?: boolean;
-  defaultOpen?: boolean;
+  selected?: boolean;
   disabled?: boolean;
+  canAdjustStock?: boolean;
+  onToggleSelect?: (fieldId: string, selected: boolean) => void;
   onRemove: UseFieldArrayRemove;
 }) {
-  const [open, setOpen] = React.useState(defaultOpen);
   const [removeOpen, setRemoveOpen] = React.useState(false);
+  const [optionsOpen, setOptionsOpen] = React.useState(false);
   const sku = useWatch({ control, name: `variants.${index}.sku` });
   const price = useWatch({ control, name: `variants.${index}.price` });
   const selectedOptionIds =
     useWatch({ control, name: `variants.${index}.option_value_ids` }) ?? [];
-  const { errors } = useFormState({
-    control,
-    name: `variants.${index}`,
-  });
+  const { errors } = useFormState({ control, name: `variants.${index}` });
   const skuError = errors.variants?.[index]?.sku?.message;
   const priceError = errors.variants?.[index]?.price?.message;
   const compareError = errors.variants?.[index]?.compare_at_price?.message;
@@ -91,268 +151,244 @@ export const VariantRow = React.memo(function VariantRow({
   const hasError = Boolean(
     skuError || priceError || compareError || optionsError,
   );
-  const isOpen = open || hasError;
+
+  const rowNumber = index + 1;
+  const rowHeaderId = `${fieldId}-row-header`;
+  const optionsId = `variants.${index}.option_value_ids`;
   const skuId = `variants.${index}.sku`;
   const priceId = `variants.${index}.price`;
   const compareId = `variants.${index}.compare_at_price`;
-  const activeId = `variants.${index}.is_active`;
-  const rowTitleId = `${fieldId}-title`;
-  const selectedOptionLabels = optionTypes.flatMap((group) =>
-    group.values
-      .filter((value) => selectedOptionIds.includes(value.id))
-      .map((value) => value.value),
-  );
-  const optionSummary =
-    selectedOptionLabels.length > 0
-      ? selectedOptionLabels.join(" / ")
-      : "بدون ویژگی";
+
   const stockLabel =
     typeof availableStock === "number"
       ? availableStock > 0
-        ? `موجودی: ${availableStock.toLocaleString("fa-IR")}`
+        ? availableStock.toLocaleString("fa-IR")
         : "ناموجود"
       : isPersisted
-        ? "موجودی نامشخص"
-        : "موجودی پس از ایجاد";
+        ? "نامشخص"
+        : "پس از ایجاد";
 
   return (
     <>
-    <Collapsible open={isOpen} onOpenChange={setOpen}>
-      <div
-        role="group"
-        aria-labelledby={rowTitleId}
-        className={cn(
-          "min-w-0 overflow-hidden rounded-xl border border-border/60 bg-muted/20 transition-colors hover:border-border",
-          hasError && "border-destructive/40",
-        )}
+      <TableRow
+        data-state={selected ? "selected" : undefined}
+        className={cn(hasError && "bg-destructive/[0.06]")}
       >
-        <div className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-2 md:grid-cols-[minmax(0,1.4fr)_minmax(100px,.6fr)_minmax(130px,.7fr)_auto_auto]">
-          <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className="group flex min-w-0 items-center gap-2 rounded-lg text-start focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none"
+        <TableCell className="w-10">
+          <Checkbox
+            checked={selected}
+            disabled={disabled}
+            aria-label={`انتخاب تنوع ${rowNumber}`}
+            data-cell={cellAddress(index, "select")}
+            onCheckedChange={(checked) =>
+              onToggleSelect?.(fieldId, checked === true)
+            }
+          />
+        </TableCell>
+
+        <th
+          scope="row"
+          id={rowHeaderId}
+          className="whitespace-nowrap p-2 text-start align-middle font-medium"
+        >
+          <span className="text-sm">تنوع {rowNumber}</span>
+          {images?.length ? (
+            <span className="mt-0.5 flex items-center gap-1 text-xs font-normal text-muted-foreground">
+              <ImageIcon className="size-3.5" aria-hidden />
+              {images.length.toLocaleString("fa-IR")} تصویر اختصاصی
+            </span>
+          ) : null}
+        </th>
+
+        {optionTypes.map((group) => {
+          const value = group.values.find((option) =>
+            selectedOptionIds.includes(option.id),
+          );
+          return (
+            <TableCell
+              key={group.id}
+              className={cn(
+                "text-sm",
+                value ? undefined : "text-muted-foreground",
+                optionsError && "text-destructive",
+              )}
             >
-              <ChevronDown
-                className={cn(
-                  "size-4 shrink-0 text-muted-foreground transition-transform",
-                  isOpen && "rotate-180",
-                )}
-                aria-hidden
-              />
-              <span className="min-w-0">
-                <span
-                  id={rowTitleId}
-                  className="block truncate text-sm font-medium"
-                >
-                  تنوع {index + 1}: {optionSummary}
-                </span>
-                <span
-                  className="mt-0.5 block truncate text-xs text-muted-foreground"
-                  dir="ltr"
-                >
-                  {sku?.trim() || "SKU تعیین نشده"}
-                </span>
-                <span className="mt-1 flex flex-wrap gap-1.5 md:hidden">
-                  <Badge variant="outline">{formatPrice(price)}</Badge>
-                  <Badge
-                    variant={availableStock === 0 ? "destructive" : "secondary"}
-                  >
-                    {stockLabel}
-                  </Badge>
-                </span>
-              </span>
-            </button>
-          </CollapsibleTrigger>
+              {value?.value ?? "—"}
+            </TableCell>
+          );
+        })}
 
-          <span className="hidden text-sm md:block">
-            {formatPrice(price)}
-          </span>
-          <Badge
-            variant={availableStock === 0 ? "destructive" : "secondary"}
-            className="hidden md:inline-flex"
-          >
-            {stockLabel}
-          </Badge>
+        <TableCell className="min-w-40">
+          <Input
+            id={skuId}
+            dir="ltr"
+            className="font-mono"
+            placeholder="مثلاً BLK-750ML"
+            disabled={disabled}
+            aria-label={`SKU تنوع ${rowNumber}`}
+            aria-invalid={!!skuError}
+            aria-describedby={skuError ? fieldErrorId(skuId) : undefined}
+            data-cell={cellAddress(index, "sku")}
+            {...register(`variants.${index}.sku`)}
+          />
+          <CellError id={skuId} message={skuError} />
+        </TableCell>
 
+        <TableCell className="min-w-32">
+          <Input
+            id={priceId}
+            inputMode="numeric"
+            dir="ltr"
+            disabled={disabled}
+            aria-label={`قیمت تنوع ${rowNumber} به تومان`}
+            aria-invalid={!!priceError}
+            aria-describedby={priceError ? fieldErrorId(priceId) : undefined}
+            data-cell={cellAddress(index, "price")}
+            {...register(`variants.${index}.price`)}
+          />
+          <CellError id={priceId} message={priceError} />
+          {priceError ? null : <PriceEcho value={price} />}
+        </TableCell>
+
+        <TableCell className="min-w-32">
+          <Input
+            id={compareId}
+            inputMode="numeric"
+            dir="ltr"
+            disabled={disabled}
+            aria-label={`قیمت پیش از تخفیف تنوع ${rowNumber}`}
+            aria-invalid={!!compareError}
+            aria-describedby={
+              compareError ? fieldErrorId(compareId) : undefined
+            }
+            data-cell={cellAddress(index, "compare_at_price")}
+            {...register(`variants.${index}.compare_at_price`)}
+          />
+          <CellError id={compareId} message={compareError} />
+        </TableCell>
+
+        <TableCell
+          className={cn(
+            "text-sm tabular-nums",
+            availableStock === 0 && "text-destructive",
+          )}
+        >
+          {/* Stock is owned by the inventory ledger, not this aggregate. The
+              save payload still has no stock field and never will: a level set
+              through the product save would be an absolute overwrite with no
+              movement behind it, erasing the audit trail and racing whatever
+              orders committed stock since this page loaded. The adjustment
+              below posts a signed movement to the inventory endpoint instead,
+              with its own type and note (PE-11). */}
+          <div className="flex items-center gap-1">
+            {variantId ? (
+              <Link
+                href={`/admin/inventory/${variantId}`}
+                className="underline-offset-4 hover:underline"
+              >
+                {stockLabel}
+              </Link>
+            ) : (
+              <span className="text-muted-foreground">{stockLabel}</span>
+            )}
+            {inventory && canAdjustStock ? (
+              <StockAdjustmentPopover inventory={inventory} compact />
+            ) : null}
+          </div>
+        </TableCell>
+
+        <TableCell className="w-16">
           <Controller
             control={control}
             name={`variants.${index}.is_active`}
             render={({ field }) => (
-              <div className="flex items-center gap-2">
-                <Label htmlFor={activeId} className="sr-only">
-                  فعال بودن تنوع {index + 1}
-                </Label>
-                <Switch
-                  id={activeId}
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                  disabled={disabled}
-                  aria-label={`فعال بودن تنوع ${index + 1}`}
-                />
-                <span className="hidden text-xs text-muted-foreground xl:inline">
-                  {field.value ? "فعال" : "غیرفعال"}
-                </span>
-              </div>
+              <Switch
+                checked={field.value}
+                onCheckedChange={field.onChange}
+                disabled={disabled}
+                aria-label={`فعال بودن تنوع ${rowNumber}`}
+                data-cell={cellAddress(index, "is_active")}
+              />
             )}
           />
+        </TableCell>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            disabled={disabled}
-            aria-label={`حذف تنوع ${index + 1}`}
-            className="size-11 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            onClick={() => setRemoveOpen(true)}
-          >
-            <Trash2 className="size-4" aria-hidden />
-          </Button>
-        </div>
-
-        <CollapsibleContent
-          forceMount
-          hidden={!isOpen}
-          onFocusCapture={() => setOpen(true)}
-        >
-          <div className="border-t border-border/60 p-3 sm:p-4">
-            <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 xl:col-span-1">
-                <Label htmlFor={skuId} className="text-xs">
-                  SKU
-                </Label>
-                <Input
-                  id={skuId}
-                  dir="ltr"
-                  placeholder="مثلاً 750ML"
+        <TableCell className="w-24">
+          <div className="flex items-center justify-end gap-0.5">
+            <Popover open={optionsOpen} onOpenChange={setOptionsOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  id={optionsId}
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   disabled={disabled}
-                  aria-invalid={!!skuError}
-                  aria-describedby={skuError ? fieldErrorId(skuId) : undefined}
-                  {...register(`variants.${index}.sku`)}
-                />
-                {skuError ? (
-                  <p
-                    id={fieldErrorId(skuId)}
-                    role="alert"
-                    className="text-xs text-destructive"
-                  >
-                    {skuError}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <Label htmlFor={priceId} className="text-xs">
-                  قیمت (تومان)
-                </Label>
-                <Input
-                  id={priceId}
-                  type="number"
-                  min={1}
-                  dir="ltr"
-                  disabled={disabled}
-                  aria-invalid={!!priceError}
-                  aria-describedby={
-                    priceError ? fieldErrorId(priceId) : undefined
+                  aria-label={`ویرایش ویژگی‌های تنوع ${rowNumber}`}
+                  aria-invalid={!!optionsError}
+                  className={cn(
+                    "size-11 text-muted-foreground",
+                    optionsError && "text-destructive",
+                  )}
+                >
+                  <SlidersHorizontal className="size-4" aria-hidden />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80">
+                <VariantOptionSelectors
+                  index={index}
+                  control={control}
+                  setValue={setValue}
+                  optionTypes={optionTypes}
+                  error={
+                    typeof optionsError === "string" ? optionsError : undefined
                   }
-                  {...register(`variants.${index}.price`)}
-                />
-                {priceError ? (
-                  <p
-                    id={fieldErrorId(priceId)}
-                    role="alert"
-                    className="text-xs text-destructive"
-                  >
-                    {priceError}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <Label htmlFor={compareId} className="text-xs">
-                  قیمت پیش از تخفیف
-                </Label>
-                <Input
-                  id={compareId}
-                  type="number"
-                  min={0}
-                  dir="ltr"
                   disabled={disabled}
-                  aria-invalid={!!compareError}
-                  aria-describedby={
-                    compareError ? fieldErrorId(compareId) : undefined
-                  }
-                  {...register(`variants.${index}.compare_at_price`)}
                 />
-                {compareError ? (
-                  <p
-                    id={fieldErrorId(compareId)}
-                    role="alert"
-                    className="text-xs text-destructive"
-                  >
-                    {compareError}
-                  </p>
-                ) : null}
-              </div>
-            </div>
+              </PopoverContent>
+            </Popover>
 
-            <div className="mt-4 border-t border-border/60 pt-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="flex items-center gap-2 text-xs font-medium text-foreground">
-                  <SlidersHorizontal
-                    className="size-3.5 text-muted-foreground"
-                    aria-hidden
-                  />
-                  ویژگی‌های این تنوع
-                </p>
-                {images ? (
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <ImageIcon className="size-3.5" aria-hidden />
-                    {images.length.toLocaleString("fa-IR")} تصویر اختصاصی
-                  </p>
-                ) : null}
-              </div>
-              <VariantOptionSelectors
-                index={index}
-                control={control}
-                setValue={setValue}
-                optionTypes={optionTypes}
-                error={
-                  typeof optionsError === "string" ? optionsError : undefined
-                }
-                disabled={disabled}
-              />
-            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={disabled}
+              aria-label={`حذف تنوع ${rowNumber}`}
+              className="size-11 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setRemoveOpen(true)}
+            >
+              <Trash2 className="size-4" aria-hidden />
+            </Button>
           </div>
-        </CollapsibleContent>
-      </div>
-    </Collapsible>
-    <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>حذف تنوع؟</AlertDialogTitle>
-          <AlertDialogDescription>
-            {sku?.trim()
-              ? `تنوع «${sku.trim()}» از این محصول حذف می‌شود.`
-              : `تنوع ${index + 1} از این محصول حذف می‌شود.`}
-            {isPersisted
-              ? " پس از ذخیره، این SKU از کاتالوگ هم برداشته می‌شود."
-              : " هنوز ذخیره نشده و فقط از این فرم حذف می‌شود."}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>انصراف</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            onClick={() => {
-              setRemoveOpen(false);
-              onRemove(index);
-            }}
-          >
-            حذف تنوع
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        </TableCell>
+      </TableRow>
+
+      <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف تنوع؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              {sku?.trim()
+                ? `تنوع «${sku.trim()}» از این محصول حذف می‌شود.`
+                : `تنوع ${rowNumber} از این محصول حذف می‌شود.`}
+              {isPersisted
+                ? " پس از ذخیره، این SKU از کاتالوگ هم برداشته می‌شود."
+                : " هنوز ذخیره نشده و فقط از این فرم حذف می‌شود."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>انصراف</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                setRemoveOpen(false);
+                onRemove(index);
+              }}
+            >
+              حذف تنوع
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 });

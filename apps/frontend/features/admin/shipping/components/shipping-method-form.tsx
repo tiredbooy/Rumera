@@ -30,6 +30,10 @@ import {
   type ShippingMethodFormValues,
 } from "@/features/shipping/validations";
 
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { RateTypePicker } from "./rate-type-picker";
 import { ShippingCostPreview } from "./shipping-cost-preview";
 import { ShippingFormField, ShippingFormSection } from "./shipping-form-field";
@@ -79,7 +83,7 @@ export function ShippingMethodForm({
     handleSubmit,
     setError,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<ShippingMethodFormValues>({
     resolver: zodResolver(shippingMethodFormSchema),
     defaultValues: shippingMethodFormDefaults(method),
@@ -88,6 +92,7 @@ export function ShippingMethodForm({
   const baseRate = useWatch({ control, name: "base_rate" });
   const freeAboveAmount = useWatch({ control, name: "free_above_amount" });
   const busy = isSubmitting || createMethod.isPending || updateMethod.isPending;
+  const guard = useUnsavedChangesGuard({ enabled: isDirty, isSaving: busy });
 
   function applyError(error: unknown) {
     if (error instanceof ShippingApiError) {
@@ -123,6 +128,7 @@ export function ShippingMethodForm({
         });
         toast.success("تغییرات روش ارسال ذخیره شد");
       }
+      guard.release();
       router.push(`/admin/shipping/${zoneID}`);
       router.refresh();
     } catch (error) {
@@ -371,6 +377,8 @@ export function ShippingMethodForm({
           {mode === "create" ? "ساخت روش ارسال" : "ذخیرهٔ تغییرات"}
         </Button>
       </div>
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
     </form>
   );
 }

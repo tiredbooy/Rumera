@@ -352,6 +352,12 @@ type RecipeDetailResponse struct {
 	StructuredData map[string]any `json:"structured_data,omitempty"`
 }
 
+// SlugRedirectResponse is the 404-path answer for a retired slug: the slug the
+// content lives at now.
+type SlugRedirectResponse struct {
+	Slug string `json:"slug"`
+}
+
 // RecipeSitemapItem feeds sitemap.xml generation on the frontend.
 type RecipeSitemapItem struct {
 	Slug      string    `json:"slug"`

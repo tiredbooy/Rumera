@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   status: "authenticated" as "authenticated" | "unauthenticated" | "loading",
+  push: vi.fn(),
   addMutate: vi.fn(),
   removeMutate: vi.fn(),
   useWishlist: vi.fn((enabled?: boolean) => ({
@@ -21,7 +22,7 @@ vi.mock("next-auth/react", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mocks.push }),
 }));
 
 vi.mock("next/link", () => ({
@@ -92,6 +93,8 @@ vi.mock("@/components/ui/button", () => ({
     ),
 }));
 
+import { takeWishlistIntent } from "@/features/wishlist/pending-wishlist";
+
 import {
   PRODUCT_CARD_ACTIONS_OVERLAY_CLASS,
   ProductCardActions,
@@ -109,6 +112,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
   mocks.status = "authenticated";
   mocks.useWishlist.mockImplementation((enabled?: boolean) => ({
     enabled,
@@ -176,6 +180,27 @@ describe("ProductCardActions wishlist", () => {
     expect(
       screen.getByRole("link", { name: "انتخاب گزینه‌ها" }),
     ).toHaveAttribute("href", "/products/reserve-bottle");
+  });
+
+  it("stashes the variant when a guest heart is bounced to login", () => {
+    mocks.status = "unauthenticated";
+    render(
+      <ProductCardActions {...baseProps} purchasableVariantId={9} />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "افزودن بطری رزرو ویژه به علاقه‌مندی‌ها",
+      }),
+    );
+
+    expect(mocks.addMutate).not.toHaveBeenCalled();
+    expect(mocks.push).toHaveBeenCalled();
+    expect(takeWishlistIntent()).toEqual({
+      product_variant_id: 9,
+      product_id: 42,
+    });
+    expect(takeWishlistIntent()).toBeNull();
   });
 
   it("hides the heart when multi-option cards have no public PDP", () => {

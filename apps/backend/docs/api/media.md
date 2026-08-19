@@ -17,6 +17,7 @@ See [Authentication](../authentication.md) for trust tiers and
 | GET    | `/media/*key`                              | Public | Available          | Serve an original or transformed local image |
 | POST   | `/admin/products/:id/images`               | Admin  | Available | Upload and attach a product image            |
 | POST   | `/admin/products/:id/images/url`           | Admin  | Available | Attach a product image URL                   |
+| GET    | `/admin/uploads`                           | Admin  | Available | List stored originals (media library)        |
 | POST   | `/admin/uploads`                           | Admin  | Legacy    | Upload without durable owner attachment      |
 | POST   | `/admin/uploads/release`                   | Admin  | Available | Release a cancelled standalone upload        |
 | POST   | `/admin/uploads/:ownerType/:ownerID/:role` | Admin  | Available | Upload and attach owner media                |
@@ -124,8 +125,22 @@ values fall back to `uploads`. It returns `url`, `key`, `width`, and `height` in
 a `201 Created` envelope.
 
 This route stores a blob but does not attach it to an owner row. It remains for
-category compatibility; hero-slide, recipe, and journal forms use the
-owner-aware contract.
+category compatibility and for images embedded in an editorial body; hero-slide,
+recipe, and journal *slots* use the owner-aware contract.
+
+## Media Library
+
+```http
+GET /api/v1/admin/uploads?limit=60&q=recipes
+```
+
+Lists stored originals newest first — `url`, `key`, `size`, `modified_at` — so an
+editor can reuse an image already on the site. `limit` defaults to 60 and is
+capped at 200; `q` is a case-insensitive substring match on the storage key.
+Rendered derivatives live in a separate cache namespace and never appear.
+
+Body-embedded images referenced from `recipes.content` / `blogs.content` count as
+live references for cleanup, so reusing a library image in a body keeps it alive.
 
 An explicitly cancelled standalone upload is released with:
 
@@ -172,6 +187,7 @@ Only these owner and role combinations are supported:
 | `recipes`     | `cover`   | `recipes`     | `image_url`        | `image_storage_key`        |
 | `recipes`     | `og`      | `recipes`     | `og_image_url`     | `og_image_storage_key`     |
 | `journal`     | `cover`   | `blogs`       | `image_url`        | `image_storage_key`        |
+| `journal`     | `og`      | `blogs`       | `og_image_url`     | `og_image_storage_key`     |
 
 All other combinations must be rejected. A successful implementation stores the
 blob under the owner's stable namespace and persists the URL/key pair on that

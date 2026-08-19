@@ -39,6 +39,7 @@ The `Blog` object:
 | `excerpt` | string \| null | |
 | `image_url` | string \| null | cover image |
 | `image_alt` | string \| null | cover-image alternative text |
+| `og_image_url` | string \| null | dedicated social/Open Graph crop; null falls back to `image_url` |
 | `time_to_read` | int | minutes |
 | `total_reads` | int64 | read counter |
 | `status` | string | `draft` · `published` · `archived` |
@@ -248,6 +249,7 @@ Authorization: Bearer <access_token>
 | `excerpt` | string \| null | |
 | `image_url` | string \| null | cover image |
 | `image_alt` | string \| null | cover-image alternative text, max 255 |
+| `og_image_url` | string \| null | social crop; external HTTPS or site-relative only — a `/media/` value must come from the owner upload route |
 | `time_to_read` | int | minutes; defaults to `1` when ≤ 0 |
 | `status` | string | one of `draft` `published` `archived`; defaults to `draft` |
 | `is_featured` | bool | |
@@ -307,6 +309,7 @@ All fields optional; only supplied fields are updated (`BlogUpdateReq`).
 | `content` | string | |
 | `excerpt` | string \| null | |
 | `image_url` | string \| null | cover image |
+| `og_image_url` | string \| null | social crop; a `/media/` value is only accepted when it already matches the stored one |
 | `time_to_read` | int | minutes (min 1) |
 | `status` | string | one of `draft` `published` `archived` |
 | `is_featured` | bool | |
@@ -322,7 +325,7 @@ All fields optional; only supplied fields are updated (`BlogUpdateReq`).
 > server to stamp `published_at` to now. A future `published_at` is honored as a
 > schedule on public list/detail; admin still sees the row.
 >
-> **Nullable fields.** For `excerpt`, `image_url`, `image_alt`, `meta_title`,
+> **Nullable fields.** For `excerpt`, `image_url`, `image_alt`, `og_image_url`, `meta_title`,
 > `meta_description`, and `published_at`: omit the field to leave it unchanged,
 > send `null` to clear it, or send a value to replace it. A published post cannot
 > remain without a publication timestamp, so clearing `published_at` while its

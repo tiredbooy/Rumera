@@ -7,6 +7,10 @@ import { SiteHeader } from "@/features/storefront/navigation/components/site-hea
 import { SiteFooter } from "@/components/site-footer";
 import { AgeGate } from "@/features/compliance/components/age-gate";
 import { ReferralTracker } from "@/features/referral/components/referral-tracker";
+import { PendingCartIntent } from "@/features/cart/pending-intent";
+import { PendingAlertIntent } from "@/features/product-alerts/pending-alert";
+import { PendingBulkAddIntent } from "@/features/recipes/pending-bulk-add";
+import { PendingWishlistIntent } from "@/features/wishlist/pending-wishlist";
 import { getCategoryTree } from "@/features/catalog/categories/api";
 import { getPublicSiteSettingsOrNull } from "@/features/settings/api/server";
 import { MaintenanceScreen } from "@/features/storefront/maintenance/components/maintenance-screen";
@@ -37,6 +41,11 @@ export default async function StorefrontLayout({
       <SiteFooter />
       <AgeGate />
       <ReferralTracker />
+      {/* Replays guest actions dropped by the login bounce (U-8 / U-13 / U-14). */}
+      <PendingCartIntent />
+      <PendingBulkAddIntent />
+      <PendingWishlistIntent />
+      <PendingAlertIntent />
     </>
   );
 }

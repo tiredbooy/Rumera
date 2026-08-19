@@ -34,6 +34,10 @@ type Repository interface {
 	AdminBan(ctx context.Context, actorUserID, targetUserID uuid.UUID) (*User, error)
 	AdminUnban(ctx context.Context, actorUserID, targetUserID uuid.UUID) (*User, error)
 	GetAdminAudit(ctx context.Context, targetUserID uuid.UUID, filter AdminUserAuditFilter) ([]AdminUserAuditEvent, int64, error)
+	// AdminWalletBalance reads the customer's wallet balance for the admin
+	// detail projection (CF-3). Direct SQL rather than a wallet.Service call:
+	// wallet already imports users, so the dependency cannot run the other way.
+	AdminWalletBalance(ctx context.Context, id int64) (float64, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 	ExistsByID(ctx context.Context, userID uuid.UUID) (bool, error)
 }
@@ -226,6 +230,18 @@ func (r *repository) GetByIDIncludingInactive(ctx context.Context, userID uuid.U
 		return nil, fmt.Errorf("repository.GetByIDIncludingInactive: %w", err)
 	}
 	return user, nil
+}
+
+// AdminWalletBalance returns the wallet balance for a user id. Wallets are
+// created lazily on first use (wallet.Service.GetOrCreate), so a customer who
+// has never transacted has no row — that is a zero balance, not an error.
+func (r *repository) AdminWalletBalance(ctx context.Context, id int64) (float64, error) {
+	const q = `SELECT COALESCE((SELECT balance FROM wallets WHERE user_id = $1), 0)`
+	var balance float64
+	if err := r.db.QueryRow(ctx, q, id).Scan(&balance); err != nil {
+		return 0, fmt.Errorf("repository.AdminWalletBalance: %w", err)
+	}
+	return balance, nil
 }
 
 func (r *repository) GetAuthUserByUID(ctx context.Context, uid int64) (*AuthUser, error) {

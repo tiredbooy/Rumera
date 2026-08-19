@@ -81,10 +81,16 @@ import {
   SEO_DESCRIPTION_LIMIT,
   SEO_TITLE_LIMIT,
 } from "@/features/admin/shared/seo-fields";
+import { FormDraftNotice, useFormDraft } from "@/hooks/use-form-draft";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { apiErrorMessage, localizeApiText } from "@/lib/api/user-facing-error";
 import { faDate } from "@/lib/utils/date";
 
 import { JournalFormField, JournalFormSection } from "./form-field";
+import { JournalOGImage } from "./journal-og-image";
 import {
   ProductPicker,
   type ProductPickerOption,
@@ -99,6 +105,7 @@ const FORM_FIELDS = new Set<keyof JournalPostFormValues>([
   "content",
   "image_url",
   "image_alt",
+  "og_image_url",
   "time_to_read",
   "status",
   "published_at",
@@ -188,16 +195,28 @@ export function JournalForm({
   const [pendingUnpublish, setPendingUnpublish] =
     React.useState<JournalPostFormValues | null>(null);
   const skipUnpublishConfirm = React.useRef(false);
+  const form = useForm<JournalPostFormValues>({
+    resolver: zodResolver(journalPostFormSchema),
+    defaultValues: journalPostFormDefaults(post),
+  });
   const {
     register,
     handleSubmit,
     control,
     setError,
     setValue,
-    formState: { errors, isSubmitting },
-  } = useForm<JournalPostFormValues>({
-    resolver: zodResolver(journalPostFormSchema),
-    defaultValues: journalPostFormDefaults(post),
+    formState: { errors, isSubmitting, isDirty },
+  } = form;
+
+  const draft = useFormDraft({
+    storageKey: `rumera:journal-draft:${mode}:${post?.id ?? "new"}`,
+    form,
+    revision: post?.updated_at,
+    enabled: canWrite,
+  });
+  const guard = useUnsavedChangesGuard({
+    enabled: isDirty,
+    isSaving: isSubmitting,
   });
   const title = useWatch({ control, name: "title" });
   const slug = useWatch({ control, name: "slug" });
@@ -314,6 +333,8 @@ export function JournalForm({
       toast.success(
         mode === "create" ? "نوشته ساخته شد" : "تغییرات نوشته ذخیره شد",
       );
+      draft.clear();
+      guard.release();
       router.push("/admin/journal");
       router.refresh();
     } catch (error) {
@@ -330,6 +351,10 @@ export function JournalForm({
             ? "نوشته و تصویر ذخیره شدند؛ وضعیت انتشار را در صفحهٔ ویرایش بررسی کنید"
             : "نوشته ذخیره شد؛ بارگذاری تصویر را در صفحهٔ ویرایش ادامه دهید",
         );
+        // The post exists now, so the create-mode draft is stale — leaving it
+        // would offer it back on the next «نوشتهٔ جدید» in this tab.
+        draft.clear();
+        guard.release();
         router.push(`/admin/journal/${savedOwnerID}`);
         router.refresh();
       } else if (mode === "edit" && mediaAttached) {
@@ -364,6 +389,13 @@ export function JournalForm({
           فقط مشاهده — ذخیره و بارگذاری تصویر به مجوز نوشتن ژورنال نیاز دارد.
         </p>
       )}
+      <FormDraftNotice
+        className="lg:col-span-2"
+        draft={draft.draft}
+        savedAt={draft.savedAt}
+        onRestore={draft.restore}
+        onDiscard={draft.discard}
+      />
       <div className="flex min-w-0 flex-col gap-6">
         {formError ? (
           <p
@@ -584,6 +616,24 @@ export function JournalForm({
               />
             </div>
           </JournalFormField>
+          <Controller
+            control={control}
+            name="og_image_url"
+            render={({ field }) => (
+              <JournalOGImage
+                postId={post?.id}
+                value={field.value}
+                onChange={field.onChange}
+                fallbackURL={previewURL}
+                disabled={editorLocked}
+              />
+            )}
+          />
+          {errors.og_image_url ? (
+            <p role="alert" className="text-xs text-destructive sm:col-span-2">
+              {errors.og_image_url.message}
+            </p>
+          ) : null}
           <div className="sm:col-span-2">
             <SearchSnippetPreview
               metaTitle={metaTitle}
@@ -774,7 +824,7 @@ export function JournalForm({
         <EditorActions
           submitLabel={mode === "create" ? "ساخت نوشته" : "ذخیرهٔ تغییرات"}
           isSubmitting={isSubmitting}
-          onCancel={() => router.push("/admin/journal")}
+          onCancel={() => guard.requestNavigation("/admin/journal")}
           hint={PUBLICATION_KIND_HINT[kind]}
           canWrite={canWrite}
         />
@@ -815,6 +865,8 @@ export function JournalForm({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <UnsavedChangesDialog {...guard.dialogProps} />
     </>
   );
 }

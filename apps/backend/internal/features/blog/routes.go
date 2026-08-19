@@ -9,6 +9,8 @@ func RegisterPublic(v1 *gin.RouterGroup, h *Handler) {
 	}
 	v1.GET("/blogs", h.ListPublic)
 	v1.GET("/blogs/:slug", h.GetBySlug)
+	// 404 path: resolves a slug retired by a rename to the current one.
+	v1.GET("/blogs/:slug/redirect", h.SlugRedirect)
 	v1.GET("/blog-categories", h.ListCategories)
 	v1.GET("/blog-categories/:id", h.GetCategory)
 }

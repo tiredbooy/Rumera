@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: timescale/timescaledb:latest-pg17
+    image: timescale/timescaledb:2.19.3-pg17
     container_name: rumera_postgres
     restart: unless-stopped
     environment:
@@ -20,7 +20,7 @@ services:
       retries: 5
 
   analytics_db:
-    image: timescale/timescaledb:latest-pg17
+    image: timescale/timescaledb:2.19.3-pg17
     container_name: rumera_analytics
     restart: unless-stopped
     environment:

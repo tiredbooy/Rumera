@@ -1,3 +1,8 @@
+import {
+  collectRoutePassthrough,
+  type RoutePassthrough,
+  withRoutePassthrough,
+} from "@/features/catalog/route-passthrough";
 import type {
   RecipeDifficulty,
   RecipeSortDirection,
@@ -46,6 +51,8 @@ export type RecipeRouteQuery = {
   sortBy: RecipeSortField;
   orderBy: RecipeSortDirection;
   needsRedirect: boolean;
+  /** Params the route does not own — carried through any redirect. */
+  passthrough: RoutePassthrough;
 };
 
 const QUERY_KEYS = new Set(["page", "q", "difficulty", "sort"]);
@@ -61,9 +68,10 @@ export function parseRecipePage(value: RecipeSearchParamValue): number | null {
 export function parseRecipeRouteQuery(
   searchParams: RecipeSearchParamsRecord,
 ): RecipeRouteQuery {
-  let needsRedirect = Object.entries(searchParams).some(
-    ([key, value]) => value !== undefined && !QUERY_KEYS.has(key),
-  );
+  // A campaign param is not a malformed URL. Unknown keys ride along instead of
+  // triggering a redirect that would strip them (see route-passthrough.ts).
+  const passthrough = collectRoutePassthrough(searchParams, QUERY_KEYS);
+  let needsRedirect = false;
 
   const parsedPage = parseRecipePage(searchParams.page);
   const page = parsedPage ?? 1;
@@ -120,6 +128,7 @@ export function parseRecipeRouteQuery(
     sortBy: sortOption.sortBy,
     orderBy: sortOption.orderBy,
     needsRedirect,
+    passthrough,
   };
 }
 
@@ -136,6 +145,21 @@ export function recipePageHref(
   const value = params.toString();
   const path = value ? `/recipes?${value}` : "/recipes";
   return hash ? `${path}#${hash}` : path;
+}
+
+/**
+ * The href a redirect goes to — canonical, plus the params the route does not
+ * own, so a campaign click keeps its attribution across the correction.
+ */
+export function recipeRedirectHref(
+  query: Pick<RecipeRouteQuery, "q" | "difficulty" | "sort" | "passthrough">,
+  page: number,
+  hash?: string,
+): string {
+  return withRoutePassthrough(
+    recipePageHref(query, page, hash),
+    query.passthrough,
+  );
 }
 
 export function getRecipeSortLabel(sort: RecipeSortMode): string {

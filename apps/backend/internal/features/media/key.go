@@ -43,7 +43,7 @@ func contentMediaSlot(ownerType, role string) (OwnerKind, Role, error) {
 			return kind, mediaRole, nil
 		}
 	case MediaOwnerJournal:
-		if mediaRole == RoleCover {
+		if mediaRole == RoleCover || mediaRole == RoleOG {
 			return kind, mediaRole, nil
 		}
 	}
@@ -84,7 +84,7 @@ func mediaStorageKey(
 		}
 		directory = string(kind) + "/" + id
 	case MediaOwnerJournal:
-		if role != RoleCover {
+		if role != RoleCover && role != RoleOG {
 			return "", ErrInvalidMediaOwner
 		}
 		directory = string(kind) + "/" + id

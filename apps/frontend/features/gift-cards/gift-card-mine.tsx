@@ -66,7 +66,7 @@ function CardRow({ card }: { card: PurchasedGiftCard }) {
         <p className="text-sm text-muted-foreground">
           مبلغ روی کارت:{" "}
           <strong className="font-medium text-foreground" dir="ltr">
-            {formatPrice(Number(card.initial_amount))}
+            {formatPrice(card.initial_amount)}
           </strong>
           {card.status === "active" ? (
             <span className="ms-1">· قابل استفاده یک‌باره</span>

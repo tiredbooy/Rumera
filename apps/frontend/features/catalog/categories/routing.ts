@@ -1,3 +1,8 @@
+import {
+  collectRoutePassthrough,
+  type RoutePassthrough,
+  withRoutePassthrough,
+} from "@/features/catalog/route-passthrough";
 import type {
   ProductSortDirection,
   ProductSortField,
@@ -59,6 +64,8 @@ export type CategoryRouteQuery = {
   sortBy: ProductSortField;
   orderBy: ProductSortDirection;
   needsRedirect: boolean;
+  /** Params the route does not own — carried through any redirect. */
+  passthrough: RoutePassthrough;
 };
 
 const QUERY_KEYS = new Set(["page", "q", "sort"]);
@@ -75,9 +82,10 @@ export function parseCategoryPage(
 export function parseCategoryRouteQuery(
   searchParams: CategorySearchParamsRecord,
 ): CategoryRouteQuery {
-  let needsRedirect = Object.entries(searchParams).some(
-    ([key, value]) => value !== undefined && !QUERY_KEYS.has(key),
-  );
+  // A campaign param is not a malformed URL. Unknown keys ride along instead of
+  // triggering a redirect that would strip them (see route-passthrough.ts).
+  const passthrough = collectRoutePassthrough(searchParams, QUERY_KEYS);
+  let needsRedirect = false;
 
   const parsedPage = parseCategoryPage(searchParams.page);
   const page = parsedPage ?? 1;
@@ -120,6 +128,7 @@ export function parseCategoryRouteQuery(
     sortBy: sortOption.sortBy,
     orderBy: sortOption.orderBy,
     needsRedirect,
+    passthrough,
   };
 }
 
@@ -138,6 +147,22 @@ export function categoryPageHref(
   if (page > 1) params.set("page", String(page));
   const value = params.toString();
   return value ? `${basePath}?${value}` : basePath;
+}
+
+/**
+ * The href a redirect goes to. Same canonical URL as categoryPageHref, plus the
+ * params the route does not own — internal links stay campaign-free, a redirect
+ * does not drop the attribution the click arrived with.
+ */
+export function categoryRedirectHref(
+  basePath: string,
+  query: Pick<CategoryRouteQuery, "q" | "sort" | "passthrough">,
+  page: number,
+): string {
+  return withRoutePassthrough(
+    categoryPageHref(basePath, query, page),
+    query.passthrough,
+  );
 }
 
 export function categoryFilterHref(

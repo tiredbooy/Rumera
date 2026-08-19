@@ -30,6 +30,7 @@ import type { UserListItem } from "@/features/customers/types";
 import type { InventoryItem } from "@/features/inventory/types";
 import type { JournalListItem } from "@/features/journal/types";
 import type { AdminRecipeListItem } from "@/features/recipes/types";
+import { requestGuardedNavigation } from "@/hooks/use-unsaved-changes-guard";
 import { faNum } from "@/lib/products";
 import { can } from "@/lib/rbac/can";
 import { ADMIN_NAV, filterNav } from "@/lib/rbac/nav";
@@ -238,6 +239,10 @@ export function AdminCommandMenu({
 
   function go(href: string) {
     setOpen(false);
+    // A programmatic push is invisible to the guard's anchor listener, so ask
+    // it directly — otherwise ⌘K silently discards unsaved work in every
+    // guarded admin form.
+    if (requestGuardedNavigation(href)) return;
     router.push(href);
   }
 

@@ -11,6 +11,7 @@ import type {
   FieldErrors,
   UseFieldArrayAppend,
   UseFieldArrayRemove,
+  UseFormGetValues,
   UseFormRegister,
   UseFormSetValue,
 } from "react-hook-form";
@@ -18,13 +19,12 @@ import type {
 import { Button } from "@/components/ui/button";
 import type { ProductOptionGroup } from "@/features/admin/products/types";
 import type { AdminProductVariant } from "@/features/admin/products/types";
-import type {
-  ProductFormValues,
-  VariantFormValues,
-} from "../../validations";
+import type { InventoryItem } from "@/features/inventory/types";
+import type { ProductFormValues, VariantFormValues } from "../../validations";
+import { generateVariantSkus } from "../../variant-sku";
 import { BulkVariantGenerator } from "./BulkVariantGenerator";
 import { FormSection } from "./FormLayout";
-import { VariantRow } from "./VariantRow";
+import { VariantTable } from "./VariantTable";
 
 function WatchedBulkVariantGenerator({
   control,
@@ -54,6 +54,7 @@ export function VariantsSection({
   register,
   control,
   setValue,
+  getValues,
   errors,
   fields,
   append,
@@ -61,12 +62,15 @@ export function VariantsSection({
   optionTypes,
   optionCatalogError = null,
   productVariants = [],
+  inventory = [],
   error,
   disabled,
+  canAdjustStock = false,
 }: {
   register: UseFormRegister<ProductFormValues>;
   control: Control<ProductFormValues>;
   setValue: UseFormSetValue<ProductFormValues>;
+  getValues: UseFormGetValues<ProductFormValues>;
   errors: FieldErrors<ProductFormValues>;
   fields: FieldArrayWithId<ProductFormValues, "variants", "id">[];
   append: UseFieldArrayAppend<ProductFormValues, "variants">;
@@ -74,8 +78,10 @@ export function VariantsSection({
   optionTypes: ProductOptionGroup[];
   optionCatalogError?: string | null;
   productVariants?: AdminProductVariant[];
+  inventory?: InventoryItem[];
   error?: string | null;
   disabled?: boolean;
+  canAdjustStock?: boolean;
 }) {
   const router = useRouter();
   const [isRetrying, startRetry] = useTransition();
@@ -125,8 +131,8 @@ export function VariantsSection({
           <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-4 py-4 text-sm leading-6">
             <p className="font-medium">هنوز ویژگی مشترکی تعریف نشده</p>
             <p className="mt-1 text-muted-foreground">
-              یک‌بار «حجم»، «رنگ» و … را در بخش ویژگی‌ها بسازید؛ بعد همین‌جا برای
-              هر محصول دوباره استفاده می‌کنید — نیازی به ساخت مجدد نیست.
+              یک‌بار «حجم»، «رنگ» و … را در بخش ویژگی‌ها بسازید؛ بعد همین‌جا
+              برای هر محصول دوباره استفاده می‌کنید — نیازی به ساخت مجدد نیست.
             </p>
             <Button asChild variant="secondary" size="sm" className="mt-3 h-10">
               <Link href="/admin/options">مدیریت ویژگی‌های تنوع</Link>
@@ -149,7 +155,25 @@ export function VariantsSection({
           control={control}
           optionTypes={optionTypes}
           disabled={disabled}
-          onGenerate={(generated) => append(generated, { shouldFocus: false })}
+          onGenerate={(generated) => {
+            // The complaint PE-1 answers is that a bulk run produced rows with
+            // no SKU. Name them here, while the combination is still in hand.
+            const existing = getValues("variants") ?? [];
+            const offset = existing.length;
+            const skus = generateVariantSkus(
+              getValues("code") ?? "",
+              optionTypes,
+              [...existing, ...generated],
+              generated.map((_, position) => offset + position),
+            );
+            append(
+              generated.map((variant, position) => ({
+                ...variant,
+                sku: skus.get(offset + position) ?? variant.sku,
+              })),
+              { shouldFocus: false },
+            );
+          }}
         />
 
         {fields.length === 0 ? (
@@ -181,42 +205,20 @@ export function VariantsSection({
         ) : null}
 
         {fields.length > 0 ? (
-          <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(100px,.6fr)_minmax(130px,.7fr)_auto_auto] gap-3 px-3 text-xs text-muted-foreground md:grid">
-            <span>تنوع / SKU</span>
-            <span>قیمت</span>
-            <span>موجودی</span>
-            <span>وضعیت</span>
-            <span className="sr-only">عملیات</span>
-          </div>
-        ) : null}
-
-        {fields.map((f, i) => (
-          <VariantRow
-            key={f.id}
-            fieldId={f.id}
-            index={i}
+          <VariantTable
             register={register}
             control={control}
             setValue={setValue}
+            getValues={getValues}
+            fields={fields}
+            remove={remove}
             optionTypes={optionTypes}
-            images={
-              f._id
-                ? productVariants.find((variant) => variant.id === f._id)
-                    ?.images
-                : undefined
-            }
-            availableStock={
-              f._id
-                ? productVariants.find((variant) => variant.id === f._id)
-                    ?.available_stock
-                : undefined
-            }
-            isPersisted={Boolean(f._id)}
-            defaultOpen={!f._id && fields.length <= 3}
+            productVariants={productVariants}
+            inventory={inventory}
             disabled={disabled}
-            onRemove={remove}
+            canAdjustStock={canAdjustStock}
           />
-        ))}
+        ) : null}
 
         <Button
           type="button"

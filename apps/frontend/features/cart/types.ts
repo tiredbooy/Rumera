@@ -9,6 +9,13 @@ export interface CartItem {
   current_price: number;
   price_changed: boolean;
   quantity: number;
+  /**
+   * Sellable stock for this variant right now (stock_on_hand - committed_stock,
+   * clamped at zero) — the same number the order reserve path checks. Zero is
+   * sold out; below `quantity` the line cannot be ordered as it stands.
+   * Optional only so cached/partial payloads read as "unknown" (U-3).
+   */
+  available_stock?: number;
   line_total: number;
   image_url?: string;
   options?: ProductOptionValue[];

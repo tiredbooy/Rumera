@@ -30,6 +30,7 @@ type userServiceRepoStub struct {
 	actor            *User
 	byID             *User
 	byPhone          *User
+	walletBalance    float64
 	updatedReq       UpdateUserReq
 	updateCalls      int
 }
@@ -69,6 +70,14 @@ func (s *userServiceRepoStub) GetByID(_ context.Context, id uuid.UUID) (*User, e
 		return s.byID, nil
 	}
 	return nil, models.ErrNotFound
+}
+
+func (s *userServiceRepoStub) GetByIDIncludingInactive(ctx context.Context, id uuid.UUID) (*User, error) {
+	return s.GetByID(ctx, id)
+}
+
+func (s *userServiceRepoStub) AdminWalletBalance(context.Context, int64) (float64, error) {
+	return s.walletBalance, nil
 }
 
 func (s *userServiceRepoStub) GetByPhone(_ context.Context, phone string) (*User, error) {

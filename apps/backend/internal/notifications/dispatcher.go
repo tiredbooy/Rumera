@@ -3,6 +3,9 @@ package notifications
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Dispatcher is the single entry point handlers/services use for outbound
@@ -125,9 +128,17 @@ func (d *Dispatcher) DispatchOrderConfirmed(ctx context.Context, to, subject, ht
 	})
 }
 
-// DispatchGiftPurchased queues or sends the paid gift-card code email (PR-005b).
-// idempotencyKey must be stable per purchase (e.g. gift_purchase:{purchaseTxID}).
-func (d *Dispatcher) DispatchGiftPurchased(ctx context.Context, to, subject, htmlBody, correlationID, idempotencyKey string) error {
+// DispatchGiftPurchasedTx queues the paid gift-card code email (PR-005b) on the
+// caller's transaction. idempotencyKey must be stable per purchase
+// (e.g. gift_purchase:{purchaseTxID}).
+//
+// The card is issued inside payments.Confirm's transaction, so the email must
+// enqueue on that same transaction: enqueued on a second connection it survived a
+// rollback and mailed a code for a card that never committed (ED-011c).
+//
+// Inline mode has no outbox to be transactional with and still sends on the spot.
+// Production runs async; local inline keeps the old behaviour.
+func (d *Dispatcher) DispatchGiftPurchasedTx(ctx context.Context, tx pgx.Tx, to, subject, htmlBody, correlationID, idempotencyKey string) error {
 	if d == nil {
 		return fmt.Errorf("notifications: dispatcher nil")
 	}
@@ -141,7 +152,7 @@ func (d *Dispatcher) DispatchGiftPurchased(ctx context.Context, to, subject, htm
 		if err != nil {
 			return err
 		}
-		return EnqueueEnvelope(ctx, d.Outbox, env)
+		return EnqueueEnvelopeTx(ctx, d.Outbox, tx, env)
 	}
 	if d.Mail == nil {
 		return fmt.Errorf("notifications: mailer not configured")
@@ -150,12 +161,19 @@ func (d *Dispatcher) DispatchGiftPurchased(ctx context.Context, to, subject, htm
 }
 
 // DispatchAlert queues or sends a restock / price-drop email (PR-055a).
-// Idempotency is per alert id — each row fires once after notified_at is set.
-func (d *Dispatcher) DispatchAlert(ctx context.Context, to, subject, htmlBody string, alertID int64, correlationID string) error {
+//
+// Idempotency is per arming on BOTH modes, not per alert id. Re-subscribe
+// (ON CONFLICT) keeps the same id, clears notified_at, and stamps a new
+// created_at — `alert:{id}:notify` would suppress that new arm forever.
+// The key includes created_at unix so a crash after send and before
+// MarkNotified still collapses (same id + same created_at) while a later
+// re-subscribe does not. Async is covered by the outbox key; inline goes
+// through sendOnce for the same reason.
+func (d *Dispatcher) DispatchAlert(ctx context.Context, to, subject, htmlBody string, alertID int64, armedAt time.Time, correlationID string) error {
 	if d == nil {
 		return fmt.Errorf("notifications: dispatcher nil")
 	}
-	idem := fmt.Sprintf("alert:%d:notify", alertID)
+	idem := fmt.Sprintf("alert:%d:notify:%d", alertID, armedAt.UTC().Unix())
 	if d.Async() {
 		env, err := NewEnvelope(TypeAlertV1, idem, correlationID, EmailData{
 			To: to, Subject: subject, Template: htmlBody,
@@ -169,12 +187,15 @@ func (d *Dispatcher) DispatchAlert(ctx context.Context, to, subject, htmlBody st
 	if d.Mail == nil {
 		return fmt.Errorf("notifications: mailer not configured")
 	}
-	return d.Mail.Send(ctx, to, subject, htmlBody)
+	return d.sendOnce(ctx, idem, TopicEmail, "email", func(ctx context.Context) error {
+		return d.Mail.Send(ctx, to, subject, htmlBody)
+	})
 }
 
 // DispatchSubscriptionRenewal queues or sends the cellar-box due reminder (PR-055a).
 // periodKey must be stable per renewal window (typically next_renewal_at UTC date)
-// so a later cadence is not treated as a duplicate of the previous send.
+// so a later cadence is not treated as a duplicate of the previous send — and,
+// on both modes, so a re-run of the same window is.
 func (d *Dispatcher) DispatchSubscriptionRenewal(ctx context.Context, to, subject, htmlBody string, subscriptionID int64, periodKey, correlationID string) error {
 	if d == nil {
 		return fmt.Errorf("notifications: dispatcher nil")
@@ -196,5 +217,7 @@ func (d *Dispatcher) DispatchSubscriptionRenewal(ctx context.Context, to, subjec
 	if d.Mail == nil {
 		return fmt.Errorf("notifications: mailer not configured")
 	}
-	return d.Mail.Send(ctx, to, subject, htmlBody)
+	return d.sendOnce(ctx, idem, TopicEmail, "email", func(ctx context.Context) error {
+		return d.Mail.Send(ctx, to, subject, htmlBody)
+	})
 }

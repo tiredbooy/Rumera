@@ -21,6 +21,7 @@ import { faNum } from "@/lib/products";
 import { faDate } from "@/lib/utils/date";
 
 import { LoyaltyMembersFilters } from "./loyalty-members-filters";
+import { requireLoyaltyEnabled } from "../guard";
 import { listLoyaltyMembers } from "../api/server";
 import {
   loyaltyTierLabel,
@@ -47,11 +48,14 @@ export function membersPageHref(
   return qs ? `/admin/loyalty?${qs}` : "/admin/loyalty";
 }
 
-export function LoyaltyMembersView({
+export async function LoyaltyMembersView({
   searchParams,
 }: {
   searchParams: LoyaltyMemberSearchParams;
 }) {
+  // Above the Suspense boundary on purpose: a redirect thrown inside the
+  // streamed table would already have flushed the shell.
+  await requireLoyaltyEnabled();
   const filters = parseLoyaltyMemberFilters(searchParams);
 
   return (

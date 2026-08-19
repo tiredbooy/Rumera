@@ -19,6 +19,7 @@ import {
   journalPageHref,
   type JournalListSearchParams,
   parseJournalRouteQuery,
+  journalRedirectHref,
 } from "@/features/journal/routing";
 import { Reveal } from "@/features/motion/components/reveal";
 import { faNum } from "@/lib/products";
@@ -35,7 +36,7 @@ export async function JournalListView({
 }) {
   const rawSearchParams = await searchParams;
   const query = parseJournalRouteQuery(rawSearchParams);
-  if (query.needsRedirect) redirect(journalPageHref(query, query.page));
+  if (query.needsRedirect) redirect(journalRedirectHref(query, query.page));
 
   const isUnfiltered = !query.q && query.sort === "new";
   const editorialFeatured = isUnfiltered

@@ -14,12 +14,14 @@ import { useTransition } from "react";
 
 import { apiErrorMessage, localizeApiText } from "@/lib/api/user-facing-error";
 
-import type { Brand } from "@/features/catalog/brands/types";
-
 import {
+  getAdminProduct,
   ProductClientError,
   saveProductAggregate,
 } from "@/features/admin/products/api/client";
+
+import { rebaseProductForm } from "../conflict-rebase";
+import { collectProductFormErrors } from "../form-errors";
 
 import type {
   AdminProductDetail,
@@ -40,6 +42,21 @@ import { FormHeaderBar } from "./product-form/sidebar/FormHeaderBar";
 import { MobileActionBar } from "./product-form/sidebar/MobileActionBar";
 import { PreviewCard } from "./product-form/sidebar/PreviewCard";
 import { ProductFormSectionNav } from "./product-form/SectionNav";
+import {
+  PRODUCT_FORM_SECTIONS,
+  productFormSectionForTarget,
+  productFormSectionId,
+  useProductFormSection,
+  type ProductFormSectionKey,
+} from "./product-form/sections";
+import {
+  unknownBrandLabel,
+  type BrandOption,
+} from "./product-form/BrandSelect";
+import {
+  PRODUCT_ERROR_SUMMARY_ID,
+  ProductErrorSummary,
+} from "./product-form/ErrorSummary";
 import { GeneralInfoSection } from "./product-form/GeneralInfoSection";
 import { SpecificationsSection } from "./product-form/SpecificationsSection";
 import { VariantsSection } from "./product-form/VariantsSection";
@@ -55,6 +72,7 @@ import type {
   ProductImageUploaderHandle,
 } from "@/features/image-uploader/types";
 import type { ProductGallerySnapshot } from "@/features/image-uploader/product-types";
+import type { InventoryItem } from "@/features/inventory/types";
 
 // ── Payload helpers ─────────────────────────────────────────────
 
@@ -116,25 +134,35 @@ export function ProductForm({
   mode,
   product,
   categories,
-  brands,
+  selectedBrand = null,
   tags = [],
   optionTypes = [],
   optionCatalogError = null,
+  inventory = [],
   canWrite = true,
+  canAdjustStock = false,
 }: {
   mode: "create" | "edit";
   product?: AdminProductDetail;
   categories: Category[];
-  brands: Brand[];
+  /** The product's own brand, looked up by id so it survives page-one (PE-4). */
+  selectedBrand?: BrandOption | null;
   tags?: Tag[];
   optionTypes?: ProductOptionGroup[];
   optionCatalogError?: string | null;
+  /** Ledger rows for the persisted variants, so stock is adjustable here (PE-11). */
+  inventory?: InventoryItem[];
   canWrite?: boolean;
+  canAdjustStock?: boolean;
 }) {
   const router = useRouter();
+  const { section, search, selectSection } = useProductFormSection();
   const [isPending, startTransition] = useTransition();
   const [savePhase, setSavePhase] = React.useState<ProductSavePhase>("idle");
   const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [conflictNotice, setConflictNotice] = React.useState<string | null>(
+    null,
+  );
   const [mediaError, setMediaError] = React.useState<string | null>(null);
   const [variantError, setVariantError] = React.useState<string | null>(null);
   const [mediaDirty, setMediaDirty] = React.useState(false);
@@ -163,6 +191,8 @@ export function ProductForm({
   const pendingSaveRef = React.useRef<PendingAggregateSave | null>(null);
   const recoveryTimerRef = React.useRef<number | null>(null);
   const revisionRef = React.useRef(product?.updated_at);
+  // The revision the operator is editing against — the ancestor of a rebase.
+  const baselineRef = React.useRef(getDefaultFormValues(product));
   const historyGuardRef = React.useRef<{
     id: string;
     previousState: unknown;
@@ -242,11 +272,15 @@ export function ProductForm({
     setError,
     clearErrors,
     reset,
-    formState: { errors, isDirty },
+    getValues,
+    formState: { errors, isDirty, submitCount },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
     defaultValues: getDefaultFormValues(product),
     shouldFocusError: false,
+    // Report a field once the operator has left it, not on every keystroke —
+    // waiting for submit meant a 64-variant product failed all at once (PE-6).
+    mode: "onTouched",
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -257,9 +291,72 @@ export function ProductForm({
   const title = useWatch({ control, name: "title" });
   const brandId = useWatch({ control, name: "brand_id" });
   const isActive = useWatch({ control, name: "is_active" });
-  const brandName = brands.find((b) => String(b.id) === brandId)?.title;
+  const [brandOption, setBrandOption] = React.useState<BrandOption | null>(
+    selectedBrand,
+  );
+  // The preview used to read the brand out of the first 100, so a product on
+  // brand #101 previewed as brand-less — the same lie the picker told (PE-4).
+  const brandName = brandId
+    ? brandOption && String(brandOption.id) === brandId
+      ? brandOption.title
+      : unknownBrandLabel(Number(brandId))
+    : undefined;
   const hasUnsavedChanges = isDirty || mediaDirty || hasPendingRetry;
+  // Rebuilt on every render, never memoised: react-hook-form mutates `errors`
+  // in place, so a dependency on it would freeze the summary at whatever was
+  // wrong the first time and let it go stale as fields are fixed.
+  const errorEntries = collectProductFormErrors(errors);
+  if (variantError) {
+    errorEntries.push({
+      key: "section:variants",
+      label: "تنوع‌ها",
+      message: variantError,
+      targetId: "product-variants-trigger",
+    });
+  }
+  if (mediaError) {
+    errorEntries.push({
+      key: "section:images",
+      label: "رسانه",
+      message: mediaError,
+      targetId: "product-images-trigger",
+    });
+  }
   const shouldBlockNavigation = hasUnsavedChanges || isPending;
+  // A section the operator cannot see still has to say it is broken; the nav
+  // is the only thing on screen that can say so once the others are hidden.
+  const sectionHasError: Record<ProductFormSectionKey, boolean> = {
+    general: Boolean(
+      errors.title ||
+      errors.slug ||
+      errors.code ||
+      errors.category_id ||
+      errors.brand_id ||
+      errors.description,
+    ),
+    specs: Boolean(errors.weight || errors.abv || errors.country_of_origin),
+    tags: Boolean(errors.tag_ids),
+    variants: Boolean(errors.variants || variantError || optionCatalogError),
+    images: Boolean(mediaError),
+    seo: Boolean(
+      errors.meta_title || errors.meta_description || errors.meta_tags,
+    ),
+  };
+
+  /**
+   * Open whichever section holds a jump target before anything tries to focus
+   * it (PE-5 × PE-6). A hidden section is `display:none`, so `focus()` on a
+   * field inside one is a no-op and the error-summary link would do nothing.
+   */
+  const revealSection = React.useCallback(
+    (targetId: string | undefined) => {
+      const key = targetId ? productFormSectionForTarget(targetId) : undefined;
+      // Replaces rather than pushes: revealing an error is part of the click
+      // the operator already made, not a step to go «back» from.
+      if (key) selectSection(key, { push: false });
+    },
+    [selectSection],
+  );
 
   const scheduleErrorFocus = React.useCallback(
     (preferredId?: string, requireInvalid = false) => {
@@ -334,12 +431,10 @@ export function ProductForm({
       }
       const destination = new URL(anchor.href, window.location.href);
       if (destination.origin !== window.location.origin) return;
-      if (
-        destination.pathname === window.location.pathname &&
-        destination.search === window.location.search
-      ) {
-        return;
-      }
+      // Section links (PE-5) and error-summary jumps stay on this page: they
+      // change the query or the hash, never the route, and must not raise the
+      // unsaved-changes dialog (PE-3).
+      if (destination.pathname === window.location.pathname) return;
       const next = `${destination.pathname}${destination.search}${destination.hash}`;
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       if (next === current) return;
@@ -373,11 +468,17 @@ export function ProductForm({
       }
     }
 
+    const formPathname = window.location.pathname;
+
     const guardHistoryNavigation = (event: PopStateEvent) => {
       if (allowHistoryNavigationRef.current) {
         allowHistoryNavigationRef.current = false;
         return;
       }
+      // Stepping back through sections lands on the same page; only the guard
+      // marker distinguishes entries pushed before the form went dirty, and
+      // those are section entries too.
+      if (window.location.pathname === formPathname) return;
       if (historyGuardID(event.state) === guard.id) return;
       setPendingNavigation({ kind: "history" });
       window.history.forward();
@@ -416,6 +517,7 @@ export function ProductForm({
     let message = apiErrorMessage(e, "خطای غیرمنتظره رخ داد");
     let hasFieldError = false;
     let sectionFocusId: string | undefined;
+    let firstErrorTargetId: string | undefined;
     let shouldDiscardPrepared = false;
     if (e instanceof ProductClientError && e.fields) {
       const details = Object.entries(e.fields);
@@ -438,6 +540,7 @@ export function ProductForm({
         }
         if (!isProductFormPath(path)) continue;
         hasFieldError = true;
+        firstErrorTargetId ??= path;
         setError(path as FieldPath<ProductFormValues>, {
           type: "server",
           message: fieldMessage,
@@ -448,12 +551,59 @@ export function ProductForm({
     if (shouldDiscardPrepared) uploaderRef.current?.discardPrepared?.();
     setSaveError(message);
     toast.error(message);
-    scheduleErrorFocus(
+    const focusId =
       preferredFocusId ??
-        sectionFocusId ??
-        (hasFieldError ? undefined : "product-save-error"),
+      sectionFocusId ??
+      (hasFieldError ? PRODUCT_ERROR_SUMMARY_ID : "product-save-error");
+    revealSection(preferredFocusId ?? sectionFocusId ?? firstErrorTargetId);
+    scheduleErrorFocus(
+      focusId,
       hasFieldError && !preferredFocusId && !sectionFocusId,
     );
+  }
+
+  /**
+   * PE-2: a colleague saved first. Re-read their revision, re-apply this
+   * operator's edits on top of it and report the overlap — resubmitting the
+   * whole payload against the fresh revision would erase their work silently.
+   * Returns false when the conflict cannot be rebased (the caller then falls
+   * back to reporting it).
+   */
+  async function rebaseOnConflict(uploader: ProductImageUploaderHandle | null) {
+    const productId = mode === "edit" ? product?.id : undefined;
+    if (!productId) return false;
+    let fresh: AdminProductDetail;
+    try {
+      fresh = await getAdminProduct(productId);
+    } catch {
+      return false;
+    }
+
+    // Prepared uploads are re-sent by storage key, so the next attempt reuses
+    // them instead of uploading the same file twice.
+    uploader?.preservePrepared(true);
+    // The frozen envelope carries the stale revision; it can never succeed.
+    clearPendingSave();
+
+    const theirs = getDefaultFormValues(fresh);
+    const rebase = rebaseProductForm(baselineRef.current, getValues(), theirs);
+    const gallery = uploader?.rebase(fresh.images) ?? {
+      dropped: 0,
+      adopted: 0,
+    };
+
+    revisionRef.current = fresh.updated_at;
+    baselineRef.current = theirs;
+    // Two resets: the colleague's revision becomes the clean baseline, then
+    // our edits go back on top so they still read as unsaved changes.
+    reset(theirs);
+    reset(rebase.values, { keepDefaultValues: true });
+
+    setSavePhase("conflict");
+    setSaveError(null);
+    setConflictNotice(conflictNoticeText(rebase, gallery));
+    scheduleErrorFocus("product-conflict-notice");
+    return true;
   }
 
   function onSubmit(
@@ -473,6 +623,7 @@ export function ProductForm({
       }
     }
     setSaveError(null);
+    setConflictNotice(null);
     clearErrors();
     setSavePhase(pendingSaveRef.current ? "saving" : "preparing");
     startTransition(async () => {
@@ -508,7 +659,9 @@ export function ProductForm({
         uploader?.commit(saved.images);
         revisionRef.current = saved.updated_at;
         clearPendingSave();
-        reset(getDefaultFormValues(saved));
+        baselineRef.current = getDefaultFormValues(saved);
+        reset(baselineRef.current);
+        setConflictNotice(null);
         releaseHistoryGuard();
         setSavePhase("saved");
 
@@ -520,6 +673,9 @@ export function ProductForm({
         }
         router.refresh();
       } catch (e) {
+        if (isStaleRevisionConflict(e) && (await rebaseOnConflict(uploader))) {
+          return;
+        }
         if (
           e instanceof ProductClientError &&
           e.status >= 400 &&
@@ -553,15 +709,20 @@ export function ProductForm({
     }
     void handleSubmit(
       (values) => onSubmit(values, uploader),
-      () => {
+      (invalid) => {
         setSavePhase("error");
-        setSaveError("لطفاً موارد مشخص‌شده در فرم را بررسی کنید.");
-        scheduleErrorFocus(undefined, true);
+        // The summary below lists every failure by name; a second generic
+        // sentence above it would only add noise.
+        setSaveError(null);
+        revealSection(collectProductFormErrors(invalid)[0]?.targetId);
+        scheduleErrorFocus(PRODUCT_ERROR_SUMMARY_ID, true);
       },
     )(event);
   }
 
-  const fieldsLocked = !canWrite;
+  // A pending retry replays a frozen payload, so edits made now could never
+  // reach the server — lock the fields instead of losing them silently.
+  const fieldsLocked = !canWrite || hasPendingRetry;
   const displayedSavePhase: ProductSavePhase =
     savePhase === "saved" && (isDirty || mediaDirty) ? "idle" : savePhase;
 
@@ -613,26 +774,66 @@ export function ProductForm({
         </p>
       ) : null}
 
-      <fieldset disabled={fieldsLocked} className="contents">
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="flex flex-col gap-6">
-            <div id="product-section-general" className="scroll-mt-28">
+      {submitCount > 0 ? (
+        <ProductErrorSummary
+          entries={errorEntries}
+          onJump={(targetId) => {
+            revealSection(targetId);
+            scheduleErrorFocus(targetId);
+          }}
+        />
+      ) : null}
+
+      {conflictNotice ? (
+        <p
+          id="product-conflict-notice"
+          tabIndex={-1}
+          role="status"
+          className="mb-6 rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-500/30 dark:text-amber-200"
+        >
+          {conflictNotice}
+        </p>
+      ) : null}
+
+      <ProductFormSectionNav
+        active={section}
+        search={search}
+        onSelect={selectSection}
+        sections={PRODUCT_FORM_SECTIONS.map((entry) => ({
+          ...entry,
+          hasError: sectionHasError[entry.key],
+        }))}
+      />
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="flex flex-col gap-6">
+          <fieldset disabled={fieldsLocked} className="contents">
+            {/* Hidden, never unmounted: unmounting would drop the gallery's
+                staged uploads and every uncommitted react-hook-form value. */}
+            <div
+              id={productFormSectionId("general")}
+              hidden={section !== "general"}
+            >
               <GeneralInfoSection
                 register={register}
                 control={control}
                 errors={errors}
                 categories={categories}
-                brands={brands}
+                selectedBrand={brandOption}
+                onBrandChange={setBrandOption}
               />
             </div>
-            <div id="product-section-specs" className="scroll-mt-28">
+            <div
+              id={productFormSectionId("specs")}
+              hidden={section !== "specs"}
+            >
               <SpecificationsSection
                 register={register}
                 control={control}
                 errors={errors}
               />
             </div>
-            <div id="product-section-tags" className="scroll-mt-28">
+            <div id={productFormSectionId("tags")} hidden={section !== "tags"}>
               <TagsSection
                 control={control}
                 errors={errors}
@@ -641,29 +842,43 @@ export function ProductForm({
                 disabled={fieldsLocked}
               />
             </div>
-            <div id="product-section-variants" className="scroll-mt-28">
-              <VariantsSection
-                register={register}
-                control={control}
-                setValue={setValue}
-                errors={errors}
-                fields={fields}
-                append={append}
-                remove={remove}
-                optionTypes={optionTypes}
-                optionCatalogError={optionCatalogError}
-                productVariants={mode === "edit" ? product?.variants : undefined}
-                error={variantError}
-                disabled={fieldsLocked}
-              />
-            </div>
+          </fieldset>
 
-            <div id="product-section-images" className="scroll-mt-28">
+          <div
+            id={productFormSectionId("variants")}
+            hidden={section !== "variants"}
+          >
+            <VariantsSection
+              register={register}
+              control={control}
+              setValue={setValue}
+              getValues={getValues}
+              errors={errors}
+              fields={fields}
+              append={append}
+              remove={remove}
+              optionTypes={optionTypes}
+              optionCatalogError={optionCatalogError}
+              productVariants={
+                mode === "edit" ? product?.variants : undefined
+              }
+              inventory={inventory}
+              error={variantError}
+              disabled={fieldsLocked}
+              canAdjustStock={canAdjustStock}
+            />
+          </div>
+
+          <fieldset disabled={fieldsLocked} className="contents">
+            <div
+              id={productFormSectionId("images")}
+              hidden={section !== "images"}
+            >
               <ImagesSection
                 uploaderRef={uploaderRef}
-                productId={mode === "edit" ? product?.id ?? null : null}
+                productId={mode === "edit" ? (product?.id ?? null) : null}
                 mode={mode}
-                initialImages={mode === "edit" ? product?.images ?? [] : []}
+                initialImages={mode === "edit" ? (product?.images ?? []) : []}
                 disabled={fieldsLocked}
                 error={mediaError}
                 onDirtyChange={setMediaDirty}
@@ -671,72 +886,24 @@ export function ProductForm({
               />
             </div>
 
-            <div id="product-section-seo" className="scroll-mt-28">
+            <div id={productFormSectionId("seo")} hidden={section !== "seo"}>
               <SeoSection register={register} errors={errors} />
             </div>
-          </div>
-
-          <aside className="flex flex-col gap-6">
-            <div className="flex flex-col gap-4 lg:sticky lg:top-20">
-              <PreviewCard
-                imageUrl={gallerySnapshot.primaryUrl}
-                title={title}
-                brandName={brandName}
-                isActive={isActive}
-                mode={mode}
-              />
-              <ProductFormSectionNav
-                className="hidden lg:block"
-                sections={[
-                  {
-                    id: "product-section-general",
-                    label: "اطلاعات کلی",
-                    hint: "نام، دسته، برند",
-                    hasError: Boolean(
-                      errors.title ||
-                        errors.slug ||
-                        errors.category_id ||
-                        errors.brand_id,
-                    ),
-                  },
-                  {
-                    id: "product-section-specs",
-                    label: "مشخصات",
-                    hint: "وزن، مبدأ، ABV",
-                    hasError: Boolean(errors.weight || errors.abv),
-                  },
-                  {
-                    id: "product-section-tags",
-                    label: "برچسب‌ها",
-                    hasError: Boolean(errors.tag_ids),
-                  },
-                  {
-                    id: "product-section-variants",
-                    label: "تنوع و قیمت",
-                    hint: "SKU و گزینه‌ها",
-                    hasError: Boolean(
-                      errors.variants || variantError || optionCatalogError,
-                    ),
-                  },
-                  {
-                    id: "product-section-images",
-                    label: "رسانه",
-                    hasError: Boolean(mediaError),
-                  },
-                  {
-                    id: "product-section-seo",
-                    label: "سئو",
-                    hint: "اختیاری",
-                    hasError: Boolean(
-                      errors.meta_title || errors.meta_description,
-                    ),
-                  },
-                ]}
-              />
-            </div>
-          </aside>
+          </fieldset>
         </div>
-      </fieldset>
+
+        <aside className="flex flex-col gap-6">
+          <div className="flex flex-col gap-4 lg:sticky lg:top-20">
+            <PreviewCard
+              imageUrl={gallerySnapshot.primaryUrl}
+              title={title}
+              brandName={brandName}
+              isActive={isActive}
+              mode={mode}
+            />
+          </div>
+        </aside>
+      </div>
 
       <MobileActionBar
         control={control}
@@ -757,6 +924,45 @@ export function ProductForm({
       />
     </form>
   );
+}
+
+/** A 409 the backend raised on the optimistic-concurrency check. */
+function isStaleRevisionConflict(error: unknown) {
+  return (
+    error instanceof ProductClientError &&
+    error.status === 409 &&
+    Boolean(error.fields?.expected_updated_at)
+  );
+}
+
+function conflictNoticeText(
+  rebase: { overwritten: string[]; droppedVariants: number },
+  gallery: { dropped: number; adopted: number },
+) {
+  const parts = [
+    "همکار دیگری این محصول را زودتر ذخیره کرد. تغییرات شما روی نسخهٔ تازه اعمال شد؛ برای ثبت، دوباره ذخیره کنید.",
+  ];
+  if (rebase.overwritten.length > 0) {
+    parts.push(
+      `«${rebase.overwritten.join("، ")}» را همکارتان هم تغییر داده بود و مقدار شما جایگزین می‌شود.`,
+    );
+  }
+  if (rebase.droppedVariants > 0) {
+    parts.push(
+      `${rebase.droppedVariants.toLocaleString("fa-IR")} تنوع که همکارتان حذف کرده بود از فرم برداشته شد.`,
+    );
+  }
+  if (gallery.dropped > 0) {
+    parts.push(
+      `${gallery.dropped.toLocaleString("fa-IR")} تصویر حذف‌شده از گالری برداشته شد.`,
+    );
+  }
+  if (gallery.adopted > 0) {
+    parts.push(
+      `${gallery.adopted.toLocaleString("fa-IR")} تصویر تازهٔ همکارتان به گالری افزوده شد.`,
+    );
+  }
+  return parts.join(" ");
 }
 
 function historyGuardID(state: unknown) {
@@ -796,5 +1002,3 @@ function isProductFormPath(path: string) {
     )
   );
 }
-
-

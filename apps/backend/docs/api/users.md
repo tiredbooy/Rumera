@@ -165,10 +165,19 @@ Inactive users remain addressable. **Response** `200 OK`:
     "national_code": "1234567890",
     "is_active": false,
     "is_banned": false,
-    "updated_at": "2026-07-28T10:00:00Z"
+    "updated_at": "2026-07-28T10:00:00Z",
+    "wallet_balance": "125000.00"
   }
 }
 ```
+
+`wallet_balance` is the live wallet balance as an exact decimal string, `"0.00"`
+for a customer who has never transacted (wallet rows are created lazily). It is
+on this read only — the create, update and ban responses omit it rather than
+report a balance they never looked up. The admin customer screen mints wallet
+credit, so the balance travels with the identity instead of being a second call
+(CF-3). The matching ledger trail is
+`GET /admin/users/:userID/wallet/transactions` (see `wallet.md`).
 
 Password hashes and internal database IDs are never returned.
 

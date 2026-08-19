@@ -109,4 +109,19 @@ describe("OptionTypeForm write gate", () => {
     fireEvent.click(screen.getByRole("button", { name: "حذف مقدار" }));
     await waitFor(() => expect(mocks.deleteValue).toHaveBeenCalledWith(7));
   });
+
+  it("stops warning about unsaved changes once the edit is saved", async () => {
+    mocks.updateType.mockResolvedValue(undefined);
+    render(<OptionTypeForm mode="edit" option={option} canWrite />);
+
+    fireEvent.change(screen.getByLabelText("نام نمایشی (فارسی)"), {
+      target: { value: "حجم بطری" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ذخیره" }));
+    await waitFor(() => expect(mocks.updateType).toHaveBeenCalled());
+
+    // The form saves in place; the guard must not treat saved work as unsaved.
+    fireEvent.click(screen.getByRole("link", { name: "بازگشت" }));
+    expect(screen.queryByText("تغییرات ذخیره نشده‌اند")).toBeNull();
+  });
 });

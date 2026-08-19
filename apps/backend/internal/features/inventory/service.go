@@ -223,6 +223,8 @@ func (s *inventoryService) ReserveForOrderTx(ctx context.Context, tx pgx.Tx, ord
 		endSpan(err)
 	}()
 
+	items = NormalizeStockLines(items)
+
 	for _, item := range items {
 		if err = s.inventoryRepo.Reserve(ctx, tx, item.VariantID, item.Quantity, orderID); err != nil {
 			// ErrInsufficientStock bubbles up as-is so the caller can map it
@@ -271,6 +273,8 @@ func (s *inventoryService) ReleaseForOrderTx(ctx context.Context, tx pgx.Tx, ord
 	if s == nil {
 		return nil
 	}
+	items = NormalizeStockLines(items)
+
 	for _, item := range items {
 		if err := s.inventoryRepo.Release(ctx, tx, item.VariantID, item.Quantity, orderID); err != nil {
 			return fmt.Errorf("inventoryService.ReleaseForOrderTx variant %d: %w", item.VariantID, err)
@@ -312,6 +316,8 @@ func (s *inventoryService) DeductForOrderTx(ctx context.Context, tx pgx.Tx, orde
 		}
 		endSpan(err)
 	}()
+
+	items = NormalizeStockLines(items)
 
 	for _, item := range items {
 		if err = s.inventoryRepo.Deduct(ctx, tx, item.VariantID, item.Quantity, orderID); err != nil {

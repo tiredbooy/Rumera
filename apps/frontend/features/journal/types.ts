@@ -34,6 +34,8 @@ export interface JournalListItem {
 /** Full projection shared by public-by-slug and admin-by-id reads. */
 export interface JournalDetail extends JournalListItem {
   content: string;
+  /** Dedicated social/Open Graph crop; null falls back to `image_url`. */
+  og_image_url: string | null;
   meta_title: string | null;
   meta_description: string | null;
   categories: JournalCategory[];
@@ -48,6 +50,7 @@ export interface CreateJournalPostInput {
   excerpt?: string | null;
   image_url?: string | null;
   image_alt?: string | null;
+  og_image_url?: string | null;
   time_to_read?: number;
   status?: JournalStatus;
   is_featured?: boolean;
@@ -66,6 +69,7 @@ export interface UpdateJournalPostInput {
   excerpt?: string | null;
   image_url?: string | null;
   image_alt?: string | null;
+  og_image_url?: string | null;
   time_to_read?: number;
   status?: JournalStatus;
   is_featured?: boolean;

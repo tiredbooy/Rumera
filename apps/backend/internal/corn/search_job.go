@@ -20,27 +20,43 @@ func NewSearchCronJob(db *pgxpool.Pool, svc *featanalytics.SearchSummaryService)
 }
 
 func (j *SearchCronJob) Run(ctx context.Context) {
-	yesterday := time.Now().UTC().AddDate(0, 0, -1).Truncate(24 * time.Hour)
-
-	slog.Info("search summary job: aggregating", "date", yesterday.Format("2006-01-02"))
-
-	reqs, err := j.aggregate(ctx, yesterday)
+	dates, err := pendingStatDates(ctx, j.db, "search_summary", time.Now())
 	if err != nil {
-		slog.Error("search summary job: aggregation failed", "err", err)
+		slog.Error("search summary job: gap scan failed", "err", err)
 		return
 	}
-
-	if len(reqs) == 0 {
-		slog.Info("search summary job: no search events yesterday")
+	if len(dates) == 0 {
+		slog.Info("search summary job: nothing pending")
 		return
 	}
-
-	if err := j.svc.FlushBatch(ctx, reqs); err != nil {
-		slog.Error("search summary job: flush failed", "err", err)
-		return
+	if len(dates) > 1 {
+		slog.Warn("search summary job: backfilling missed days", "days", len(dates))
 	}
 
-	slog.Info("search summary job: done", "terms", len(reqs), "date", yesterday.Format("2006-01-02"))
+	for _, date := range dates {
+		slog.Info("search summary job: aggregating", "date", date.Format("2006-01-02"))
+
+		reqs, err := j.aggregate(ctx, date)
+		if err != nil {
+			slog.Error("search summary job: aggregation failed",
+				"date", date.Format("2006-01-02"), "err", err)
+			continue
+		}
+
+		if len(reqs) == 0 {
+			slog.Info("search summary job: no search events",
+				"date", date.Format("2006-01-02"))
+			continue
+		}
+
+		if err := j.svc.FlushBatch(ctx, reqs); err != nil {
+			slog.Error("search summary job: flush failed",
+				"date", date.Format("2006-01-02"), "err", err)
+			continue
+		}
+
+		slog.Info("search summary job: done", "terms", len(reqs), "date", date.Format("2006-01-02"))
+	}
 }
 
 func (j *SearchCronJob) aggregate(ctx context.Context, date time.Time) ([]*featanalytics.SearchSummaryUpsertReq, error) {

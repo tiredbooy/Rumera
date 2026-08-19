@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -512,17 +511,9 @@ func (r *orderRepository) GetStockLines(ctx context.Context, orderID int64) ([]i
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("orderRepository.GetStockLines rows: %w", err)
 	}
-	sortStockLinesByVariantID(lines)
-	return lines, nil
-}
-
-// sortStockLinesByVariantID is the lock-order used by GetStockLines so
-// reserve/release/deduct take inventory row locks in VariantID ascending
-// order (avoids 40P01 when two checkouts share variants in opposite order).
-func sortStockLinesByVariantID(lines []inventory.StockLine) {
-	sort.Slice(lines, func(i, j int) bool {
-		return lines[i].VariantID < lines[j].VariantID
-	})
+	// Merged by variant and sorted ascending: inventory_reservations is unique on
+	// (order_id, product_variant_id), and ascending VariantID is the lock order.
+	return inventory.NormalizeStockLines(lines), nil
 }
 
 // optionalTextArg trims a PATCH string pointer. Empty becomes SQL NULL.

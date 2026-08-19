@@ -147,6 +147,20 @@ describe("category index storefront", () => {
     await expect(CategoryIndexView()).rejects.toBe(failure);
   });
 
+  it("does not fail next build when the API origin is the wrong process", async () => {
+    const previous = process.env.NEXT_PHASE;
+    process.env.NEXT_PHASE = "phase-production-build";
+    mocks.getCategoryTree.mockRejectedValue(new Error("404 from a foreign :8080"));
+
+    try {
+      const { container } = render(await CategoryIndexView());
+      expect(container).toHaveTextContent("هنوز دسته‌بندی‌ای برای نمایش نیست");
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PHASE;
+      else process.env.NEXT_PHASE = previous;
+    }
+  });
+
   it("keeps a slugless root and exposes its complete three-level route hierarchy in keyboard order", async () => {
     const grandchild: CategoryTree = {
       id: 3,

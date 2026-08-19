@@ -122,7 +122,7 @@ export function GiftCardPurchase({
         <p className="mt-1.5 text-base leading-relaxed text-muted-foreground">
           مبلغ{" "}
           <strong className="font-medium text-foreground">
-            {formatPrice(Number(intent.amount))}
+            {formatPrice(intent.amount)}
           </strong>{" "}
           ثبت شد. کد کارت هدیه{" "}
           <strong className="font-medium text-foreground">فقط پس از</strong>{" "}

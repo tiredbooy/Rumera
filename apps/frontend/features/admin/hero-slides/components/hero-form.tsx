@@ -25,6 +25,10 @@ import {
   heroSlideFormSchema,
   type HeroSlideFormValues,
 } from "@/features/hero-slides/validations";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { parseAsciiNumber } from "@/lib/normalize-digits";
 import { HeroAppearanceFields } from "./hero-form/appearance-fields";
 import { HeroContentFields } from "./hero-form/content-fields";
@@ -109,10 +113,15 @@ export function HeroForm({
     watch,
     setValue,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<HeroSlideFormValues>({
     resolver: zodResolver(heroSlideFormSchema),
     defaultValues: defaults(slide),
+  });
+
+  const guard = useUnsavedChangesGuard({
+    enabled: isDirty,
+    isSaving: isSubmitting,
   });
 
   // Live preview values.
@@ -231,12 +240,14 @@ export function HeroForm({
         await updateHeroSlide(saved.id, { is_active: true });
       }
       toast.success(mode === "create" ? "اسلاید ایجاد شد" : "تغییرات ذخیره شد");
+      guard.release();
       router.push("/admin/hero-slides");
       router.refresh();
     } catch (e) {
       applyServerErrors(e);
       if (mode === "create" && savedOwnerId) {
         toast.info("پیش‌نویس ذخیره شد؛ بارگذاری را در صفحه ویرایش ادامه دهید");
+        guard.release();
         router.push(`/admin/hero-slides/${savedOwnerId}`);
         router.refresh();
       }
@@ -298,8 +309,10 @@ export function HeroForm({
         submitLabel={submitLabel}
         isSubmitting={isSubmitting}
         uploadBusy={isSubmitting}
-        onCancel={() => router.push("/admin/hero-slides")}
+        onCancel={() => guard.requestNavigation("/admin/hero-slides")}
       />
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
     </form>
   );
 }

@@ -47,7 +47,6 @@ export function ImagesSection({
       description="تغییرات تصاویر همراه با ذخیرهٔ محصول ثبت می‌شوند"
       icon={<ImageIcon />}
       collapsible
-      defaultOpen={gallery.count > 0}
       hasError={Boolean(error)}
       summary={
         gallery.count > 0

@@ -7,6 +7,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Hash, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { apiErrorMessage } from "@/lib/api/user-facing-error";
 
 import { Button } from "@/components/ui/button";
@@ -90,7 +94,7 @@ export function TagForm({ mode, tag }: { mode: "create" | "edit"; tag?: Tag }) {
     control,
     setError,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<TagFormValues>({
     resolver: zodResolver(tagFormSchema),
     defaultValues: tagFormDefaults(tag),
@@ -99,6 +103,7 @@ export function TagForm({ mode, tag }: { mode: "create" | "edit"; tag?: Tag }) {
   const title = useWatch({ control, name: "title" });
   const slug = useWatch({ control, name: "slug" });
   const busy = isSubmitting || createTag.isPending || updateTag.isPending;
+  const guard = useUnsavedChangesGuard({ enabled: isDirty, isSaving: busy });
 
   React.useEffect(() => {
     if (slugTouched) return;
@@ -137,6 +142,7 @@ export function TagForm({ mode, tag }: { mode: "create" | "edit"; tag?: Tag }) {
         await updateTag.mutateAsync(toUpdateTagInput(values));
         toast.success("تغییرات برچسب ذخیره شد");
       }
+      guard.release();
       router.push("/admin/tags");
       router.refresh();
     } catch (error) {
@@ -238,11 +244,13 @@ export function TagForm({ mode, tag }: { mode: "create" | "edit"; tag?: Tag }) {
           variant="outline"
           size="lg"
           disabled={busy}
-          onClick={() => router.push("/admin/tags")}
+          onClick={() => guard.requestNavigation("/admin/tags")}
         >
           انصراف
         </Button>
       </aside>
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
     </form>
   );
 }

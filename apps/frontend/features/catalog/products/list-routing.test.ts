@@ -3,8 +3,19 @@ import { describe, expect, it } from "vitest";
 import {
   parseProductListRouteQuery,
   productListHref,
+  productListRedirectHref,
   PRODUCT_LIST_SORT_OPTIONS,
 } from "./list-routing";
+
+const CAMPAIGN_PARAMS = {
+  utm_source: "google",
+  utm_medium: "cpc",
+  utm_campaign: "spring-whisky",
+  utm_content: "hero-a",
+  utm_term: "ویسکی ژاپنی",
+  gclid: "EAIaIQobChMI",
+  fbclid: "IwAR0abc",
+} as const;
 
 describe("product list routing", () => {
   it("defaults to newest and maps only supported sort fields", () => {
@@ -36,6 +47,87 @@ describe("product list routing", () => {
     ).toMatchObject({
       sortMode: "alphabetical",
     });
+  });
+
+  it("lets campaign params through without a redirect", () => {
+    const query = parseProductListRouteQuery({ ...CAMPAIGN_PARAMS });
+
+    expect(query).toMatchObject({
+      page: 1,
+      search: undefined,
+      brand: undefined,
+      sortBy: "created_at",
+      orderBy: "desc",
+      needsRedirect: false,
+    });
+    expect(Object.fromEntries(query.passthrough)).toEqual(CAMPAIGN_PARAMS);
+    // Nothing to correct, so no redirect href is ever built for this URL.
+    expect(productListRedirectHref(query, query.page)).toBe(
+      `/products?${new URLSearchParams(CAMPAIGN_PARAMS).toString()}`,
+    );
+  });
+
+  it("keeps campaign params across a catalogue-triggered redirect", () => {
+    // `page=1` and an uppercase brand are the legitimate normalisations.
+    const query = parseProductListRouteQuery({
+      ...CAMPAIGN_PARAMS,
+      page: "1",
+      brand: " Jack-Daniel ",
+      sortBy: "price",
+      orderBy: "asc",
+    });
+
+    expect(query).toMatchObject({
+      page: 1,
+      brand: "jack-daniel",
+      sortBy: "price",
+      orderBy: "asc",
+      needsRedirect: true,
+    });
+
+    const href = productListRedirectHref(query, query.page);
+    expect(href).toBe(
+      `/products?${new URLSearchParams({
+        brand: "jack-daniel",
+        sortBy: "price",
+        orderBy: "asc",
+        ...CAMPAIGN_PARAMS,
+      }).toString()}`,
+    );
+
+    // Round trip: the corrected URL is stable and still carries attribution.
+    const round = parseProductListRouteQuery(
+      Object.fromEntries(new URLSearchParams(href.split("?")[1] ?? "")),
+    );
+    expect(round.needsRedirect).toBe(false);
+    expect(Object.fromEntries(round.passthrough)).toEqual(CAMPAIGN_PARAMS);
+  });
+
+  it("keeps repeated campaign values and drops only the legacy sort key", () => {
+    const query = parseProductListRouteQuery({
+      utm_source: ["google", "bing"],
+      sort: "discount",
+    });
+
+    expect(query.needsRedirect).toBe(true);
+    expect(query.passthrough).toEqual([
+      ["utm_source", "google"],
+      ["utm_source", "bing"],
+    ]);
+    expect(productListRedirectHref(query, query.page)).toBe(
+      "/products?utm_source=google&utm_source=bing",
+    );
+  });
+
+  it("leaves internal catalogue links free of campaign params", () => {
+    const query = parseProductListRouteQuery({
+      ...CAMPAIGN_PARAMS,
+      brand: "jack-daniel",
+    });
+
+    expect(productListHref(query, 2)).toBe(
+      "/products?brand=jack-daniel&page=2",
+    );
   });
 
   it("rejects unsupported discount/price legacy params and unknown fields", () => {

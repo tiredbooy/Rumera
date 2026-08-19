@@ -32,6 +32,7 @@ export function ImageSlotList({
   onMoveDown,
 }: ImageSlotListProps) {
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
+  const [dropIndex, setDropIndex] = React.useState<number | null>(null);
   const [focusVersion, requestFocus] = React.useReducer(
     (version: number) => version + 1,
     0,
@@ -39,7 +40,7 @@ export function ImageSlotList({
   const listRef = React.useRef<HTMLUListElement>(null);
   const focusRequestRef = React.useRef<{
     localId: string;
-    direction: "up" | "down";
+    direction: "prev" | "next";
   } | null>(null);
 
   React.useLayoutEffect(() => {
@@ -69,7 +70,13 @@ export function ImageSlotList({
   if (slots.length === 0) return null;
 
   return (
-    <ul ref={listRef} aria-label="تصاویر محصول" className="flex flex-col gap-2">
+    // A grid, not a column: a gallery is compared side by side, and a
+    // one-per-row list of thumbnails pushed the sixth image off-screen.
+    <ul
+      ref={listRef}
+      aria-label="تصاویر محصول"
+      className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4"
+    >
       {slots.map((slot, i) => {
         const isPrimary =
           slot.kind === "uploaded" ? slot.image.is_primary : slot.isPrimary;
@@ -81,6 +88,7 @@ export function ImageSlotList({
             total={slots.length}
             isPending={isPending}
             isDragging={dragIndex === i}
+            isDropTarget={dropIndex === i && dragIndex !== i}
             isPrimary={isPrimary}
             canRetry={live}
             onAltChange={(alt) => onAltChange(slot, alt)}
@@ -88,28 +96,38 @@ export function ImageSlotList({
             onMakePrimary={() => onMakePrimary(slot)}
             onRemove={() => onRemove(slot)}
             onRetry={() => slot.kind === "staged" && onRetry(slot)}
-            onMoveUp={() => {
+            onMovePrev={() => {
               focusRequestRef.current = {
                 localId: slot.localId,
-                direction: "down",
+                direction: "prev",
               };
               onMoveUp(i);
               requestFocus();
             }}
-            onMoveDown={() => {
+            onMoveNext={() => {
               focusRequestRef.current = {
                 localId: slot.localId,
-                direction: "up",
+                direction: "next",
               };
               onMoveDown(i);
               requestFocus();
             }}
             onDragStart={() => setDragIndex(i)}
-            onDragEnd={() => setDragIndex(null)}
-            onDragOver={(e) => e.preventDefault()}
+            onDragEnd={() => {
+              setDragIndex(null);
+              setDropIndex(null);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDropIndex(i);
+            }}
+            onDragLeave={() =>
+              setDropIndex((current) => (current === i ? null : current))
+            }
             onDrop={() => {
               if (dragIndex !== null) onMove(dragIndex, i);
               setDragIndex(null);
+              setDropIndex(null);
             }}
           />
         );

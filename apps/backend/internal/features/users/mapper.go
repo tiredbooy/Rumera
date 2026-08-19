@@ -1,5 +1,7 @@
 package users
 
+import "strconv"
+
 func MapToCreateUserReq(input SignUpInput) CreateUserReq {
 	return CreateUserReq{
 		FirstName:    input.FirstName,
@@ -51,4 +53,14 @@ func MapToAdminUser(u *User) *AdminUser {
 		LastLoginAt:     u.LastLoginAt,
 		UpdatedAt:       u.UpdatedAt,
 	}
+}
+
+// MapToAdminUserWithWallet is the admin *detail* projection (CF-3): identity
+// plus the live wallet balance. The create / update / ban responses keep using
+// MapToAdminUser — they never looked the balance up, and emitting "0.00" there
+// would be a number the caller could act on but nobody read.
+func MapToAdminUserWithWallet(u *User, balance float64) *AdminUser {
+	out := MapToAdminUser(u)
+	out.WalletBalance = strconv.FormatFloat(balance, 'f', 2, 64)
+	return out
 }

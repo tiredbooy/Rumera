@@ -47,6 +47,14 @@ export function BulkVariantGenerator({
   const [selectedTypeIds, setSelectedTypeIds] = React.useState<number[]>([]);
   const [basePrice, setBasePrice] = React.useState("");
   const [message, setMessage] = React.useState<string | null>(null);
+  // The preview step: the combinations the Cartesian product proposes, and the
+  // ones the operator has struck off because that bottling is never sold in
+  // that size. Deselection is keyed by combination, not by position, so it
+  // survives re-computing the preview.
+  const [preview, setPreview] = React.useState<number[][] | null>(null);
+  const [excluded, setExcluded] = React.useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const selectableTypes = optionTypes.filter(
     (group) => group.values.length > 0,
   );
@@ -60,10 +68,25 @@ export function BulkVariantGenerator({
   const validPrice =
     Number.isFinite(Number(basePrice)) && Number(basePrice) > 0;
   const exceedsLimit = combinationCount > MAX_BULK_VARIANTS;
+  const valueLabels = new Map(
+    selectableTypes.flatMap((group) =>
+      group.values.map((value) => [value.id, value.value] as const),
+    ),
+  );
+  const keptCombinations = (preview ?? []).filter(
+    (ids) => !excluded.has(combinationKey(ids)),
+  );
 
   if (selectableTypes.length === 0) return null;
 
-  function generate() {
+  /** Discards a stale preview whenever the inputs that produced it change. */
+  function resetPreview() {
+    setMessage(null);
+    setPreview(null);
+    setExcluded(new Set());
+  }
+
+  function buildPreview() {
     const existing = new Set(existingCombinations.map(combinationKey));
     const combinations = buildCombinations(selectedGroups).filter(
       (ids) => !existing.has(combinationKey(ids)),
@@ -73,9 +96,16 @@ export function BulkVariantGenerator({
       setMessage("همهٔ ترکیب‌های انتخاب‌شده از قبل وجود دارند.");
       return;
     }
+    setMessage(null);
+    setExcluded(new Set());
+    setPreview(combinations);
+  }
+
+  function generate() {
+    if (keptCombinations.length === 0) return;
 
     onGenerate(
-      combinations.map((optionValueIds) => ({
+      keptCombinations.map((optionValueIds) => ({
         sku: "",
         price: basePrice.trim(),
         compare_at_price: "",
@@ -83,8 +113,11 @@ export function BulkVariantGenerator({
         option_value_ids: optionValueIds,
       })),
     );
+    const created = keptCombinations.length;
+    setPreview(null);
+    setExcluded(new Set());
     setMessage(
-      `${combinations.length.toLocaleString("fa-IR")} تنوع تازه ساخته شد؛ SKU هر ردیف را در صورت نیاز تکمیل کنید.`,
+      `${created.toLocaleString("fa-IR")} تنوع تازه ساخته شد؛ SKU هر ردیف از کد محصول ساخته شد.`,
     );
   }
 
@@ -140,7 +173,7 @@ export function BulkVariantGenerator({
                         checked={checked}
                         disabled={disabled}
                         onCheckedChange={(nextChecked) => {
-                          setMessage(null);
+                          resetPreview();
                           setSelectedTypeIds((current) =>
                             nextChecked
                               ? [...current, group.id]
@@ -175,20 +208,85 @@ export function BulkVariantGenerator({
               />
             </div>
 
+            {preview ? (
+              <fieldset className="space-y-2">
+                <legend className="text-xs font-medium">
+                  ترکیب‌هایی که ساخته می‌شوند
+                </legend>
+                <p className="text-xs text-muted-foreground">
+                  ترکیبی که این محصول در آن عرضه نمی‌شود را بردارید تا ساخته
+                  نشود.
+                </p>
+                <ul className="max-h-64 space-y-1 overflow-y-auto rounded-xl bg-background/60 p-2">
+                  {preview.map((ids) => {
+                    const key = combinationKey(ids);
+                    const checkboxId = `bulk-preview-${key}`;
+                    const label = ids
+                      .map((id) => valueLabels.get(id) ?? String(id))
+                      .join(" / ");
+                    return (
+                      <li key={key}>
+                        <Label
+                          htmlFor={checkboxId}
+                          className="min-h-11 cursor-pointer gap-2 rounded-lg px-2 text-sm font-normal"
+                        >
+                          <Checkbox
+                            id={checkboxId}
+                            checked={!excluded.has(key)}
+                            disabled={disabled}
+                            onCheckedChange={(nextChecked) =>
+                              setExcluded((current) => {
+                                const next = new Set(current);
+                                if (nextChecked) next.delete(key);
+                                else next.add(key);
+                                return next;
+                              })
+                            }
+                          />
+                          {label}
+                        </Label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </fieldset>
+            ) : null}
+
             <div className="flex flex-wrap items-center gap-3">
-              <Button
-                type="button"
-                size="sm"
-                disabled={
-                  disabled ||
-                  selectedGroups.length === 0 ||
-                  !validPrice ||
-                  exceedsLimit
-                }
-                onClick={generate}
-              >
-                ساخت {combinationCount.toLocaleString("fa-IR")} ترکیب
-              </Button>
+              {preview ? (
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={disabled || keptCombinations.length === 0}
+                    onClick={generate}
+                  >
+                    ساخت {keptCombinations.length.toLocaleString("fa-IR")} تنوع
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={resetPreview}
+                  >
+                    بازگشت
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    disabled ||
+                    selectedGroups.length === 0 ||
+                    !validPrice ||
+                    exceedsLimit
+                  }
+                  onClick={buildPreview}
+                >
+                  پیش‌نمایش {combinationCount.toLocaleString("fa-IR")} ترکیب
+                </Button>
+              )}
               <p className="text-xs text-muted-foreground">
                 ترکیب‌های تکراری به‌صورت خودکار نادیده گرفته می‌شوند.
               </p>

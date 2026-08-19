@@ -218,6 +218,18 @@ func (h *Handler) UploadImage(c *gin.Context) {
 	response.Created(c, res)
 }
 
+// ListLibrary — GET /admin/uploads. CE-10: the reusable media library behind
+// the editor's image picker.
+func (h *Handler) ListLibrary(c *gin.Context) {
+	limit, _ := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
+	items, err := h.Media.ListLibrary(c.Request.Context(), c.Query("q"), limit)
+	if err != nil {
+		h.handleMediaError(c, err)
+		return
+	}
+	response.OK(c, items)
+}
+
 type releaseStandaloneUploadReq struct {
 	Key string `json:"key" validate:"required,max=512"`
 }

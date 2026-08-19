@@ -40,6 +40,9 @@ import {
   TicketPercent,
   Truck,
   Bell,
+  ListChecks,
+  Megaphone,
+  SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
 
@@ -62,11 +65,38 @@ export type NavGroup = {
   /** Stable id for collapse state (localStorage). */
   id?: string;
   title?: string;
+  /** Parent icon for accordion groups. Unused on single-link groups. */
+  icon?: LucideIcon;
   items: NavItem[];
-  /** Setup/infrequent groups can fold; daily work stays open. */
-  collapsible?: boolean;
+  /** Accordion groups only. Setup starts folded; daily work starts open. */
   defaultCollapsed?: boolean;
 };
+
+/** Two or more destinations become a parent/child accordion. One stays a link. */
+export function isAccordionGroup(group: NavGroup): boolean {
+  return group.items.length > 1;
+}
+
+export function isActivePath(
+  pathname: string,
+  href: string,
+  exact?: boolean,
+): boolean {
+  return exact
+    ? pathname === href
+    : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function groupHasActive(group: NavGroup, pathname: string): boolean {
+  return group.items.some((item) =>
+    isActivePath(pathname, item.href, item.exact),
+  );
+}
+
+/** Sum of pending-work badges. Zero means the parent stays unbadged. */
+export function groupBadgeTotal(group: NavGroup): number {
+  return group.items.reduce((total, item) => total + (item.badge ?? 0), 0);
+}
 
 export const ADMIN_NAV: NavGroup[] = [
   {
@@ -79,6 +109,7 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     id: "daily",
     title: "کار روزانه",
+    icon: ListChecks,
     items: [
       {
         label: "سفارش‌ها",
@@ -109,6 +140,7 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     id: "catalogue",
     title: "کاتالوگ",
+    icon: Package,
     items: [
       {
         label: "محصولات",
@@ -145,6 +177,7 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     id: "customers",
     title: "مشتریان",
+    icon: Users,
     items: [
       {
         label: "کاربران",
@@ -163,6 +196,7 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     id: "marketing",
     title: "بازاریابی و محتوا",
+    icon: Megaphone,
     items: [
       {
         label: "کدهای تخفیف",
@@ -199,7 +233,7 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     id: "setup",
     title: "پیکربندی",
-    collapsible: true,
+    icon: SlidersHorizontal,
     defaultCollapsed: true,
     items: [
       {
@@ -244,7 +278,9 @@ export const ADMIN_NAV: NavGroup[] = [
 
 export const ACCOUNT_NAV: NavGroup[] = [
   {
+    id: "account-overview",
     title: "نمای کلی",
+    icon: Home,
     items: [
       { label: "نمای کلی", href: "/account", icon: Home, exact: true },
       { label: "سفارش‌های من", href: "/account/orders", icon: ShoppingBag },
@@ -252,7 +288,9 @@ export const ACCOUNT_NAV: NavGroup[] = [
     ],
   },
   {
+    id: "account-profile",
     title: "حساب و آدرس",
+    icon: MapPin,
     items: [
       { label: "آدرس‌ها", href: "/account/addresses", icon: MapPin },
       { label: "کیف پول", href: "/account/wallet", icon: Wallet },
@@ -260,7 +298,9 @@ export const ACCOUNT_NAV: NavGroup[] = [
     ],
   },
   {
+    id: "account-loyalty",
     title: "تجربه و وفاداری",
+    icon: Award,
     items: [
       { label: "سلیقهٔ من", href: "/account/taste", icon: Sparkles },
       { label: "باشگاه مشتریان", href: "/account/rewards", icon: Award },

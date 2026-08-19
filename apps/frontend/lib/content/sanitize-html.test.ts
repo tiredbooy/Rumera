@@ -31,18 +31,36 @@ describe("editorial content sanitation", () => {
       extractContentSteps(
         "<ol><li>یخ را اضافه کنید</li><li>هم بزنید</li></ol>",
       ),
-    ).toEqual(["یخ را اضافه کنید", "هم بزنید"]);
+    ).toEqual([{ text: "یخ را اضافه کنید" }, { text: "هم بزنید" }]);
     expect(extractContentSteps("1. یخ را اضافه کنید\n2. هم بزنید")).toEqual([
-      "یخ را اضافه کنید",
-      "هم بزنید",
+      { text: "یخ را اضافه کنید" },
+      { text: "هم بزنید" },
     ]);
     expect(extractContentSteps("<p>مرحلهٔ نخست</p><p>مرحلهٔ دوم</p>")).toEqual([
-      "مرحلهٔ نخست",
-      "مرحلهٔ دوم",
+      { text: "مرحلهٔ نخست" },
+      { text: "مرحلهٔ دوم" },
     ]);
     expect(
       extractContentSteps("<h2>مرحلهٔ نخست</h2><p>یخ را اضافه کنید</p>"),
-    ).toEqual(["یخ را اضافه کنید"]);
+    ).toEqual([{ text: "یخ را اضافه کنید" }]);
+  });
+
+  it("reads the method list, not every list, and keeps per-step images", () => {
+    // CE-5. A tips <ul> next to the method used to land in recipeInstructions;
+    // the ordered list is now the only thing that can be a step.
+    expect(
+      extractContentSteps(
+        "<ul><li>نکته: یخ تازه</li></ul>" +
+          "<ol><li><p>یخ را اضافه کنید</p><img src=\"/media/recipes/1/step.webp\" alt=\"\" />" +
+          "<ul><li>ریز نکته</li></ul></li><li>هم بزنید</li></ol>",
+      ),
+    ).toEqual([
+      {
+        text: "یخ را اضافه کنید ریز نکته",
+        image: "/media/recipes/1/step.webp",
+      },
+      { text: "هم بزنید" },
+    ]);
   });
 
   it("distinguishes HTML from Markdown and handles empty content", () => {

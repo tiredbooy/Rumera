@@ -136,6 +136,9 @@ function numberField(opts: { min?: number; gt?: number; label: string }) {
  */
 export const loyaltyProgrammeFormSchema = z
   .object({
+    // L-2: the kill switch. Server-side `enabled` is validated as required,
+    // so it is a real field here rather than a value threaded past the form.
+    enabled: z.boolean(),
     earn_divisor: numberField({ gt: 0, label: "مبلغ خرید به ازای هر امتیاز" }),
     redeem_value: numberField({ gt: 0, label: "ارزش هر امتیاز" }),
     signup_bonus: numberField({ min: 0, label: "هدیهٔ عضویت" }),
@@ -181,10 +184,9 @@ export function loyaltyProgrammeFormDefaults(
   programme: LoyaltyProgramme,
 ): LoyaltyProgrammeFormValues {
   const threshold = (id: string) =>
-    String(
-      programme.tiers.find((t) => t.id === id)?.min_lifetime_points ?? 0,
-    );
+    String(programme.tiers.find((t) => t.id === id)?.min_lifetime_points ?? 0);
   return {
+    enabled: programme.enabled,
     earn_divisor: String(programme.earn_divisor),
     redeem_value: String(programme.redeem_value),
     signup_bonus: String(programme.signup_bonus),
@@ -200,15 +202,14 @@ export function loyaltyProgrammeFormDefaults(
 }
 
 /**
- * `enabled` is threaded through from the current programme rather than edited:
- * the server validates it as required, so omitting it is a 422 on every save.
+ * The PUT is a full replace, so every lever — `enabled` included — is sent on
+ * each save; the server validates it as required and a dropped one is a 422.
  */
 export function toUpdateLoyaltyProgrammeInput(
   values: LoyaltyProgrammeFormValues,
-  enabled: boolean,
 ): UpdateLoyaltyProgrammeInput {
   return {
-    enabled,
+    enabled: values.enabled,
     earn_divisor: Number(values.earn_divisor),
     redeem_value: Number(values.redeem_value),
     signup_bonus: Number(values.signup_bonus),

@@ -10,11 +10,17 @@ import type {
   LoyaltyMemberLedgerQuery,
   LoyaltyMemberListQuery,
   LoyaltyMemberTransaction,
+  LoyaltyOverview,
   LoyaltyProgramme,
 } from "../types";
 
 export function getLoyaltyProgramme(): Promise<LoyaltyProgramme> {
   return apiFetch<LoyaltyProgramme>("/admin/loyalty/programme");
+}
+
+/** L-9: liability, tier distribution and birthday-job health in one read. */
+export function getLoyaltyOverview(): Promise<LoyaltyOverview> {
+  return apiFetch<LoyaltyOverview>("/admin/loyalty/overview");
 }
 
 export function listLoyaltyMembers(

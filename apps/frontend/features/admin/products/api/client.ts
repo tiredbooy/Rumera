@@ -56,6 +56,13 @@ async function productRequest<T>(
   return ((body as ApiSuccess<T> | null)?.data ?? body) as T;
 }
 
+/** Re-reads the product so a stale-revision conflict can be rebased (PE-2). */
+export function getAdminProduct(
+  productId: number,
+): Promise<AdminProductDetail> {
+  return productRequest<AdminProductDetail>(`admin/products/${productId}`);
+}
+
 export function saveProductAggregate(
   productId: number | null,
   payload: SaveProductAggregateInput,

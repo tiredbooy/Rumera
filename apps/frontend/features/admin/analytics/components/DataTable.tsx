@@ -69,6 +69,7 @@ export function DataTable<T>({
   toolbarHint,
   resultCountLabel,
   emptyMessage = "موردی یافت نشد.",
+  onVisibleRowsChange,
 }: {
   rows: T[]
   columns: Column<T>[]
@@ -83,6 +84,8 @@ export function DataTable<T>({
   toolbarHint?: string
   resultCountLabel?: (filtered: number, total: number) => React.ReactNode
   emptyMessage?: string
+  /** The rows the table is actually showing after search/facets — not the page input. */
+  onVisibleRowsChange?: (rows: T[]) => void
 }) {
   const [query, setQuery] = React.useState("")
   const [facets, setFacets] = React.useState<Record<string, string>>({})
@@ -114,6 +117,10 @@ export function DataTable<T>({
     }
     return out
   }, [rows, query, facets, sort, filters, columns, searchText])
+
+  React.useLayoutEffect(() => {
+    onVisibleRowsChange?.(filtered)
+  }, [filtered, onVisibleRowsChange])
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
   const current = Math.min(page, pageCount - 1)
@@ -173,7 +180,11 @@ export function DataTable<T>({
               value={facets[f.id] ?? "all"}
               onValueChange={(v) => setFacetReset(f.id, v)}
             >
-              <SelectTrigger size="sm" className="min-h-11 w-auto min-w-36">
+              <SelectTrigger
+                size="sm"
+                className="min-h-11 w-auto min-w-36"
+                aria-label={f.label}
+              >
                 <SelectValue placeholder={f.label} />
               </SelectTrigger>
               <SelectContent>

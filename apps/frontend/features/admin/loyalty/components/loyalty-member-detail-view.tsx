@@ -13,6 +13,7 @@ import { faNum } from "@/lib/products";
 import { faDateTime } from "@/lib/utils/date";
 
 import { getLoyaltyMember } from "../api/server";
+import { requireLoyaltyEnabled } from "../guard";
 import { loyaltyTierLabel, memberDisplayName } from "../labels";
 import type { LoyaltyMemberAccount } from "../types";
 import { LoyaltyAdjustForm } from "./loyalty-adjust-form";
@@ -30,9 +31,11 @@ export async function LoyaltyMemberDetailView({
   userID: string;
   ledgerPage: number;
   ledgerReason?: string;
-  /** customers:write — grant / clawback affordance */
+  /** loyalty:adjust — grant / clawback affordance (L-8, not customers:write) */
   canAdjust?: boolean;
 }) {
+  await requireLoyaltyEnabled();
+
   let member: LoyaltyMemberAccount;
   try {
     member = await getLoyaltyMember(userID);
@@ -211,7 +214,7 @@ export async function LoyaltyMemberDetailView({
               تنظیم امتیاز
             </p>
             <p className="mt-1">
-              برای اهدا یا برگشت امتیاز به مجوز «ویرایش مشتریان» نیاز است.
+              برای اهدا یا برگشت امتیاز به مجوز «تنظیم امتیاز باشگاه» نیاز است.
             </p>
           </div>
         )}

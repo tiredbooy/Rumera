@@ -34,6 +34,11 @@ type Repository interface {
 	SlugExists(ctx context.Context, slug string) (bool, error)
 	WithTx(tx pgx.Tx) Repository
 
+	// slug redirects — keep inbound links alive across a rename
+	ResolveSlugRedirect(ctx context.Context, fromSlug string) (string, error)
+	RecordSlugRedirect(ctx context.Context, fromSlug string, blogID int64) error
+	ReleaseSlugRedirect(ctx context.Context, slug string) error
+
 	// relations
 	AssignCategories(ctx context.Context, blogID int64, categoryIDs []int64) error
 	RemoveCategories(ctx context.Context, blogID int64) error
@@ -229,7 +234,8 @@ func (r *repository) WithTx(tx pgx.Tx) Repository {
 	return &repository{db: tx}
 }
 
-const blogColumns = `id, author_id, title, slug, content, excerpt, image_url, image_alt, time_to_read,
+const blogColumns = `id, author_id, title, slug, content, excerpt, image_url, image_alt,
+					  og_image_url, time_to_read,
 					  total_reads, status, is_featured, meta_title, meta_description,
 					  published_at, created_at, updated_at`
 
@@ -238,7 +244,7 @@ const blogColumns = `id, author_id, title, slug, content, excerpt, image_url, im
 func blogScanDest(b *Blog) []any {
 	return []any{
 		&b.ID, &b.AuthorID, &b.Title, &b.Slug, &b.Content,
-		&b.Excerpt, &b.ImageURL, &b.ImageAlt, &b.TimeToRead, &b.TotalReads,
+		&b.Excerpt, &b.ImageURL, &b.ImageAlt, &b.OGImageURL, &b.TimeToRead, &b.TotalReads,
 		&b.Status, &b.IsFeatured, &b.MetaTitle, &b.MetaDescription,
 		&b.PublishedAt, &b.CreatedAt, &b.UpdatedAt,
 	}
@@ -423,15 +429,15 @@ func (r *repository) List(ctx context.Context, f BlogFilter) ([]*Blog, int64, er
 
 func (r *repository) Create(ctx context.Context, req *BlogReq) (*Blog, error) {
 	query := `INSERT INTO blogs
-			  (author_id, title, slug, content, excerpt, image_url, image_alt, time_to_read,
-			   status, is_featured, meta_title, meta_description, published_at)
-			  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			  (author_id, title, slug, content, excerpt, image_url, image_alt, og_image_url,
+			   time_to_read, status, is_featured, meta_title, meta_description, published_at)
+			  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 			  RETURNING ` + blogColumns
 
 	b := &Blog{}
 	if err := scanBlog(r.db.QueryRow(ctx, query,
 		req.AuthorID, req.Title, req.Slug, req.Content,
-		req.Excerpt, req.ImageURL, req.ImageAlt, req.TimeToRead,
+		req.Excerpt, req.ImageURL, req.ImageAlt, req.OGImageURL, req.TimeToRead,
 		req.Status, req.IsFeatured, req.MetaTitle,
 		req.MetaDescription, req.PublishedAt,
 	), b); err != nil {
@@ -469,6 +475,12 @@ func (r *repository) Update(ctx context.Context, id int64, req *BlogUpdateReq) (
 	if req.ImageAlt.Set {
 		add("image_alt", req.ImageAlt.Value)
 	}
+	if req.OGImageURL.Set {
+		sets = append(sets,
+			"og_image_storage_key = CASE WHEN og_image_url IS DISTINCT FROM @og_image_url THEN NULL ELSE og_image_storage_key END",
+		)
+		add("og_image_url", req.OGImageURL.Value)
+	}
 	if req.TimeToRead != nil {
 		add("time_to_read", *req.TimeToRead)
 	}
@@ -493,6 +505,10 @@ func (r *repository) Update(ctx context.Context, id int64, req *BlogUpdateReq) (
 		where += " AND image_url IS NOT DISTINCT FROM @expected_image_url"
 		args["expected_image_url"] = req.ExpectedImageURL.Value
 	}
+	if req.ExpectedOGImageURL.Set {
+		where += " AND og_image_url IS NOT DISTINCT FROM @expected_og_image_url"
+		args["expected_og_image_url"] = req.ExpectedOGImageURL.Value
+	}
 	query := fmt.Sprintf(
 		`UPDATE blogs SET %s WHERE %s RETURNING `+blogColumns,
 		strings.Join(sets, ", "), where,
@@ -501,7 +517,7 @@ func (r *repository) Update(ctx context.Context, id int64, req *BlogUpdateReq) (
 	b := &Blog{}
 	if err := scanBlog(r.db.QueryRow(ctx, query, args), b); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			if req.ExpectedImageURL.Set {
+			if req.ExpectedImageURL.Set || req.ExpectedOGImageURL.Set {
 				return nil, models.ErrConflict
 			}
 			return nil, models.ErrNotFound
@@ -514,7 +530,8 @@ func (r *repository) Update(ctx context.Context, id int64, req *BlogUpdateReq) (
 func (r *repository) SoftDelete(ctx context.Context, id int64) error {
 	ct, err := r.db.Exec(ctx,
 		`UPDATE blogs
-		 SET deleted_at = NOW(), image_url = NULL, image_storage_key = NULL
+		 SET deleted_at = NOW(), image_url = NULL, image_storage_key = NULL,
+		     og_image_url = NULL, og_image_storage_key = NULL
 		 WHERE id = $1 AND deleted_at IS NULL`, id,
 	)
 	if err != nil {
@@ -546,6 +563,65 @@ func (r *repository) SlugExists(ctx context.Context, slug string) (bool, error) 
 		return false, fmt.Errorf("checking blog slug: %w", err)
 	}
 	return exists, nil
+}
+
+// ── Slug redirects ────────────────────────────────────────────────────────────
+
+const blogSlugRedirectType = "blog"
+
+// ResolveSlugRedirect maps a retired slug to the post's current slug. It runs on
+// the 404 path of a public page, so it stays a single index scan on
+// (content_type, from_slug) plus the primary-key join. Joining the live row also
+// means a retired slug whose post went back to draft 404s instead of
+// redirecting into another 404.
+func (r *repository) ResolveSlugRedirect(ctx context.Context, fromSlug string) (string, error) {
+	var slug string
+	err := r.db.QueryRow(ctx,
+		`SELECT b.slug
+		   FROM slug_redirects sr
+		   JOIN blogs b ON b.id = sr.target_id
+		  WHERE sr.content_type = $1 AND sr.from_slug = $2
+		    AND b.slug <> sr.from_slug
+		    AND b.status = 'published' AND b.deleted_at IS NULL
+		    AND `+publicLivePublishedAtSQL("b.published_at"),
+		blogSlugRedirectType, fromSlug,
+	).Scan(&slug)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", models.ErrNotFound
+		}
+		return "", fmt.Errorf("resolving blog slug redirect: %w", err)
+	}
+	return slug, nil
+}
+
+// RecordSlugRedirect points a retired slug at the post id — not at the
+// replacement slug — so a second rename needs no rewrite and a -> b -> c still
+// lands on c in one hop.
+func (r *repository) RecordSlugRedirect(ctx context.Context, fromSlug string, blogID int64) error {
+	if _, err := r.db.Exec(ctx,
+		`INSERT INTO slug_redirects (content_type, from_slug, target_id)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (content_type, from_slug)
+		 DO UPDATE SET target_id = EXCLUDED.target_id, updated_at = NOW()`,
+		blogSlugRedirectType, fromSlug, blogID,
+	); err != nil {
+		return fmt.Errorf("recording blog slug redirect: %w", err)
+	}
+	return nil
+}
+
+// ReleaseSlugRedirect drops the record a now-live slug used to redirect away
+// from. Re-using a retired slug for a different post must take it over
+// outright, never keep sending that traffic to the previous owner.
+func (r *repository) ReleaseSlugRedirect(ctx context.Context, slug string) error {
+	if _, err := r.db.Exec(ctx,
+		`DELETE FROM slug_redirects WHERE content_type = $1 AND from_slug = $2`,
+		blogSlugRedirectType, slug,
+	); err != nil {
+		return fmt.Errorf("releasing blog slug redirect: %w", err)
+	}
+	return nil
 }
 
 // ── Relations ─────────────────────────────────────────────────────────────────

@@ -10,10 +10,11 @@ import (
 )
 
 const (
-	defaultChannelSize = 10_000          // how many events buffer before drops
-	defaultBatchSize   = 250             // flush when this many events queued
-	defaultFlushEvery  = 3 * time.Second // flush even if batch not full
-	defaultWorkerCount = 4               // parallel batch writers
+	defaultChannelSize  = 10_000           // how many events buffer before drops
+	defaultBatchSize    = 250              // flush when this many events queued
+	defaultFlushEvery   = 3 * time.Second  // flush even if batch not full
+	defaultWorkerCount  = 4                // parallel batch writers
+	defaultFlushTimeout = 10 * time.Second // per-batch write budget
 )
 
 type Queue struct {
@@ -68,15 +69,22 @@ func (q *Queue) Push(e *featanalytics.EventReq) {
 }
 
 // Start launches worker goroutines. Call once at app startup.
+//
+// ctx is stripped of cancellation on purpose: the only stop signal is Shutdown
+// closing the channel. Started with the signal context, every worker returned on
+// SIGTERM with its in-hand batch — and a cancelled context anyway — so Shutdown
+// found no readers and discarded up to Capacity() buffered events.
 func (q *Queue) Start(ctx context.Context) {
+	ctx = context.WithoutCancel(ctx)
 	for i := range q.workerCount {
 		q.wg.Add(1)
 		go q.worker(ctx, i)
 	}
 }
 
-// Shutdown drains the channel and waits for all workers to finish.
-// Call during graceful shutdown.
+// Shutdown drains the channel and waits for all workers to finish. Bounded by
+// defaultFlushTimeout per batch, so a wedged analytics DB cannot hold shutdown open
+// forever. Call during graceful shutdown, before the DB pools close.
 func (q *Queue) Shutdown() {
 	close(q.ch)
 	q.wg.Wait()
@@ -93,7 +101,10 @@ func (q *Queue) worker(ctx context.Context, id int) {
 		if len(batch) == 0 {
 			return
 		}
-		if err := q.service.FlushEvents(ctx, batch); err != nil {
+		flushCtx, cancel := context.WithTimeout(ctx, defaultFlushTimeout)
+		err := q.service.FlushEvents(flushCtx, batch)
+		cancel()
+		if err != nil {
 			slog.Error("analytics flush failed", "worker", id, "count", len(batch), "err", err)
 		}
 		batch = batch[:0] // reset slice, reuse memory
@@ -114,10 +125,6 @@ func (q *Queue) worker(ctx context.Context, id int) {
 
 		case <-ticker.C:
 			flush()
-
-		case <-ctx.Done():
-			flush()
-			return
 		}
 	}
 }

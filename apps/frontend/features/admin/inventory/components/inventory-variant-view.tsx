@@ -110,7 +110,7 @@ export function InventoryVariantView({
                   وضعیت فعلی انبار
                 </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  قیمت واحد {formatPrice(Number(inventory.unit_price))}
+                  قیمت واحد {formatPrice(inventory.unit_price)}
                 </p>
               </div>
               <InventoryStockBadge status={status} />

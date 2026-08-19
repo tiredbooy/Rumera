@@ -147,11 +147,13 @@ func (m *stubGiftMailer) Send(_ context.Context, to, subject, htmlBody string) e
 type stubGiftDispatcher struct {
 	calls                      int
 	lastTo, lastBody, lastIdem string
+	lastTx                     pgx.Tx
 	err                        error
 }
 
-func (d *stubGiftDispatcher) DispatchGiftPurchased(_ context.Context, to, _, htmlBody, _, idempotencyKey string) error {
+func (d *stubGiftDispatcher) DispatchGiftPurchasedTx(_ context.Context, tx pgx.Tx, to, _, htmlBody, _, idempotencyKey string) error {
 	d.calls++
+	d.lastTx = tx
 	d.lastTo = to
 	d.lastBody = htmlBody
 	d.lastIdem = idempotencyKey
@@ -435,5 +437,65 @@ func TestGiftCardIssueRetriesAnAtomicCollision(t *testing.T) {
 	}
 	if repo.createCalls != 2 || len(cards) != 3 {
 		t.Fatalf("retry result = calls %d, cards %d; want 2 and 3", repo.createCalls, len(cards))
+	}
+}
+
+// savepointTx is the minimal pgx.Tx a savepoint test needs. Everything else is
+// nil-embedded and panics if the code under test touches it.
+type savepointTx struct {
+	pgx.Tx
+	parent    *savepointTx
+	begins    int
+	commits   int
+	rollbacks int
+}
+
+func (t *savepointTx) Begin(context.Context) (pgx.Tx, error) {
+	t.begins++
+	return &savepointTx{parent: t}, nil
+}
+func (t *savepointTx) Commit(context.Context) error   { t.commits++; return nil }
+func (t *savepointTx) Rollback(context.Context) error { t.rollbacks++; return nil }
+
+// conflictOnceRepo collides on the first code, like a real UNIQUE violation. On a
+// bare shared transaction that aborts it (25P02) and every later statement fails —
+// including the payments.Confirm that owns the tx, after the customer has paid.
+type conflictOnceRepo struct {
+	purchaseRepoStub
+	failed bool
+}
+
+func (r *conflictOnceRepo) InsertPurchasedTx(ctx context.Context, tx pgx.Tx, code string, amount decimal.Decimal, userID int64, txid string) (*GiftCard, error) {
+	if !r.failed {
+		r.failed = true
+		return nil, models.ErrConflict
+	}
+	return r.purchaseRepoStub.InsertPurchasedTx(ctx, tx, code, amount, userID, txid)
+}
+
+func TestFulfillPaidPurchaseRetriesOnASavepoint(t *testing.T) {
+	repo := &conflictOnceRepo{}
+	disp := &stubGiftDispatcher{}
+	emails := &stubEmails{email: "buyer@example.com"}
+	tx := &savepointTx{}
+	svc := NewService(repo, nil).WithDispatcher(disp).WithPurchaserEmailLookup(emails)
+
+	if err := svc.FulfillPaidPurchaseTx(context.Background(), tx, 1, 50_000, "gbuy-sp"); err != nil {
+		t.Fatalf("collision must not fail the paid confirm: %v", err)
+	}
+	if tx.begins != 2 {
+		t.Fatalf("savepoints opened = %d; want one per attempt (2)", tx.begins)
+	}
+	if tx.rollbacks != 0 || tx.commits != 0 {
+		t.Fatalf("the caller's tx was settled by us: commits=%d rollbacks=%d", tx.commits, tx.rollbacks)
+	}
+	// ED-011c: the email must ride the caller's transaction, not the savepoint
+	// and not a second connection — a rollback would otherwise mail a code for a
+	// card that never committed.
+	if disp.calls != 1 {
+		t.Fatalf("dispatch calls = %d; want 1", disp.calls)
+	}
+	if disp.lastTx != pgx.Tx(tx) {
+		t.Fatalf("gift email enqueued off the caller's transaction: %#v", disp.lastTx)
 	}
 }

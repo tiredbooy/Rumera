@@ -64,14 +64,23 @@ function renderAdmin(
 }
 
 describe("DashboardNav", () => {
-  it("regroups by job and keeps daily work visible", () => {
+  it("renders multi-item groups as accordion parents and dashboard as a lone link", () => {
     renderAdmin();
 
-    expect(screen.getByText("امروز")).toBeInTheDocument();
-    expect(screen.getByText("کار روزانه")).toBeInTheDocument();
-    expect(screen.getByText("کاتالوگ")).toBeInTheDocument();
-    expect(screen.getByText("مشتریان")).toBeInTheDocument();
-    expect(screen.getByText("بازاریابی و محتوا")).toBeInTheDocument();
+    expect(screen.queryByText("امروز")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "داشبورد" })).toHaveAttribute(
+      "href",
+      "/admin",
+    );
+    expect(screen.getByRole("button", { name: "کار روزانه" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "کاتالوگ" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "مشتریان" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "بازاریابی و محتوا" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "پیکربندی" })).toBeInTheDocument();
 
     expect(screen.getByRole("link", { name: "سفارش‌ها" })).toHaveAttribute(
@@ -133,6 +142,19 @@ describe("DashboardNav", () => {
       screen.getByRole("link", { name: `موجودی، ${faNum(5)} مورد در انتظار` }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "پرداخت‌ها" })).toBeInTheDocument();
+  });
+
+  it("rolls pending counts onto a collapsed parent", () => {
+    renderAdmin({ "/admin/products": 3 });
+
+    const parent = screen.getByRole("button", {
+      name: `کاتالوگ، ${faNum(3)} مورد در انتظار`,
+    });
+    fireEvent.click(parent);
+    expect(
+      screen.queryByRole("link", { name: `محصولات، ${faNum(3)} مورد در انتظار` }),
+    ).not.toBeInTheDocument();
+    expect(parent).toHaveAttribute("aria-expanded", "false");
   });
 
   it("does not show a zero or failed count as a badge", () => {

@@ -25,6 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { toAsciiDigits } from "@/lib/normalize-digits";
 import { cn } from "@/lib/utils";
 import { validateImageURL } from "@/features/image-uploader/constants";
@@ -171,7 +175,7 @@ export function CategoryForm({
     watch,
     setValue,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<CategoryFormValues>({
     resolver: zodResolver(categoryFormSchema),
     defaultValues: defaults(category),
@@ -243,6 +247,7 @@ export function CategoryForm({
         toast.success("تغییرات ذخیره شد");
       }
       await queryClient.invalidateQueries({ queryKey: CATEGORIES_QUERY_KEY });
+      guard.release();
       router.push("/admin/categories");
       router.refresh();
     } catch (e) {
@@ -259,6 +264,10 @@ export function CategoryForm({
   }
 
   const editorLocked = isSubmitting || imageUploading || !canWrite;
+  const guard = useUnsavedChangesGuard({
+    enabled: isDirty,
+    isSaving: isSubmitting,
+  });
 
   return (
     <form
@@ -543,13 +552,15 @@ export function CategoryForm({
               variant="outline"
               size="lg"
               disabled={isSubmitting || imageUploading}
-              onClick={() => router.push("/admin/categories")}
+              onClick={() => guard.requestNavigation("/admin/categories")}
             >
               انصراف
             </Button>
           </div>
         </div>
       </aside>
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
     </form>
   );
 }

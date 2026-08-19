@@ -311,3 +311,37 @@ func TestService_ProcessPendingLoyaltyAwards_RetriesLeftover(t *testing.T) {
 		t.Fatalf("intent user = %d; want %d", repo.intents[oid].UserID, uid)
 	}
 }
+
+// deductFailInventory fails the in-transaction stock drain. Only the one method
+// Confirm calls is implemented; anything else is a test bug and panics.
+type deductFailInventory struct {
+	inventory.Service
+	err error
+}
+
+func (i *deductFailInventory) DeductForOrderTx(context.Context, pgx.Tx, int64, []inventory.StockLine) error {
+	return i.err
+}
+
+// Confirm's contract: "If money/stock fails the whole thing rolls back — the
+// order never shows as paid without a confirmed payment record." MarkAsPaid runs
+// BEFORE the stock drain, so the only thing standing between a stock failure and
+// a paid-but-unstocked order is the rollback. Pin it.
+func TestConfirmRollsBackSoAnOrderNeverShowsPaidWithoutConfirmedMoney(t *testing.T) {
+	_, _, repo, orders := newOrderConfirmFixture()
+	inv := &deductFailInventory{err: errors.New("insufficient committed stock")}
+	svc := NewService(repo, orders, inv, nil, nil, nil, nil)
+
+	if _, err := svc.Confirm(context.Background(), ConfirmPaymentReq{TransactionID: "gw-order-1"}); err == nil {
+		t.Fatal("Confirm returned nil after the stock drain failed")
+	}
+	if repo.tx.Committed {
+		t.Error("the confirm transaction committed after a failed stock drain; the order is paid with stock it never took")
+	}
+	if !repo.tx.RolledBack {
+		t.Error("the confirm transaction was neither committed nor rolled back — the connection leaks and MarkAsPaid may still land")
+	}
+	if len(repo.intents) != 0 {
+		t.Errorf("an earn intent was written on a rolled-back confirm: %+v", repo.intents)
+	}
+}

@@ -70,7 +70,7 @@ func (j *AlertCheckJob) Run(ctx context.Context) {
 
 func (j *AlertCheckJob) dispatch(ctx context.Context, a alerts.PendingAlert, subject, body string) error {
 	if j.dispatcher != nil {
-		return j.dispatcher.DispatchAlert(ctx, a.Email, subject, body, a.ID, fmt.Sprintf("alert:%d", a.ID))
+		return j.dispatcher.DispatchAlert(ctx, a.Email, subject, body, a.ID, a.CreatedAt, fmt.Sprintf("alert:%d:%d", a.ID, a.CreatedAt.UTC().Unix()))
 	}
 	if j.mailer == nil {
 		return fmt.Errorf("alert check job: mailer nil")

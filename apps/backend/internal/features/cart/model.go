@@ -60,16 +60,21 @@ type CartItemResponse struct {
 	// client payloads when nil.
 	CategoryID *int64 `json:"category_id,omitempty"`
 	// WeightKg is the product's unit weight when known (catalog weight column).
-	WeightKg          *float64                     `json:"weight_kg,omitempty"`
-	VariantID         int64                        `json:"variant_id"`
-	SKU               *string                      `json:"sku,omitempty"`
-	UnitPriceSnapshot float64                      `json:"unit_price_snapshot"`
-	CurrentPrice      float64                      `json:"current_price"`
-	PriceChanged      bool                         `json:"price_changed"`
-	Quantity          int                          `json:"quantity"`
-	LineTotal         float64                      `json:"line_total"`
-	ImageURL          *string                      `json:"image_url,omitempty"`
-	Options           []models.OptionValueResponse `json:"options,omitempty"`
+	WeightKg          *float64 `json:"weight_kg,omitempty"`
+	VariantID         int64    `json:"variant_id"`
+	SKU               *string  `json:"sku,omitempty"`
+	UnitPriceSnapshot float64  `json:"unit_price_snapshot"`
+	CurrentPrice      float64  `json:"current_price"`
+	PriceChanged      bool     `json:"price_changed"`
+	Quantity          int      `json:"quantity"`
+	// AvailableStock is the sellable stock for this variant right now
+	// (inventory.stock_on_hand - committed_stock, clamped at zero) — the same
+	// number the reserve path checks at checkout. Zero means sold out; a value
+	// below Quantity means the line cannot be ordered as it stands.
+	AvailableStock int                          `json:"available_stock"`
+	LineTotal      float64                      `json:"line_total"`
+	ImageURL       *string                      `json:"image_url,omitempty"`
+	Options        []models.OptionValueResponse `json:"options,omitempty"`
 }
 
 type CartResponse struct {

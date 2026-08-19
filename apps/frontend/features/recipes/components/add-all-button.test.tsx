@@ -45,6 +45,8 @@ vi.mock("sonner", () => ({
   },
 }));
 
+import { takeBulkAddIntent } from "@/features/recipes/pending-bulk-add";
+
 import { AddAllIngredientsButton } from "./add-all-button";
 
 const product: ShoppableProduct = {
@@ -62,6 +64,7 @@ const product: ShoppableProduct = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
   mocks.state.status = "authenticated";
   mocks.state.result = { added: 1, skipped: [] };
   mocks.mutate.mockImplementation(
@@ -118,5 +121,25 @@ describe("AddAllIngredientsButton", () => {
       }),
     );
     expect(mocks.success).not.toHaveBeenCalled();
+  });
+
+  it("stashes the available ingredients when a guest is bounced to login", () => {
+    mocks.state.status = "unauthenticated";
+    render(
+      <AddAllIngredientsButton
+        products={[product, { ...product, recipe_product_id: 2, product_variant_id: 9 }]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(mocks.mutate).not.toHaveBeenCalled();
+    expect(mocks.push).toHaveBeenCalledWith(
+      "/login?callbackUrl=%2Frecipes%2Fmojito",
+    );
+    expect(takeBulkAddIntent()).toEqual([
+      { product_variant_id: 8, quantity: 1 },
+      { product_variant_id: 9, quantity: 1 },
+    ]);
+    expect(takeBulkAddIntent()).toBeNull();
   });
 });

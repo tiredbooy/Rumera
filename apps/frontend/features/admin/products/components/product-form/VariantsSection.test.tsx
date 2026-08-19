@@ -10,6 +10,13 @@ import type { ProductOptionGroup } from "@/features/admin/products/types";
 import type { ProductFormValues } from "../../validations";
 import { VariantsSection } from "./VariantsSection";
 
+// The stock adjustment posts through a "use server" action; Next breaks that
+// import chain at the boundary, Vitest needs it stubbed (PE-11).
+vi.mock("@/features/inventory/actions", () => ({
+  adjustVariantStockAction: vi.fn(),
+  updateVariantReorderAction: vi.fn(),
+}));
+
 const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
@@ -43,9 +50,10 @@ function Harness({
   optionTypes: ProductOptionGroup[];
   optionCatalogError?: string | null;
 }) {
-  const { register, control, setValue, formState } = useForm<ProductFormValues>({
-    defaultValues: { variants: [] },
-  });
+  const { register, control, setValue, getValues, formState } =
+    useForm<ProductFormValues>({
+      defaultValues: { code: "BLK", variants: [] },
+    });
   const { fields, append, remove } = useFieldArray({
     control,
     name: "variants",
@@ -56,6 +64,7 @@ function Harness({
       register={register}
       control={control}
       setValue={setValue}
+      getValues={getValues}
       errors={formState.errors}
       fields={fields}
       append={append}
@@ -76,12 +85,16 @@ describe("VariantsSection option catalog", () => {
   it("uses the empty-options copy when the catalog loaded and is empty", () => {
     render(<Harness optionTypes={[]} />);
 
-    expect(screen.getByText("هنوز ویژگی مشترکی تعریف نشده")).toBeInTheDocument();
+    expect(
+      screen.getByText("هنوز ویژگی مشترکی تعریف نشده"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "تلاش دوباره" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText("بارگذاری ویژگی‌های تنوع ناموفق بود. دوباره تلاش کنید."),
+      screen.queryByText(
+        "بارگذاری ویژگی‌های تنوع ناموفق بود. دوباره تلاش کنید.",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -93,7 +106,9 @@ describe("VariantsSection option catalog", () => {
       />,
     );
 
-    expect(screen.getByText("هنوز ویژگی مشترکی تعریف نشده")).toBeInTheDocument();
+    expect(
+      screen.getByText("هنوز ویژگی مشترکی تعریف نشده"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("بارگذاری ویژگی‌های تنوع ناموفق بود. دوباره تلاش کنید."),
     ).toBeInTheDocument();
@@ -108,5 +123,20 @@ describe("VariantsSection option catalog", () => {
       screen.queryByText("هنوز ویژگی مشترکی تعریف نشده"),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/ویژگی‌های مشترک از/)).toBeInTheDocument();
+  });
+
+  it("hands every bulk-generated row an SKU built from the product code", () => {
+    render(<Harness optionTypes={[volume]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /ساخت گروهی تنوع‌ها/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /حجم/ }));
+    fireEvent.change(screen.getByLabelText("قیمت پایه (تومان)"), {
+      target: { value: "1250000" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "پیش‌نمایش ۱ ترکیب" }));
+    fireEvent.click(screen.getByRole("button", { name: "ساخت ۱ تنوع" }));
+
+    // The complaint PE-1 answers: a bulk run used to leave every row nameless.
+    expect(screen.getByLabelText("SKU تنوع 1")).toHaveValue("BLK-700ML");
   });
 });

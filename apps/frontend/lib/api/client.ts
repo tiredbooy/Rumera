@@ -5,6 +5,7 @@ import { headers as requestHeaders } from "next/headers";
 import { getAccessTokenFromJwt } from "@/lib/auth/auth.config";
 import { API_BASE } from "./base";
 import { ApiError } from "./errors";
+import { readJsonOrNull } from "./read-json";
 import type { ApiErrorEnvelope, ApiSuccess } from "./types";
 
 export { API_BASE } from "./base";
@@ -57,7 +58,11 @@ export async function apiFetch<T>(
     cache: rest.cache ?? "no-store",
   });
 
-  const body: unknown = await res.json().catch(() => null);
+  if (res.status === 304) {
+    throw new ApiError(304, "NOT_MODIFIED", res.statusText || "Not Modified");
+  }
+
+  const body: unknown = await readJsonOrNull(res);
 
   if (!res.ok) {
     const error = (body as ApiErrorEnvelope | null)?.error;

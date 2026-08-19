@@ -2,29 +2,13 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  Archive,
-  Loader2,
-  Pencil,
-  Plus,
-  RotateCw,
-  Search,
-  TicketPercent,
-} from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Archive, Loader2, Pencil, Plus, TicketPercent } from "lucide-react";
 import { toast } from "sonner";
 
 import { ListPagination } from "@/components/list-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -56,6 +40,15 @@ import type {
 } from "@/features/coupons/types";
 import { DashboardErrorState } from "@/features/dashboard/components/async-state";
 import {
+  AdminFilterChips,
+  AdminSavedViews,
+  FilterSearchInput,
+  FilterSelect,
+  useFilterParams,
+  type FilterChip,
+  type FilterParamLabels,
+} from "@/features/dashboard/components/admin-filter-controls";
+import {
   AdminFilterBar,
   AdminPage,
 } from "@/features/dashboard/components/admin-page";
@@ -64,6 +57,33 @@ import { faDate } from "@/lib/utils/date";
 
 const PAGE_SIZE = 20;
 type StatusFilter = "all" | "current" | "inactive";
+
+const STATUS_OPTIONS = [
+  { value: "", label: "همهٔ وضعیت‌ها" },
+  { value: "current", label: "فعال در بازهٔ زمانی" },
+  { value: "inactive", label: "غیرفعال" },
+];
+
+const TYPE_FA: Record<DiscountType, string> = {
+  percentage: "درصدی",
+  fixed_amount: "مبلغ ثابت",
+  free_shipping: "ارسال رایگان",
+};
+
+const TYPE_OPTIONS = [
+  { value: "", label: "همهٔ انواع" },
+  ...(Object.keys(TYPE_FA) as DiscountType[]).map((value) => ({
+    value,
+    label: TYPE_FA[value],
+  })),
+];
+
+/** Every param this list owns — feeds the chips and the saved-view menu. */
+const COUPON_FILTER_PARAMS: FilterParamLabels = {
+  q: "جستجو",
+  status: "وضعیت",
+  type: "نوع تخفیف",
+};
 
 function positivePage(value: string | null): number {
   if (!value || !/^[1-9]\d*$/.test(value)) return 1;
@@ -107,6 +127,23 @@ function couponStatus(coupon: Coupon): {
   return { label: "فعال", variant: "default" };
 }
 
+function couponChips(
+  query: string,
+  status: StatusFilter,
+  type: DiscountType | undefined,
+): FilterChip[] {
+  const chips: FilterChip[] = [];
+  if (query) chips.push({ param: "q", label: `جستجو: ${query}` });
+  if (status !== "all") {
+    chips.push({
+      param: "status",
+      label: status === "current" ? "فعال در بازهٔ زمانی" : "غیرفعال",
+    });
+  }
+  if (type) chips.push({ param: "type", label: `نوع: ${TYPE_FA[type]}` });
+  return chips;
+}
+
 function LoadingTable() {
   return (
     <div
@@ -130,50 +167,13 @@ function LoadingTable() {
 }
 
 export function CouponsBoard() {
-  const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const setFilters = useFilterParams();
   const query = searchParams.get("q")?.trim() ?? "";
   const page = positivePage(searchParams.get("page"));
   const status = statusFilter(searchParams.get("status"));
   const type = discountTypeFilter(searchParams.get("type"));
-  const [search, setSearch] = React.useState(query);
-  const [lastQuery, setLastQuery] = React.useState(query);
   const [archiveTarget, setArchiveTarget] = React.useState<Coupon | null>(null);
-
-  if (query !== lastQuery) {
-    setLastQuery(query);
-    setSearch(query);
-  }
-
-  const updateURL = React.useCallback(
-    (
-      updates: Record<string, string | undefined>,
-      resetPage = false,
-      replace = false,
-    ) => {
-      const params = new URLSearchParams(searchParams.toString());
-      for (const [key, value] of Object.entries(updates)) {
-        if (value) params.set(key, value);
-        else params.delete(key);
-      }
-      if (resetPage) params.delete("page");
-      const suffix = params.toString();
-      const href = suffix ? `${pathname}?${suffix}` : pathname;
-      if (replace) router.replace(href);
-      else router.push(href);
-    },
-    [pathname, router, searchParams],
-  );
-
-  React.useEffect(() => {
-    if (search.trim() === query) return;
-    const timer = window.setTimeout(
-      () => updateURL({ q: search.trim() || undefined }, true),
-      350,
-    );
-    return () => window.clearTimeout(timer);
-  }, [query, search, updateURL]);
 
   const listQuery: CouponListQuery = {
     page,
@@ -203,12 +203,8 @@ export function CouponsBoard() {
   React.useEffect(() => {
     if (!outOfRangePage || !coupons.data) return;
     const lastPage = coupons.data.pagination.total_pages;
-    updateURL(
-      { page: lastPage > 1 ? String(lastPage) : undefined },
-      false,
-      true,
-    );
-  }, [coupons.data, outOfRangePage, updateURL]);
+    setFilters({ page: lastPage > 1 ? String(lastPage) : undefined });
+  }, [coupons.data, outOfRangePage, setFilters]);
 
   async function confirmDeactivate() {
     if (!archiveTarget) return;
@@ -249,54 +245,40 @@ export function CouponsBoard() {
           id="coupons-filter-title"
           title="جستجو و فیلتر کدها"
           hasFilters={hasFilters}
-          onReset={() => router.push(pathname)}
+          onReset={() =>
+            setFilters({ q: undefined, status: undefined, type: undefined })
+          }
           gridClassName="sm:grid-cols-[minmax(0,1fr)_11rem_11rem]"
+          chips={
+            <>
+              <AdminFilterChips
+                params={COUPON_FILTER_PARAMS}
+                chips={couponChips(query, status, type)}
+              />
+              <AdminSavedViews list="coupons" params={COUPON_FILTER_PARAMS} />
+            </>
+          }
         >
-          <label className="relative block">
-            <span className="sr-only">جستجوی کد تخفیف</span>
-            <Search
-              className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
-              aria-hidden
-            />
-            <Input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="جستجو بر اساس کد…"
-              className="h-11 ps-9"
-            />
-          </label>
-          <Select
-            value={status}
-            onValueChange={(value) =>
-              updateURL({ status: value === "all" ? undefined : value }, true)
-            }
-          >
-            <SelectTrigger className="h-11 w-full" aria-label="فیلتر وضعیت">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">همهٔ وضعیت‌ها</SelectItem>
-              <SelectItem value="current">فعال در بازهٔ زمانی</SelectItem>
-              <SelectItem value="inactive">غیرفعال</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={type ?? "all"}
-            onValueChange={(value) =>
-              updateURL({ type: value === "all" ? undefined : value }, true)
-            }
-          >
-            <SelectTrigger className="h-11 w-full" aria-label="فیلتر نوع تخفیف">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">همهٔ انواع</SelectItem>
-              <SelectItem value="percentage">درصدی</SelectItem>
-              <SelectItem value="fixed_amount">مبلغ ثابت</SelectItem>
-              <SelectItem value="free_shipping">ارسال رایگان</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterSearchInput
+            id="coupons-query"
+            label="جستجوی کد تخفیف"
+            placeholder="جستجو بر اساس کد…"
+            value={query}
+          />
+          <FilterSelect
+            id="coupons-status"
+            label="وضعیت"
+            param="status"
+            value={status === "all" ? "" : status}
+            options={STATUS_OPTIONS}
+          />
+          <FilterSelect
+            id="coupons-type"
+            label="نوع تخفیف"
+            param="type"
+            value={type ?? ""}
+            options={TYPE_OPTIONS}
+          />
         </AdminFilterBar>
       }
       pagination={
@@ -310,11 +292,11 @@ export function CouponsBoard() {
             hasPrev={coupons.data.pagination.has_prev}
             hasNext={coupons.data.pagination.has_next}
             onPrev={() =>
-              updateURL({
+              setFilters({
                 page: previousPage > 1 ? String(previousPage) : undefined,
               })
             }
-            onNext={() => updateURL({ page: String(page + 1) })}
+            onNext={() => setFilters({ page: String(page + 1) })}
             disabled={coupons.isFetching}
             ariaLabel="صفحه‌بندی کدهای تخفیف"
             label={

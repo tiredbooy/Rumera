@@ -37,6 +37,10 @@ import {
   useUpdateAdminCoupon,
 } from "@/features/coupons/api";
 import type { Coupon } from "@/features/coupons/types";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { apiErrorMessage, localizeApiText } from "@/lib/api/user-facing-error";
 import { cn } from "@/lib/utils";
 
@@ -189,7 +193,7 @@ export function CouponForm({
     handleSubmit,
     setError,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<CouponFormValues>({
     resolver: zodResolver(couponFormSchema),
     defaultValues: couponFormDefaults(coupon),
@@ -208,6 +212,7 @@ export function CouponForm({
     minOrderAmount,
   });
   const busy = isSubmitting || createCoupon.isPending || updateCoupon.isPending;
+  const guard = useUnsavedChangesGuard({ enabled: isDirty, isSaving: busy });
 
   function applyError(error: unknown) {
     const fallback = "ذخیرهٔ کد تخفیف ناموفق بود";
@@ -245,6 +250,7 @@ export function CouponForm({
         await updateCoupon.mutateAsync(toUpdateCouponInput(values, coupon));
         toast.success("تغییرات کد تخفیف ذخیره شد");
       }
+      guard.release();
       router.push("/admin/coupons");
       router.refresh();
     } catch (error) {
@@ -658,6 +664,8 @@ export function CouponForm({
           {mode === "create" ? "ساخت کد تخفیف" : "ذخیرهٔ تغییرات"}
         </Button>
       </div>
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
     </form>
   );
 }

@@ -27,6 +27,11 @@ type minimalRepoStub struct {
 	assignProducts    func(int64, []*RecipeProductReq) error
 	assignTags        func(int64, []int64) error
 	slugExists        func(string) (bool, error)
+
+	// Slug redirect record (CE-7). Both maps are shared by the root and tx stubs
+	// so a rename made under a transaction is visible to resolve assertions.
+	redirects map[string]int64 // retired slug -> recipe id
+	slugs     map[int64]string // recipe id -> current slug
 }
 
 func (r *minimalRepoStub) WithTx(pgx.Tx) Repository {
@@ -127,6 +132,33 @@ func (r *minimalRepoStub) AssignTags(_ context.Context, id int64, ids []int64) e
 	return nil
 }
 func (r *minimalRepoStub) RemoveTags(context.Context, int64) error { return nil }
+
+func (r *minimalRepoStub) RecordSlugRedirect(_ context.Context, fromSlug string, recipeID int64) error {
+	if r.redirects == nil {
+		r.redirects = map[string]int64{}
+	}
+	r.redirects[fromSlug] = recipeID
+	return nil
+}
+
+func (r *minimalRepoStub) ReleaseSlugRedirect(_ context.Context, slug string) error {
+	delete(r.redirects, slug)
+	return nil
+}
+
+// ResolveSlugRedirect mirrors the SQL: the record holds the recipe id, so the
+// answer is always that recipe's current slug — one hop, never a chain.
+func (r *minimalRepoStub) ResolveSlugRedirect(_ context.Context, fromSlug string) (string, error) {
+	id, ok := r.redirects[fromSlug]
+	if !ok {
+		return "", models.ErrNotFound
+	}
+	slug := r.slugs[id]
+	if slug == "" || slug == fromSlug {
+		return "", models.ErrNotFound
+	}
+	return slug, nil
+}
 
 func TestRecipeCreateRollsBackWhenRelationFailsOnTxRepo(t *testing.T) {
 	tx := &mocks.FakeTx{}

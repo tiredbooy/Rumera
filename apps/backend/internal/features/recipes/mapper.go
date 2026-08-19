@@ -227,8 +227,16 @@ func BuildRecipeJSONLD(r *Recipe, ingredients []*RecipeIngredient) map[string]an
 		}
 		ld["recipeIngredient"] = list
 	}
-	if r.Content != "" {
-		ld["recipeInstructions"] = r.Content
+	if steps := methodSteps(r.Content); len(steps) > 0 {
+		instructions := make([]any, 0, len(steps))
+		for i, step := range steps {
+			instructions = append(instructions, map[string]any{
+				"@type":    "HowToStep",
+				"position": i + 1,
+				"text":     step,
+			})
+		}
+		ld["recipeInstructions"] = instructions
 	}
 
 	return ld

@@ -35,6 +35,19 @@ vi.mock("@/features/referral/components/referral-tracker", () => ({
   ReferralTracker: () => null,
 }));
 
+vi.mock("@/features/cart/pending-intent", () => ({
+  PendingCartIntent: () => null,
+}));
+vi.mock("@/features/recipes/pending-bulk-add", () => ({
+  PendingBulkAddIntent: () => null,
+}));
+vi.mock("@/features/wishlist/pending-wishlist", () => ({
+  PendingWishlistIntent: () => null,
+}));
+vi.mock("@/features/product-alerts/pending-alert", () => ({
+  PendingAlertIntent: () => null,
+}));
+
 vi.mock(
   "@/features/storefront/maintenance/components/maintenance-screen",
   () => ({

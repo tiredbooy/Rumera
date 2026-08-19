@@ -29,6 +29,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { toAsciiDigits } from "@/lib/normalize-digits";
 import { cn } from "@/lib/utils";
 import type {
@@ -184,7 +188,7 @@ export function BrandForm({
     control,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<BrandFormValues>({
     resolver: zodResolver(brandFormSchema),
     defaultValues: defaults(brand),
@@ -228,12 +232,14 @@ export function BrandForm({
         await createBrand(toPayload(v));
         await queryClient.invalidateQueries({ queryKey: BRANDS_QUERY_KEY });
         toast.success("برند ایجاد شد");
+        guard.release();
         router.push("/admin/brands");
         router.refresh();
       } else if (brand) {
         await updateBrand(brand.id, toPayload(v));
         await queryClient.invalidateQueries({ queryKey: BRANDS_QUERY_KEY });
         toast.success("تغییرات ذخیره شد");
+        guard.release();
         router.push("/admin/brands");
         router.refresh();
       }
@@ -249,6 +255,7 @@ export function BrandForm({
       await deleteBrand(brand.id);
       await queryClient.invalidateQueries({ queryKey: BRANDS_QUERY_KEY });
       toast.success("برند حذف شد");
+      guard.release();
       router.push("/admin/brands");
       router.refresh();
     } catch (e) {
@@ -262,6 +269,7 @@ export function BrandForm({
   }
 
   const busy = isSubmitting || isDeleting;
+  const guard = useUnsavedChangesGuard({ enabled: isDirty, isSaving: busy });
 
   return (
     <form
@@ -433,13 +441,15 @@ export function BrandForm({
               variant="outline"
               size="lg"
               disabled={busy}
-              onClick={() => router.push("/admin/brands")}
+              onClick={() => guard.requestNavigation("/admin/brands")}
             >
               انصراف
             </Button>
           </div>
         </div>
       </aside>
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
     </form>
   );
 }

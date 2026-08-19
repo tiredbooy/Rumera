@@ -32,7 +32,7 @@ export function GiftCardRedeem() {
           setCode("");
           idemRef.current = newGiftCardIdempotencyKey("gcr");
           toast.success("کارت هدیه اعمال شد", {
-            description: `${formatPrice(Number(res.amount))} به کیف پول شما افزوده شد.`,
+            description: `${formatPrice(res.amount)} به کیف پول شما افزوده شد.`,
           });
         },
         onError: (err) => {

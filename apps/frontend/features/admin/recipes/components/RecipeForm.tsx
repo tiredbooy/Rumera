@@ -45,6 +45,11 @@ import {
   type RecipeFormValues,
 } from "@/features/recipes/validations";
 import { normalizeEditorialSlug } from "@/features/admin/shared/editorial-fields";
+import { FormDraftNotice, useFormDraft } from "@/hooks/use-form-draft";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { apiErrorMessage, localizeApiText } from "@/lib/api/user-facing-error";
 import { toAsciiDigits } from "@/lib/normalize-digits";
 import {
@@ -151,6 +156,10 @@ export function RecipeForm({
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [slugTouched, setSlugTouched] = React.useState(mode === "edit");
 
+  const form = useForm<RecipeFormValues>({
+    resolver: zodResolver(recipeFormSchema),
+    defaultValues: defaults(recipe),
+  });
   const {
     register,
     handleSubmit,
@@ -158,10 +167,18 @@ export function RecipeForm({
     watch,
     setValue,
     setError,
-    formState: { errors, isSubmitting },
-  } = useForm<RecipeFormValues>({
-    resolver: zodResolver(recipeFormSchema),
-    defaultValues: defaults(recipe),
+    formState: { errors, isSubmitting, isDirty },
+  } = form;
+
+  const draft = useFormDraft({
+    storageKey: `rumera:recipe-draft:${mode}:${recipe?.id ?? "new"}`,
+    form,
+    revision: recipe?.updated_at,
+    enabled: canWrite,
+  });
+  const guard = useUnsavedChangesGuard({
+    enabled: isDirty,
+    isSaving: isSubmitting || isDeleting,
   });
 
   const title = watch("title");
@@ -249,6 +266,8 @@ export function RecipeForm({
         await deleteRecipe(recipe.id);
         setConfirmDeleteOpen(false);
         toast.success(`«${recipe.title}» حذف شد`);
+        draft.clear();
+        guard.release();
         router.push("/admin/recipes");
         router.refresh();
       } catch (e) {
@@ -313,12 +332,18 @@ export function RecipeForm({
         await updateRecipe(saved.id, { status: "published" });
       }
       toast.success(mode === "create" ? "دستور ایجاد شد" : "تغییرات ذخیره شد");
+      draft.clear();
+      guard.release();
       router.push("/admin/recipes");
       router.refresh();
     } catch (e) {
       applyServerErrors(e);
       if (mode === "create" && savedOwnerId) {
         toast.info("دستور ذخیره شد؛ بارگذاری را در صفحه ویرایش ادامه دهید");
+        // The record exists now, so the create-mode draft is stale — leaving it
+        // would offer it back on the next «دستور جدید» in this tab.
+        draft.clear();
+        guard.release();
         router.push(`/admin/recipes/${savedOwnerId}`);
         router.refresh();
       }
@@ -351,6 +376,13 @@ export function RecipeForm({
             نیاز دارد.
           </p>
         )}
+        <FormDraftNotice
+          className="lg:col-span-2"
+          draft={draft.draft}
+          savedAt={draft.savedAt}
+          onRestore={draft.restore}
+          onDiscard={draft.discard}
+        />
         <fieldset disabled={editorLocked} className="contents">
         <div className="flex flex-col gap-6">
           <GeneralInfoSection
@@ -408,7 +440,7 @@ export function RecipeForm({
           onPreviewChange={setCoverPreview}
           disabled={editorLocked}
           canWrite={canWrite}
-          onCancel={() => router.push("/admin/recipes")}
+          onCancel={() => guard.requestNavigation("/admin/recipes")}
           canDelete={canWrite && mode === "edit" && Boolean(recipe)}
           isDeleting={isDeleting}
           onDelete={() => {
@@ -494,6 +526,8 @@ export function RecipeForm({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
     </>
   );
 }

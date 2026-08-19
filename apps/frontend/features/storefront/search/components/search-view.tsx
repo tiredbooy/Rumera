@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft, Search, SearchX, Sparkles } from "lucide-react";
 
@@ -5,20 +6,25 @@ import { redirect } from "next/navigation";
 
 import { EmptyState } from "@/components/empty-state";
 import { ListPagination } from "@/components/list-pagination";
+import { RouteLoadingRegion } from "@/components/route-state";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { listCategories } from "@/features/catalog/categories/api";
+import type { Category } from "@/features/catalog/categories/types";
 import { listProducts } from "@/features/catalog/products/api/public";
 import { CatalogueLoadError } from "@/features/catalog/products/components/catalogue-load-error";
 import {
   ProductCard,
   PRODUCT_CARD_GRID_CLASS,
 } from "@/features/catalog/products/components/product-card";
+import { ProductGridSkeleton } from "@/features/catalog/products/components/product-grid-skeleton";
 import type { ProductListItem } from "@/features/catalog/products/types";
 import { SearchResultProductCard } from "@/features/storefront/search/components/search-result-product-card";
 import type { Paginated, Pagination } from "@/lib/api/types";
 import { faNum } from "@/lib/products";
 
 export const SEARCH_PAGE_SIZE = 24;
+const SEARCH_SUGGESTION_COUNT = 4;
 
 type SearchViewProps = {
   searchParams: Promise<{ q?: string; page?: string }>;
@@ -27,6 +33,9 @@ type SearchViewProps = {
 type SettledProductList =
   | { ok: true; results: ProductListItem[]; pagination: Pagination | null }
   | { ok: false };
+
+/** Hits, category chips and the suggestion rail — everything below the hero. */
+type SearchData = [SettledProductList, Category[], SettledProductList];
 
 const EMPTY_PAGE: SettledProductList = {
   ok: true,
@@ -61,35 +70,48 @@ async function settleProducts(
   }
 }
 
+/** Shared by the out-of-range redirect check and the rendered results. */
+function readSearchPage(searchPage: SettledProductList) {
+  const results = searchPage.ok ? searchPage.results : [];
+  const pagination = searchPage.ok ? searchPage.pagination : null;
+  return {
+    results,
+    pagination,
+    totalItems: pagination?.total_items ?? results.length,
+    totalPages: Math.max(1, pagination?.total_pages ?? 1),
+  };
+}
+
 export async function SearchView({ searchParams }: SearchViewProps) {
   const { q = "", page: rawPage } = await searchParams;
   const query = q.trim();
   const page = parseSearchPage(rawPage);
 
-  const [searchPage, categories, suggestionsPage] = await Promise.all([
+  // One promise for all three lookups: still fully concurrent, and every branch
+  // is already settled to a value, so nothing rejects while the shell decides
+  // whether it has to redirect.
+  const data: Promise<SearchData> = Promise.all([
     query
       ? settleProducts(
           listProducts({ search: query, page, limit: SEARCH_PAGE_SIZE }),
         )
       : Promise.resolve(EMPTY_PAGE),
     listCategories().catch(() => []),
-    settleProducts(listProducts({ page: 1, limit: 4 })),
+    settleProducts(
+      listProducts({ page: 1, limit: SEARCH_SUGGESTION_COUNT }),
+    ),
   ]);
 
-  const searchFailed = Boolean(query) && !searchPage.ok;
-  const results = searchPage.ok ? searchPage.results : [];
-  const pagination = searchPage.ok ? searchPage.pagination : null;
-  const totalItems = pagination?.total_items ?? results.length;
-  const totalPages = Math.max(1, pagination?.total_pages ?? 1);
-
-  if (query && pagination && page > totalPages && totalItems > 0) {
-    redirect(searchPageHref(query, totalPages));
+  // Page 1 can never be out of range, so the common case — every fresh search,
+  // every crawler hit — streams. Only a deep page has to block, because its
+  // redirect must fire before the shell flushes.
+  if (page > 1) {
+    const [searchPage] = await data;
+    const { pagination, totalItems, totalPages } = readSearchPage(searchPage);
+    if (query && pagination && page > totalPages && totalItems > 0) {
+      redirect(searchPageHref(query, totalPages));
+    }
   }
-
-  const suggestions = suggestionsPage.ok ? suggestionsPage.results : [];
-  const showZero = Boolean(query) && !searchFailed && totalItems === 0;
-  const showHits = Boolean(query) && !searchFailed && results.length > 0;
-  const showSuggestions = !showHits && !searchFailed && suggestions.length > 0;
 
   return (
     <>
@@ -124,112 +146,185 @@ export async function SearchView({ searchParams }: SearchViewProps) {
       </section>
 
       <section className="container-px mx-auto w-full max-w-7xl py-12 sm:py-14">
-        {showHits ? (
-          <>
-            <p className="text-muted-foreground">
-              {`${faNum(totalItems)} نتیجه برای «`}
-              <span className="font-medium text-foreground">{query}</span>
-              {"»"}
-            </p>
-            <div className={`${PRODUCT_CARD_GRID_CLASS} mt-8`}>
-              {results.map((product) => (
-                <SearchResultProductCard
-                  key={product.id}
-                  product={product}
-                  query={query}
-                />
-              ))}
-            </div>
-            {pagination ? (
-              <ListPagination
-                page={pagination.page}
-                totalPages={totalPages}
-                hasPrev={pagination.has_prev}
-                hasNext={pagination.has_next}
-                prevHref={searchPageHref(query, pagination.page - 1)}
-                nextHref={searchPageHref(query, pagination.page + 1)}
-                ariaLabel="صفحه‌بندی نتایج جستجو"
-                className="mt-12"
-              />
-            ) : null}
-          </>
-        ) : null}
-
-        {searchFailed ? (
-          <CatalogueLoadError
-            title="جستجو انجام نشد"
-            description="بارگذاری نتایج با خطا روبه‌رو شد. این به‌معنای صفر نتیجه نیست — دوباره تلاش کنید."
-          />
-        ) : null}
-
-        {showZero ? (
-          <EmptyState
-            icon={SearchX}
-            title={`نتیجه‌ای برای «${query}» پیدا نشد`}
-            description="املا را چک کنید یا کلمه‌ای کوتاه‌تر بزنید. جستجو روی نام محصول، توضیحات، برند، دسته، کد، SKU و برچسب است — از دسته‌ها یا پیشنهادهای زیر هم می‌توانید شروع کنید."
-            className="mx-auto max-w-lg"
-          >
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button asChild>
-                <Link href="/products">
-                  مرور فروشگاه <ArrowLeft className="size-4" aria-hidden />
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/search">پاک کردن جستجو</Link>
-              </Button>
-            </div>
-          </EmptyState>
-        ) : null}
-
-        {!query && !showHits ? (
-          <div className="mx-auto max-w-lg text-center">
-            <p className="text-muted-foreground">
-              عبارتی وارد کنید یا از دسته‌بندی‌ها و پیشنهادهای زیر شروع کنید.
-            </p>
-          </div>
-        ) : null}
-
-        {categories.length ? (
-          <div className={showHits ? "mt-16" : "mt-14"}>
-            <p className="eyebrow mb-4 justify-center text-center">
-              جستجو بر اساس دسته
-            </p>
-            <div className="flex flex-wrap justify-center gap-2.5">
-              {categories.map((c) => (
-                <Link
-                  key={c.id}
-                  href={c.slug ? `/categories/${c.slug}` : "/categories"}
-                  className="rounded-full border border-border bg-card/50 px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground"
-                >
-                  {c.title}
-                </Link>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {showSuggestions ? (
-          <div className="mt-16">
-            <p className="eyebrow mb-2 justify-center text-center">
-              {showZero ? "شاید این‌ها را بپسندید" : "پیشنهاد شروع"}
-            </p>
-            <h2 className="section-title mb-8 text-center text-2xl sm:text-3xl">
-              {showZero ? "نمونه‌هایی از سردابه" : "تازه‌های فروشگاه"}
-            </h2>
-            <div className={PRODUCT_CARD_GRID_CLASS}>
-              {suggestions.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
-            </div>
-            <div className="mt-8 text-center">
-              <Button asChild variant="outline" className="h-11">
-                <Link href="/products">مشاهدهٔ همهٔ محصولات</Link>
-              </Button>
-            </div>
-          </div>
-        ) : null}
+        <Suspense
+          key={`${query}|${page}`}
+          fallback={<SearchResultsSkeleton hasQuery={Boolean(query)} />}
+        >
+          <SearchResults data={data} query={query} />
+        </Suspense>
       </section>
     </>
+  );
+}
+
+export async function SearchResults({
+  data,
+  query,
+}: {
+  data: Promise<SearchData>;
+  query: string;
+}) {
+  const [searchPage, categories, suggestionsPage] = await data;
+  const { results, pagination, totalItems, totalPages } =
+    readSearchPage(searchPage);
+
+  const searchFailed = Boolean(query) && !searchPage.ok;
+  const suggestions = suggestionsPage.ok ? suggestionsPage.results : [];
+  const showZero = Boolean(query) && !searchFailed && totalItems === 0;
+  const showHits = Boolean(query) && !searchFailed && results.length > 0;
+  const showSuggestions = !showHits && !searchFailed && suggestions.length > 0;
+
+  return (
+    <>
+      {showHits ? (
+        <>
+          <p className="text-muted-foreground">
+            {`${faNum(totalItems)} نتیجه برای «`}
+            <span className="font-medium text-foreground">{query}</span>
+            {"»"}
+          </p>
+          <div className={`${PRODUCT_CARD_GRID_CLASS} mt-8`}>
+            {results.map((product) => (
+              <SearchResultProductCard
+                key={product.id}
+                product={product}
+                query={query}
+              />
+            ))}
+          </div>
+          {pagination ? (
+            <ListPagination
+              page={pagination.page}
+              totalPages={totalPages}
+              hasPrev={pagination.has_prev}
+              hasNext={pagination.has_next}
+              prevHref={searchPageHref(query, pagination.page - 1)}
+              nextHref={searchPageHref(query, pagination.page + 1)}
+              ariaLabel="صفحه‌بندی نتایج جستجو"
+              className="mt-12"
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {searchFailed ? (
+        <CatalogueLoadError
+          title="جستجو انجام نشد"
+          description="بارگذاری نتایج با خطا روبه‌رو شد. این به‌معنای صفر نتیجه نیست — دوباره تلاش کنید."
+        />
+      ) : null}
+
+      {showZero ? (
+        <EmptyState
+          icon={SearchX}
+          title={`نتیجه‌ای برای «${query}» پیدا نشد`}
+          description="املا را چک کنید یا کلمه‌ای کوتاه‌تر بزنید. جستجو روی نام محصول، توضیحات، برند، دسته، کد، SKU و برچسب است — از دسته‌ها یا پیشنهادهای زیر هم می‌توانید شروع کنید."
+          className="mx-auto max-w-lg"
+        >
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button asChild>
+              <Link href="/products">
+                مرور فروشگاه <ArrowLeft className="size-4" aria-hidden />
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/search">پاک کردن جستجو</Link>
+            </Button>
+          </div>
+        </EmptyState>
+      ) : null}
+
+      {!query && !showHits ? (
+        <div className="mx-auto max-w-lg text-center">
+          <p className="text-muted-foreground">
+            عبارتی وارد کنید یا از دسته‌بندی‌ها و پیشنهادهای زیر شروع کنید.
+          </p>
+        </div>
+      ) : null}
+
+      {categories.length ? (
+        <div className={showHits ? "mt-16" : "mt-14"}>
+          <p className="eyebrow mb-4 justify-center text-center">
+            جستجو بر اساس دسته
+          </p>
+          <div className="flex flex-wrap justify-center gap-2.5">
+            {categories.map((c) => (
+              <Link
+                key={c.id}
+                href={c.slug ? `/categories/${c.slug}` : "/categories"}
+                className="rounded-full border border-border bg-card/50 px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground"
+              >
+                {c.title}
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {showSuggestions ? (
+        <div className="mt-16">
+          <p className="eyebrow mb-2 justify-center text-center">
+            {showZero ? "شاید این‌ها را بپسندید" : "پیشنهاد شروع"}
+          </p>
+          <h2 className="section-title mb-8 text-center text-2xl sm:text-3xl">
+            {showZero ? "نمونه‌هایی از سردابه" : "تازه‌های فروشگاه"}
+          </h2>
+          <div className={PRODUCT_CARD_GRID_CLASS}>
+            {suggestions.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+          <div className="mt-8 text-center">
+            <Button asChild variant="outline" className="h-11">
+              <Link href="/products">مشاهدهٔ همهٔ محصولات</Link>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** Chip row placeholder for «جستجو بر اساس دسته». */
+function CategoryChipsSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={className}>
+      <Skeleton className="mx-auto h-4 w-32" />
+      <div className="mt-4 flex flex-wrap justify-center gap-2.5">
+        {["w-20", "w-24", "w-16", "w-28", "w-20", "w-24"].map((width) => (
+          <Skeleton key={width} className={`h-9 rounded-full ${width}`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A query streams a full page of hits; an empty query streams the prompt plus
+ * the suggestion rail — the two shapes the resolved region actually takes.
+ */
+function SearchResultsSkeleton({ hasQuery }: { hasQuery: boolean }) {
+  return (
+    <RouteLoadingRegion as="div" label="در حال بارگذاری نتایج جستجو">
+      {hasQuery ? (
+        <>
+          <Skeleton className="h-6 w-56" />
+          <ProductGridSkeleton count={SEARCH_PAGE_SIZE} className="mt-8" />
+          <CategoryChipsSkeleton className="mt-16" />
+        </>
+      ) : (
+        <>
+          <div className="mx-auto max-w-lg">
+            <Skeleton className="mx-auto h-6 w-full max-w-md" />
+          </div>
+          <CategoryChipsSkeleton className="mt-14" />
+          <div className="mt-16">
+            <Skeleton className="mx-auto h-4 w-24" />
+            <Skeleton className="mx-auto mt-2 mb-8 h-9 w-64" />
+            <ProductGridSkeleton count={SEARCH_SUGGESTION_COUNT} />
+          </div>
+        </>
+      )}
+    </RouteLoadingRegion>
   );
 }

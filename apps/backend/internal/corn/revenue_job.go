@@ -21,22 +21,37 @@ func NewRevenueCronJob(db *pgxpool.Pool, svc *featanalytics.DailyRevenueStatsSer
 }
 
 func (j *RevenueCronJob) Run(ctx context.Context) {
-	yesterday := time.Now().UTC().AddDate(0, 0, -1).Truncate(24 * time.Hour)
-
-	slog.Info("revenue stats job: aggregating", "date", yesterday.Format("2006-01-02"))
-
-	req, err := j.aggregate(ctx, yesterday)
+	dates, err := pendingStatDates(ctx, j.db, "daily_revenue_stats", time.Now())
 	if err != nil {
-		slog.Error("revenue stats job: aggregation failed", "err", err)
+		slog.Error("revenue stats job: gap scan failed", "err", err)
 		return
 	}
-
-	if err := j.svc.FlushStats(ctx, req); err != nil {
-		slog.Error("revenue stats job: flush failed", "err", err)
+	if len(dates) == 0 {
+		slog.Info("revenue stats job: nothing pending")
 		return
 	}
+	if len(dates) > 1 {
+		slog.Warn("revenue stats job: backfilling missed days", "days", len(dates))
+	}
 
-	slog.Info("revenue stats job: done", "date", yesterday.Format("2006-01-02"))
+	for _, date := range dates {
+		slog.Info("revenue stats job: aggregating", "date", date.Format("2006-01-02"))
+
+		req, err := j.aggregate(ctx, date)
+		if err != nil {
+			slog.Error("revenue stats job: aggregation failed",
+				"date", date.Format("2006-01-02"), "err", err)
+			continue // a bad day must not block the days behind it
+		}
+
+		if err := j.svc.FlushStats(ctx, req); err != nil {
+			slog.Error("revenue stats job: flush failed",
+				"date", date.Format("2006-01-02"), "err", err)
+			continue
+		}
+
+		slog.Info("revenue stats job: done", "date", date.Format("2006-01-02"))
+	}
 }
 
 func (j *RevenueCronJob) aggregate(ctx context.Context, date time.Time) (*featanalytics.DailyRevenueStatsUpsertReq, error) {

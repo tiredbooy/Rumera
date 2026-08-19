@@ -41,6 +41,10 @@ import {
   type OptionTypeFormValues,
 } from "@/features/admin/options/validations";
 import type { ProductOptionGroup } from "@/features/admin/products/types";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { faNum } from "@/lib/products";
 
 function Field({
@@ -111,7 +115,8 @@ export function OptionTypeForm({
     handleSubmit,
     control,
     setValue,
-    formState: { errors, isSubmitting },
+    reset,
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<OptionTypeFormValues>({
     resolver: zodResolver(optionTypeFormSchema),
     defaultValues: optionTypeFormDefaults(option),
@@ -126,6 +131,7 @@ export function OptionTypeForm({
     createValue.isPending ||
     deleteValue.isPending;
   const editorLocked = busy || !canWrite;
+  const guard = useUnsavedChangesGuard({ enabled: isDirty, isSaving: busy });
 
   React.useEffect(() => {
     if (mode === "edit" || titleTouched) return;
@@ -142,12 +148,16 @@ export function OptionTypeForm({
       if (mode === "create") {
         const created = await createType.mutateAsync(values);
         toast.success(`ویژگی «${created.display_name}» ساخته شد`);
+        guard.release();
         router.push(`/admin/options/${created.id}`);
         router.refresh();
         return;
       }
       await updateType.mutateAsync(values);
       toast.success("ویژگی ذخیره شد");
+      // Saved in place: re-baseline so the guard stops treating already-saved
+      // values as unsaved work (same as SettingsForm).
+      reset(values);
       router.refresh();
     } catch (error) {
       const message =
@@ -383,6 +393,8 @@ export function OptionTypeForm({
           ) : null}
         </section>
       ) : null}
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
 
       <AlertDialog
         open={Boolean(pendingDelete)}

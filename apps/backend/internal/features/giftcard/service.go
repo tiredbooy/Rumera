@@ -25,7 +25,7 @@ type Mailer interface {
 // GiftPurchaseNotifier delivers the purchased-code email (inline or async outbox).
 // Prefer notifications.Dispatcher via WithDispatcher when the outbox is wired.
 type GiftPurchaseNotifier interface {
-	DispatchGiftPurchased(ctx context.Context, to, subject, htmlBody, correlationID, idempotencyKey string) error
+	DispatchGiftPurchasedTx(ctx context.Context, tx pgx.Tx, to, subject, htmlBody, correlationID, idempotencyKey string) error
 }
 
 // PurchaserEmailLookup resolves the buyer's email after a successful paid issue.
@@ -154,14 +154,33 @@ func (s *Service) FulfillPaidPurchaseTx(
 		if err != nil {
 			return apperr.ErrInternal
 		}
-		card, err := s.repo.InsertPurchasedTx(ctx, tx, codes[0], dec, userID, purchaseTxID)
+		// Each attempt runs on its own savepoint. A unique violation aborts the
+		// enclosing transaction (25P02) and every later statement on it fails —
+		// including the payments.Confirm that owns this tx. Retrying a collided
+		// code on the bare tx could therefore only ever fail, and take the
+		// customer's paid confirm down with it. pgx.Tx.Begin is a SAVEPOINT.
+		sp, target, err := savepoint(ctx, tx)
+		if err != nil {
+			return apperr.ErrInternal
+		}
+		card, err := s.repo.InsertPurchasedTx(ctx, target, codes[0], dec, userID, purchaseTxID)
 		if err == nil {
 			code := codes[0]
 			if card != nil && card.Code != "" {
 				code = card.Code
 			}
-			s.notifyPurchased(ctx, userID, code, dec, purchaseTxID)
+			if sp != nil {
+				if err = sp.Commit(ctx); err != nil {
+					return apperr.ErrInternal
+				}
+			}
+			// On the same tx as the card: enqueued on a second connection, the
+			// email survived a rollback and mailed a card that never committed.
+			s.notifyPurchased(ctx, tx, userID, code, dec, purchaseTxID)
 			return nil
+		}
+		if sp != nil {
+			_ = sp.Rollback(ctx)
 		}
 		if errors.Is(err, models.ErrConflict) {
 			// Code collision or concurrent fulfill on same purchase_txid.
@@ -175,7 +194,20 @@ func (s *Service) FulfillPaidPurchaseTx(
 	return apperr.ErrInternal
 }
 
-func (s *Service) notifyPurchased(ctx context.Context, userID int64, code string, amount decimal.Decimal, purchaseTxID string) {
+// savepoint nests a savepoint on tx and returns it alongside the handle the
+// attempt should run on. A nil tx has nothing to nest on (unit tests).
+func savepoint(ctx context.Context, tx pgx.Tx) (sp, target pgx.Tx, err error) {
+	if tx == nil {
+		return nil, nil, nil
+	}
+	sp, err = tx.Begin(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return sp, sp, nil
+}
+
+func (s *Service) notifyPurchased(ctx context.Context, tx pgx.Tx, userID int64, code string, amount decimal.Decimal, purchaseTxID string) {
 	if s == nil {
 		return
 	}
@@ -200,7 +232,7 @@ func (s *Service) notifyPurchased(ctx context.Context, userID int64, code string
 	subject, body := purchasedGiftEmail(code, amount)
 	idem := fmt.Sprintf("gift_purchase:%s", purchaseTxID)
 	if s.dispatcher != nil {
-		if err := s.dispatcher.DispatchGiftPurchased(ctx, to, subject, body, purchaseTxID, idem); err != nil {
+		if err := s.dispatcher.DispatchGiftPurchasedTx(ctx, tx, to, subject, body, purchaseTxID, idem); err != nil {
 			slog.Warn("giftcard: purchase email dispatch failed",
 				"user_id", userID, "purchase_txid", purchaseTxID, "err", err)
 		}

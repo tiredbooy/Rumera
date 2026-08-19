@@ -41,6 +41,10 @@ import {
   settingsTabsWithErrors,
   type SettingsTab,
 } from "../settings-tabs";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { toAdminSettingsPutBody } from "../to-admin-settings-put";
 import { ContactSection } from "./settings-form/ContactSection";
 import { GiftSection } from "./settings-form/GiftSection";
@@ -83,6 +87,13 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
     defaultValues: defaultsFromSettings(initial),
     // Keep values when tab panels unmount so phone/address edits are never dropped.
     shouldUnregister: false,
+  });
+
+  // Saving re-baselines the form instead of navigating, so the guard disarms
+  // on its own once `reset` clears the dirty state.
+  const guard = useUnsavedChangesGuard({
+    enabled: isDirty,
+    isSaving: isSubmitting,
   });
 
   const maintenanceEnabled = watch("enabled");
@@ -219,6 +230,8 @@ export function SettingsForm({ settings }: { settings: SiteSettings }) {
           </p>
         ) : null}
       </div>
+
+      <UnsavedChangesDialog {...guard.dialogProps} />
     </form>
   );
 }

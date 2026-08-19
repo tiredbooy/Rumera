@@ -2,14 +2,33 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { DataTable, type Column } from "./DataTable";
+import { DataTable, type Column, type Filter } from "./DataTable";
 
 type Row = { id: number; title: string; status: string };
 
 afterEach(cleanup);
+
+beforeEach(() => {
+  Object.defineProperty(Element.prototype, "hasPointerCapture", {
+    configurable: true,
+    value: () => false,
+  });
+  Object.defineProperty(Element.prototype, "setPointerCapture", {
+    configurable: true,
+    value: () => {},
+  });
+  Object.defineProperty(Element.prototype, "releasePointerCapture", {
+    configurable: true,
+    value: () => {},
+  });
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: () => {},
+  });
+});
 
 describe("DataTable row navigation", () => {
   it("renders the primary cell as a real link instead of a clickable row", () => {
@@ -56,5 +75,48 @@ describe("DataTable row navigation", () => {
     expect(sortButton.closest("th")).toHaveAttribute("aria-sort", "ascending");
     fireEvent.click(sortButton);
     expect(sortButton.closest("th")).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("reports only the rows a facet is still showing", async () => {
+    const seen: string[][] = [];
+    const rows: Row[] = [
+      { id: 1, title: "الف", status: "فعال" },
+      { id: 2, title: "ب", status: "آرشیو" },
+    ];
+    const columns: Column<Row>[] = [
+      { id: "title", header: "محصول", cell: (row) => row.title },
+    ];
+    const filters: Filter<Row>[] = [
+      {
+        id: "status",
+        label: "وضعیت",
+        getValue: (row) => row.status,
+        options: [
+          { value: "فعال", label: "فعال" },
+          { value: "آرشیو", label: "آرشیو" },
+        ],
+      },
+    ];
+
+    render(
+      <DataTable
+        rows={rows}
+        columns={columns}
+        getRowKey={(row) => String(row.id)}
+        filters={filters}
+        onVisibleRowsChange={(visible) => {
+          seen.push(visible.map((row) => row.title));
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(seen.at(-1)).toEqual(["الف", "ب"]));
+
+    const trigger = screen.getByRole("combobox", { name: /وضعیت/ });
+    fireEvent.pointerDown(trigger);
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole("option", { name: "آرشیو" }));
+
+    await waitFor(() => expect(seen.at(-1)).toEqual(["ب"]));
   });
 });
